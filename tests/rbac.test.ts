@@ -3,6 +3,7 @@ import { ForbiddenError } from "@/src/lib/http/errors";
 import {
   Permission,
   hasPermission,
+  isPermission,
   requirePermission,
   type Principal,
 } from "@/src/lib/auth/rbac";
@@ -20,4 +21,8 @@ describe("RBAC framework", () => {
     expect(() => requirePermission(reader, Permission.SYSTEM_ADMIN)).toThrow(
       ForbiddenError,
     ));
+  it("recognizes only declared permissions", () => {
+    expect(isPermission(Permission.SYSTEM_READ)).toBe(true);
+    expect(isPermission("system:unknown")).toBe(false);
+  });
 });

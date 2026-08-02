@@ -7,6 +7,12 @@ export const Permission = {
 
 export type Permission = (typeof Permission)[keyof typeof Permission];
 
+const permissions = new Set<string>(Object.values(Permission));
+
+export function isPermission(value: unknown): value is Permission {
+  return typeof value === "string" && permissions.has(value);
+}
+
 export interface Principal {
   subject: string;
   roles: string[];

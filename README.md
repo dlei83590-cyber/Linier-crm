@@ -22,6 +22,14 @@ npm run dev
 
 Open `http://localhost:3000`, health at `/api/v1/health`, and Swagger at `/api-docs`.
 
+To run the complete container stack without a local Node.js installation:
+
+```bash
+docker compose up --build
+```
+
+The Compose defaults are for local development only. Set a strong `JWT_SECRET` in every shared or production environment.
+
 ## Quality checks
 
 ```bash

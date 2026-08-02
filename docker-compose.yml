@@ -17,14 +17,28 @@ services:
 
   app:
     build: .
-    env_file: .env
     environment:
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
       DATABASE_URL: postgresql://linier:linier@postgres:5432/linier_crm?schema=public
+      JWT_SECRET: ${JWT_SECRET:-local-development-secret-change-before-production}
+      JWT_ISSUER: ${JWT_ISSUER:-linier-crm}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-linier-crm-web}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
     ports:
       - "3000:3000"
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:3000/api/v1/health >/dev/null",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
 volumes:
   postgres-data:

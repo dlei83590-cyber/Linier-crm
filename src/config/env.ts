@@ -12,7 +12,10 @@ const schema = z.object({
   JWT_SECRET: z.string().min(32),
   JWT_ISSUER: z.string().min(1).default("linier-crm"),
   JWT_AUDIENCE: z.string().min(1).default("linier-crm-web"),
-  JWT_EXPIRES_IN: z.string().min(1).default("15m"),
+  JWT_EXPIRES_IN: z
+    .string()
+    .regex(/^\d+[smhd]$/, "must use s, m, h, or d units")
+    .default("15m"),
 });
 
 export type Environment = z.infer<typeof schema>;

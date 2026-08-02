@@ -1,7 +1,7 @@
 import { jwtVerify, SignJWT, type JWTPayload } from "jose";
 import { getEnvironment } from "@/src/config/env";
 import { UnauthorizedError } from "@/src/lib/http/errors";
-import type { Permission, Principal } from "./rbac";
+import { isPermission, type Permission, type Principal } from "./rbac";
 
 interface AccessTokenPayload extends JWTPayload {
   roles: string[];
@@ -49,7 +49,9 @@ export async function verifyAccessToken(token: string): Promise<Principal> {
     if (
       !payload.sub ||
       !Array.isArray(payload.roles) ||
-      !Array.isArray(payload.permissions)
+      !payload.roles.every((role) => typeof role === "string") ||
+      !Array.isArray(payload.permissions) ||
+      !payload.permissions.every(isPermission)
     )
       throw new Error("Invalid claims");
     return {
