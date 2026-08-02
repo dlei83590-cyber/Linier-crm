@@ -5,14 +5,14 @@
 - Use a relational database as the system of record.
 - Tables and columns use `snake_case`; table names are plural.
 - Primary keys SHOULD be UUIDs or another non-sequential, globally unique identifier.
-- Department-scoped business tables MUST contain the ownership fields required to enforce responsible-user and department data access.
+- Tenant-owned tables MUST contain a non-null `workspace_id` with an indexed foreign key.
 - Mutable tables MUST include `created_at` and `updated_at` UTC timestamps.
 - Foreign keys and uniqueness constraints MUST enforce business invariants where practical.
 - Currency amounts MUST use integer minor units, never floating-point values.
 
-## Internal Data Access
+## Tenant Isolation
 
-The system uses one internal-company data model, not a tenant or workspace model. Queries MUST enforce authenticated role, department, and responsible-user data scope where required. Database row-level security MAY be used as defense in depth where supported, but it does not replace application authorization tests.
+Every tenant-scoped query MUST constrain `workspace_id`. Composite unique constraints SHOULD begin with `workspace_id`. Database row-level security SHOULD be used as defense in depth where supported, but it does not replace application authorization tests.
 
 ## Migrations
 
@@ -29,3 +29,4 @@ The system uses one internal-company data model, not a tenant or workspace model
 - Transactions MUST be as short as practical and encompass all writes for one invariant.
 - Production access MUST be audited and limited to authorized personnel.
 - Backups MUST be encrypted, monitored, and restored in a scheduled recovery test.
+

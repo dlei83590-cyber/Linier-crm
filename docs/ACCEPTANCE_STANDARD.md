@@ -1,69 +1,23 @@
-# Linier CRM Management System 验收标准
+# Acceptance Standard
 
-## 1. 验收依据与边界
+## Story Readiness
 
-- 项目正式名称为 **Linier CRM Management System（利尼尔 CRM 管理系统）**。
-- 合同《系统开发功能清单》是业务功能验收的唯一范围依据。
-- `PROJECT_MASTER.md` 用于把合同范围映射为业务目标、核心流程、角色权限和可测试标准，但不得扩大或替代合同。
-- 系统按福建利尼尔工业装备有限公司内部单组织 CRM 验收。未经书面批准，多租户 `workspace`/`tenant` 架构不属于交付范围。
-- 营销自动化、客服工单、机器学习预测及其他合同未约定功能不得作为完成度、演示亮点或验收项。
+A story is ready when it has a user outcome, explicit scope, testable acceptance criteria, dependencies, designs where applicable, and identified security or migration considerations.
 
-## 2. 需求进入开发条件
+## Definition of Done Checklist
 
-一项需求进入开发前必须具备：
+- [ ] Acceptance criteria are demonstrated and approved by the product owner or delegate.
+- [ ] Code is reviewed and all required CI checks pass.
+- [ ] Unit, integration, contract, and end-to-end tests are added as appropriate.
+- [ ] Accessibility supports keyboard operation, visible focus, semantic markup, and sufficient contrast.
+- [ ] Authorization and tenant isolation are verified.
+- [ ] API, database, user, and operational documentation is updated.
+- [ ] Logs, metrics, alerts, and audit events are present where required.
+- [ ] Migrations, deployment order, compatibility, rollback, and feature flags are documented.
+- [ ] No unresolved critical or high-severity security findings remain.
+- [ ] The change has been validated in a production-like environment.
 
-- 对应的合同功能条目及明确的范围说明。
-- 用户目标、前置条件、主流程、异常流程和可测试验收场景。
-- 涉及角色、部门数据范围和操作日志要求。
-- 页面原型、字段、状态、编号和计算规则（适用时）。
-- 依赖、数据迁移、安全或部署影响说明。
-- 业务负责人对歧义处理结果的确认。
+## Release Acceptance
 
-缺少合同依据的新增需求必须先走书面变更批准，不得直接进入 Sprint。
+A release MUST have an owner, version or traceable commit, release notes, successful automated checks, a rollback decision point, and post-deployment verification. Any waived criterion MUST record the risk, approver, owner, and remediation deadline.
 
-## 3. 功能验收通用标准
-
-每个合同模块必须同时满足：
-
-- `PROJECT_MASTER.md` 中对应模块的业务目标、核心流程、角色权限和验收标准均有实现及测试证据。
-- 正常流程、校验失败、非法状态流转、未授权访问和部门数据越权场景均通过测试。
-- 新增、修改、删除、审核及关键状态变化按要求生成不可由普通用户篡改的操作日志。
-- 列表查询、详情、导出和统计遵循同一数据权限，不通过错误信息泄露未授权数据。
-- 编号、金额、数量、日期、状态及关联关系符合已确认规则，历史单据不因基础资料变更而失真。
-- 页面显示、API 响应、数据库结果和导出数据在相同条件下保持一致。
-
-## 4. 模块验收矩阵
-
-| Sprint   | 合同模块                     | 必须提供的验收证据                                                                                                 |
-| -------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Sprint 1 | Infrastructure               | `SPRINT_PLAN.md` 定义的十二项强制检查全部通过；无 Customer、Supplier、Quotation、Order、Product 或 Report 业务实现 |
-| Sprint 2 | 产品、供应商、原料、价目表   | 档案 CRUD/启停测试；唯一性和关联校验；价格与有效期测试；历史引用验证                                               |
-| Sprint 3 | 客户、联系人、公海、查重     | 客户数据权限测试；公海并发领取；分配/回收记录；查重命中与防泄露测试                                                |
-| Sprint 4 | 商机、跟进、拜访、签到、报价 | 阶段及时间线测试；计划与签到关联；位置/时间记录；报价计算、审核和版本测试                                          |
-| Sprint 5 | 订单申请、订单阶段、销售出库 | 申请审核；非法阶段拦截；出库资格和数量约束；订单状态回写测试                                                       |
-| Sprint 6 | 报销、经营数据、绩效数据     | 报销审批及凭证测试；指标口径确认；汇总到明细追溯；页面与导出权限测试                                               |
-
-### Sprint 1 特别判定
-
-Sprint 1 使用全有或全无的验收门禁：只有 `npm install`、`docker compose up`、`npm run dev`、`npm run build`、`prisma migrate`、`prisma seed`、`lint`、`typecheck`、`test`、`swagger`、`jwt` 和 `rbac` 全部通过，才可判定为 **PASS**。任一项失败、未执行或缺少证据，或发现提前开发禁止业务模块，必须判定为 **Rejected**。
-
-## 5. Definition of Done
-
-- [ ] 功能逐项映射到合同《系统开发功能清单》，无遗漏、无未批准扩项。
-- [ ] 业务负责人已按确认场景演示并验收。
-- [ ] 代码评审完成，所有必需的 CI 检查通过且无新增警告。
-- [ ] 单元、集成、API 契约和关键端到端测试按风险补齐并通过。
-- [ ] 服务端角色权限、部门数据范围和越权场景已验证。
-- [ ] 操作日志、安全、隐私和敏感信息处理符合标准。
-- [ ] 键盘操作、可见焦点、语义结构、表单错误提示和对比度满足内部 Web 可访问性要求。
-- [ ] API、数据库、用户操作、部署和回滚文档已更新。
-- [ ] 数据库迁移已验证前向执行、兼容部署和回滚/前向修复方案。
-- [ ] 无未处理的严重或高危安全问题。
-- [ ] 已在类生产环境完成验证，并保留测试、演示和批准记录。
-
-## 6. Sprint 与发布验收
-
-- Sprint 只能验收 `SPRINT_PLAN.md` 为该 Sprint 指定的模块；跨 Sprint 提前开发不得替代当前 Sprint 出口条件。
-- Sprint 验收必须记录版本、范围、通过项、遗留项、风险、责任人和处理期限。
-- 发布必须具有可追溯提交或版本、发布说明、数据库变更说明、部署负责人、回滚决策点和上线后检查结果。
-- 任何豁免必须记录合同影响、风险、批准人、责任人和整改期限；未获授权的范围扩张不得通过豁免进入发布。

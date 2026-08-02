@@ -1,33 +1,11 @@
-# Linier CRM 文档协作规范
+# Documentation Guidelines
 
-本文件适用于 `docs/` 目录及其所有子目录。
+These instructions apply to every file under `docs/`.
 
-## 项目身份
+- Treat `PROJECT_MASTER.md` as the product source of truth and keep related documents consistent with it.
+- Write concise, actionable Markdown. Prefer checklists and tables where they improve clarity.
+- Use RFC 2119 terms (`MUST`, `SHOULD`, and `MAY`) deliberately.
+- Do not add secrets, credentials, customer data, or environment-specific values to documentation.
+- Update `SPRINT_PLAN.md` when scope or delivery status changes.
+- Changes to architecture, APIs, or data models MUST update the corresponding standard in the same pull request.
 
-- 项目正式英文名称必须写作 **Linier CRM Management System**。
-- 项目正式中文名称必须写作 **利尼尔 CRM 管理系统**。
-- 本项目是福建利尼尔工业装备有限公司内部使用的 CRM 管理系统，不是通用 SaaS CRM。
-- 除非取得明确书面批准，不得设计、实现或描述多租户 `workspace`/`tenant` 架构。
-
-## 范围来源
-
-- 合同《系统开发功能清单》是唯一业务范围依据。
-- `PROJECT_MASTER.md` 是合同范围在仓库中的实施总纲；若其内容与合同冲突，以合同为准并立即修订文档。
-- 不得自行添加营销自动化、客服工单、机器学习预测、插件市场等合同未约定功能。
-- 任何业务范围变更必须引用合同条目或书面批准记录，并同步更新 `PROJECT_MASTER.md`、`SPRINT_PLAN.md` 和 `ACCEPTANCE_STANDARD.md`。
-
-## 文档要求
-
-- 使用简洁、可执行、可验收的 Markdown；表格和清单应服务于可读性。
-- 每项业务功能必须说明业务目标、核心流程、角色权限和验收标准。
-- 使用“必须”“应”“可以”时保持一致，避免无法验证的“完善”“智能”“全面”等表述。
-- 不得写入密钥、凭证、真实客户数据或特定环境的敏感配置。
-- 架构、API 或数据模型变更必须在同一 Pull Request 中更新对应标准和测试要求。
-- 更新 Sprint 范围或状态时必须同步维护 `SPRINT_PLAN.md`。
-
-## 提交前检查
-
-- 搜索并移除不符合本文件“项目身份”定义的项目名称及未经批准的 `workspace`/`tenant` 业务设计。
-- 对照合同功能清单检查是否漏项、越界或改变业务含义。
-- 检查标题层级、表格、列表、链接和代码块格式。
-- 运行仓库规定的 Markdown 格式检查，并在 Pull Request 中记录准确命令和结果。

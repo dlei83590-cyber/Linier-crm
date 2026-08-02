@@ -1,12 +1,12 @@
-# Linier CRM Management System CTO Engineering Directive
+# CTO Engineering Directive
 
 ## Mission
 
-Build Linier CRM Management System（利尼尔 CRM 管理系统）as a secure and maintainable internal CRM for 福建利尼尔工业装备有限公司, strictly within the contract《系统开发功能清单》.
+Build Nilier CRM as a secure, maintainable, multi-tenant customer relationship platform that teams can operate with confidence.
 
 ## Engineering Principles
 
-1. **Protect company and customer data.** Role and department data boundaries, least privilege, encryption, and auditable access are mandatory.
+1. **Protect customer data.** Tenant isolation, least privilege, encryption, and auditable access are mandatory.
 2. **Prefer simple systems.** Start with a modular monolith and introduce distributed components only when measurements justify them.
 3. **Ship in small increments.** Every change should be reviewable, testable, observable, and reversible.
 4. **Automate quality.** Formatting, static analysis, tests, migrations, and security checks belong in CI.
@@ -21,10 +21,11 @@ Build Linier CRM Management System（利尼尔 CRM 管理系统）as a secure an
 
 ## Initial Quality Targets
 
-| Area                     | Target                                        |
-| ------------------------ | --------------------------------------------- |
-| Availability             | 99.9% monthly for production API              |
-| API latency              | p95 under 500 ms for standard CRUD operations |
-| Recovery point objective | 24 hours or better                            |
-| Recovery time objective  | 4 hours or better                             |
-| Critical vulnerabilities | None knowingly released                       |
+| Area | Target |
+| --- | --- |
+| Availability | 99.9% monthly for production API |
+| API latency | p95 under 500 ms for standard CRUD operations |
+| Recovery point objective | 24 hours or better |
+| Recovery time objective | 4 hours or better |
+| Critical vulnerabilities | None knowingly released |
+

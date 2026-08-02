@@ -1,173 +1,53 @@
-# Linier CRM Management System Sprint 计划
+# Sprint Plan
 
-## 项目信息
+## Sprint 0: Project Standards
 
-- **中文名称：** 利尼尔 CRM 管理系统
-- **业务范围依据：** 合同《系统开发功能清单》
-- **架构边界：** 福建利尼尔工业装备有限公司内部单组织系统；未经书面批准不建设多租户 `workspace`/`tenant` 能力。
+| Field | Value |
+| --- | --- |
+| Status | Accepted with Minor Changes |
+| Version | v0.0.1 |
 
-## Sprint 0：项目治理文档修订
+### Accepted Outcomes
 
-| 项目 | 内容                                                 |
-| ---- | ---------------------------------------------------- |
-| 状态 | APPROVED                                             |
-| 版本 | v0.1.0                                               |
-| 目标 | 统一项目名称、合同范围、架构边界、实施顺序和验收规则 |
+- [x] Established the product vision, MVP scope, domain rules, and definition of done.
+- [x] Documented engineering, repository, Git, database, API, test, and acceptance standards.
+- [x] Added documentation maintenance instructions and a prioritized delivery backlog.
 
-### 交付结果
+Minor changes identified during acceptance are incorporated into the next planning revision and do not block acceptance of v0.0.1.
 
-- [x] 以合同《系统开发功能清单》作为唯一业务范围依据。
-- [x] 明确系统为福建利尼尔工业装备有限公司内部 CRM，而非通用 SaaS CRM。
-- [x] 将合同功能拆分到 Sprint 1—6，明确每个 Sprint 的边界。
-- [x] 修订项目总纲、Sprint 计划、文档协作规范、项目结构和验收标准。
+## Sprint 1: Infrastructure
 
-## Sprint 1：Infrastructure
+**Objective:** Establish a deployable skeleton and secure workspace boundary.
 
-**目标：** 只建立可运行、可构建、可迁移、可测试的工程基础设施和认证授权框架，不开发任何业务模块。
+### Planned Outcomes
 
-### 开发范围
+- [ ] Select and scaffold the web, API, database, and shared contract toolchain.
+- [ ] Add formatter, linter, type checking, unit test, and build commands.
+- [ ] Configure CI with required quality and secret-scanning checks.
+- [ ] Implement authentication and session lifecycle.
+- [ ] Model users, workspaces, memberships, and roles.
+- [ ] Enforce and test tenant isolation on a health-checkable API slice.
+- [ ] Add local environment setup and initial deployment runbook.
 
-- [ ] Next.js。
-- [ ] TypeScript。
-- [ ] Prisma。
-- [ ] PostgreSQL。
-- [ ] Docker。
-- [ ] Docker Compose。
-- [ ] Logger：结构化日志基础能力，不包含业务操作日志功能。
-- [ ] Config：集中配置加载与校验。
-- [ ] Error Handler：统一异常处理和安全错误响应。
-- [ ] JWT Framework：令牌签发、校验和失效处理框架，不包含具体业务用户流程。
-- [ ] RBAC Framework：角色、权限和鉴权接口框架，不包含业务角色配置。
-- [ ] Swagger：API 文档生成和访问基础能力。
-- [ ] GitHub Action：安装、格式、lint、typecheck、test 和 build 的持续集成检查。
-- [ ] Seed：可重复执行的基础开发/测试种子机制，不包含业务数据。
-- [ ] Migration：Prisma 数据库迁移机制和初始基础迁移。
-- [ ] Environment：本地、测试和生产环境变量模板、校验及使用说明，不提交密钥。
+### Exit Criteria
 
-### 明确禁止
+- A new contributor can start the system using documented commands.
+- CI builds and tests the repository from a clean checkout.
+- An authenticated user can access only their active workspace.
+- The application can be deployed and rolled back in a non-production environment.
 
-Sprint 1 禁止开发以下业务模块、数据模型、API、页面、Seed 或报表：
+## Prioritized Backlog
 
-- Customer。
-- Supplier。
-- Quotation。
-- Order。
-- Product。
-- Report。
+1. Organizations and contacts.
+2. Pipelines, stages, and opportunities.
+3. Activities and tasks.
+4. Search, filtering, and pagination.
+5. CSV import and export.
+6. Audit views and operational hardening.
 
-上述功能全部进入后续 Sprint。不得以演示、占位、预留接口或“基础数据”为理由提前实现。
+## Sprint Operating Rules
 
-### 强制验收清单
-
-以下项目必须在干净环境中逐项执行并保留成功证据：
-
-- [ ] `npm install`：依赖安装成功。
-- [ ] `docker compose up`：PostgreSQL 和所需基础服务成功启动并保持健康。
-- [ ] `npm run dev`：Next.js 开发服务成功启动且基础健康检查可访问。
-- [ ] `npm run build`：生产构建成功。
-- [ ] `prisma migrate`：迁移可在空数据库成功执行，重复执行结果可预测。
-- [ ] `prisma seed`：基础 Seed 可重复执行且不产生合同业务数据。
-- [ ] `lint`：仓库 lint 命令零错误通过。
-- [ ] `typecheck`：TypeScript 类型检查零错误通过。
-- [ ] `test`：自动化测试全部通过。
-- [ ] `swagger`：Swagger 文档可访问，Schema 生成无错误。
-- [ ] `jwt`：自动化测试证明有效令牌通过、无效/过期令牌被拒绝。
-- [ ] `rbac`：自动化测试证明有权限请求通过、无权限请求返回拒绝结果。
-
-### Sprint 判定
-
-- 上述十二项全部通过：**Sprint 1 — PASS**。
-- 任意一项未执行、失败或缺少证据：**Sprint 1 — Rejected**。
-- 被禁止的业务功能一旦进入 Sprint 1 交付物，即使技术检查通过，Sprint 1 仍判定为 **Rejected**。
-
-## Sprint 2：基础资料
-
-**目标：** 交付产品、供应商、原料和价目表，为后续销售业务提供统一基础数据。
-
-### 范围
-
-- [ ] 产品档案。
-- [ ] 供应商档案。
-- [ ] 原料档案。
-- [ ] 价目表。
-
-### 验收出口
-
-- 四类资料均可按权限新增、查询、修改、启停并留痕。
-- 编码、必填项、状态、价格和有效期规则通过测试。
-- 停用资料不能用于新增业务，历史引用保持可追溯。
-
-## Sprint 3：客户管理
-
-**目标：** 建立客户主数据、联系人、客户公海和客户查重闭环。
-
-### 范围
-
-- [ ] 客户档案。
-- [ ] 联系人管理。
-- [ ] 客户公海。
-- [ ] 客户查重。
-
-### 验收出口
-
-- 客户和联系人可按本人、部门及授权范围管理。
-- 公海领取、分配、回收具备并发控制、权限校验和操作记录。
-- 新建与导入使用一致的查重规则，重复处理不泄露未授权数据。
-
-## Sprint 4：销售管理
-
-**目标：** 交付从商机识别到报价形成的销售过程管理。
-
-### 范围
-
-- [ ] 商机管理。
-- [ ] 客户跟进。
-- [ ] 拜访计划。
-- [ ] 签到管理。
-- [ ] 报价管理。
-
-### 验收出口
-
-- 商机阶段、跟进历史和拜访执行可完整追溯。
-- 签到准确关联人员、客户、时间、位置及拜访计划。
-- 报价金额计算、价目引用、审核和版本记录符合确认规则。
-
-## Sprint 5：订单管理
-
-**目标：** 交付从订单申请、阶段流转到销售出库的执行闭环。
-
-### 范围
-
-- [ ] 订单申请。
-- [ ] 订单阶段管理。
-- [ ] 销售出库。
-
-### 验收出口
-
-- 未获批准的订单申请不能进入订单执行或出库。
-- 阶段流转按顺序和角色权限执行，异常及终止原因可追溯。
-- 出库数量符合订单约束，确认结果准确回写订单状态。
-
-## Sprint 6：财务与数据洞察
-
-**目标：** 交付报销流程、经营数据和绩效数据。
-
-### 范围
-
-- [ ] 报销申请。
-- [ ] 经营数据。
-- [ ] 绩效数据。
-
-### 验收出口
-
-- 报销明细、凭证、审批状态和意见完整且可追溯。
-- 经营与绩效指标采用业务方确认口径，并可追溯至原始业务数据。
-- 页面、明细和导出的本人/部门/公司数据权限一致。
-- 数据洞察不包含合同未约定的机器学习预测。
-
-## Sprint 执行规则
-
-- 每个 Sprint 开始前必须把合同条目细化为可测试验收场景，并由业务负责人确认。
-- 范围调整必须引用合同条目或附书面变更批准，不得以技术预留扩大业务范围。
-- 上一 Sprint 的阻断问题未关闭时，不得宣告下一 Sprint 对应依赖已就绪。
-- 完成项必须满足 `ACCEPTANCE_STANDARD.md`，通过评审、测试和业务验收后方可标记完成。
+- Scope changes require an explicit trade-off and product owner approval.
+- Blockers are raised within one working day.
+- Work is not counted complete until it satisfies `ACCEPTANCE_STANDARD.md`.
+- The plan is updated during refinement, sprint planning, review, and retrospective.

@@ -36,7 +36,8 @@ Messages MUST be safe for clients. Internal stack traces, SQL, and secrets MUST 
 ## Security and Documentation
 
 - Authentication and authorization MUST be checked for every protected endpoint.
-- Role and department data scope MUST come from authenticated user authorization, not from trusted client-supplied identifiers alone.
+- Tenant context MUST come from the authenticated membership, not a trusted client-supplied identifier alone.
 - State-changing browser requests MUST address CSRF where cookie authentication is used.
 - Rate limits SHOULD protect authentication, export, import, and expensive search routes.
 - The API contract MUST be maintained as OpenAPI and validated in CI.
+
