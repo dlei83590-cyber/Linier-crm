@@ -21,11 +21,10 @@ Build Nilier CRM as a secure, maintainable, multi-tenant customer relationship p
 
 ## Initial Quality Targets
 
-| Area | Target |
-| --- | --- |
-| Availability | 99.9% monthly for production API |
-| API latency | p95 under 500 ms for standard CRUD operations |
-| Recovery point objective | 24 hours or better |
-| Recovery time objective | 4 hours or better |
-| Critical vulnerabilities | None knowingly released |
-
+| Area                     | Target                                        |
+| ------------------------ | --------------------------------------------- |
+| Availability             | 99.9% monthly for production API              |
+| API latency              | p95 under 500 ms for standard CRUD operations |
+| Recovery point objective | 24 hours or better                            |
+| Recovery time objective  | 4 hours or better                             |
+| Critical vulnerabilities | None knowingly released                       |

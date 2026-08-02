@@ -2,10 +2,10 @@
 
 ## Sprint 0: Project Standards
 
-| Field | Value |
-| --- | --- |
-| Status | Accepted with Minor Changes |
-| Version | v0.0.1 |
+| Field   | Value                       |
+| ------- | --------------------------- |
+| Status  | Accepted with Minor Changes |
+| Version | v0.0.1                      |
 
 ### Accepted Outcomes
 
@@ -17,24 +17,27 @@ Minor changes identified during acceptance are incorporated into the next planni
 
 ## Sprint 1: Infrastructure
 
-**Objective:** Establish a deployable skeleton and secure workspace boundary.
+**Objective:** Establish a deployable, observable, and testable application foundation without implementing CRM business modules.
 
 ### Planned Outcomes
 
-- [ ] Select and scaffold the web, API, database, and shared contract toolchain.
-- [ ] Add formatter, linter, type checking, unit test, and build commands.
-- [ ] Configure CI with required quality and secret-scanning checks.
-- [ ] Implement authentication and session lifecycle.
-- [ ] Model users, workspaces, memberships, and roles.
-- [ ] Enforce and test tenant isolation on a health-checkable API slice.
-- [ ] Add local environment setup and initial deployment runbook.
+- [ ] Initialize Next.js and TypeScript with formatting, lint, type checking, tests, and production builds.
+- [ ] Configure PostgreSQL, Prisma, migrations, and an idempotent infrastructure seed.
+- [ ] Provide Docker and Docker Compose workflows for the application and database.
+- [ ] Add validated environment configuration, structured logging, and a consistent error handler.
+- [ ] Add JWT authentication and RBAC foundations with automated allow/deny tests.
+- [ ] Publish the infrastructure API contract through OpenAPI and Swagger.
+- [ ] Configure GitHub Actions to install, migrate, seed, lint, typecheck, test, and build.
+
+Customer, Supplier, Quotation, Order, Product, and Report implementation is prohibited in Sprint 1 and remains deferred to later approved Sprints.
 
 ### Exit Criteria
 
-- A new contributor can start the system using documented commands.
-- CI builds and tests the repository from a clean checkout.
-- An authenticated user can access only their active workspace.
-- The application can be deployed and rolled back in a non-production environment.
+- `npm install`, `npm run dev`, `npm run build`, lint, typecheck, and tests pass from a clean checkout.
+- `docker compose up` starts the application and a healthy PostgreSQL service.
+- Prisma migration and seed commands succeed against an empty database.
+- Swagger is reachable and accurately describes the infrastructure endpoints.
+- JWT accepts valid tokens and rejects invalid or expired tokens; RBAC allows and denies requests according to permission.
 
 ## Prioritized Backlog
 

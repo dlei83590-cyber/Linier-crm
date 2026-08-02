@@ -8,4 +8,3 @@ These instructions apply to every file under `docs/`.
 - Do not add secrets, credentials, customer data, or environment-specific values to documentation.
 - Update `SPRINT_PLAN.md` when scope or delivery status changes.
 - Changes to architecture, APIs, or data models MUST update the corresponding standard in the same pull request.
-

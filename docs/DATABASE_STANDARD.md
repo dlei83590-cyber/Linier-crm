@@ -29,4 +29,3 @@ Every tenant-scoped query MUST constrain `workspace_id`. Composite unique constr
 - Transactions MUST be as short as practical and encompass all writes for one invariant.
 - Production access MUST be audited and limited to authorized personnel.
 - Backups MUST be encrypted, monitored, and restored in a scheduled recovery test.
-

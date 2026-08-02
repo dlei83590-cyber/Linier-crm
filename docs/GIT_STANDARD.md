@@ -30,4 +30,3 @@ Every pull request MUST include:
 - Links to the issue, sprint item, or decision record.
 
 Prefer squash merging unless preserving a curated commit series improves traceability. Delete merged branches.
-

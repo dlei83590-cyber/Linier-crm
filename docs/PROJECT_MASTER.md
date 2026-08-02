@@ -22,11 +22,11 @@ Nilier CRM gives small and medium-sized teams one dependable workspace for manag
 
 ## Personas
 
-| Persona | Primary needs |
-| --- | --- |
-| Workspace administrator | Manage members, roles, settings, and data safety |
-| Sales manager | Configure pipelines and inspect team performance |
-| Sales representative | Maintain contacts, opportunities, activities, and tasks |
+| Persona                 | Primary needs                                           |
+| ----------------------- | ------------------------------------------------------- |
+| Workspace administrator | Manage members, roles, settings, and data safety        |
+| Sales manager           | Configure pipelines and inspect team performance        |
+| Sales representative    | Maintain contacts, opportunities, activities, and tasks |
 
 ## MVP Scope
 
@@ -58,4 +58,3 @@ Nilier CRM gives small and medium-sized teams one dependable workspace for manag
 ## Definition of Done
 
 A feature is done only when it meets `DEVELOPMENT_STANDARD.md`, `TEST_STANDARD.md`, and `ACCEPTANCE_STANDARD.md`, includes required documentation and observability, and is deployed or demonstrably deployable.
-

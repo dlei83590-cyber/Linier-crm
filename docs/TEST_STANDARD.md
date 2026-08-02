@@ -2,12 +2,12 @@
 
 ## Test Layers
 
-| Layer | Purpose | Expectation |
-| --- | --- | --- |
-| Unit | Business rules and pure transformations | Fast, deterministic, isolated |
-| Integration | Database, queues, and service boundaries | Use production-like dependencies |
-| Contract | API schema and compatibility | Validate requests, responses, and errors |
-| End-to-end | Critical user journeys | Cover a small, stable set of core workflows |
+| Layer       | Purpose                                  | Expectation                                 |
+| ----------- | ---------------------------------------- | ------------------------------------------- |
+| Unit        | Business rules and pure transformations  | Fast, deterministic, isolated               |
+| Integration | Database, queues, and service boundaries | Use production-like dependencies            |
+| Contract    | API schema and compatibility             | Validate requests, responses, and errors    |
+| End-to-end  | Critical user journeys                   | Cover a small, stable set of core workflows |
 
 ## Required Coverage
 
@@ -30,4 +30,3 @@ Critical journeys include:
 - External services MUST be stubbed in unit tests and exercised in dedicated integration tests.
 - Coverage is a diagnostic, not a substitute for behavior-focused assertions; changed code SHOULD maintain at least 80% line coverage unless justified.
 - Flaky tests MUST be fixed or quarantined with an owner and deadline; they MUST NOT be silently retried indefinitely.
-

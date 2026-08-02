@@ -20,4 +20,3 @@ A story is ready when it has a user outcome, explicit scope, testable acceptance
 ## Release Acceptance
 
 A release MUST have an owner, version or traceable commit, release notes, successful automated checks, a rollback decision point, and post-deployment verification. Any waived criterion MUST record the risk, approver, owner, and remediation deadline.
-

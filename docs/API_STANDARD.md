@@ -40,4 +40,3 @@ Messages MUST be safe for clients. Internal stack traces, SQL, and secrets MUST 
 - State-changing browser requests MUST address CSRF where cookie authentication is used.
 - Rate limits SHOULD protect authentication, export, import, and expensive search routes.
 - The API contract MUST be maintained as OpenAPI and validated in CI.
-
