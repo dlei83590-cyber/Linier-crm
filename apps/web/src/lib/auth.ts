@@ -31,5 +31,5 @@ export async function signSessionToken(claims: SessionClaims): Promise<string> {
 
 export async function verifySessionToken(token: string): Promise<JWTPayload & { roles?: string[] }> {
   const { payload } = await jwtVerify(token, secret);
-  return payload as JWTPayload & { roles?: string[] };
+  return payload as unknown as JWTPayload & { roles?: string[] };
 }
