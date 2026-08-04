@@ -17,7 +17,9 @@ RUN corepack enable pnpm && (test -f pnpm-lock.yaml && pnpm install --frozen-loc
 # Rebuild the source code only when needed
 FROM base AS builder
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
+# Copy the full deps output so pnpm workspace symlink trees survive:
+# root node_modules (.pnpm store) + apps/web/node_modules + packages/*/node_modules
+COPY --from=deps /app/ ./
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
