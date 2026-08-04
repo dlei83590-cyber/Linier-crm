@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Nilier CRM",
+  title: "Linier CRM Management System",
   description: "Enterprise customer relationship management platform",
 };
 

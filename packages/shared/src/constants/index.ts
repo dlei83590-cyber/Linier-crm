@@ -1,4 +1,4 @@
-export const APP_NAME = "Nilier CRM";
+export const APP_NAME = "Linier CRM Management System";
 
 export const ROLES = {
   SUPER_ADMIN: "SUPER_ADMIN",

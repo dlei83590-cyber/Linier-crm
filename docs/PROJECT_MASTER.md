@@ -1,8 +1,8 @@
-# Nilier CRM Project Master
+# Linier CRM Management System Project Master
 
 ## Product Vision
 
-Nilier CRM gives small and medium-sized teams one dependable workspace for managing organizations, contacts, sales opportunities, activities, and follow-ups.
+Linier CRM Management System gives small and medium-sized teams one dependable workspace for managing organizations, contacts, sales opportunities, activities, and follow-ups.
 
 ## Goals
 

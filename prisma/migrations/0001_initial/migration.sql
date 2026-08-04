@@ -49,6 +49,12 @@ CREATE TABLE "Permission" (
     CONSTRAINT "Permission_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable (implicit many-to-many join table for Role <-> Permission)
+CREATE TABLE "_PermissionToRole" (
+    "A" TEXT NOT NULL,
+    "B" TEXT NOT NULL
+);
+
 -- CreateTable
 CREATE TABLE "UserRole" (
     "id" TEXT NOT NULL,
@@ -87,6 +93,9 @@ CREATE INDEX "Role_code_idx" ON "Role"("code");
 CREATE UNIQUE INDEX "Permission_code_key" ON "Permission"("code");
 CREATE INDEX "Permission_module_code_idx" ON "Permission"("module", "code");
 
+CREATE UNIQUE INDEX "_PermissionToRole_AB_unique" ON "_PermissionToRole"("A", "B");
+CREATE INDEX "_PermissionToRole_B_index" ON "_PermissionToRole"("B");
+
 CREATE UNIQUE INDEX "UserRole_userId_roleId_key" ON "UserRole"("userId", "roleId");
 CREATE INDEX "UserRole_roleId_idx" ON "UserRole"("roleId");
 
@@ -104,3 +113,7 @@ ALTER TABLE "UserRole" ADD CONSTRAINT "UserRole_userId_fkey" FOREIGN KEY ("userI
 ALTER TABLE "UserRole" ADD CONSTRAINT "UserRole_roleId_fkey" FOREIGN KEY ("roleId") REFERENCES "Role"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 ALTER TABLE "AuditLog" ADD CONSTRAINT "AuditLog_actorId_fkey" FOREIGN KEY ("actorId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+ALTER TABLE "_PermissionToRole" ADD CONSTRAINT "_PermissionToRole_A_fkey" FOREIGN KEY ("A") REFERENCES "Permission"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+ALTER TABLE "_PermissionToRole" ADD CONSTRAINT "_PermissionToRole_B_fkey" FOREIGN KEY ("B") REFERENCES "Role"("id") ON DELETE CASCADE ON UPDATE CASCADE;

@@ -2,7 +2,7 @@
 
 ## Mission
 
-Build Nilier CRM as a secure, maintainable, multi-tenant customer relationship platform that teams can operate with confidence.
+Build Linier CRM Management System as a secure, maintainable, multi-tenant customer relationship platform that teams can operate with confidence.
 
 ## Engineering Principles
 

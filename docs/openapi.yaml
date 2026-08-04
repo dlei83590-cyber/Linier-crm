@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: Nilier CRM API
+  title: Linier CRM Management System API
   description: Enterprise customer relationship management platform - Sprint 1 infrastructure surface.
   version: 0.1.0
   contact:

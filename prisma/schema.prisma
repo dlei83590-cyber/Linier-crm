@@ -1,4 +1,4 @@
-// Nilier CRM - Sprint 1 core schema (v1)
+// Linier CRM Management System - Sprint 1 core schema (v1)
 // CTO directive: first version contains ONLY:
 //   User, Department, Role, Permission, UserRole, AuditLog
 // Business tables (Customer, Product, Order, ...) are intentionally absent
