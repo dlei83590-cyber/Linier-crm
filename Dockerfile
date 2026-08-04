@@ -44,13 +44,21 @@ COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/
 
 # Prisma migrate/seed tooling for Railway pre-deploy command
 # (full workspace node_modules tree so prisma CLI + tsx resolve correctly)
+# NOTE: node_modules must come from BUILDER (not deps): the builder ran
+# `prisma generate`, so its tree contains the generated Prisma Client.
+# Copying the deps tree instead shadows the traced @prisma/client in the
+# standalone output with an un-generated copy -> runtime error
+# "@prisma/client did not initialize yet".
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
-COPY --from=deps /app/node_modules ./node_modules
+COPY --from=builder /app/node_modules ./node_modules
 
 # pnpm for Railway pre-deploy command (corepack shim; pinned to repo's packageManager)
-RUN corepack enable pnpm && corepack prepare pnpm@9.14.4 --activate
+# Regenerate Prisma Client in the runner tree as well: guarantees the
+# standalone runtime resolves a fully-generated client regardless of what
+# Next.js traced into .next/standalone/node_modules.
+RUN corepack enable pnpm && corepack prepare pnpm@9.14.4 --activate && pnpm exec prisma generate
 
 USER nextjs
 
