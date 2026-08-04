@@ -1,0 +1,2 @@
+# Placeholder - CI workflow will be finalized once dependencies are installed.
+# Reserved jobs: lint, type-check, test, build, secret-scanning.

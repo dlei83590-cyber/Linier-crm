@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@nilier-crm/ui": ["../../packages/ui/src"],
+      "@nilier-crm/shared": ["../../packages/shared/src"],
+      "@nilier-crm/config": ["../../packages/config/src"],
+      "@nilier-crm/types": ["../../packages/types/src"]
+    }
+  },
+  "include": ["next-env.d.ts", "src/**/*.ts", "src/**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules", ".next"]
+}

@@ -1,0 +1,105 @@
+// Nilier CRM - Sprint 1 core schema (v1)
+// CTO directive: first version contains ONLY:
+//   User, Department, Role, Permission, UserRole, AuditLog
+// Business tables (Customer, Product, Order, ...) are intentionally absent
+// and will be introduced in later sprints.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Platform user account. Identity and credential record.
+model User {
+  id           String      @id @default(cuid())
+  email        String      @unique
+  passwordHash String
+  name         String?
+  isActive     Boolean     @default(true)
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  roles        UserRole[]
+  auditLogs    AuditLog[]
+  createdAt    DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime    @updatedAt @db.Timestamptz(3)
+
+  @@index([email])
+  @@index([departmentId])
+}
+
+/// Organizational unit users belong to.
+model Department {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  parentId  String?
+  parent    Department?  @relation("DepartmentTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children  Department[] @relation("DepartmentTree")
+  users     User[]
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([parentId])
+}
+
+/// Named role that bundles permissions (e.g. ADMIN, MANAGER, MEMBER, VIEWER).
+model Role {
+  id          String       @id @default(cuid())
+  name        String
+  code        String       @unique
+  description String?
+  permissions Permission[] @relation("RolePermissions")
+  users       UserRole[]
+  createdAt   DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @db.Timestamptz(3)
+
+  @@index([code])
+}
+
+/// Atomic capability, grouped by module (e.g. user:read, audit:write).
+model Permission {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique
+  module      String
+  description String?
+  roles       Role[]   @relation("RolePermissions")
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([module, code])
+}
+
+/// Explicit many-to-many link between User and Role.
+model UserRole {
+  id        String   @id @default(cuid())
+  userId    String
+  roleId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([userId, roleId])
+  @@index([roleId])
+}
+
+/// Immutable trail of security-sensitive and destructive actions.
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String
+  entityId   String?
+  meta       Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([actorId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
