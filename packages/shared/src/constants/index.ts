@@ -13,6 +13,8 @@ export const PERMISSIONS = {
   USER_WRITE: "user:write",
   ROLE_READ: "role:read",
   ROLE_WRITE: "role:write",
+  AUDIT_READ: "audit:read",
+  AUDIT_WRITE: "audit:write",
 } as const;
 
 export const DEFAULT_PAGE_SIZE = 20;
