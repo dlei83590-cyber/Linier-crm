@@ -23,7 +23,9 @@ COPY --from=deps /app/ ./
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN corepack enable pnpm && pnpm build
+# Generate Prisma Client before building so next build's type check
+# can resolve @prisma/client types (matches the CI Build job)
+RUN corepack enable pnpm && pnpm db:generate && pnpm build
 
 # Production image, copy all the files and run next
 FROM base AS runner
