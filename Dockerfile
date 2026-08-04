@@ -8,7 +8,10 @@ WORKDIR /app
 
 COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml* tsconfig.base.json ./
 COPY apps/web/package.json ./apps/web/
-COPY packages/*/package.json ./packages/*/
+COPY packages/config/package.json ./packages/config/
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/types/package.json ./packages/types/
+COPY packages/ui/package.json ./packages/ui/
 RUN corepack enable pnpm && (test -f pnpm-lock.yaml && pnpm install --frozen-lockfile || pnpm install)
 
 # Rebuild the source code only when needed
