@@ -49,6 +49,9 @@ COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY --from=deps /app/node_modules ./node_modules
 
+# pnpm for Railway pre-deploy command (corepack shim; pinned to repo's packageManager)
+RUN corepack enable pnpm && corepack prepare pnpm@9.14.4 --activate
+
 USER nextjs
 
 EXPOSE 3000
