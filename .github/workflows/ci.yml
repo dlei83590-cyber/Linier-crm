@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgresql://nilier:nilier@localhost:5432/nilier_crm?schema=public
+      PRISMA_SKIP_POSTINSTALL_GENERATE: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -28,6 +29,8 @@ jobs:
           fi
       - name: Lint
         run: pnpm lint
+      - name: Generate Prisma Client
+        run: pnpm db:generate
       - name: Type check
         run: pnpm type-check
       - name: Unit tests

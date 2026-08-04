@@ -1,4 +1,4 @@
-import { ROLES, PERMISSIONS } from "../constants";
+import { PERMISSIONS, type ROLES } from "../constants";
 
 export type RoleCode = (typeof ROLES)[keyof typeof ROLES];
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
