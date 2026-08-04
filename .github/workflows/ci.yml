@@ -17,7 +17,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
       - name: Install dependencies
         run: |
           if [ -f pnpm-lock.yaml ]; then
@@ -44,7 +43,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
       - name: Install dependencies
         run: |
           if [ -f pnpm-lock.yaml ]; then
@@ -62,6 +60,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Scan for secrets
         uses: gitleaks/gitleaks-action@v2
         env:

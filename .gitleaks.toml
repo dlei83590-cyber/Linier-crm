@@ -1,0 +1,11 @@
+# gitleaks configuration for nilier-crm
+# Extends the default rule set; only adds allowlist entries.
+
+title = "nilier-crm gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Placeholder JWT secret in historical .env.example template (never a real credential)"
+regexes = ['''replace-with-at-least-32-characters''']
