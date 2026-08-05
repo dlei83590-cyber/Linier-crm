@@ -60,5 +60,47 @@ export const PROJECT_MODULES = [
   "project-risk",
 ] as const;
 
+/** 细粒度权限动作（Sprint 3 审批流/工作流直接复用） */
+export const PERMISSION_ACTIONS = [
+  "view",
+  "create",
+  "edit",
+  "delete",
+  "approve",
+  "audit",
+  "export",
+  "import",
+  "assign",
+  "close",
+] as const;
+
+/** 全部权限模块（含系统模块） */
+export const PERMISSION_MODULES = [
+  "user",
+  "role",
+  "audit",
+  "item",
+  "business-partner",
+  "price-list",
+  "technical-standard",
+  "unit-of-measure",
+  "commercial-term",
+  "document-sequence",
+  "project-opportunity",
+  "project",
+  "project-visit",
+  "project-risk",
+] as const;
+
+/** 生成模块×动作权限码（如 "item:view"） */
+export function actionPermission(module: string, action: string): string {
+  return `${module}:${action}`;
+}
+
+/** 全部动作级权限码（供 seed 与 RBAC 全量授权使用） */
+export const ALL_ACTION_PERMISSIONS: string[] = PERMISSION_MODULES.flatMap((m) =>
+  PERMISSION_ACTIONS.map((a) => actionPermission(m, a)),
+);
+
 export const DEFAULT_PAGE_SIZE = 20;
 export const MAX_PAGE_SIZE = 100;

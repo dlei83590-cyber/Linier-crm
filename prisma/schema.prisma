@@ -37,6 +37,49 @@ enum PartnerType {
   BOTH
 }
 
+/// 价格类型（采购价/销售价/VIP/代理/工程/战略客户/区域价/客户专属价/历史价）
+enum PriceType {
+  PURCHASE // 采购价
+  SALES // 销售价
+  VIP // VIP 价
+  AGENT // 代理价
+  ENGINEERING // 工程价
+  STRATEGIC // 战略客户价
+  REGIONAL // 区域价
+  CUSTOMER // 客户专属价
+  HISTORICAL // 历史价
+}
+
+/// 物料生命周期（引入期/成长期/成熟期/衰退期/停产）
+enum ItemLifecycle {
+  INTRO
+  GROWTH
+  MATURE
+  DECLINE
+  EOL
+}
+
+/// 单据类型（报价/SO/PO/PI/CI/DO/GRN/GI/发票/贷项/借项/付款/收款/费用/日记账/合同/项目）
+enum DocumentType {
+  QUOTATION // 报价单
+  SALES_ORDER // 销售订单 SO
+  PURCHASE_ORDER // 采购订单 PO
+  PROFORMA_INVOICE // 形式发票 PI
+  COMMERCIAL_INVOICE // 商业发票 CI
+  DELIVERY_ORDER // 送货单 DO
+  GOODS_RECEIPT_NOTE // 收货单 GRN
+  GOODS_ISSUE // 出库单 GI
+  INVOICE // 发票
+  CREDIT_NOTE // 贷项通知单
+  DEBIT_NOTE // 借项通知单
+  PAYMENT_VOUCHER // 付款凭证
+  RECEIPT // 收款收据
+  EXPENSE // 费用报销
+  JOURNAL // 日记账
+  CONTRACT // 合同
+  PROJECT // 项目
+}
+
 /// Platform user account. Identity and credential record.
 model User {
   id           String      @id @default(cuid())
@@ -158,6 +201,22 @@ model Item {
   name          String // 中文名称
   model         String? // 型号
   spec          String? // 规格描述
+  brand         String? // 品牌
+  manufacturer  String? // 制造商
+  oemCode       String? // OEM 编码
+  customerItemNo String? // 客户料号
+  supplierItemNo String? // 供应商料号
+  drawingNo     String? // 图号
+  drawingVersion String? // 图纸版本
+  lifecycle     ItemLifecycle? // 生命周期
+  obsolete      Boolean         @default(false) // 停产标记
+  replacementItemId String? // 替代料
+  replacementItem Item?          @relation("ItemReplacement", fields: [replacementItemId], references: [id], onDelete: SetNull)
+  replacedBy    Item[]          @relation("ItemReplacement")
+  minPackQty    Decimal?        @db.Decimal(14, 2) // 最小包装
+  procurementLeadTime Int? // 采购周期（天）
+  moq           Decimal?        @db.Decimal(14, 2) // MOQ
+  safetyStock   Decimal?        @db.Decimal(14, 2) // 安全库存
   category      ItemCategory    @default(FINISHED_GOOD)
   unitId        String?
   unit          UnitOfMeasure?  @relation(fields: [unitId], references: [id], onDelete: SetNull)
@@ -180,6 +239,7 @@ model Item {
   @@index([model])
   @@index([mnemonic])
   @@index([category])
+  @@index([replacementItemId])
   @@index([deletedAt])
 }
 
@@ -256,6 +316,20 @@ model BusinessPartner {
   bankName            String? // 开户银行
   bankAccount         String? // 银行账号
   settlementTerms     String? // 结算条款
+  shortName            String? // 客户简称
+  fullName             String? // 客户全称
+  groupName            String? // 集团名称
+  region               String? // 所属区域
+  industry             String? // 所属行业
+  companySize          String? // 企业规模
+  creditRating         String? // 信用等级
+  sourceChannel        String? // 来源渠道
+  foundedDate          DateTime? // 成立日期
+  registeredCapital    Decimal?      @db.Decimal(14, 2) // 注册资本（万元）
+  employeeCount        Int? // 员工人数
+  website              String? // 官网
+  wechatOfficialAccount String? // 微信公众号
+  tags                 Json? // 企业标签
   contactPerson       String?
   phone               String?
   email               String?
@@ -283,6 +357,7 @@ model PriceList {
   id              String          @id @default(cuid())
   code            String          @unique
   name            String
+  priceType       PriceType       @default(SALES) // 价格类型
   currency        String          @default("CNY")
   validFrom       DateTime? // 报价有效期起
   validTo         DateTime? // 报价有效期止
@@ -355,6 +430,7 @@ model DocumentSequence {
   id          String   @id @default(cuid())
   code        String   @unique // 单据类型编码
   name        String
+  docType     DocumentType // 单据类型（枚举）
   prefix      String?
   nextNo      Int      @default(1)
   padLength   Int      @default(4)
@@ -505,6 +581,15 @@ model Project {
   paymentStatus      PaymentStatus       @default(UNPAID) // 回款状态
   competitors        Json? // 竞争对手
   successProbability Decimal?            @db.Decimal(5, 2) // 成功概率 %
+  expectedContractAmount Decimal?        @db.Decimal(14, 2) // 预计合同金额
+  expectedProfit Decimal?                 @db.Decimal(14, 2) // 预计利润
+  expectedGrossMarginRate Decimal?        @db.Decimal(5, 2) // 预计毛利率 %
+  receivedAmount Decimal?                 @db.Decimal(14, 2) // 回款金额
+  invoicedAmount Decimal?                  @db.Decimal(14, 2) // 已开发票金额
+  uninvoicedAmount Decimal?                @db.Decimal(14, 2) // 未开发票金额
+  receivableBalance Decimal?               @db.Decimal(14, 2) // 应收余额
+  projectRating String? // 项目评级
+  failureReason String? // 失败原因
   ownerId            String? // 项目负责人
   description        String?
   stakeholders       ProjectStakeholder[]

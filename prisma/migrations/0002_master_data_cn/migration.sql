@@ -7,6 +7,15 @@ CREATE TYPE "ApprovalStatus" AS ENUM ('DRAFT', 'PENDING', 'APPROVED', 'REJECTED'
 -- CreateEnum
 CREATE TYPE "PartnerType" AS ENUM ('CUSTOMER', 'SUPPLIER', 'BOTH');
 
+-- CreateEnum
+CREATE TYPE "PriceType" AS ENUM ('PURCHASE', 'SALES', 'VIP', 'AGENT', 'ENGINEERING', 'STRATEGIC', 'REGIONAL', 'CUSTOMER', 'HISTORICAL');
+
+-- CreateEnum
+CREATE TYPE "ItemLifecycle" AS ENUM ('INTRO', 'GROWTH', 'MATURE', 'DECLINE', 'EOL');
+
+-- CreateEnum
+CREATE TYPE "DocumentType" AS ENUM ('QUOTATION', 'SALES_ORDER', 'PURCHASE_ORDER', 'PROFORMA_INVOICE', 'COMMERCIAL_INVOICE', 'DELIVERY_ORDER', 'GOODS_RECEIPT_NOTE', 'GOODS_ISSUE', 'INVOICE', 'CREDIT_NOTE', 'DEBIT_NOTE', 'PAYMENT_VOUCHER', 'RECEIPT', 'EXPENSE', 'JOURNAL', 'CONTRACT', 'PROJECT');
+
 -- CreateTable
 CREATE TABLE "UnitOfMeasure" (
     "id" TEXT NOT NULL,
@@ -34,6 +43,20 @@ CREATE TABLE "Item" (
     "name" TEXT NOT NULL,
     "model" TEXT,
     "spec" TEXT,
+    "brand" TEXT,
+    "manufacturer" TEXT,
+    "oemCode" TEXT,
+    "customerItemNo" TEXT,
+    "supplierItemNo" TEXT,
+    "drawingNo" TEXT,
+    "drawingVersion" TEXT,
+    "lifecycle" "ItemLifecycle",
+    "obsolete" BOOLEAN NOT NULL DEFAULT false,
+    "replacementItemId" TEXT,
+    "minPackQty" DECIMAL(14,2),
+    "procurementLeadTime" INTEGER,
+    "moq" DECIMAL(14,2),
+    "safetyStock" DECIMAL(14,2),
     "category" "ItemCategory" NOT NULL DEFAULT 'FINISHED_GOOD',
     "unitId" TEXT,
     "description" TEXT,
@@ -119,6 +142,20 @@ CREATE TABLE "BusinessPartner" (
     "bankName" TEXT,
     "bankAccount" TEXT,
     "settlementTerms" TEXT,
+    "shortName" TEXT,
+    "fullName" TEXT,
+    "groupName" TEXT,
+    "region" TEXT,
+    "industry" TEXT,
+    "companySize" TEXT,
+    "creditRating" TEXT,
+    "sourceChannel" TEXT,
+    "foundedDate" TIMESTAMP(3) WITH TIME ZONE,
+    "registeredCapital" DECIMAL(14,2),
+    "employeeCount" INTEGER,
+    "website" TEXT,
+    "wechatOfficialAccount" TEXT,
+    "tags" JSONB,
     "contactPerson" TEXT,
     "phone" TEXT,
     "email" TEXT,
@@ -141,6 +178,7 @@ CREATE TABLE "PriceList" (
     "id" TEXT NOT NULL,
     "code" TEXT NOT NULL,
     "name" TEXT NOT NULL,
+    "priceType" "PriceType" NOT NULL DEFAULT 'SALES',
     "currency" TEXT NOT NULL DEFAULT 'CNY',
     "validFrom" TIMESTAMP(3) WITH TIME ZONE,
     "validTo" TIMESTAMP(3) WITH TIME ZONE,
@@ -206,6 +244,7 @@ CREATE TABLE "DocumentSequence" (
     "id" TEXT NOT NULL,
     "code" TEXT NOT NULL,
     "name" TEXT NOT NULL,
+    "docType" "DocumentType" NOT NULL,
     "prefix" TEXT,
     "nextNo" INTEGER NOT NULL DEFAULT 1,
     "padLength" INTEGER NOT NULL DEFAULT 4,
@@ -245,6 +284,9 @@ CREATE INDEX "Item_mnemonic_idx" ON "Item"("mnemonic");
 
 -- CreateIndex
 CREATE INDEX "Item_category_idx" ON "Item"("category");
+
+-- CreateIndex
+CREATE INDEX "Item_replacementItemId_idx" ON "Item"("replacementItemId");
 
 -- CreateIndex
 CREATE INDEX "Item_deletedAt_idx" ON "Item"("deletedAt");
@@ -323,6 +365,9 @@ CREATE INDEX "DocumentSequence_deletedAt_idx" ON "DocumentSequence"("deletedAt")
 
 -- AddForeignKey
 ALTER TABLE "Item" ADD CONSTRAINT "Item_unitId_fkey" FOREIGN KEY ("unitId") REFERENCES "UnitOfMeasure"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Item" ADD CONSTRAINT "Item_replacementItemId_fkey" FOREIGN KEY ("replacementItemId") REFERENCES "Item"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "LinearGuideSpecification" ADD CONSTRAINT "LinearGuideSpecification_itemId_fkey" FOREIGN KEY ("itemId") REFERENCES "Item"("id") ON DELETE CASCADE ON UPDATE CASCADE;
