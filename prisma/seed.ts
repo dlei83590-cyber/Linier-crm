@@ -500,6 +500,31 @@ const SEED_APPROVER_GROUPS = [
   { code: "FINANCE", name: "财务组", description: "财务审批人" },
 ];
 
+
+/** Sprint 3B：菜单组 */
+const SEED_MENU_GROUPS = [
+  { code: "DASHBOARD", name: "仪表盘", icon: "LayoutDashboard", sort: 1 },
+  { code: "MASTER_DATA", name: "主数据", icon: "Database", sort: 2 },
+  { code: "PROJECT", name: "项目管理", icon: "Briefcase", sort: 3 },
+  { code: "WORKFLOW", name: "工作流", icon: "GitBranch", sort: 4 },
+  { code: "SYSTEM", name: "系统设置", icon: "Settings", sort: 99 },
+];
+
+/** Sprint 3B：菜单（含 RouteMeta：icon/sort/hidden/cache/externalLink/permission） */
+const SEED_MENUS = [
+  { code: "dashboard", name: "数据总览", groupCode: "DASHBOARD", path: "/dashboard", icon: "LayoutDashboard", sort: 1 },
+  { code: "items", name: "物料管理", groupCode: "MASTER_DATA", path: "/items", icon: "Boxes", sort: 1, permission: "item:view" },
+  { code: "business-partners", name: "往来单位", groupCode: "MASTER_DATA", path: "/business-partners", icon: "Building2", sort: 2, permission: "business-partner:view" },
+  { code: "price-lists", name: "价格表", groupCode: "MASTER_DATA", path: "/price-lists", icon: "Tags", sort: 3, permission: "price-list:view" },
+  { code: "projects", name: "项目", groupCode: "PROJECT", path: "/projects", icon: "FolderKanban", sort: 1, permission: "project:view" },
+  { code: "project-opportunities", name: "销售机会", groupCode: "PROJECT", path: "/project-opportunities", icon: "Target", sort: 2, permission: "project-opportunity:view" },
+  { code: "workflow-definitions", name: "流程定义", groupCode: "WORKFLOW", path: "/workflows/definitions", icon: "GitBranch", sort: 1, permission: "workflow-definition:view" },
+  { code: "workflow-instances", name: "审批实例", groupCode: "WORKFLOW", path: "/workflows/instances", icon: "ClipboardList", sort: 2, permission: "workflow-instance:view" },
+  { code: "dictionaries", name: "字典管理", groupCode: "SYSTEM", path: "/dictionaries", icon: "BookOpen", sort: 1, permission: "dictionary-type:view" },
+  { code: "settings", name: "参数设置", groupCode: "SYSTEM", path: "/settings", icon: "Settings2", sort: 2, permission: "system-setting:view" },
+  { code: "audit-logs", name: "审计日志", groupCode: "SYSTEM", path: "/audit-logs", icon: "ShieldCheck", sort: 3, permission: "audit:view" },
+];
+
 async function main() {
   const email = process.env.SEED_ADMIN_EMAIL ?? "admin@linier.com";
   const password = process.env.SEED_ADMIN_PASSWORD ?? "ChangeMe123!";
@@ -654,6 +679,38 @@ async function main() {
       update: {},
       create: g,
     });
+  }
+
+  // Sprint 3B: menu groups + menus（幂等：稳定 code + upsert，菜单按 code 重建子项）
+  const menuGroupIds = new Map<string, string>();
+  for (const g of SEED_MENU_GROUPS) {
+    const saved = await prisma.menuGroup.upsert({
+      where: { code: g.code },
+      update: {},
+      create: g,
+    });
+    menuGroupIds.set(g.code, saved.id);
+  }
+  for (const m of SEED_MENUS) {
+    const groupId = menuGroupIds.get(m.groupCode);
+    if (!groupId) continue;
+    const saved = await prisma.menu.upsert({
+      where: { code: m.code },
+      update: {},
+      create: {
+        code: m.code,
+        name: m.name,
+        groupId,
+        path: m.path ?? null,
+        icon: m.icon ?? null,
+        sort: m.sort ?? 0,
+        hidden: m.hidden ?? false,
+        cache: m.cache ?? false,
+        externalLink: m.externalLink ?? null,
+        permission: m.permission ?? null,
+      },
+    });
+    void saved;
   }
 
   // Master data: price list (含税/未税/税率/税额)

@@ -1,6 +1,6 @@
 # DOMAIN_MODEL 领域模型
 
-- 版本：v1.1
+- 版本：v1.5
 - 日期：2026-08-05
 - 维护者：CIO（JINZA）｜审核：CTO
 - 关联：[PRODUCT_VISION.md](./PRODUCT_VISION.md) ｜ [ROADMAP.md](./ROADMAP.md) ｜ [ADR](./ADR/)
@@ -90,7 +90,8 @@ Project Expense / 日常 Expense ──> 审批流 ──> Voucher（凭证）
 ## 6. 已落地 vs 规划中
 
 - ✅ 已落地（Sprint 2，PR #4）：Item / LinearGuideSpecification / BusinessPartner / PriceList / TechnicalStandard / UnitOfMeasure / CommercialTerm / DocumentSequence + 项目领域 14 模型
-- ✅ 已落地（Sprint 3A，PR #待创建）：Workflow Foundation 22 模型（Workflow 6 + Approval 7 + Notification 4 + Dictionary 2 + Settings 3），见第 7-10 节
+- ✅ 已落地（Sprint 3A，PR #5）：Workflow Foundation 22 模型（Workflow 6 + Approval 7 + Notification 4 + Dictionary 2 + Settings 3），见第 7-10 节
+- 🔄 进行中（Sprint 3B）：Audit Center（第 12 节）✅ + Menu Center（第 13 节）✅ + Dashboard API（第 14 节）✅ + File Center（第 15 节）✅
 - ⬜ 规划中（Sprint 4-7）：Quotation / Sales Order / Contract / Delivery / Invoice / Payment / Purchase / GRN / Warehouse / Stock / AR / AP / Voucher / Journal / GL
 
 > 详细字段标准见数据库 schema（`prisma/schema.prisma`）与 [architecture/domain-model.md](./architecture/domain-model.md)。
@@ -452,3 +453,214 @@ erDiagram
 | DictionaryType → DictionaryItem | Cascade | 字典项依附类型 |
 
 > 统一审计字段（CTO 规则）：id / createdAt / createdBy / updatedAt / updatedBy / version / approvalStatus / isDeleted / deletedAt / deletedBy；业务数据一律软删除，禁止物理删除。
+
+## 12. Audit Center（Sprint 3B 升级，ADR-0005）
+
+```mermaid
+erDiagram
+    User ||--o{ AuditLog : acts
+
+    AuditLog {
+        string id PK
+        string actorId FK
+        string action
+        string entityType
+        string entityId
+        Json beforeData
+        Json afterData
+        string requestId
+        string traceId
+        Json meta
+        string ipAddress
+        string device
+        string browser
+        int duration
+        AuditResult result
+        datetime createdAt
+    }
+```
+
+- 字段语义：entityType = ObjectType；entityId = ObjectId；beforeData/afterData = 操作前后数据快照；requestId/traceId = 链路追踪；device/browser = 终端环境（UA 解析）；duration = 耗时（毫秒）；result = SUCCESS/FAILURE/PARTIAL
+- 枚举：AuditResult（SUCCESS / FAILURE / PARTIAL）
+- 迁移 `0005_audit_upgrade`：仅 ALTER 加列 + 建索引（表已存在不重建，CTO 规则），新增 requestId/traceId/result 索引
+- API：`GET /api/audit-logs`（分页 + actorId/entityType/entityId/action/result/requestId/traceId/时间过滤）+ `GET /api/audit-logs/:id`；权限 `audit:view`（仅 SUPER_ADMIN/ADMIN）
+- requestMeta() 统一提取 IP/Device/Browser/RequestId/TraceId；所有写操作自动写入完整审计
+
+
+## 13. Menu Center（Sprint 3B，ADR-0006）
+
+```mermaid
+erDiagram
+    MenuGroup ||--o{ Menu : contains
+    Menu ||--o{ Menu : tree
+
+    MenuGroup {
+        string id PK
+        string code UK
+        string name
+        string icon
+        int sort
+        int version
+        datetime deletedAt
+    }
+
+    Menu {
+        string id PK
+        string groupId FK
+        string parentId FK
+        string code UK
+        string name
+        string path
+        string icon
+        int sort
+        bool hidden
+        bool cache
+        string externalLink
+        string permission
+        int version
+        datetime deletedAt
+    }
+```
+
+- RouteMeta 内联：path / icon / sort / hidden（隐藏）/ cache（缓存）/ externalLink（外链）/ permission（权限码）
+- 删除策略：Menu → MenuGroup Cascade；Menu → Menu（parentId）SetNull（父删子提升为根）
+- 迁移 `0006_menu_center`：2 表 + 索引 + 外键
+- API：GET /api/menus（?tree=true 树形，前端直接读取）/ POST / GET / PATCH（乐观锁）/ DELETE（软删除，递归子树）
+- 权限：menu / menu-group 模块，MANAGER 全量
+
+
+## 14. Dashboard API（Sprint 3B，ADR-0007）
+
+```mermaid
+erDiagram
+    DashboardWidget {
+        string id PK
+        string code UK
+        string name
+        DashboardWidgetType widgetType
+        string dataSource
+        Json query
+        int refreshInterval
+        int sort
+        bool enabled
+        int version
+        datetime deletedAt
+    }
+
+    DashboardLayout {
+        string id PK
+        string code UK
+        string name
+        bool isDefault
+        Json grid
+        bool enabled
+        int version
+        datetime deletedAt
+    }
+
+    DashboardKpi {
+        string id PK
+        string code UK
+        string name
+        string unit
+        DashboardAggregate aggregate
+        string dataSource
+        Json query
+        Decimal target
+        int sort
+        bool enabled
+        int version
+        datetime deletedAt
+    }
+
+    DashboardChart {
+        string id PK
+        string code UK
+        string name
+        DashboardChartType chartType
+        string dataSource
+        Json query
+        string xAxis
+        string yAxis
+        int sort
+        bool enabled
+        int version
+        datetime deletedAt
+    }
+```
+
+- 枚举：DashboardWidgetType（KPI/CHART/TABLE）、DashboardChartType（LINE/BAR/PIE/AREA/SCATTER）、DashboardAggregate（SUM/AVG/COUNT/MIN/MAX）
+- 只提供数据 API（/api/dashboard/widgets|layouts|kpis|charts），页面 Sprint 8 开发
+- 迁移 `0007_dashboard_api`：4 表 + 3 枚举 + code 唯一索引
+- 权限：dashboard-widget / dashboard-layout / dashboard-kpi / dashboard-chart 模块，MANAGER 全量
+
+
+
+## 15. File Center（Sprint 3B，ADR-0008）
+
+```mermaid
+erDiagram
+    FileFolder ||--o{ FileFolder : tree
+    FileFolder ||--o{ File : contains
+    File ||--o{ FileVersion : versions
+    File ||--o{ FileAttachment : attached
+
+    FileFolder {
+        string id PK
+        string code UK
+        string name
+        string parentId FK
+        int sort
+        int version
+        datetime deletedAt
+    }
+
+    File {
+        string id PK
+        string code UK
+        string name
+        string originalName
+        string extension
+        string mimeType
+        int size
+        string storagePath
+        string checksum
+        string folderId FK
+        string ownerId
+        int currentVersion
+        int version
+        datetime deletedAt
+    }
+
+    FileVersion {
+        string id PK
+        string fileId FK
+        int versionNo
+        string originalName
+        string extension
+        string mimeType
+        int size
+        string storagePath
+        string checksum
+        datetime deletedAt
+    }
+
+    FileAttachment {
+        string id PK
+        string fileId FK
+        string businessType
+        string businessId
+        int sort
+        datetime deletedAt
+    }
+```
+
+- File 只存元数据（storagePath 指向对象存储/本地），真实二进制存储后续接入
+- 创建 File 自动生成 versionNo=1；新版本推进 currentVersion（事务）
+- 附件关联：fileId + businessType/businessId（quotation/contract/sales-order/invoice/project 统一引用）
+- 预览：GET /api/files/:id/preview 按 mimeType 白名单判定可预览
+- 删除策略：File → FileFolder SetNull；FileVersion/FileAttachment → File Cascade（逻辑软删）
+- 迁移 `0008_file_center`：4 表 + 索引 + 外键
+- 权限：file / file-folder / file-version / file-attachment 模块，MANAGER 全量
+
+## 16. 变更记录

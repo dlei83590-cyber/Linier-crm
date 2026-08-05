@@ -64,14 +64,50 @@ export function clientIp(request: NextRequest): string | undefined {
   return request.headers.get("x-real-ip") ?? undefined;
 }
 
-export async function writeAuditLog(params: {
+/** 请求元数据（Sprint 3B Audit 升级：RequestId/TraceId/IP/Device/Browser） */
+export interface RequestMeta {
+  requestId: string | null;
+  traceId: string | null;
+  ipAddress: string | undefined;
+  device: string | null;
+  browser: string | null;
+}
+
+export function requestMeta(request: NextRequest): RequestMeta {
+  const ua = request.headers.get("user-agent") ?? "";
+  const device = /mobile|android|iphone|ipad/i.test(ua) ? "mobile" : "desktop";
+  const browser =
+    /edg\//i.test(ua) ? "Edge" :
+    /chrome/i.test(ua) ? "Chrome" :
+    /firefox/i.test(ua) ? "Firefox" :
+    /safari/i.test(ua) ? "Safari" : null;
+  return {
+    requestId: request.headers.get("x-request-id"),
+    traceId: request.headers.get("x-trace-id"),
+    ipAddress: clientIp(request),
+    device,
+    browser,
+  };
+}
+
+export interface AuditLogParams {
   actorId?: string | null;
   action: string;
   entityType: string;
   entityId?: string | null;
+  beforeData?: unknown;
+  afterData?: unknown;
+  requestId?: string | null;
+  traceId?: string | null;
   meta?: unknown;
   ipAddress?: string;
-}) {
+  device?: string | null;
+  browser?: string | null;
+  duration?: number | null;
+  result?: "SUCCESS" | "FAILURE" | "PARTIAL";
+}
+
+export async function writeAuditLog(params: AuditLogParams) {
   try {
     await prisma.auditLog.create({
       data: {
@@ -79,8 +115,16 @@ export async function writeAuditLog(params: {
         action: params.action,
         entityType: params.entityType,
         entityId: params.entityId ?? null,
+        beforeData: params.beforeData === undefined ? undefined : (params.beforeData as object),
+        afterData: params.afterData === undefined ? undefined : (params.afterData as object),
+        requestId: params.requestId ?? null,
+        traceId: params.traceId ?? null,
         meta: params.meta === undefined ? undefined : (params.meta as object),
         ipAddress: params.ipAddress,
+        device: params.device ?? null,
+        browser: params.browser ?? null,
+        duration: params.duration ?? null,
+        result: params.result ?? "SUCCESS",
       },
     });
   } catch {

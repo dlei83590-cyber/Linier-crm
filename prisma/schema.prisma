@@ -155,19 +155,38 @@ model UserRole {
 }
 
 /// Immutable trail of security-sensitive and destructive actions.
+/// 审计结果
+enum AuditResult {
+  SUCCESS
+  FAILURE
+  PARTIAL
+}
+
+/// 审计日志（Sprint 3B 升级：ObjectType/ObjectId/Before/AfterData/RequestId/TraceId/IP/Device/Browser/Duration/Result）
 model AuditLog {
-  id         String   @id @default(cuid())
+  id         String      @id @default(cuid())
   actorId    String?
-  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actor      User?       @relation(fields: [actorId], references: [id], onDelete: SetNull)
   action     String
-  entityType String
-  entityId   String?
+  entityType String // ObjectType（如 workflow-definition）
+  entityId   String? // ObjectId
+  beforeData Json? // 操作前数据快照
+  afterData  Json? // 操作后数据快照
+  requestId  String? // 请求 ID（链路追踪）
+  traceId    String? // 追踪 ID（全链路）
   meta       Json?
-  ipAddress  String?
-  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  ipAddress  String? // IP
+  device     String? // 设备（mobile/desktop）
+  browser    String? // 浏览器 UA 摘要
+  duration   Int? // 耗时（毫秒）
+  result     AuditResult @default(SUCCESS) // 操作结果
+  createdAt  DateTime    @default(now()) @db.Timestamptz(3)
 
   @@index([actorId])
   @@index([entityType, entityId])
+  @@index([requestId])
+  @@index([traceId])
+  @@index([result])
   @@index([createdAt])
 }
 
@@ -1574,5 +1593,295 @@ model UserSetting {
 
   @@unique([userId, key])
   @@index([userId])
+  @@index([deletedAt])
+}
+
+// ============================================================================
+// Sprint 3B - Menu Center（菜单中心：前端直接读取，RouteMeta 内联）
+// ============================================================================
+
+/// 菜单组（顶级分组，如"主数据"）
+model MenuGroup {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  icon        String? // 分组图标
+  sort        Int      @default(0)
+  menus       Menu[]
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([deletedAt])
+}
+
+/// 菜单（树形：parentId 自关联；RouteMeta 内联）
+model Menu {
+  id           String   @id @default(cuid())
+  groupId      String
+  group        MenuGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  parentId     String?
+  parent       Menu?    @relation("MenuTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children     Menu[]   @relation("MenuTree")
+  code         String   @unique
+  name         String
+  path         String? // 路由路径
+  icon         String? // 图标
+  sort         Int      @default(0)
+  hidden       Boolean  @default(false) // 隐藏
+  cache        Boolean  @default(false) // 缓存
+  externalLink String? // 外链（http(s)://）
+  permission   String? // 关联权限码（如 workflow-definition:view）
+  isActive     Boolean  @default(true)
+  createdById  String?
+  updatedById  String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version      Int      @default(1)
+  deletedAt    DateTime?
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([groupId])
+  @@index([parentId])
+  @@index([deletedAt])
+}
+
+// ============================================================================
+// Sprint 3B - Dashboard API（只提供数据 API，页面以后开发）
+// ============================================================================
+
+/// Dashboard Widget 类型
+enum DashboardWidgetType {
+  KPI
+  CHART
+  TABLE
+}
+
+/// Dashboard Chart 类型
+enum DashboardChartType {
+  LINE
+  BAR
+  PIE
+  AREA
+  SCATTER
+}
+
+/// KPI 聚合方式
+enum DashboardAggregate {
+  SUM
+  AVG
+  COUNT
+  MIN
+  MAX
+}
+
+/// Dashboard Widget（组件定义）
+model DashboardWidget {
+  id             String              @id @default(cuid())
+  code           String              @unique
+  name           String
+  widgetType     DashboardWidgetType @default(KPI)
+  dataSource     String? // 数据源标识（如 sales-order/project）
+  query          Json? // 查询配置
+  refreshInterval Int? // 刷新间隔（秒）
+  sort           Int                 @default(0)
+  enabled        Boolean             @default(true)
+  isActive       Boolean             @default(true)
+  createdById    String?
+  updatedById    String?
+  approvedById   String?
+  approvalStatus ApprovalStatus      @default(DRAFT)
+  version        Int                 @default(1)
+  deletedAt      DateTime?
+  createdAt      DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime            @updatedAt @db.Timestamptz(3)
+
+  @@index([deletedAt])
+}
+
+/// Dashboard Layout（布局：widget 位置网格）
+model DashboardLayout {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  isDefault   Boolean  @default(false)
+  grid        Json? // [{ widgetId, x, y, w, h }]
+  enabled     Boolean  @default(true)
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([deletedAt])
+}
+
+/// Dashboard KPI（指标定义）
+model DashboardKpi {
+  id          String             @id @default(cuid())
+  code        String             @unique
+  name        String
+  unit        String? // 单位（CNY/%/件）
+  aggregate   DashboardAggregate @default(SUM)
+  dataSource  String? // 数据源（如 project/sales-order）
+  query       Json? // 过滤/统计配置
+  target      Decimal? @db.Decimal(18, 2) // 目标值
+  sort        Int                @default(0)
+  enabled     Boolean            @default(true)
+  isActive    Boolean            @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus  @default(DRAFT)
+  version     Int                @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime           @updatedAt @db.Timestamptz(3)
+
+  @@index([deletedAt])
+}
+
+/// Dashboard Chart（图表定义）
+model DashboardChart {
+  id          String             @id @default(cuid())
+  code        String             @unique
+  name        String
+  chartType   DashboardChartType @default(LINE)
+  dataSource  String? // 数据源（如 sales-order/project）
+  query       Json? // 查询配置
+  xAxis       String? // X 轴字段
+  yAxis       String? // Y 轴字段
+  sort        Int                @default(0)
+  enabled     Boolean            @default(true)
+  isActive    Boolean            @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus  @default(DRAFT)
+  version     Int                @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime           @updatedAt @db.Timestamptz(3)
+
+  @@index([deletedAt])
+}
+
+// ============================================================================
+// Sprint 3B - File Center（统一文件中心：报价/合同/SO/Invoice/Project 引用）
+// ============================================================================
+
+/// 文件文件夹（树形）
+model FileFolder {
+  id          String       @id @default(cuid())
+  code        String       @unique
+  name        String
+  parentId    String?
+  parent      FileFolder?  @relation("FileFolderTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    FileFolder[] @relation("FileFolderTree")
+  files       File[]
+  sort        Int          @default(0)
+  isActive    Boolean      @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int          @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @db.Timestamptz(3)
+
+  @@index([parentId])
+  @@index([deletedAt])
+}
+
+/// 文件（元数据；真实二进制存储后续接入对象存储）
+model File {
+  id             String           @id @default(cuid())
+  code           String           @unique
+  name           String
+  originalName   String?
+  extension      String?
+  mimeType       String?
+  size           Int              @default(0) // 字节
+  storagePath    String? // 存储路径（对象存储/本地）
+  checksum       String? // 完整性校验
+  folderId       String?
+  folder         FileFolder?      @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  ownerId        String?
+  currentVersion Int              @default(1)
+  versions       FileVersion[]
+  attachments    FileAttachment[]
+  isActive       Boolean          @default(true)
+  createdById    String?
+  updatedById    String?
+  approvedById   String?
+  approvalStatus ApprovalStatus   @default(DRAFT)
+  version        Int              @default(1)
+  deletedAt      DateTime?
+  createdAt      DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime         @updatedAt @db.Timestamptz(3)
+
+  @@index([folderId])
+  @@index([deletedAt])
+}
+
+/// 文件版本历史
+model FileVersion {
+  id           String   @id @default(cuid())
+  fileId       String
+  file         File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  versionNo    Int
+  originalName String?
+  extension    String?
+  mimeType     String?
+  size         Int      @default(0)
+  storagePath  String?
+  checksum     String?
+  isActive     Boolean  @default(true)
+  createdById  String?
+  updatedById  String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version      Int      @default(1)
+  deletedAt    DateTime?
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([fileId, versionNo])
+  @@index([fileId])
+  @@index([deletedAt])
+}
+
+/// 业务附件关联（Quotation/Contract/SO/Invoice/Project 统一引用）
+model FileAttachment {
+  id           String   @id @default(cuid())
+  fileId       String
+  file         File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  businessType String // quotation/contract/sales-order/invoice/project
+  businessId   String
+  sort         Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdById  String?
+  updatedById  String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version      Int      @default(1)
+  deletedAt    DateTime?
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([businessType, businessId])
+  @@index([fileId])
   @@index([deletedAt])
 }

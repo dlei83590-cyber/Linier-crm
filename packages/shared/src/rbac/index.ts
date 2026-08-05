@@ -61,6 +61,19 @@ const ROLE_PERMISSIONS: Record<RoleCode, PermissionCode[]> = {
     "system-setting:view", "system-setting:create", "system-setting:edit", "system-setting:delete", "system-setting:approve", "system-setting:audit", "system-setting:export", "system-setting:import", "system-setting:assign", "system-setting:close",
     "tenant-setting:view", "tenant-setting:create", "tenant-setting:edit", "tenant-setting:delete", "tenant-setting:approve", "tenant-setting:audit", "tenant-setting:export", "tenant-setting:import", "tenant-setting:assign", "tenant-setting:close",
     "user-setting:view", "user-setting:create", "user-setting:edit", "user-setting:delete", "user-setting:approve", "user-setting:audit", "user-setting:export", "user-setting:import", "user-setting:assign", "user-setting:close",
+    // Sprint 3B：菜单平台
+    "menu:view", "menu:create", "menu:edit", "menu:delete", "menu:approve", "menu:audit", "menu:export", "menu:import", "menu:assign", "menu:close",
+    "menu-group:view", "menu-group:create", "menu-group:edit", "menu-group:delete", "menu-group:approve", "menu-group:audit", "menu-group:export", "menu-group:import", "menu-group:assign", "menu-group:close",
+    // Sprint 3B：Dashboard API
+    "dashboard-widget:view", "dashboard-widget:create", "dashboard-widget:edit", "dashboard-widget:delete", "dashboard-widget:approve", "dashboard-widget:audit", "dashboard-widget:export", "dashboard-widget:import", "dashboard-widget:assign", "dashboard-widget:close",
+    "dashboard-layout:view", "dashboard-layout:create", "dashboard-layout:edit", "dashboard-layout:delete", "dashboard-layout:approve", "dashboard-layout:audit", "dashboard-layout:export", "dashboard-layout:import", "dashboard-layout:assign", "dashboard-layout:close",
+    "dashboard-kpi:view", "dashboard-kpi:create", "dashboard-kpi:edit", "dashboard-kpi:delete", "dashboard-kpi:approve", "dashboard-kpi:audit", "dashboard-kpi:export", "dashboard-kpi:import", "dashboard-kpi:assign", "dashboard-kpi:close",
+    "dashboard-chart:view", "dashboard-chart:create", "dashboard-chart:edit", "dashboard-chart:delete", "dashboard-chart:approve", "dashboard-chart:audit", "dashboard-chart:export", "dashboard-chart:import", "dashboard-chart:assign", "dashboard-chart:close",
+    // Sprint 3B：File Center
+    "file:view", "file:create", "file:edit", "file:delete", "file:approve", "file:audit", "file:export", "file:import", "file:assign", "file:close",
+    "file-folder:view", "file-folder:create", "file-folder:edit", "file-folder:delete", "file-folder:approve", "file-folder:audit", "file-folder:export", "file-folder:import", "file-folder:assign", "file-folder:close",
+    "file-version:view", "file-version:create", "file-version:edit", "file-version:delete", "file-version:approve", "file-version:audit", "file-version:export", "file-version:import", "file-version:assign", "file-version:close",
+    "file-attachment:view", "file-attachment:create", "file-attachment:edit", "file-attachment:delete", "file-attachment:approve", "file-attachment:audit", "file-attachment:export", "file-attachment:import", "file-attachment:assign", "file-attachment:close",
   ],
   MEMBER: [
     PERMISSIONS.USER_READ,
