@@ -52,9 +52,9 @@
 | --- | --- | --- |
 | 3C-1 | Customer Foundation：Customer / Contact / Address / Tag / Industry / Credit | ✅ Closed（PR #7 已合并，main=f0839262） |
 | 3C-2 | Supplier Foundation：Supplier + 独有 Qualification/Certificate/Settlement + Partner 共享（Contact/Address/Tag/BankAccount/Credit） | ✅ Closed（PR #8 已合并，main=c27c59130b） |
-| 3C-3 | Item Foundation：Item Master（ItemType 10 类/五级层级/多 UOM/ItemSpecification/ItemCost/SupplierItem/ItemRevision/ItemTag） | 🔄 Implementation（PR #9） |
-| 3C-4 | Project Foundation：Opportunity / Project / Milestone / Task / Visit / Risk / Expense | ⬜ |
-| 3C-5 | Price Foundation：Price List / Price Rule / Customer Price / Region Price / History | ⬜ |
+| 3C-3 | Item Foundation：Item Master（ItemType 10 类/五级层级/多 UOM/ItemSpecification+Definition/ItemCost/SupplierItem/ItemRevision/ItemTag） | 🔄 Implementation（PR #9） |
+| 3C-4 | Price Foundation（CTO #2138 提前）：PricePolicy / PriceList / PriceListItem / CustomerPrice / SupplierPrice / Promotion | ⬜（前置文档 PRICE_STRATEGY.md + MASTER_DATA_DEPENDENCY.md 已建） |
+| 3C-5 | Project Foundation（CTO #2138 移后）：Opportunity / Project / Milestone / Task / Visit / Risk / Expense | ⬜（引用全部底座，最后实施） |
 
 > 新增规范（CTO 要求）：docs/API_GUIDELINES.md（分页/过滤/排序/搜索/批量/导入/导出/错误码/版本/Headers/Rate Limit/Idempotency）、docs/ERROR_CODES.md（统一错误码）、docs/EVENTS.md（Domain Events）
 

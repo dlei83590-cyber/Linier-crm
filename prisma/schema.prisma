@@ -2474,15 +2474,14 @@ model SupplierSettlement {
 // ============ Sprint 3C-3 Item Foundation（Item Master，CTO #2075 定稿）============
 
 /// 物料分类树（CTO #2075 五级层级 Level1 Category → Level2 SubCategory）
+/// 物料分类（CTO #2138：CategoryPath 代替 parentId 递归，如 001 / 001.003 / 001.003.005，树查询极快）
 model ItemCategory {
-  id          String   @id @default(cuid())
-  code        String   @unique
-  name        String
-  parentId    String? // Level1 Category 的 parentId=null；Level2 SubCategory 指向 Category
-  parent      ItemCategory? @relation("ItemCategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
-  children    ItemCategory[] @relation("ItemCategoryTree")
-  level       Int      @default(1) // 1=Category, 2=SubCategory（CTO：不设第六层）
-  sort        Int      @default(0)
+  id           String   @id @default(cuid())
+  code         String   @unique
+  name         String
+  categoryPath String   @unique // CTO #2138：分段路径（001 / 001.003 / 001.003.005），子树查询 LIKE 'path.%' 不用递归
+  level        Int      @default(1) // 1=Category, 2=SubCategory（CTO：不设第六层）
+  sort         Int      @default(0)
   // 统一审计字段
   isActive    Boolean  @default(true)
   createdById String?
@@ -2495,20 +2494,47 @@ model ItemCategory {
   updatedAt   DateTime @updatedAt @db.Timestamptz(3)
 
   items       Item[]
-  @@index([parentId])
   @@index([level])
+  @@index([categoryPath])
   @@index([deletedAt])
 }
 
 /// 物料规格（CTO #2075：key/value/unit/sort KV 表，不建几十个字段）
+/// 物料规格定义（CTO #2138：定义/实例分离，支持过滤/排序/范围查询）
+model SpecificationDefinition {
+  id          String   @id @default(cuid())
+  code        String   @unique // 定义编码（如 RAIL_LENGTH）
+  name        String   // 定义名称（如 Rail Length）
+  unit        String?  // 单位（如 mm）
+  dataType    String   @default("STRING") // STRING/DECIMAL/INTEGER/BOOLEAN/DATE
+  isRequired  Boolean  @default(false)
+  sort        Int      @default(0)
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  itemSpecifications ItemSpecification[]
+  @@index([deletedAt])
+}
+
+/// 物料规格实例（CTO #2138：definitionId 关联定义，specKey/unit 冗余快照）
 model ItemSpecification {
-  id        String   @id @default(cuid())
-  itemId    String
-  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  specKey   String
-  specValue String
-  unit      String?
-  sort      Int      @default(0)
+  id           String   @id @default(cuid())
+  itemId       String
+  item         Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  definitionId String? // 关联规格定义（可选；有定义则过滤/排序/范围查询友好）
+  definition   SpecificationDefinition? @relation(fields: [definitionId], references: [id], onDelete: SetNull)
+  specKey      String   // 规格键（冗余快照，来自定义或自由填写）
+  specValue    String   // 规格值（如 4000）
+  unit         String?  // 单位（冗余快照，如 mm）
+  sort         Int      @default(0)
   // 统一审计字段
   isActive    Boolean  @default(true)
   createdById String?
@@ -2521,6 +2547,7 @@ model ItemSpecification {
   updatedAt   DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([itemId])
+  @@index([definitionId])
   @@index([deletedAt])
 }
 

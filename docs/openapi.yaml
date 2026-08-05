@@ -5418,6 +5418,133 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
+
+  /api/specification-definitions:
+    get:
+      tags: [Item Master]
+      summary: List specification definitions (CTO #2138)
+      operationId: listSpecificationDefinitions
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: pageSize, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationDefinitionListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Item Master]
+      summary: Create specification definition
+      operationId: createSpecificationDefinition
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpecificationDefinitionCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationDefinitionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/specification-definitions/{id}:
+    get:
+      tags: [Item Master]
+      summary: Get specification definition
+      operationId: getSpecificationDefinition
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationDefinitionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Item Master]
+      summary: Update specification definition (optimistic lock)
+      operationId: updateSpecificationDefinition
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpecificationDefinitionUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationDefinitionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Item Master]
+      summary: Soft delete specification definition (blocked if referenced)
+      operationId: deleteSpecificationDefinition
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -8235,5 +8362,58 @@ components:
         data:
           type: array
           items: { $ref: "#/components/schemas/FileAttachment" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+
+    SpecificationDefinition:
+      type: object
+      required: [id, code, name, dataType, version]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        unit: { type: [string, "null"] }
+        dataType: { type: string, default: STRING }
+        isRequired: { type: boolean }
+        sort: { type: integer }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    SpecificationDefinitionCreate:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        unit: { type: string }
+        dataType: { type: string, default: STRING }
+        isRequired: { type: boolean, default: false }
+        sort: { type: integer, default: 0 }
+    SpecificationDefinitionUpdate:
+      type: object
+      required: [version]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        unit: { type: string }
+        dataType: { type: string }
+        isRequired: { type: boolean }
+        sort: { type: integer }
+        version: { type: integer }
+    SpecificationDefinitionResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/SpecificationDefinition" }
+    SpecificationDefinitionListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/SpecificationDefinition" }
         meta: { $ref: "#/components/schemas/PaginationMeta" }
 

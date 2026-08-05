@@ -177,3 +177,29 @@ DRAFT ──提交──> SUBMITTED ──审批通过──> APPROVED ──转
   │
   └──超期──> EXPIRED（validUntil 过后由定时任务标记）
 ```
+
+## 5. CTO #2138 补充：QuotationVersion / QuotationSnapshot / Approval Policy
+
+### 5.1 QuotationVersion（报价版本，改价全保留）
+- 每次提交/审批通过生成新版本（versionNo 递增），报价单本身不可直接修改价格。
+- 模型：id / quotationId / versionNo / changeSummary / linesSnapshot(Json) / createdById / createdAt（+审计字段）。
+- 作用：客户改价全部保留历史，审批链路不失效。
+
+### 5.2 QuotationSnapshot（快照，审批时固化）
+- 审批通过时生成完整快照：Header + Lines + 价格来源（PricePolicy 命中项）。
+- 模型：id / quotationId / versionNo / snapshot(Json) / generatedById / generatedAt（+审计字段）。
+- 作用：报价转单（CONVERTED）以快照为准，后续价格变动不影响已批准报价。
+
+### 5.3 Approval Policy（审批策略，金额自动匹配流程）
+- Workflow 负责执行，Policy 负责选择流程（CTO #2138）。
+- 模型：ApprovalPolicy（id / code / name / minAmount / maxAmount / approverLevel / workflowDefinitionCode / enabled / sort + 审计字段）。
+- 规则示例：
+
+| 金额区间 | 审批人 | 流程 |
+| --- | --- | --- |
+| < 5,000 | 主管 | QUOTATION_APPROVAL（单签） |
+| 5,000 ~ 50,000 | 经理 | QUOTATION_APPROVAL（经理签） |
+| > 50,000 | 总经理 | QUOTATION_APPROVAL（总经理终审） |
+
+- 提交报价时按 total 匹配 Policy → 创建对应 Workflow Instance（复用 Sprint 3A Workflow 平台）。
+- 金额跨区间变更 → 重新匹配 Policy（版本化保证审批链路完整）。

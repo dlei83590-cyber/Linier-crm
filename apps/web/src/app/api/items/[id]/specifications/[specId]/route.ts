@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 
 const specUpdateSchema = z
   .object({
+    definitionId: z.string().min(1).nullable().optional(),
     specKey: z.string().min(1).max(100).optional(),
     specValue: z.string().min(1).max(500).optional(),
     unit: z.string().max(50).nullable().optional(),

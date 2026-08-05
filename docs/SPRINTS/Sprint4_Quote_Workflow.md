@@ -71,3 +71,10 @@ QUOTATION_APPROVAL 工作流（Sprint 3A seed 已建，定义示例）：
 2. 报价模块只维护状态机 + QuotationApproval 留痕 + 事件发布
 3. 提交/审批幂等（Idempotency-Key，API_GUIDELINES）
 4. 所有状态变更写 AuditLog（requestMeta 完整审计）
+
+## 4. Approval Policy（CTO #2138：Policy 选择流程，Workflow 执行）
+
+- 报价提交时：按 `total` 金额匹配 ApprovalPolicy（minAmount ≤ total < maxAmount）。
+- 匹配结果决定工作流实例：approverLevel（主管/经理/总经理）+ workflowDefinitionCode。
+- 金额变更 → 重新匹配 Policy，历史审批仍按原快照（QuotationSnapshot）追溯。
+- Policy 示例：<5000 主管 / 5000~50000 经理 / >50000 总经理（可配置）。

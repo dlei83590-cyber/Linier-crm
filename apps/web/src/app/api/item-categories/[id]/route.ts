@@ -12,13 +12,13 @@ const categoryUpdateSchema = z
   .object({
     code: z.string().min(1).max(64).optional(),
     name: z.string().min(1).max(100).optional(),
-    parentId: z.string().min(1).nullable().optional(),
+    categoryPath: z.string().min(1).max(100).optional(),
     sort: z.number().int().optional(),
     version: z.number().int().positive(),
   })
   .refine((v) => Object.keys(v).length > 1, { message: "至少提供一个更新字段" });
 
-/** GET /api/item-categories/:id（详情含子分类与物料计数） */
+/** GET /api/item-categories/:id（详情含物料计数；子树查询用 categoryPath 前缀） */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await authenticate(request);
   const denied = requirePermission(user, "item-category:view");
@@ -29,13 +29,18 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const category = await prisma.itemCategory.findFirst({
     where: { id, deletedAt: null },
     include: {
-      parent: { select: { id: true, code: true, name: true } },
-      children: { where: { deletedAt: null }, orderBy: { sort: "asc" } },
       _count: { select: { items: { where: { deletedAt: null } } } },
     },
   });
   if (!category) return failNotFound(ERROR_CODES.NOT_FOUND, "分类不存在");
-  return ok(category);
+
+  // 子树（categoryPath 前缀，免递归，CTO #2138）
+  const descendants = await prisma.itemCategory.findMany({
+    where: { categoryPath: { startsWith: `${category.categoryPath}.` }, deletedAt: null },
+    orderBy: { categoryPath: "asc" },
+  });
+
+  return ok({ ...category, descendants });
 }
 
 /** PATCH /api/item-categories/:id（乐观锁） */
@@ -57,6 +62,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (existing.version !== version) {
     return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
   }
+  if (updates.categoryPath && updates.categoryPath !== existing.categoryPath) {
+    const dup = await prisma.itemCategory.findUnique({ where: { categoryPath: updates.categoryPath } });
+    if (dup && !dup.deletedAt) return failConflict(ERROR_CODES.CONFLICT, "分类路径已存在");
+  }
 
   const updated = await prisma.itemCategory.update({
     where: { id },
@@ -68,8 +77,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     action: "item-category.update",
     entityType: "item-category",
     entityId: id,
-    beforeData: { name: existing.name, code: existing.code },
-    afterData: { name: updated.name, code: updated.code },
+    beforeData: { name: existing.name, categoryPath: existing.categoryPath },
+    afterData: { name: updated.name, categoryPath: updated.categoryPath },
     ...meta,
   });
 
@@ -88,10 +97,15 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   const category = await prisma.itemCategory.findFirst({
     where: { id, deletedAt: null },
-    include: { _count: { select: { children: { where: { deletedAt: null } }, items: { where: { deletedAt: null } } } } },
+    include: { _count: { select: { items: { where: { deletedAt: null } } } } },
   });
   if (!category) return failNotFound(ERROR_CODES.NOT_FOUND, "分类不存在");
-  if (category._count.children > 0) return failConflict(ERROR_CODES.CONFLICT, "存在子分类，不能删除");
+
+  // 子树存在（categoryPath 前缀）或物料存在 → 拒绝
+  const hasDescendants = await prisma.itemCategory.count({
+    where: { categoryPath: { startsWith: `${category.categoryPath}.` }, deletedAt: null },
+  });
+  if (hasDescendants > 0) return failConflict(ERROR_CODES.CONFLICT, "存在子分类，不能删除");
   if (category._count.items > 0) return failConflict(ERROR_CODES.CONFLICT, "分类下存在物料，不能删除");
 
   await prisma.itemCategory.update({

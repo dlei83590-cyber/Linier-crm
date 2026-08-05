@@ -48,7 +48,7 @@ CREATE TABLE "ItemCategory" (
     "id" TEXT NOT NULL,
     "code" TEXT NOT NULL,
     "name" TEXT NOT NULL,
-    "parentId" TEXT,
+    "categoryPath" TEXT NOT NULL,
     "level" INTEGER NOT NULL DEFAULT 1,
     "sort" INTEGER NOT NULL DEFAULT 0,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
@@ -68,6 +68,7 @@ CREATE TABLE "ItemCategory" (
 CREATE TABLE "ItemSpecification" (
     "id" TEXT NOT NULL,
     "itemId" TEXT NOT NULL,
+    "definitionId" TEXT,
     "specKey" TEXT NOT NULL,
     "specValue" TEXT NOT NULL,
     "unit" TEXT,
@@ -84,6 +85,29 @@ CREATE TABLE "ItemSpecification" (
 
     CONSTRAINT "ItemSpecification_pkey" PRIMARY KEY ("id")
 );
+
+-- CreateTable
+CREATE TABLE "SpecificationDefinition" (
+    "id" TEXT NOT NULL,
+    "code" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "unit" TEXT,
+    "dataType" TEXT NOT NULL DEFAULT 'STRING',
+    "isRequired" BOOLEAN NOT NULL DEFAULT false,
+    "sort" INTEGER NOT NULL DEFAULT 0,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdById" TEXT,
+    "updatedById" TEXT,
+    "approvedById" TEXT,
+    "approvalStatus" "ApprovalStatus" NOT NULL DEFAULT 'DRAFT',
+    "version" INTEGER NOT NULL DEFAULT 1,
+    "deletedAt" TIMESTAMP(3) WITH TIME ZONE,
+    "createdAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL,
+
+    CONSTRAINT "SpecificationDefinition_pkey" PRIMARY KEY ("id")
+);
+
 
 -- CreateTable
 CREATE TABLE "UomConversion" (
@@ -197,10 +221,14 @@ CREATE TABLE "ItemTag" (
 
 -- CreateIndex
 CREATE UNIQUE INDEX "ItemCategory_code_key" ON "ItemCategory"("code");
-CREATE INDEX "ItemCategory_parentId_idx" ON "ItemCategory"("parentId");
+CREATE UNIQUE INDEX "ItemCategory_categoryPath_key" ON "ItemCategory"("categoryPath");
+CREATE INDEX "ItemCategory_categoryPath_idx" ON "ItemCategory"("categoryPath");
 CREATE INDEX "ItemCategory_level_idx" ON "ItemCategory"("level");
 CREATE INDEX "ItemCategory_deletedAt_idx" ON "ItemCategory"("deletedAt");
 CREATE INDEX "ItemSpecification_itemId_idx" ON "ItemSpecification"("itemId");
+CREATE INDEX "ItemSpecification_definitionId_idx" ON "ItemSpecification"("definitionId");
+CREATE UNIQUE INDEX "SpecificationDefinition_code_key" ON "SpecificationDefinition"("code");
+CREATE INDEX "SpecificationDefinition_deletedAt_idx" ON "SpecificationDefinition"("deletedAt");
 CREATE INDEX "ItemSpecification_deletedAt_idx" ON "ItemSpecification"("deletedAt");
 CREATE UNIQUE INDEX "UomConversion_itemId_fromUomId_toUomId_key" ON "UomConversion"("itemId", "fromUomId", "toUomId");
 CREATE INDEX "UomConversion_itemId_idx" ON "UomConversion"("itemId");
@@ -230,8 +258,8 @@ ALTER TABLE "Item" ADD CONSTRAINT "Item_categoryId_fkey" FOREIGN KEY ("categoryI
 ALTER TABLE "Item" ADD CONSTRAINT "Item_stockUomId_fkey" FOREIGN KEY ("stockUomId") REFERENCES "UnitOfMeasure"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "Item" ADD CONSTRAINT "Item_purchaseUomId_fkey" FOREIGN KEY ("purchaseUomId") REFERENCES "UnitOfMeasure"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "Item" ADD CONSTRAINT "Item_salesUomId_fkey" FOREIGN KEY ("salesUomId") REFERENCES "UnitOfMeasure"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-ALTER TABLE "ItemCategory" ADD CONSTRAINT "ItemCategory_parentId_fkey" FOREIGN KEY ("parentId") REFERENCES "ItemCategory"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "ItemSpecification" ADD CONSTRAINT "ItemSpecification_itemId_fkey" FOREIGN KEY ("itemId") REFERENCES "Item"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "ItemSpecification" ADD CONSTRAINT "ItemSpecification_definitionId_fkey" FOREIGN KEY ("definitionId") REFERENCES "SpecificationDefinition"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "UomConversion" ADD CONSTRAINT "UomConversion_itemId_fkey" FOREIGN KEY ("itemId") REFERENCES "Item"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "UomConversion" ADD CONSTRAINT "UomConversion_fromUomId_fkey" FOREIGN KEY ("fromUomId") REFERENCES "UnitOfMeasure"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "UomConversion" ADD CONSTRAINT "UomConversion_toUomId_fkey" FOREIGN KEY ("toUomId") REFERENCES "UnitOfMeasure"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

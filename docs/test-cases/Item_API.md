@@ -103,7 +103,36 @@
 | I4 | 标签列表（含 tag 信息） | GET .../tags | 200 |
 | I5 | 移除标签 | DELETE .../tags/:tagId | 200 |
 
-## J. ItemAttachment（复用 File Center）
+## J. SpecificationDefinition（CTO #2138 定义/实例分离）
+
+| # | 用例 | 方法/路径 | 预期 |
+| --- | --- | --- | --- |
+| J1 | 新增规格定义（code/name/unit/dataType/isRequired） | POST /api/specification-definitions | 201 |
+| J2 | 定义列表（分页） | GET /api/specification-definitions | 200 |
+| J3 | 定义详情 | GET /api/specification-definitions/:id | 200 |
+| J4 | 更新定义（乐观锁） | PATCH .../specification-definitions/:id | 200 |
+| J5 | 删除被引用的定义 | DELETE ...（有 ItemSpecification 引用） | 409 |
+| J6 | 编码唯一 | POST ...（同 code） | 409 |
+| J7 | 规格引用定义（definitionId） | POST /api/items/:id/specifications | 201，definition 可查 |
+| J8 | 规格按 definitionId 过滤 | GET .../specifications?definitionId=xxx | 200 |
+| J9 | 无效 definitionId | POST .../specifications（无效 id） | 404 |
+
+## K. ItemCategory CategoryPath（CTO #2138 去递归）
+
+| # | 用例 | 方法/路径 | 预期 |
+| --- | --- | --- | --- |
+| K1 | 新增 Level1（categoryPath=001） | POST /api/item-categories | 201 |
+| K2 | 新增 Level2（categoryPath=001.003，父级存在） | POST /api/item-categories | 201 |
+| K3 | Level2 父级不存在 | POST（父路径无对应记录） | 404 |
+| K4 | 路径唯一 | POST（categoryPath 重复） | 409 |
+| K5 | 子树查询（categoryPath=001 → 含 001.003） | GET /api/item-categories?categoryPath=001 | 200，前缀匹配 |
+| K6 | 详情含 descendants（startsWith 免递归） | GET /api/item-categories/:id | 200，descendants 数组 |
+| K7 | 删除有子树分类 | DELETE /:id（存在 001.003） | 409 |
+| K8 | 删除有物料分类 | DELETE /:id | 409 |
+
+## L. ItemAttachment（复用 File Center）
+
+
 
 | # | 用例 | 方法/路径 | 预期 |
 | --- | --- | --- | --- |
@@ -112,7 +141,7 @@
 | J3 | 文件不存在 | POST .../attachments（无效 fileId） | 404 |
 | J4 | 7 种 AttachmentType 校验 | POST（DRAWING/CERTIFICATE/PHOTO/MANUAL/MODEL_3D/VIDEO/INSPECTION_REPORT） | 201 |
 
-## K. 通用规范（API_GUIDELINES）
+## M. 通用规范（API_GUIDELINES）
 
 | # | 用例 | 预期 |
 | --- | --- | --- |

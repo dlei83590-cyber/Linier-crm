@@ -17,8 +17,9 @@
 | 枚举 | AttachmentType | DRAWING/CERTIFICATE/PHOTO/MANUAL/MODEL_3D/VIDEO/INSPECTION_REPORT（统一放 File Center） |
 | 枚举 | ItemLifecycle | DESIGN/TRIAL/MASS_PRODUCTION/DISCONTINUED/OBSOLETE（原 INTRO/GROWTH/MATURE/DECLINE/EOL 重命名） |
 | 主档 | Item（升级） | itemType/categoryId/series/model/variant（五级层级 Level3-5）/barcode/qrCode/revision（Identification）/status/多 UOM（stock/purchase/sales）/isSalable/isPurchasable/isManufacturable |
-| 树 | ItemCategory | 两级树（Level1 Category → Level2 SubCategory，自引用，CTO 不设第六层） |
-| 子表 | ItemSpecification | key/value/unit/sort KV 表 |
+| 树 | ItemCategory | 两级树（Level1 Category → Level2 SubCategory，**CategoryPath 分段路径 001/001.003，无 parentId 递归**，CTO #2138） |
+| 子表 | ItemSpecification | key/value/unit/sort KV 表 + **definitionId 关联 SpecificationDefinition**（CTO #2138 定义/实例分离） |
+| 定义 | SpecificationDefinition | code/name/unit/dataType(STRING/DECIMAL/INTEGER/BOOLEAN/DATE)/isRequired（CTO #2138：过滤/排序/范围查询友好） |
 | 子表 | UomConversion | fromUom/toUom/factor（1 from = factor to，@@unique([itemId, fromUomId, toUomId])） |
 | 子表 | ItemCost | costType/amount/currency/effectiveFrom/effectiveTo/source（时间维度） |
 | 子表 | SupplierItem | itemId+supplierId+supplierCode/moq/leadTime/currency/purchasePrice/isPreferred/incoterm/paymentTerm（一个 Item 多供应商） |
@@ -28,6 +29,8 @@
 所有模型带统一审计字段，软删除、禁止物理删除、onDelete 明确。
 
 ### 1.2 迁移 0011_item_foundation
+- ItemCategory：parentId → **categoryPath**（unique，去递归）+ 索引调整（CTO #2138）
+- ItemSpecification + definitionId 列；新增 SpecificationDefinition 表
 - Item 表 ALTER：RENAME COLUMN category→itemType + ADD COLUMN（categoryId/series/variant/barcode/qrCode/revision/status/stockUomId/purchaseUomId/salesUomId/isSalable/isPurchasable/isManufacturable）——**不改既有列，保持 priceListItems/projectProducts/standards 引用稳定**
 - 枚举演进：ItemCategory RENAME→ItemType + ADD VALUE 4 个；ItemLifecycle RENAME VALUE 5 个
 - FileAttachment ADD COLUMN attachmentType（AttachmentType 枚举，统一放 File Center）
@@ -36,11 +39,12 @@
 ### 1.3 RBAC（+8 子模块）
 item（动作级已存在）+ item-category / item-specification / item-uom / item-cost / item-supplier / item-revision / item-tag / item-attachment（MANAGER 动作级全量）。
 
-### 1.4 API（16 路由文件）
+### 1.4 API（18 路由文件）
 | 分组 | 端点 | 权限 |
 | --- | --- | --- |
 | 主档 | GET/POST /api/items；GET/PATCH/DELETE /api/items/:id | item:* |
-| 分类树 | GET/POST /api/item-categories；GET/PATCH/DELETE /:id | item-category:* |
+| 分类树 | GET/POST /api/item-categories（categoryPath）；GET/PATCH/DELETE /:id（含子树） | item-category:* |
+| 规格定义 | GET/POST /api/specification-definitions；GET/PATCH/DELETE /:id | item-specification:* |
 | 规格 | GET/POST /:id/specifications；PATCH/DELETE /:id/specifications/:specId | item-specification:* |
 | UOM 换算 | GET/POST /:id/uom-conversions；PATCH/DELETE /:id/uom-conversions/:conversionId | item-uom:* |
 | 成本 | GET/POST /:id/costs；PATCH/DELETE /:id/costs/:costId | item-cost:* |
@@ -55,7 +59,9 @@ SEED_LINEAR_GUIDE_ITEMS 同步：category→itemType、lifecycle 新枚举值（
 ## 2. 验收清单
 
 ### 2.1 Schema / 迁移
-- [x] 7 新模型 + 4 新枚举；Item 升级（五级层级/Identification/多 UOM/status/业务开关）字段齐全
+- [x] 8 新模型（+SpecificationDefinition）+ 4 新枚举；Item 升级（五级层级/Identification/多 UOM/status/业务开关）字段齐全
+- [x] ItemCategory 使用 CategoryPath（001/001.003，unique），子树查询 startsWith 免递归（CTO #2138）
+- [x] ItemSpecification.definitionId 关联 SpecificationDefinition（定义/实例分离，过滤/排序/范围查询）
 - [x] 反向关系全部配对（ItemCategory.items/Item.specifications/uomConversions/costs/supplierItems/revisions/tags；UnitOfMeasure stock/purchase/sales + from/toConversions；Tag.itemTags；BusinessPartner.supplierItems；FileAttachment.attachmentType）
 - [x] 迁移 0011 仅新增表/加列/枚举演进，未重建既有表；既有 Item 引用（priceListItems/projectProducts/standards/linearGuide）稳定
 - [x] 禁止物理删除；统一审计字段齐全
