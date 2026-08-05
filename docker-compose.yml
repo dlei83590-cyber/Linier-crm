@@ -1,0 +1,49 @@
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    container_name: nilier-crm-app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=${NEXTAUTH_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - nilier-network
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: nilier-crm-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-nilier}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-nilier_secret}
+      - POSTGRES_DB=${POSTGRES_DB:-nilier_crm}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - nilier-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nilier} -d ${POSTGRES_DB:-nilier_crm}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+
+networks:
+  nilier-network:
+    driver: bridge
