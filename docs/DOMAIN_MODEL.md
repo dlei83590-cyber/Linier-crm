@@ -1,6 +1,6 @@
 # DOMAIN_MODEL 领域模型
 
-- 版本：v1.4
+- 版本：v1.5
 - 日期：2026-08-05
 - 维护者：CIO（JINZA）｜审核：CTO
 - 关联：[PRODUCT_VISION.md](./PRODUCT_VISION.md) ｜ [ROADMAP.md](./ROADMAP.md) ｜ [ADR](./ADR/)
@@ -91,7 +91,7 @@ Project Expense / 日常 Expense ──> 审批流 ──> Voucher（凭证）
 
 - ✅ 已落地（Sprint 2，PR #4）：Item / LinearGuideSpecification / BusinessPartner / PriceList / TechnicalStandard / UnitOfMeasure / CommercialTerm / DocumentSequence + 项目领域 14 模型
 - ✅ 已落地（Sprint 3A，PR #5）：Workflow Foundation 22 模型（Workflow 6 + Approval 7 + Notification 4 + Dictionary 2 + Settings 3），见第 7-10 节
-- 🔄 进行中（Sprint 3B）：Audit Center（第 12 节）✅ + Menu Center（第 13 节）✅ + Dashboard API（第 14 节）✅ + File Center
+- 🔄 进行中（Sprint 3B）：Audit Center（第 12 节）✅ + Menu Center（第 13 节）✅ + Dashboard API（第 14 节）✅ + File Center（第 15 节）✅
 - ⬜ 规划中（Sprint 4-7）：Quotation / Sales Order / Contract / Delivery / Invoice / Payment / Purchase / GRN / Warehouse / Stock / AR / AP / Voucher / Journal / GL
 
 > 详细字段标准见数据库 schema（`prisma/schema.prisma`）与 [architecture/domain-model.md](./architecture/domain-model.md)。
@@ -594,4 +594,73 @@ erDiagram
 - 迁移 `0007_dashboard_api`：4 表 + 3 枚举 + code 唯一索引
 - 权限：dashboard-widget / dashboard-layout / dashboard-kpi / dashboard-chart 模块，MANAGER 全量
 
-## 15. 变更记录
+
+
+## 15. File Center（Sprint 3B，ADR-0008）
+
+```mermaid
+erDiagram
+    FileFolder ||--o{ FileFolder : tree
+    FileFolder ||--o{ File : contains
+    File ||--o{ FileVersion : versions
+    File ||--o{ FileAttachment : attached
+
+    FileFolder {
+        string id PK
+        string code UK
+        string name
+        string parentId FK
+        int sort
+        int version
+        datetime deletedAt
+    }
+
+    File {
+        string id PK
+        string code UK
+        string name
+        string originalName
+        string extension
+        string mimeType
+        int size
+        string storagePath
+        string checksum
+        string folderId FK
+        string ownerId
+        int currentVersion
+        int version
+        datetime deletedAt
+    }
+
+    FileVersion {
+        string id PK
+        string fileId FK
+        int versionNo
+        string originalName
+        string extension
+        string mimeType
+        int size
+        string storagePath
+        string checksum
+        datetime deletedAt
+    }
+
+    FileAttachment {
+        string id PK
+        string fileId FK
+        string businessType
+        string businessId
+        int sort
+        datetime deletedAt
+    }
+```
+
+- File 只存元数据（storagePath 指向对象存储/本地），真实二进制存储后续接入
+- 创建 File 自动生成 versionNo=1；新版本推进 currentVersion（事务）
+- 附件关联：fileId + businessType/businessId（quotation/contract/sales-order/invoice/project 统一引用）
+- 预览：GET /api/files/:id/preview 按 mimeType 白名单判定可预览
+- 删除策略：File → FileFolder SetNull；FileVersion/FileAttachment → File Cascade（逻辑软删）
+- 迁移 `0008_file_center`：4 表 + 索引 + 外键
+- 权限：file / file-folder / file-version / file-attachment 模块，MANAGER 全量
+
+## 16. 变更记录

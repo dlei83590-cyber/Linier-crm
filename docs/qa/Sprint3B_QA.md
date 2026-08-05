@@ -10,7 +10,7 @@
 - Audit Center：AuditLog 升级（ObjectType/ObjectId/BeforeData/AfterData/RequestId/TraceId/IP/Device/Browser/Duration/Result）
 - Menu Center：Menu / MenuGroup / RouteMeta（Icon/Sort/Hidden/Cache/ExternalLink/Permission）✅ 已开发
 - Dashboard API：/widgets /layouts /kpis /charts（不开发页面）✅ 已开发
-- File Center：File / Attachment / Folder / Version / Preview
+- File Center：File / Attachment / Folder / Version / Preview ✅ 已开发
 
 ## 2. Automated Verification（Audit Center 阶段）
 
@@ -26,6 +26,7 @@
 | Secret scan | PENDING | 远程 CI |
 | Menu Center 迁移 | PASS | 0006_menu_center：2 表 + 索引 + 外键，本地核验 |
 | Dashboard 迁移 | PASS | 0007_dashboard_api：4 表 + 3 枚举 + code 唯一索引，本地核验 |
+| File Center 迁移 | PASS | 0008_file_center：4 表 + 索引 + 外键，本地核验 |
 
 ## 3. API Test Matrix（Audit Center）
 
@@ -39,6 +40,10 @@
 | GET/PATCH/DELETE /api/menu-groups/:id | PASS(代码) | PASS(代码) | PASS(代码) | PASS(代码) | PASS(代码) |
 | GET/POST /api/dashboard/widgets|layouts|kpis|charts | PASS(代码) | PASS(代码) | PASS(代码) | N/A | PASS(代码) |
 | GET/PATCH/DELETE /api/dashboard/*/:id | PASS(代码) | PASS(代码) | PASS(代码) | PASS(代码) | PASS(代码) |
+| GET/POST /api/files + /:id（CRUD） | PASS(代码) | PASS(代码) | PASS(代码) | PASS(代码) | PASS(代码) |
+| GET/POST /api/files/:id/versions + preview | PASS(代码) | PASS(代码) | PASS(代码) | PASS(代码) | N/A |
+| GET/POST /api/file-folders + /:id | PASS(代码) | PASS(代码) | PASS(代码) | PASS(代码) | PASS(代码) |
+| GET/POST /api/attachments + DELETE /:id | PASS(代码) | PASS(代码) | PASS(代码) | PASS(代码) | PASS(代码) |
 
 > PASS(代码) = 静态代码审查通过；运行级验证待 CI/部署环境执行（PENDING）。
 
@@ -64,14 +69,14 @@ RBAC: PASS（audit:view 仅 SUPER_ADMIN/ADMIN）
 API: PASS（代码审查）→ 运行级 PENDING
 State Machine: N/A
 Unit Test: PENDING（已编写待 CI）
-OpenAPI: PASS（audit-logs + menus + menu-groups + dashboard 已覆盖）
+OpenAPI: PASS（audit-logs + menus + menu-groups + dashboard + file-center 已覆盖）
 CI: PENDING（远程 Quality Gates / Build / Secret Scan）
 Deployment QA: NOT RUN（待 Railway 环境）
 ```
 
 ## 7. 待执行项（Sprint 3B 全量完成后回填）
 
-- [ ] Menu Center / Dashboard API / File Center 开发完成
+- [x] Audit Center / Menu Center / Dashboard API / File Center 开发完成（Sprint 3B 四模块全部交付）
 - [ ] 远程 CI 全绿
 - [ ] Railway 部署后 API 实际调用矩阵回填
 - [ ] CTO 验收通过

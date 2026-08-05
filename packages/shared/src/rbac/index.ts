@@ -69,6 +69,11 @@ const ROLE_PERMISSIONS: Record<RoleCode, PermissionCode[]> = {
     "dashboard-layout:view", "dashboard-layout:create", "dashboard-layout:edit", "dashboard-layout:delete", "dashboard-layout:approve", "dashboard-layout:audit", "dashboard-layout:export", "dashboard-layout:import", "dashboard-layout:assign", "dashboard-layout:close",
     "dashboard-kpi:view", "dashboard-kpi:create", "dashboard-kpi:edit", "dashboard-kpi:delete", "dashboard-kpi:approve", "dashboard-kpi:audit", "dashboard-kpi:export", "dashboard-kpi:import", "dashboard-kpi:assign", "dashboard-kpi:close",
     "dashboard-chart:view", "dashboard-chart:create", "dashboard-chart:edit", "dashboard-chart:delete", "dashboard-chart:approve", "dashboard-chart:audit", "dashboard-chart:export", "dashboard-chart:import", "dashboard-chart:assign", "dashboard-chart:close",
+    // Sprint 3B：File Center
+    "file:view", "file:create", "file:edit", "file:delete", "file:approve", "file:audit", "file:export", "file:import", "file:assign", "file:close",
+    "file-folder:view", "file-folder:create", "file-folder:edit", "file-folder:delete", "file-folder:approve", "file-folder:audit", "file-folder:export", "file-folder:import", "file-folder:assign", "file-folder:close",
+    "file-version:view", "file-version:create", "file-version:edit", "file-version:delete", "file-version:approve", "file-version:audit", "file-version:export", "file-version:import", "file-version:assign", "file-version:close",
+    "file-attachment:view", "file-attachment:create", "file-attachment:edit", "file-attachment:delete", "file-attachment:approve", "file-attachment:audit", "file-attachment:export", "file-attachment:import", "file-attachment:assign", "file-attachment:close",
   ],
   MEMBER: [
     PERMISSIONS.USER_READ,

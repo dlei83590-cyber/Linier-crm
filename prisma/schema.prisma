@@ -1776,3 +1776,111 @@ model DashboardChart {
 
   @@index([deletedAt])
 }
+
+// ============================================================================
+// Sprint 3B - File Center（统一文件中心：报价/合同/SO/Invoice/Project 引用）
+// ============================================================================
+
+/// 文件文件夹（树形）
+model FileFolder {
+  id          String       @id @default(cuid())
+  code        String       @unique
+  name        String
+  parentId    String?
+  parent      FileFolder?  @relation("FileFolderTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    FileFolder[] @relation("FileFolderTree")
+  sort        Int          @default(0)
+  isActive    Boolean      @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int          @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @db.Timestamptz(3)
+
+  @@index([parentId])
+  @@index([deletedAt])
+}
+
+/// 文件（元数据；真实二进制存储后续接入对象存储）
+model File {
+  id             String           @id @default(cuid())
+  code           String           @unique
+  name           String
+  originalName   String?
+  extension      String?
+  mimeType       String?
+  size           Int              @default(0) // 字节
+  storagePath    String? // 存储路径（对象存储/本地）
+  checksum       String? // 完整性校验
+  folderId       String?
+  folder         FileFolder?      @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  ownerId        String?
+  currentVersion Int              @default(1)
+  versions       FileVersion[]
+  attachments    FileAttachment[]
+  isActive       Boolean          @default(true)
+  createdById    String?
+  updatedById    String?
+  approvedById   String?
+  approvalStatus ApprovalStatus   @default(DRAFT)
+  version        Int              @default(1)
+  deletedAt      DateTime?
+  createdAt      DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime         @updatedAt @db.Timestamptz(3)
+
+  @@index([folderId])
+  @@index([deletedAt])
+}
+
+/// 文件版本历史
+model FileVersion {
+  id           String   @id @default(cuid())
+  fileId       String
+  file         File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  versionNo    Int
+  originalName String?
+  extension    String?
+  mimeType     String?
+  size         Int      @default(0)
+  storagePath  String?
+  checksum     String?
+  isActive     Boolean  @default(true)
+  createdById  String?
+  updatedById  String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version      Int      @default(1)
+  deletedAt    DateTime?
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([fileId, versionNo])
+  @@index([fileId])
+  @@index([deletedAt])
+}
+
+/// 业务附件关联（Quotation/Contract/SO/Invoice/Project 统一引用）
+model FileAttachment {
+  id           String   @id @default(cuid())
+  fileId       String
+  file         File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  businessType String // quotation/contract/sales-order/invoice/project
+  businessId   String
+  sort         Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdById  String?
+  updatedById  String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version      Int      @default(1)
+  deletedAt    DateTime?
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([businessType, businessId])
+  @@index([fileId])
+  @@index([deletedAt])
+}

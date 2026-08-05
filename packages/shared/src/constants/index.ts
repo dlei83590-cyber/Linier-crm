@@ -120,6 +120,11 @@ export const PERMISSION_MODULES = [
   "dashboard-layout",
   "dashboard-kpi",
   "dashboard-chart",
+  // Sprint 3B：File Center
+  "file",
+  "file-folder",
+  "file-version",
+  "file-attachment",
 ] as const;
 
 /** 生成模块×动作权限码（如 "item:view"） */
