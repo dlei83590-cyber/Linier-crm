@@ -14,7 +14,7 @@
 | --- | --- | --- | --- |
 | Sprint 1 | Infrastructure（基础设施） | ✅ Closed | Release v0.1.0-alpha |
 | Sprint 2 | Master Data（主数据） | ✅ Closed | Release v0.2.0-alpha（2A+2B+2C） |
-| Sprint 3 | ERP Foundation（ERP 底座） | ⬜ | 3A 系统引擎 + 3B 平台能力 + 3C 业务底座 CRUD |
+| Sprint 3 | ERP Foundation（ERP 底座） | 🔄 3A ✅/3B ⬜ | 3A Workflow Foundation ✅（v0.3.0-alpha）+ 3B 平台能力 + 3C 业务底座 CRUD |
 | Sprint 4 | Sales（销售） | ⬜ | Quotation/Contract/SO/Delivery/Invoice/Payment |
 | Sprint 5 | Purchase（采购） | ⬜ | PR/PO/GRN/Supplier Invoice/Payment |
 | Sprint 6 | Inventory（库存） | ⬜ | Warehouse/Stock/Batch/Movement/Count/Transfer |
@@ -33,6 +33,10 @@
 - 每个 Sprint 统一分支：`feature/sprintX-xxxx`（如 `feature/sprint3-platform-foundation`）
 - 每个 Sprint 完成后必须六项同步：**Tag / Release / CHANGELOG / QA / ADR / ROADMAP**
 - 从 Sprint 3 开始，每个 PR 必须新增 `docs/qa/` 验收文档（如 `docs/qa/Sprint3A_QA.md`），记录：测试内容、测试结果、截图、已知问题、风险、验收人
+- **Sprint 3B 起新增 `docs/test-cases/` 测试用例文档**（如 `Menu_API.md` / `Audit_API.md` / `Dashboard_API.md` / `File_API.md`），供自动化测试复用
+- **从 v0.3.0 起 Release 必须包含**：Compatibility / Database / Migration / Breaking Changes / Upgrade Guide
+- **架构冻结**：基础平台能力（Workflow/Approval/Notification/Dictionary/Settings/Menu/Audit/Dashboard/File）调整必须新增 ADR，禁止直接修改（见 ARCHITECTURE_BASELINE.md）
+- **Sprint 4 前必须完成**：① 统一异常码 Error Code Registry（避免各模块自行定义错误码）② 事件总线 Domain Events（如审批通过后自动触发通知/日志/后续业务，模块间不直接调用）
 
 ---
 
@@ -81,28 +85,35 @@
 
 ---
 
-## 5. Sprint 3：ERP Foundation（ERP 底座）⬜
+## 5. Sprint 3：ERP Foundation（ERP 底座）🔄
 
 **原则：不开发业务页面，优先 ERP 底座能力；Sprint 3C 只做 CRUD 不做业务。**
 
-### Sprint 3A：系统引擎
+### Sprint 3A：系统引擎 ✅ Closed（v0.3.0-alpha，PR #5）
 
-| 模块 | 内容 | 支持 |
+| 模块 | 内容 | 状态 |
 | --- | --- | --- |
-| Workflow Engine | Workflow Definition / Instance / Step / Action / History / Condition | 审批 / 退回 / 驳回 / 撤销 / 转交 / 结束 |
-| Approval Engine | 审批流（基于 Workflow） | 串签 / 会签 / 或签 / 加签 / 抄送 |
-| Notification | Notification / Email / System Message / Telegram / Webhook（预留） | 以后企业微信 / 钉钉直接接入 |
-| Dictionary | Dictionary Type / Dictionary Item | 行业 / 城市 / 单位 / 品牌等 |
-| Settings | System Setting / Tenant Setting / User Setting（Key-Value） | 税率/币种/单据规则等 |
+| Workflow Engine | Workflow Definition / Instance / Step / Action / History / Condition | ✅ 统一动作 9 种 + 4 审批模式 |
+| Approval Engine | Approver / ApproverGroup / Delegate / Escalation / Timeout / Reminder（与 Workflow 解耦） | ✅ 建模 + 审批组 CRUD |
+| Notification | Template / Message / Channel / Log（SYSTEM/EMAIL/TELEGRAM/WEBHOOK + 企微/钉钉预留） | ✅ 建模 + 模板 CRUD（真实发送后续） |
+| Dictionary | Dictionary Type / Dictionary Item | ✅ CRUD |
+| Settings | System / Tenant / User 三层 Key-Value | ✅ CRUD + 加密掩码 |
 
-### Sprint 3B：平台能力
+> Release：v0.3.0-alpha（PR #5 合并，merge 42ebf22262）；迁移 0004_workflow_foundation；ADR-0004
 
-| 模块 | 内容 |
-| --- | --- |
-| Menu | Menu / Menu Permission / Menu Tree / Menu Sort |
-| Dashboard API | Dashboard Widget / Layout / KPI |
-| Audit（升级） | 在 AuditLog 基础上增加：Object Type / Object ID / IP / Device / Browser / Duration |
-| File Center | File / Folder / Version / Preview / Attachment（合同/报价/图片共用） |
+### Sprint 3B：平台能力（架构冻结后按序开发）
+
+**开发顺序（CTO 批准，不并行）：Audit Center → Menu Center → Dashboard API → File Center**
+
+| 模块 | 内容 | 优先级 |
+| --- | --- | --- |
+| Audit Center（升级） | AuditLog + ObjectType/ObjectId/BeforeData/AfterData/RequestId/TraceId/IP/Device/Browser/Duration/Result | 1️⃣ 完成后所有 CRUD 直接可用 |
+| Menu Center | Menu / MenuGroup / MenuPermission / RouteMeta / Icon / Sort / Hidden / Cache / ExternalLink | 2️⃣ 前端直接读取 |
+| Dashboard API | /widgets /layouts /kpis /charts（不写页面） | 3️⃣ 页面以后开发 |
+| File Center | File / Attachment / Folder / Version / Preview | 4️⃣ 报价/合同/SO/Invoice/Project 统一引用 |
+
+> 启动前先创建 `docs/ARCHITECTURE_BASELINE.md`（架构冻结），后续调整必须新增 ADR。
+> 新增 `docs/test-cases/`：Menu_API.md / Audit_API.md / Dashboard_API.md / File_API.md。
 
 ### Sprint 3C：业务底座（仅 CRUD，不业务）
 
@@ -214,7 +225,7 @@
 | --- | --- | --- |
 | M1 | Sprint 1 完成 | Release v0.1.0-alpha ✅ |
 | M2 | Sprint 2 完成 | Release v0.2.0-alpha ✅（main 冻结） |
-| M3 | Sprint 3 完成 | ERP 底座可用，支撑业务模块开发 |
+| M3 | Sprint 3 完成 | ERP 底座可用（3A ✅ v0.3.0-alpha；3B/3C 进行中） |
 | M4 | Sprint 4-6 完成 | 进销存闭环可用 |
 | M5 | Sprint 7 完成 | 财务闭环可用 |
 | M6 | Sprint 8-10 完成 | 数据驱动 + 移动化 |
@@ -224,4 +235,4 @@
 | 日期 | 变更 | 说明 |
 | --- | --- | --- |
 | 2026-08-05 | 创建 v1.0 | Sprint 3 拆 Phase A/B，Sprint 4-7 按销售/采购/库存/财务排序，新增 BI/OA/Mobile |
-| 2026-08-05 | 更新 v1.1 | Sprint 1/2 Closed（v0.2.0-alpha）；Sprint 3 拆 3A 系统引擎/3B 平台能力/3C 业务底座 CRUD；新增分支规范 + QA 目录 + Release 六项同步规则 |
+| 2026-08-05 | 更新 v1.2 | Sprint 3A Closed（v0.3.0-alpha，PR #5）；Sprint 3B 按 Audit→Menu→Dashboard→File 顺序；新增 ARCHITECTURE_BASELINE 架构冻结 + docs/test-cases/ + Release 五要素 + Sprint 4 前 Error Code Registry 与 Domain Events |
