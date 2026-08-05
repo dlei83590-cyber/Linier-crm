@@ -32,7 +32,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   requestLog(request, user?.id, "charts.get");
 
   const { id } = await params;
-  const item = await prisma.DashboardChart.findFirst({ where: { id, deletedAt: null } });
+  const item = await prisma.dashboardChart.findFirst({ where: { id, deletedAt: null } });
   if (!item) return failNotFound(ERROR_CODES.NOT_FOUND, "Dashboard Chart不存在");
   return ok(item);
 }
@@ -51,13 +51,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   const { version, ...updates } = parsed.data;
 
-  const existing = await prisma.DashboardChart.findFirst({ where: { id, deletedAt: null } });
+  const existing = await prisma.dashboardChart.findFirst({ where: { id, deletedAt: null } });
   if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "Dashboard Chart不存在");
   if (existing.version !== version) {
     return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
   }
 
-  const updated = await prisma.DashboardChart.update({
+  const updated = await prisma.dashboardChart.update({
     where: { id },
     data: {
       ...updates,
@@ -90,7 +90,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   const { id } = await params;
   const meta = requestMeta(request);
 
-  const result = await prisma.DashboardChart.updateMany({
+  const result = await prisma.dashboardChart.updateMany({
     where: { id, deletedAt: null },
     data: { deletedAt: new Date(), enabled: false, updatedById: user?.id ?? null },
   });

@@ -42,8 +42,8 @@ export async function GET(request: NextRequest) {
   };
 
   const [total, items] = await Promise.all([
-    prisma.DashboardChart.count({ where }),
-    prisma.DashboardChart.findMany({ where, orderBy: [{ sort: "asc" }, { updatedAt: "desc" }], skip, take }),
+    prisma.dashboardChart.count({ where }),
+    prisma.dashboardChart.findMany({ where, orderBy: [{ sort: "asc" }, { updatedAt: "desc" }], skip, take }),
   ]);
 
   return ok(items, { page, pageSize, total });
@@ -60,12 +60,12 @@ export async function POST(request: NextRequest) {
   const parsed = createSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
-  const existing = await prisma.DashboardChart.findUnique({ where: { code: parsed.data.code } });
+  const existing = await prisma.dashboardChart.findUnique({ where: { code: parsed.data.code } });
   if (existing && !existing.deletedAt) {
     return failConflict(ERROR_CODES.CONFLICT, "编码已存在");
   }
 
-  const created = await prisma.DashboardChart.create({
+  const created = await prisma.dashboardChart.create({
     data: {
       ...parsed.data,
       query: parsed.data.query === undefined ? undefined : (parsed.data.query as Prisma.InputJsonValue),
