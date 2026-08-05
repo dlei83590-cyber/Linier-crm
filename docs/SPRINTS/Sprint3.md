@@ -1,14 +1,14 @@
-# Sprint 3：ERP Foundation（ERP 底座）⬜
+# Sprint 3：ERP Foundation（ERP 底座）🔄
 
 **原则：不开发业务页面，优先 ERP 底座能力；Sprint 3C 只做 CRUD 不做业务。**
 
 | 字段 | 值 |
 | --- | --- |
-| 状态 | ⬜ 未开始（分支 feature/sprint3-platform-foundation） |
-| 上游 | Sprint 2 ✅ Closed（v0.2.0-alpha，main 冻结） |
-| 分支规范 | `feature/sprint3-platform-foundation`（以后所有 Sprint 统一 `feature/sprintX-xxxx`） |
+| 状态 | 🔄 3A ✅（v0.3.0-alpha）/ 3B ✅（v0.4.0-alpha）/ 3C Business Foundation 进行中（分支 feature/sprint3-business-foundation） |
+| 上游 | Sprint 2 ✅ Closed（v0.2.0-alpha）→ 3A ✅（v0.3.0-alpha）→ 3B ✅（v0.4.0-alpha） |
+| 分支规范 | `feature/sprint3-business-foundation`（以后所有 Sprint 统一 `feature/sprintX-xxxx`） |
 
-## Sprint 3A：系统引擎
+## Sprint 3A：系统引擎 ✅ Closed（v0.3.0-alpha，PR #5）
 
 | 模块 | 内容 | 支持 |
 | --- | --- | --- |
@@ -31,6 +31,32 @@
 
 - Customer / Supplier / Item / Project / Price List
 - 统一能力：List / Search / Filter / Create / Edit / Delete / Export / Import
+
+## Sprint 3B：平台能力 ✅ Closed（v0.4.0-alpha，PR #6）
+
+| 模块 | 内容 | 状态 |
+| --- | --- | --- |
+| Audit Center | AuditLog +8 字段 + requestMeta + audit-logs API | ✅ |
+| Menu Center | MenuGroup + Menu 树 + RouteMeta | ✅ |
+| Dashboard API | Widget / Layout / KPI / Chart 数据 API | ✅ |
+| File Center | File / Folder / Version / Attachment / Preview | ✅ |
+| 架构冻结 | ARCHITECTURE_BASELINE v1.0 | ✅ |
+
+> CTO 评价：综合成熟度 99/100；迁移 0005-0008；ADR-0005~0008
+
+## Sprint 3C：Business Foundation（业务底座，CTO 改名）
+
+**原则：不开发业务页面，只做业务底座（Validation/Permission/Audit/Workflow/Attachment 一起），每个子阶段独立 PR、独立 QA、独立 ADR、独立验收。**
+
+| 子阶段 | 内容 | 状态 |
+| --- | --- | --- |
+| 3C-1 | Customer Foundation：Customer / Contact / Address / Tag / Industry / Credit | 🔄 |
+| 3C-2 | Supplier Foundation：Supplier / Contact / Settlement / Qualification / Certificate | ⬜ |
+| 3C-3 | Item Foundation：Item / Specification / Category / Brand / UOM / Price / Attachment | ⬜ |
+| 3C-4 | Project Foundation：Opportunity / Project / Milestone / Task / Visit / Risk / Expense | ⬜ |
+| 3C-5 | Price Foundation：Price List / Price Rule / Customer Price / Region Price / History | ⬜ |
+
+> 新增规范（CTO 要求）：docs/API_GUIDELINES.md（分页/过滤/排序/搜索/批量/导入/导出/错误码/版本/Headers/Rate Limit/Idempotency）、docs/ERROR_CODES.md（统一错误码）、docs/EVENTS.md（Domain Events）
 
 ## QA 规则（CTO 批准）
 
