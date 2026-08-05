@@ -36,7 +36,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       orderBy: [{ sort: "asc" }, { createdAt: "desc" }],
       skip,
       take,
-      include: { file: { select: { id: true, name: true, mimeType: true, size: true, path: true } } },
+      include: { file: { select: { id: true, name: true, mimeType: true, size: true, storagePath: true } } },
     }),
   ]);
 
