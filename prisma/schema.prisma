@@ -155,19 +155,38 @@ model UserRole {
 }
 
 /// Immutable trail of security-sensitive and destructive actions.
+/// 审计结果
+enum AuditResult {
+  SUCCESS
+  FAILURE
+  PARTIAL
+}
+
+/// 审计日志（Sprint 3B 升级：ObjectType/ObjectId/Before/AfterData/RequestId/TraceId/IP/Device/Browser/Duration/Result）
 model AuditLog {
-  id         String   @id @default(cuid())
+  id         String      @id @default(cuid())
   actorId    String?
-  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actor      User?       @relation(fields: [actorId], references: [id], onDelete: SetNull)
   action     String
-  entityType String
-  entityId   String?
+  entityType String // ObjectType（如 workflow-definition）
+  entityId   String? // ObjectId
+  beforeData Json? // 操作前数据快照
+  afterData  Json? // 操作后数据快照
+  requestId  String? // 请求 ID（链路追踪）
+  traceId    String? // 追踪 ID（全链路）
   meta       Json?
-  ipAddress  String?
-  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  ipAddress  String? // IP
+  device     String? // 设备（mobile/desktop）
+  browser    String? // 浏览器 UA 摘要
+  duration   Int? // 耗时（毫秒）
+  result     AuditResult @default(SUCCESS) // 操作结果
+  createdAt  DateTime    @default(now()) @db.Timestamptz(3)
 
   @@index([actorId])
   @@index([entityType, entityId])
+  @@index([requestId])
+  @@index([traceId])
+  @@index([result])
   @@index([createdAt])
 }
 

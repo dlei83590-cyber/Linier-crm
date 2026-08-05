@@ -1,6 +1,6 @@
 # DOMAIN_MODEL 领域模型
 
-- 版本：v1.1
+- 版本：v1.2
 - 日期：2026-08-05
 - 维护者：CIO（JINZA）｜审核：CTO
 - 关联：[PRODUCT_VISION.md](./PRODUCT_VISION.md) ｜ [ROADMAP.md](./ROADMAP.md) ｜ [ADR](./ADR/)
@@ -90,7 +90,8 @@ Project Expense / 日常 Expense ──> 审批流 ──> Voucher（凭证）
 ## 6. 已落地 vs 规划中
 
 - ✅ 已落地（Sprint 2，PR #4）：Item / LinearGuideSpecification / BusinessPartner / PriceList / TechnicalStandard / UnitOfMeasure / CommercialTerm / DocumentSequence + 项目领域 14 模型
-- ✅ 已落地（Sprint 3A，PR #待创建）：Workflow Foundation 22 模型（Workflow 6 + Approval 7 + Notification 4 + Dictionary 2 + Settings 3），见第 7-10 节
+- ✅ 已落地（Sprint 3A，PR #5）：Workflow Foundation 22 模型（Workflow 6 + Approval 7 + Notification 4 + Dictionary 2 + Settings 3），见第 7-10 节
+- 🔄 进行中（Sprint 3B）：Audit Center 升级（第 12 节）+ Menu / Dashboard API / File Center
 - ⬜ 规划中（Sprint 4-7）：Quotation / Sales Order / Contract / Delivery / Invoice / Payment / Purchase / GRN / Warehouse / Stock / AR / AP / Voucher / Journal / GL
 
 > 详细字段标准见数据库 schema（`prisma/schema.prisma`）与 [architecture/domain-model.md](./architecture/domain-model.md)。
@@ -452,3 +453,35 @@ erDiagram
 | DictionaryType → DictionaryItem | Cascade | 字典项依附类型 |
 
 > 统一审计字段（CTO 规则）：id / createdAt / createdBy / updatedAt / updatedBy / version / approvalStatus / isDeleted / deletedAt / deletedBy；业务数据一律软删除，禁止物理删除。
+
+## 12. Audit Center（Sprint 3B 升级，ADR-0005）
+
+```mermaid
+erDiagram
+    User ||--o{ AuditLog : acts
+
+    AuditLog {
+        string id PK
+        string actorId FK
+        string action
+        string entityType
+        string entityId
+        Json beforeData
+        Json afterData
+        string requestId
+        string traceId
+        Json meta
+        string ipAddress
+        string device
+        string browser
+        int duration
+        AuditResult result
+        datetime createdAt
+    }
+```
+
+- 字段语义：entityType = ObjectType；entityId = ObjectId；beforeData/afterData = 操作前后数据快照；requestId/traceId = 链路追踪；device/browser = 终端环境（UA 解析）；duration = 耗时（毫秒）；result = SUCCESS/FAILURE/PARTIAL
+- 枚举：AuditResult（SUCCESS / FAILURE / PARTIAL）
+- 迁移 `0005_audit_upgrade`：仅 ALTER 加列 + 建索引（表已存在不重建，CTO 规则），新增 requestId/traceId/result 索引
+- API：`GET /api/audit-logs`（分页 + actorId/entityType/entityId/action/result/requestId/traceId/时间过滤）+ `GET /api/audit-logs/:id`；权限 `audit:view`（仅 SUPER_ADMIN/ADMIN）
+- requestMeta() 统一提取 IP/Device/Browser/RequestId/TraceId；所有写操作自动写入完整审计

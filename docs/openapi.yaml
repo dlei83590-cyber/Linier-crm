@@ -12,6 +12,7 @@ servers:
 tags:
   - name: Health
   - name: Auth
+  - name: Audit Logs
   - name: Workflow Definitions
   - name: Workflow Instances
   - name: Approver Groups
@@ -82,6 +83,87 @@ paths:
   # 状态机：DRAFT → ACTIVE(已发布) → ARCHIVED(已归档)
   # 规则：更新必须携带 version（乐观锁）；删除为软删除；ACTIVE/ARCHIVED 后禁止修改 code/module/steps
   # ==========================================================================
+  /api/audit-logs:
+    get:
+      tags: [Audit Logs]
+      summary: List audit logs (paginated, filterable, Sprint 3B Audit 升级)
+      operationId: listAuditLogs
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: actorId
+          in: query
+          schema: { type: string }
+        - name: entityType
+          in: query
+          schema: { type: string }
+          description: ObjectType
+        - name: entityId
+          in: query
+          schema: { type: string }
+          description: ObjectId
+        - name: action
+          in: query
+          schema: { type: string }
+        - name: result
+          in: query
+          schema: { $ref: "#/components/schemas/AuditResult" }
+        - name: requestId
+          in: query
+          schema: { type: string }
+        - name: traceId
+          in: query
+          schema: { type: string }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Paginated audit logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/audit-logs/{id}:
+    get:
+      tags: [Audit Logs]
+      summary: Get audit log detail (with before/after data)
+      operationId: getAuditLog
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Audit log detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/workflows/definitions:
     get:
       tags: [Workflow Definitions]
@@ -1276,6 +1358,57 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
 
   schemas:
+    # --------------------------------------------------------------------------
+    # Audit（Sprint 3B 升级）
+    # --------------------------------------------------------------------------
+    AuditResult:
+      type: string
+      enum: [SUCCESS, FAILURE, PARTIAL]
+
+    AuditLog:
+      type: object
+      required: [id, action, entityType, result]
+      properties:
+        id: { type: string }
+        actorId: { type: [string, "null"] }
+        actor:
+          type: [object, "null"]
+          properties:
+            id: { type: string }
+            email: { type: string }
+            name: { type: [string, "null"] }
+        action: { type: string, example: workflow-definition.create }
+        entityType: { type: string, description: ObjectType，如 workflow-definition }
+        entityId: { type: [string, "null"], description: ObjectId }
+        beforeData: { type: [object, "null"], description: 操作前数据快照 }
+        afterData: { type: [object, "null"], description: 操作后数据快照 }
+        requestId: { type: [string, "null"], description: 请求 ID（链路追踪） }
+        traceId: { type: [string, "null"], description: 全链路追踪 ID }
+        meta: { type: [object, "null"] }
+        ipAddress: { type: [string, "null"] }
+        device: { type: [string, "null"], description: mobile/desktop }
+        browser: { type: [string, "null"], description: Chrome/Firefox/Edge/Safari }
+        duration: { type: [integer, "null"], description: 耗时（毫秒） }
+        result: { $ref: "#/components/schemas/AuditResult" }
+        createdAt: { type: string, format: date-time }
+
+    AuditLogResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/AuditLog" }
+
+    AuditLogListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/AuditLog" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
     # --------------------------------------------------------------------------
     # 基础
     # --------------------------------------------------------------------------
