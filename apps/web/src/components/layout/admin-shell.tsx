@@ -8,6 +8,17 @@ import { useSession } from "@/lib/session-context";
 
 const NAV_ITEMS: ReadonlyArray<{ href: string; label: string; permission: PermissionCode | null }> = [
   { href: "/dashboard", label: "Dashboard", permission: null },
+  { href: "/items", label: "物料管理", permission: PERMISSIONS.ITEM_READ },
+  { href: "/business-partners", label: "往来单位", permission: PERMISSIONS.BUSINESS_PARTNER_READ },
+  { href: "/price-lists", label: "价格表", permission: PERMISSIONS.PRICE_LIST_READ },
+  { href: "/technical-standards", label: "技术标准", permission: PERMISSIONS.TECHNICAL_STANDARD_READ },
+  { href: "/unit-of-measures", label: "计量单位", permission: PERMISSIONS.UNIT_OF_MEASURE_READ },
+  { href: "/commercial-terms", label: "商业条款", permission: PERMISSIONS.COMMERCIAL_TERM_READ },
+  { href: "/document-sequences", label: "单据序列", permission: PERMISSIONS.DOCUMENT_SEQUENCE_READ },
+  { href: "/project-opportunities", label: "项目机会", permission: PERMISSIONS.PROJECT_OPPORTUNITY_READ },
+  { href: "/projects", label: "项目管理", permission: PERMISSIONS.PROJECT_READ },
+  { href: "/project-visits", label: "客户走访", permission: PERMISSIONS.PROJECT_VISIT_READ },
+  { href: "/project-risks", label: "项目风险", permission: PERMISSIONS.PROJECT_RISK_READ },
   { href: "/users", label: "用户管理", permission: PERMISSIONS.USER_READ },
   { href: "/departments", label: "部门管理", permission: PERMISSIONS.USER_READ },
   { href: "/roles", label: "角色权限", permission: PERMISSIONS.ROLE_READ },

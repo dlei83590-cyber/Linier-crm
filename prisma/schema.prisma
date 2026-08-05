@@ -1,8 +1,7 @@
-// Linier CRM Management System - Sprint 1 core schema (v1)
-// CTO directive: first version contains ONLY:
-//   User, Department, Role, Permission, UserRole, AuditLog
-// Business tables (Customer, Product, Order, ...) are intentionally absent
-// and will be introduced in later sprints.
+// Linier CRM Management System - Sprint 2 China Industrial Master Data schema (v2)
+// CTO directive: unified Item model + BusinessPartner model for Chinese industrial enterprise.
+// Master data foundation: Item / LinearGuideSpecification / BusinessPartner / PriceList /
+// TechnicalStandard / ItemStandard / UnitOfMeasure / CommercialTerm / DocumentSequence.
 
 generator client {
   provider = "prisma-client-js"
@@ -11,6 +10,74 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+/// 物料分类：成品 / 原材料 / 配件 / 外购件 / 服务 / 包装物
+enum ItemCategory {
+  FINISHED_GOOD
+  RAW_MATERIAL
+  ACCESSORY
+  PURCHASED_PART
+  SERVICE
+  PACKAGING
+}
+
+/// 审核状态：草稿 / 待审核 / 已审核 / 已驳回
+enum ApprovalStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// 往来单位类型：客户 / 供应商 / 客户兼供应商
+enum PartnerType {
+  CUSTOMER
+  SUPPLIER
+  BOTH
+}
+
+/// 价格类型（采购价/销售价/VIP/代理/工程/战略客户/区域价/客户专属价/历史价）
+enum PriceType {
+  PURCHASE // 采购价
+  SALES // 销售价
+  VIP // VIP 价
+  AGENT // 代理价
+  ENGINEERING // 工程价
+  STRATEGIC // 战略客户价
+  REGIONAL // 区域价
+  CUSTOMER // 客户专属价
+  HISTORICAL // 历史价
+}
+
+/// 物料生命周期（引入期/成长期/成熟期/衰退期/停产）
+enum ItemLifecycle {
+  INTRO
+  GROWTH
+  MATURE
+  DECLINE
+  EOL
+}
+
+/// 单据类型（报价/SO/PO/PI/CI/DO/GRN/GI/发票/贷项/借项/付款/收款/费用/日记账/合同/项目）
+enum DocumentType {
+  QUOTATION // 报价单
+  SALES_ORDER // 销售订单 SO
+  PURCHASE_ORDER // 采购订单 PO
+  PROFORMA_INVOICE // 形式发票 PI
+  COMMERCIAL_INVOICE // 商业发票 CI
+  DELIVERY_ORDER // 送货单 DO
+  GOODS_RECEIPT_NOTE // 收货单 GRN
+  GOODS_ISSUE // 出库单 GI
+  INVOICE // 发票
+  CREDIT_NOTE // 贷项通知单
+  DEBIT_NOTE // 借项通知单
+  PAYMENT_VOUCHER // 付款凭证
+  RECEIPT // 收款收据
+  EXPENSE // 费用报销
+  JOURNAL // 日记账
+  CONTRACT // 合同
+  PROJECT // 项目
 }
 
 /// Platform user account. Identity and credential record.
@@ -60,7 +127,7 @@ model Role {
   @@index([code])
 }
 
-/// Atomic capability, grouped by module (e.g. user:read, audit:write).
+/// Atomic capability, grouped by module (e.g. user:read, item:write).
 model Permission {
   id          String   @id @default(cuid())
   name        String
@@ -102,4 +169,747 @@ model AuditLog {
   @@index([actorId])
   @@index([entityType, entityId])
   @@index([createdAt])
+}
+
+/// 计量单位主数据（如：kg、m、件、套）
+model UnitOfMeasure {
+  id            String   @id @default(cuid())
+  code          String   @unique
+  name          String
+  symbol        String?
+  isActive      Boolean  @default(true)
+  createdById   String?
+  updatedById   String?
+  approvedById  String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version       Int      @default(1)
+  deletedAt     DateTime?
+  items         Item[]
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([name])
+  @@index([deletedAt])
+}
+
+/// 统一物料主表：成品 / 原材料 / 配件 / 外购件 / 服务 / 包装物。
+/// 名称、型号、规格、计量单位统一维护；品类差异通过扩展模型承载（如直线导轨规格）。
+model Item {
+  id            String          @id @default(cuid())
+  code          String          @unique // 内部编码
+  mnemonic      String? // 助记码
+  name          String // 中文名称
+  model         String? // 型号
+  spec          String? // 规格描述
+  brand         String? // 品牌
+  manufacturer  String? // 制造商
+  oemCode       String? // OEM 编码
+  customerItemNo String? // 客户料号
+  supplierItemNo String? // 供应商料号
+  drawingNo     String? // 图号
+  drawingVersion String? // 图纸版本
+  lifecycle     ItemLifecycle? // 生命周期
+  obsolete      Boolean         @default(false) // 停产标记
+  replacementItemId String? // 替代料
+  replacementItem Item?          @relation("ItemReplacement", fields: [replacementItemId], references: [id], onDelete: SetNull)
+  replacedBy    Item[]          @relation("ItemReplacement")
+  minPackQty    Decimal?        @db.Decimal(14, 2) // 最小包装
+  procurementLeadTime Int? // 采购周期（天）
+  moq           Decimal?        @db.Decimal(14, 2) // MOQ
+  safetyStock   Decimal?        @db.Decimal(14, 2) // 安全库存
+  category      ItemCategory    @default(FINISHED_GOOD)
+  unitId        String?
+  unit          UnitOfMeasure?  @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  description   String?
+  isActive      Boolean         @default(true)
+  createdById   String?
+  updatedById   String?
+  approvedById  String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version       Int             @default(1)
+  deletedAt     DateTime?
+  linearGuide   LinearGuideSpecification?
+  standards     ItemStandard[]
+  priceListItems PriceListItem[]
+  projectProducts ProjectProduct[]
+  createdAt     DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime        @updatedAt @db.Timestamptz(3)
+
+  @@index([name])
+  @@index([model])
+  @@index([mnemonic])
+  @@index([category])
+  @@index([replacementItemId])
+  @@index([deletedAt])
+}
+
+/// 直线导轨专用扩展规格（关联 Item，1:1）。
+model LinearGuideSpecification {
+  id                 String   @id @default(cuid())
+  itemId             String   @unique
+  item               Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  series             String? // 系列（SG/SM/SR/SV）
+  slideBlockType     String? // 滑块型式
+  railType           String? // 导轨型式
+  interchangeability String? // 互换性
+  precisionGrade     String? // 精度等级
+  preload            String? // 预压力
+  railLength         Decimal? @db.Decimal(12, 2) // 导轨长度 mm
+  ratedDynamicLoad   Decimal? @db.Decimal(12, 2) // 额定动负荷 kN
+  ratedStaticLoad    Decimal? @db.Decimal(12, 2) // 额定静负荷 kN
+  ratedMoment        Json? // 额定力矩（MR/MP/MY）
+  lubrication        String? // 润滑
+  dustProtection     String? // 防尘
+  material           String? // 材质
+  hardness           String? // 硬度
+  mountingType       String? // 安装方式
+  createdAt          DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime @updatedAt @db.Timestamptz(3)
+}
+
+/// 技术标准主数据（如 GB/T、ISO）
+model TechnicalStandard {
+  id          String         @id @default(cuid())
+  code        String         @unique
+  name        String
+  description String?
+  isActive    Boolean        @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int            @default(1)
+  deletedAt   DateTime?
+  items       ItemStandard[]
+  createdAt   DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime       @updatedAt @db.Timestamptz(3)
+
+  @@index([name])
+  @@index([deletedAt])
+}
+
+/// Item 与 TechnicalStandard 的多对多关联
+model ItemStandard {
+  id         String            @id @default(cuid())
+  itemId     String
+  item       Item              @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  standardId String
+  standard   TechnicalStandard @relation(fields: [standardId], references: [id], onDelete: Cascade)
+  createdAt  DateTime          @default(now()) @db.Timestamptz(3)
+
+  @@unique([itemId, standardId])
+  @@index([standardId])
+}
+
+/// 统一往来单位：客户 / 供应商 / 客户兼供应商。
+model BusinessPartner {
+  id                  String         @id @default(cuid())
+  code                String         @unique // 内部编码
+  mnemonic            String? // 助记码
+  name                String // 中文名称
+  type                PartnerType    @default(SUPPLIER)
+  uscc                String?        @unique // 统一社会信用代码
+  taxpayerType        String? // 纳税人类型（一般纳税人/小规模纳税人）
+  legalRepresentative String? // 法定代表人
+  registeredAddress   String? // 注册地址
+  invoiceInfo         Json? // 开票信息
+  bankName            String? // 开户银行
+  bankAccount         String? // 银行账号
+  settlementTerms     String? // 结算条款
+  shortName            String? // 客户简称
+  fullName             String? // 客户全称
+  groupName            String? // 集团名称
+  region               String? // 所属区域
+  industry             String? // 所属行业
+  companySize          String? // 企业规模
+  creditRating         String? // 信用等级
+  sourceChannel        String? // 来源渠道
+  foundedDate          DateTime? // 成立日期
+  registeredCapital    Decimal?      @db.Decimal(14, 2) // 注册资本（万元）
+  employeeCount        Int? // 员工人数
+  website              String? // 官网
+  wechatOfficialAccount String? // 微信公众号
+  tags                 Json? // 企业标签
+  contactPerson       String?
+  phone               String?
+  email               String?
+  address             String?
+  isActive            Boolean        @default(true)
+  createdById         String?
+  updatedById         String?
+  approvedById        String?
+  approvalStatus      ApprovalStatus @default(DRAFT)
+  version             Int            @default(1)
+  deletedAt           DateTime?
+  opportunities       ProjectOpportunity[]
+  projects            Project[]
+  createdAt           DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime       @updatedAt @db.Timestamptz(3)
+
+  @@index([name])
+  @@index([mnemonic])
+  @@index([type])
+  @@index([deletedAt])
+}
+
+/// 价格表主数据。币种默认 CNY；税率默认由配置（DEFAULT_TAX_RATE）提供，不在代码写死。
+model PriceList {
+  id              String          @id @default(cuid())
+  code            String          @unique
+  name            String
+  priceType       PriceType       @default(SALES) // 价格类型
+  currency        String          @default("CNY")
+  validFrom       DateTime? // 报价有效期起
+  validTo         DateTime? // 报价有效期止
+  freightIncluded Boolean         @default(false) // 是否含运费
+  isActive        Boolean         @default(true)
+  createdById     String?
+  updatedById     String?
+  approvedById    String?
+  approvalStatus  ApprovalStatus  @default(DRAFT)
+  version         Int             @default(1)
+  deletedAt       DateTime?
+  items           PriceListItem[]
+  createdAt       DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime        @updatedAt @db.Timestamptz(3)
+
+  @@index([name])
+  @@index([deletedAt])
+}
+
+/// 价格表明细：未税价 / 税率 / 税额 / 含税价 / 最小起订量 / 阶梯价
+model PriceListItem {
+  id               String        @id @default(cuid())
+  priceListId      String
+  priceList        PriceList     @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  itemId           String
+  item             Item          @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  unitPriceExclTax Decimal       @db.Decimal(14, 4) // 未税价
+  taxRate          Decimal       @db.Decimal(5, 2) // 税率 %（默认值来自配置）
+  taxAmount        Decimal       @db.Decimal(14, 4) // 税额
+  unitPriceInclTax Decimal       @db.Decimal(14, 4) // 含税价
+  minOrderQty      Decimal?      @db.Decimal(14, 2) // 最小起订量
+  tieredPricing    Json? // 阶梯价（如 [{qty, price}])
+  isActive         Boolean       @default(true)
+  createdById      String?
+  updatedById      String?
+  approvedById     String?
+  approvalStatus   ApprovalStatus @default(DRAFT)
+  version          Int           @default(1)
+  deletedAt        DateTime?
+  createdAt        DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime      @updatedAt @db.Timestamptz(3)
+
+  @@index([priceListId])
+  @@index([itemId])
+  @@index([deletedAt])
+}
+
+/// 商业条款主数据（如 EXW/FOB/CIF/月结30天）
+model CommercialTerm {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([name])
+  @@index([deletedAt])
+}
+
+/// 单据序列主数据（销售订单/采购订单/报价单等编号规则）
+model DocumentSequence {
+  id          String   @id @default(cuid())
+  code        String   @unique // 单据类型编码
+  name        String
+  docType     DocumentType // 单据类型（枚举）
+  prefix      String?
+  nextNo      Int      @default(1)
+  padLength   Int      @default(4)
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([name])
+  @@index([deletedAt])
+}
+
+// ============================================================
+// Sprint 2B：项目机会与项目执行领域（中国工业项目制业务）
+// 阶段：线索 → 准入 → 方案 → 报价 → 试样 → 测试 → 小批量 → 批量供货 → 暂停/失败/结项
+// ============================================================
+
+/// 项目阶段：线索 / 准入 / 方案 / 报价 / 试样 / 测试 / 小批量 / 批量供货 / 暂停 / 失败 / 结项
+enum ProjectStage {
+  LEAD // 线索
+  QUALIFIED // 准入
+  SOLUTION // 方案
+  QUOTATION // 报价
+  SAMPLING // 试样
+  TESTING // 测试
+  SMALL_BATCH // 小批量
+  MASS_SUPPLY // 批量供货
+  PAUSED // 暂停
+  FAILED // 失败
+  CLOSED // 结项
+}
+
+/// 项目关系人角色：需求人 / 技术人 / 采购人 / 决策人 / 使用人
+enum StakeholderRole {
+  REQUESTER // 需求人
+  TECHNICAL // 技术人
+  PURCHASER // 采购人
+  DECISION_MAKER // 决策人
+  END_USER // 使用人
+}
+
+/// 回款状态：未回款 / 部分回款 / 已回款 / 逾期
+enum PaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  OVERDUE
+}
+
+/// 里程碑状态：计划中 / 进行中 / 已完成 / 已延期
+enum MilestoneStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  DELAYED
+}
+
+/// 任务状态：待办 / 进行中 / 已完成 / 已取消
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+/// 风险状态：开启 / 应对中 / 已关闭
+enum RiskStatus {
+  OPEN
+  MITIGATING
+  CLOSED
+}
+
+/// 走访/沟通类型：走访 / 电话 / 视频 / 会议 / 其他
+enum VisitType {
+  VISIT
+  PHONE
+  VIDEO
+  MEETING
+  OTHER
+}
+
+/// 验收结果：通过 / 有条件通过 / 不通过 / 待验收
+enum AcceptanceResult {
+  PASSED
+  CONDITIONAL_PASS
+  FAILED
+  PENDING
+}
+
+/// 项目机会（线索/准入/方案/报价阶段）。
+/// 承载客户投入、预计营收/成本/毛利、费用预算、销售目标、回款状态、竞争对手、成功概率。
+model ProjectOpportunity {
+  id                 String           @id @default(cuid())
+  code               String           @unique // 机会编号（用 DocumentSequence 生成）
+  name               String // 机会名称
+  customerId         String
+  customer           BusinessPartner  @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  stage              ProjectStage     @default(LEAD)
+  customerInvestment Decimal?         @db.Decimal(14, 2) // 客户投入
+  expectedRevenue    Decimal?         @db.Decimal(14, 2) // 预计营收
+  expectedCost       Decimal?         @db.Decimal(14, 2) // 预计成本
+  grossProfit        Decimal?         @db.Decimal(14, 2) // 毛利
+  expenseBudget      Decimal?         @db.Decimal(14, 2) // 费用预算
+  salesTarget        Decimal?         @db.Decimal(14, 2) // 销售目标
+  paymentStatus      PaymentStatus    @default(UNPAID) // 回款状态
+  competitors        Json? // 竞争对手（[{name, note}]）
+  successProbability Decimal?         @db.Decimal(5, 2) // 成功概率 %
+  ownerId            String? // 负责人
+  description        String?
+  project            Project?
+  isActive           Boolean          @default(true)
+  createdById        String?
+  updatedById        String?
+  approvedById       String?
+  approvalStatus     ApprovalStatus   @default(DRAFT)
+  version            Int              @default(1)
+  deletedAt          DateTime?
+  createdAt          DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime         @updatedAt @db.Timestamptz(3)
+
+  @@index([customerId])
+  @@index([stage])
+  @@index([name])
+  @@index([deletedAt])
+}
+
+/// 项目（试样/测试/小批量/批量供货/暂停/失败/结项阶段）。
+model Project {
+  id                 String              @id @default(cuid())
+  code               String              @unique // 项目编号（用 DocumentSequence 生成）
+  name               String // 项目名称
+  opportunityId      String?           @unique // 关联的项目机会（可空，1:1）
+  opportunity        ProjectOpportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  customerId         String
+  customer           BusinessPartner     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  stage              ProjectStage        @default(SAMPLING)
+  customerInvestment Decimal?            @db.Decimal(14, 2) // 客户投入
+  expectedRevenue    Decimal?            @db.Decimal(14, 2) // 预计营收
+  expectedCost       Decimal?            @db.Decimal(14, 2) // 预计成本
+  grossProfit        Decimal?            @db.Decimal(14, 2) // 毛利
+  expenseBudget      Decimal?            @db.Decimal(14, 2) // 费用预算
+  salesTarget        Decimal?            @db.Decimal(14, 2) // 销售目标
+  paymentStatus      PaymentStatus       @default(UNPAID) // 回款状态
+  competitors        Json? // 竞争对手
+  successProbability Decimal?            @db.Decimal(5, 2) // 成功概率 %
+  expectedContractAmount Decimal?        @db.Decimal(14, 2) // 预计合同金额
+  expectedProfit Decimal?                 @db.Decimal(14, 2) // 预计利润
+  expectedGrossMarginRate Decimal?        @db.Decimal(5, 2) // 预计毛利率 %
+  receivedAmount Decimal?                 @db.Decimal(14, 2) // 回款金额
+  invoicedAmount Decimal?                  @db.Decimal(14, 2) // 已开发票金额
+  uninvoicedAmount Decimal?                @db.Decimal(14, 2) // 未开发票金额
+  receivableBalance Decimal?               @db.Decimal(14, 2) // 应收余额
+  projectRating String? // 项目评级
+  failureReason String? // 失败原因
+  ownerId            String? // 项目负责人
+  description        String?
+  stakeholders       ProjectStakeholder[]
+  members            ProjectMember[]
+  milestones         ProjectMilestone[]
+  tasks              ProjectTask[]
+  budgets            ProjectBudget[]
+  expenses           ProjectExpense[]
+  products           ProjectProduct[]
+  risks              ProjectRisk[]
+  visits             ProjectVisit[]
+  progresses         ProjectProgress[]
+  acceptances        ProjectAcceptance[]
+  closure            ProjectClosure?
+  isActive           Boolean             @default(true)
+  createdById        String?
+  updatedById        String?
+  approvedById       String?
+  approvalStatus     ApprovalStatus      @default(DRAFT)
+  version            Int                 @default(1)
+  deletedAt          DateTime?
+  createdAt          DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime            @updatedAt @db.Timestamptz(3)
+
+  @@index([customerId])
+  @@index([stage])
+  @@index([name])
+  @@index([deletedAt])
+}
+
+/// 项目关系人：需求人 / 技术人 / 采购人 / 决策人 / 使用人。
+model ProjectStakeholder {
+  id          String          @id @default(cuid())
+  projectId   String
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  role        StakeholderRole
+  name        String // 姓名
+  title       String? // 职务
+  department  String?
+  phone       String?
+  email       String?
+  note        String?
+  isActive    Boolean         @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int             @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime        @updatedAt @db.Timestamptz(3)
+
+  @@index([projectId])
+  @@index([role])
+  @@index([deletedAt])
+}
+
+/// 项目成员（内部团队）。
+model ProjectMember {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId      String? // 关联系统用户（可空，允许未建账号成员）
+  name        String // 姓名
+  roleInProject String? // 项目内角色（如：项目经理/技术负责/销售）
+  joinedAt    DateTime?
+  leftAt      DateTime?
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([projectId])
+  @@index([deletedAt])
+}
+
+/// 项目里程碑（含交付成果与延期原因）。
+model ProjectMilestone {
+  id            String          @id @default(cuid())
+  projectId     String
+  project       Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name          String // 里程碑名称
+  plannedDate   DateTime? // 计划日期
+  actualDate    DateTime? // 实际日期
+  status        MilestoneStatus @default(PLANNED)
+  deliverable   String? // 交付成果
+  delayReason   String? // 延期原因
+  isActive      Boolean         @default(true)
+  createdById   String?
+  updatedById   String?
+  approvedById  String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version       Int             @default(1)
+  deletedAt     DateTime?
+  createdAt     DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime        @updatedAt @db.Timestamptz(3)
+
+  @@index([projectId])
+  @@index([deletedAt])
+}
+
+/// 项目任务。
+model ProjectTask {
+  id          String      @id @default(cuid())
+  projectId   String
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  milestoneId String? // 关联里程碑（可空）
+  name        String // 任务名称
+  assigneeId  String? // 负责人
+  dueDate     DateTime?
+  status      TaskStatus  @default(TODO)
+  priority    String? // 高/中/低
+  description String?
+  isActive    Boolean     @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int         @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime    @updatedAt @db.Timestamptz(3)
+
+  @@index([projectId])
+  @@index([milestoneId])
+  @@index([deletedAt])
+}
+
+/// 项目预算（按科目）。
+model ProjectBudget {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  category    String // 预算科目（如：差旅/招待/测试/试样）
+  amount      Decimal  @db.Decimal(14, 2)
+  currency    String   @default("CNY")
+  note        String?
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([projectId])
+  @@index([deletedAt])
+}
+
+/// 项目费用（实际支出）。
+model ProjectExpense {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  category    String // 费用科目
+  amount      Decimal  @db.Decimal(14, 2)
+  currency    String   @default("CNY")
+  incurredAt  DateTime?
+  note        String?
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([projectId])
+  @@index([deletedAt])
+}
+
+/// 项目产品（项目涉及的产品/物料，关联 Item 主数据）。
+model ProjectProduct {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  itemId      String
+  item        Item     @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  quantity    Decimal? @db.Decimal(14, 2) // 数量
+  unitPrice   Decimal? @db.Decimal(14, 4) // 单价
+  note        String?
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([projectId])
+  @@index([itemId])
+  @@index([deletedAt])
+}
+
+/// 项目风险（含应对方案、责任人、关闭状态）。
+model ProjectRisk {
+  id          String     @id @default(cuid())
+  projectId   String
+  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  description String // 风险描述
+  impact      String? // 影响
+  probability String? // 概率（高/中/低）
+  mitigation  String? // 应对方案
+  ownerId     String? // 责任人
+  status      RiskStatus @default(OPEN)
+  closedAt    DateTime?
+  isActive    Boolean    @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int        @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime   @updatedAt @db.Timestamptz(3)
+
+  @@index([projectId])
+  @@index([deletedAt])
+}
+
+/// 客户走访与沟通记录（支持下次行动与提醒）。
+model ProjectVisit {
+  id          String    @id @default(cuid())
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  visitType   VisitType @default(VISIT)
+  visitedAt   DateTime  @default(now())
+  visitorId   String? // 走访人
+  contactName String? // 客户联系人
+  summary     String // 沟通纪要
+  nextAction  String? // 下次行动
+  reminderAt  DateTime? // 提醒时间
+  isActive    Boolean   @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int       @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@index([projectId])
+  @@index([deletedAt])
+}
+
+/// 项目进展记录。
+model ProjectProgress {
+  id              String   @id @default(cuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  recordedAt      DateTime @default(now())
+  progressPercent Decimal  @db.Decimal(5, 2) // 进度百分比
+  summary         String // 进展说明
+  isActive        Boolean  @default(true)
+  createdById     String?
+  updatedById     String?
+  approvedById    String?
+  approvalStatus  ApprovalStatus @default(DRAFT)
+  version         Int      @default(1)
+  deletedAt       DateTime?
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([projectId])
+  @@index([deletedAt])
+}
+
+/// 项目验收（含验收结果）。
+model ProjectAcceptance {
+  id          String           @id @default(cuid())
+  projectId   String
+  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String // 验收项
+  expectedDate DateTime?
+  actualDate  DateTime?
+  result      AcceptanceResult @default(PENDING)
+  resultNote  String? // 验收结果说明
+  isActive    Boolean          @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int              @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime         @updatedAt @db.Timestamptz(3)
+
+  @@index([projectId])
+  @@index([deletedAt])
+}
+
+/// 项目结项（1:1）。
+model ProjectClosure {
+  id          String   @id @default(cuid())
+  projectId   String   @unique
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  closedAt    DateTime @default(now())
+  reason      String // 结项原因
+  summary     String? // 结项总结
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([deletedAt])
 }

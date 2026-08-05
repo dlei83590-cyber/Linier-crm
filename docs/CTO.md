@@ -1,5 +1,10 @@
 # CTO Engineering Directive
 
+## Project Planning Authority
+
+- The authoritative development roadmap is [docs/ROADMAP.md](./ROADMAP.md).
+- All development decisions MUST align with the roadmap; features outside the roadmap require explicit approval.
+
 ## Mission
 
 Build Linier CRM Management System as a secure, maintainable, multi-tenant customer relationship platform that teams can operate with confidence.
