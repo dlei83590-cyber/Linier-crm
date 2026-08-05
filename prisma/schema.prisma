@@ -1789,6 +1789,7 @@ model FileFolder {
   parentId    String?
   parent      FileFolder?  @relation("FileFolderTree", fields: [parentId], references: [id], onDelete: SetNull)
   children    FileFolder[] @relation("FileFolderTree")
+  files       File[]
   sort        Int          @default(0)
   isActive    Boolean      @default(true)
   createdById String?
