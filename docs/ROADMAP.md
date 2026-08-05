@@ -14,7 +14,7 @@
 | --- | --- | --- | --- |
 | Sprint 1 | Infrastructure（基础设施） | ✅ Closed | Release v0.1.0-alpha |
 | Sprint 2 | Master Data（主数据） | ✅ Closed | Release v0.2.0-alpha（2A+2B+2C） |
-| Sprint 3 | ERP Foundation（ERP 底座） | 🔄 3A ✅/3B ⬜ | 3A Workflow Foundation ✅（v0.3.0-alpha）+ 3B 平台能力 + 3C 业务底座 CRUD |
+| Sprint 3 | ERP Foundation（ERP 底座） | 🔄 3A ✅/3B ✅/3C ⬜ | 3A Workflow Foundation ✅（v0.3.0-alpha）+ 3B Platform Capabilities ✅（v0.4.0-alpha）+ 3C Business Foundation |
 | Sprint 4 | Sales（销售） | ⬜ | Quotation/Contract/SO/Delivery/Invoice/Payment |
 | Sprint 5 | Purchase（采购） | ⬜ | PR/PO/GRN/Supplier Invoice/Payment |
 | Sprint 6 | Inventory（库存） | ⬜ | Warehouse/Stock/Batch/Movement/Count/Transfer |
@@ -36,7 +36,8 @@
 - **Sprint 3B 起新增 `docs/test-cases/` 测试用例文档**（如 `Menu_API.md` / `Audit_API.md` / `Dashboard_API.md` / `File_API.md`），供自动化测试复用
 - **从 v0.3.0 起 Release 必须包含**：Compatibility / Database / Migration / Breaking Changes / Upgrade Guide
 - **架构冻结**：基础平台能力（Workflow/Approval/Notification/Dictionary/Settings/Menu/Audit/Dashboard/File）调整必须新增 ADR，禁止直接修改（见 ARCHITECTURE_BASELINE.md）
-- **Sprint 4 前必须完成**：① 统一异常码 Error Code Registry（避免各模块自行定义错误码）② 事件总线 Domain Events（如审批通过后自动触发通知/日志/后续业务，模块间不直接调用）
+- **Sprint 3C 起新增规范文档**：`docs/API_GUIDELINES.md`（分页/过滤/排序/搜索/批量/导入/导出/错误码/版本/Headers/Rate Limit/Idempotency 统一约定）、`docs/ERROR_CODES.md`（统一错误码注册表，如 AUTH_001/WORKFLOW_001，供前端国际化与日志统计）、`docs/EVENTS.md`（Domain Events 注册表，如 ProjectCreated/WorkflowApproved/QuotationSubmitted/InvoicePaid/PurchaseCompleted，供 Notification/BI/Webhook 监听，模块间不直接调用）
+- **Sprint 4 前必须完成**：① 统一异常码 Error Code Registry（落地 ERROR_CODES.md）② 事件总线 Domain Events（落地 EVENTS.md）
 
 ---
 
@@ -87,6 +88,19 @@
 
 ## 5. Sprint 3：ERP Foundation（ERP 底座）🔄
 
+### Sprint 3B：平台能力 ✅ Closed（v0.4.0-alpha，PR #6）
+
+| 模块 | 内容 | 状态 |
+| --- | --- | --- |
+| Audit Center | AuditLog +8 字段（Before/AfterData/RequestId/TraceId/IP/Device/Browser/Duration/Result）+ requestMeta + audit-logs API | ✅ |
+| Menu Center | MenuGroup + Menu 树 + RouteMeta（Icon/Sort/Hidden/Cache/ExternalLink/Permission） | ✅ |
+| Dashboard API | Widget / Layout / KPI / Chart 四模型，只提供数据 API | ✅ |
+| File Center | File / Folder / Version / Attachment / Preview，业务单据统一引用 | ✅ |
+| 架构冻结 | ARCHITECTURE_BASELINE v1.0（调整必须 ADR） | ✅ |
+
+> Release：v0.4.0-alpha（PR #6 合并，merge e54567e67c）；迁移 0005-0008；ADR-0005~0008
+> CTO 评价：综合成熟度 99/100
+
 **原则：不开发业务页面，优先 ERP 底座能力；Sprint 3C 只做 CRUD 不做业务。**
 
 ### Sprint 3A：系统引擎 ✅ Closed（v0.3.0-alpha，PR #5）
@@ -115,10 +129,19 @@
 > 启动前先创建 `docs/ARCHITECTURE_BASELINE.md`（架构冻结），后续调整必须新增 ADR。
 > 新增 `docs/test-cases/`：Menu_API.md / Audit_API.md / Dashboard_API.md / File_API.md。
 
-### Sprint 3C：业务底座（仅 CRUD，不业务）
+### Sprint 3C：Business Foundation（业务底座，CTO 改名，非仅 CRUD）
 
-- Customer / Supplier / Item / Project / Price List
-- 统一能力：List / Search / Filter / Create / Edit / Delete / Export / Import
+**原则：不开发业务页面，只做业务底座（Validation / Permission / Audit / Workflow / Attachment 一起），每个子阶段独立 PR、独立 QA、独立 ADR、独立验收。**
+
+| 子阶段 | 内容 | 状态 |
+| --- | --- | --- |
+| 3C-1 | Customer Foundation：Customer / Contact / Address / Tag / Industry / Credit | ⬜ |
+| 3C-2 | Supplier Foundation：Supplier / Contact / Settlement / Qualification / Certificate | ⬜ |
+| 3C-3 | Item Foundation：Item / Specification / Category / Brand / UOM / Price / Attachment | ⬜ |
+| 3C-4 | Project Foundation：Opportunity / Project / Milestone / Task / Visit / Risk / Expense | ⬜ |
+| 3C-5 | Price Foundation：Price List / Price Rule / Customer Price / Region Price / History | ⬜ |
+
+> 统一能力：List / Search / Filter / Create / Edit / Delete / Export / Import + 动作级权限 + 审计 + 附件引用
 
 ---
 
@@ -225,7 +248,7 @@
 | --- | --- | --- |
 | M1 | Sprint 1 完成 | Release v0.1.0-alpha ✅ |
 | M2 | Sprint 2 完成 | Release v0.2.0-alpha ✅（main 冻结） |
-| M3 | Sprint 3 完成 | ERP 底座可用（3A ✅ v0.3.0-alpha；3B/3C 进行中） |
+| M3 | Sprint 3 完成 | ERP 底座可用（3A ✅ v0.3.0-alpha；3B ✅ v0.4.0-alpha；3C Business Foundation 进行中） |
 | M4 | Sprint 4-6 完成 | 进销存闭环可用 |
 | M5 | Sprint 7 完成 | 财务闭环可用 |
 | M6 | Sprint 8-10 完成 | 数据驱动 + 移动化 |
@@ -235,4 +258,5 @@
 | 日期 | 变更 | 说明 |
 | --- | --- | --- |
 | 2026-08-05 | 创建 v1.0 | Sprint 3 拆 Phase A/B，Sprint 4-7 按销售/采购/库存/财务排序，新增 BI/OA/Mobile |
+| 2026-08-05 | 更新 v1.3 | Sprint 3B Closed（v0.4.0-alpha，PR #6，CTO 99/100）；Sprint 3C 改名 Business Foundation 拆 5 子阶段（Customer/Supplier/Item/Project/Price）；新增 API_GUIDELINES / ERROR_CODES / EVENTS 规范文档 |
 | 2026-08-05 | 更新 v1.2 | Sprint 3A Closed（v0.3.0-alpha，PR #5）；Sprint 3B 按 Audit→Menu→Dashboard→File 顺序；新增 ARCHITECTURE_BASELINE 架构冻结 + docs/test-cases/ + Release 五要素 + Sprint 4 前 Error Code Registry 与 Domain Events |

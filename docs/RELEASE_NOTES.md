@@ -1,5 +1,40 @@
 # Release Notes
 
+## v0.4.0-alpha — Sprint 3B: Platform Capabilities（2026-08-05）
+
+> PR: #6 — `feature/sprint3-platform-capabilities`（已合并，merge commit e54567e67c）
+> 状态：RELEASED（CTO Approve，综合成熟度 99/100）
+
+### Sprint 3B 完成内容
+
+- **Audit Center**：AuditLog +8 字段 + AuditResult 枚举 + requestMeta() + audit-logs API（ISO 审计/操作追溯/审批追踪/安全分析）
+- **Menu Center**：MenuGroup + Menu 树 + RouteMeta（icon/sort/hidden/cache/externalLink/permission），前端直接读取
+- **Dashboard API**：Widget/Layout/KPI/Chart 四模型，只提供数据 API（Sprint 8 BI 接入）
+- **File Center**：File/Folder/Version/Attachment，业务单据统一附件引用
+- **架构冻结**：ARCHITECTURE_BASELINE v1.0（调整必须 ADR）
+- **迁移 0005-0008**：+8 模型/+3 枚举；**RBAC**：+10 模块动作级权限
+- **文档**：ADR-0005~0008、DOMAIN_MODEL v1.5（62 模型/29 枚举）、OpenAPI 4100+ 行、test-cases 4 份
+
+### Compatibility / Database / Migration / Breaking Changes
+
+- **Compatibility**：向下兼容 v0.3.0，无 Breaking Changes
+- **Database**：新增 8 模型 + 3 枚举；AuditLog ALTER 加列（不重建表）
+- **Migration**：0005_audit_upgrade / 0006_menu_center / 0007_dashboard_api / 0008_file_center
+- **Breaking Changes**：无
+
+### Known Risks（后续计划）
+
+- File 仅元数据建模（对象存储后续接入）、Preview 白名单判定、Dashboard 无页面（Sprint 8）、承接 3A 未完成项、运行级 Railway 验证待执行
+
+### Upgrade Guide
+
+```bash
+git pull origin main
+pnpm install && pnpm db:generate
+pnpm db:migrate
+pnpm db:seed
+```
+
 ## v0.3.0-alpha — Sprint 3A: Workflow Foundation（2026-08-05）
 
 > PR: #5 — `feature/sprint3-platform-foundation`（已合并，merge commit 42ebf22262）
