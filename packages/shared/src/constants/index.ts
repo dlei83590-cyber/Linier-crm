@@ -144,6 +144,15 @@ export const PERMISSION_MODULES = [
   "partner-tag",
   "partner-bank-account",
   "partner-credit",
+  // Sprint 3C-3：Item Master Foundation（CTO #2075：item 动作级 + 子模块）
+  "item-category",
+  "item-specification",
+  "item-uom",
+  "item-cost",
+  "item-supplier",
+  "item-revision",
+  "item-tag",
+  "item-attachment",
 ] as const;
 
 /** 生成模块×动作权限码（如 "item:view"） */

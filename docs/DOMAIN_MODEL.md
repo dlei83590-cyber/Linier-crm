@@ -1,6 +1,6 @@
 # DOMAIN_MODEL 领域模型
 
-- 版本：v1.7
+- 版本：v1.8
 - 日期：2026-08-06
 - 维护者：CIO（JINZA）｜审核：CTO
 - 关联：[PRODUCT_VISION.md](./PRODUCT_VISION.md) ｜ [ROADMAP.md](./ROADMAP.md) ｜ [ADR](./ADR/)
@@ -912,4 +912,155 @@ erDiagram
 - 权限：supplier / supplier-qualification / supplier-certificate / supplier-settlement / business-partner-role / partner-contact / partner-address / partner-tag / partner-bank-account / partner-credit 模块，MANAGER 全量
 - seed：SUP-0001/SUP-0002（关联 BP-S-0001/BP-B-0001）+ 3 条 PartnerRole（CUSTOMER/SUPPLIER/BOTH）
 
-## 18. 变更记录
+## 18. Item Master Foundation（Sprint 3C-3，ADR-0012）
+
+> 定位（CTO #2075）：**Item Master 是 ERP 核心主数据**，Sales / Purchase / Inventory / Warehouse / BOM / Production / Cost / Finance 全部引用。
+> 五级层级（正式定义）：Level1 Category → Level2 SubCategory → Level3 Series → Level4 Model → Level5 Variant；不设第六层，特殊规格进 ItemSpecification。
+
+```mermaid
+erDiagram
+    ItemCategory ||--o{ ItemCategory : parent_sub
+    ItemCategory ||--o{ Item : classifies
+    Item ||--o{ ItemSpecification : has
+    Item ||--o{ UomConversion : converts
+    UnitOfMeasure ||--o{ Item : stock_uom
+    UnitOfMeasure ||--o{ Item : purchase_uom
+    UnitOfMeasure ||--o{ Item : sales_uom
+    UnitOfMeasure ||--o{ UomConversion : from
+    UnitOfMeasure ||--o{ UomConversion : to
+    Item ||--o{ ItemCost : costs
+    Item ||--o{ SupplierItem : sources
+    BusinessPartner ||--o{ SupplierItem : supplies
+    Item ||--o{ ItemRevision : versions
+    Item ||--o{ ItemTag : tagged
+    Tag ||--o{ ItemTag : used_by
+    FileAttachment ||--o{ Item : attaches
+
+    Item {
+        string id PK
+        string code UK
+        string name
+        ItemType itemType
+        string categoryId FK
+        string series
+        string model
+        string variant
+        string oemCode
+        string barcode
+        string qrCode
+        string drawingNo
+        string revision
+        ItemLifecycle lifecycle
+        ItemStatus status
+        string stockUomId FK
+        string purchaseUomId FK
+        string salesUomId FK
+        bool isSalable
+        bool isPurchasable
+        bool isManufacturable
+        int version
+        datetime deletedAt
+    }
+
+    ItemCategory {
+        string id PK
+        string code UK
+        string name
+        string parentId FK
+        int level
+        int sort
+        datetime deletedAt
+    }
+
+    ItemSpecification {
+        string id PK
+        string itemId FK
+        string specKey
+        string specValue
+        string unit
+        int sort
+        datetime deletedAt
+    }
+
+    UomConversion {
+        string id PK
+        string itemId FK
+        string fromUomId FK
+        string toUomId FK
+        Decimal factor
+        datetime deletedAt
+    }
+
+    ItemCost {
+        string id PK
+        string itemId FK
+        ItemCostType costType
+        Decimal amount
+        string currency
+        datetime effectiveFrom
+        datetime effectiveTo
+        string source
+        datetime deletedAt
+    }
+
+    SupplierItem {
+        string id PK
+        string itemId FK
+        string supplierId FK
+        string supplierCode
+        Decimal moq
+        int leadTime
+        string currency
+        Decimal purchasePrice
+        bool isPreferred
+        string incoterm
+        string paymentTerm
+        datetime deletedAt
+    }
+
+    ItemRevision {
+        string id PK
+        string itemId FK
+        int revisionNo
+        string revision
+        string changeSummary
+        string releasedById
+        datetime releasedAt
+        string status
+        datetime deletedAt
+    }
+
+    ItemTag {
+        string id PK
+        string itemId FK
+        string tagId FK
+        datetime deletedAt
+    }
+```
+
+- 枚举：ItemType（FINISHED_GOOD/RAW_MATERIAL/SEMI_FINISHED/PURCHASED_PART/ACCESSORY/SERVICE/CONSUMABLE/ASSET/TOOLING/PACKAGING）、ItemStatus（ACTIVE/INACTIVE/LOCKED/ARCHIVED）、ItemCostType（STANDARD/LAST_PURCHASE/AVERAGE/CURRENT）、AttachmentType（DRAWING/CERTIFICATE/PHOTO/MANUAL/MODEL_3D/VIDEO/INSPECTION_REPORT，统一放 File Center）；ItemLifecycle 重命名五值（DESIGN/TRIAL/MASS_PRODUCTION/DISCONTINUED/OBSOLETE）
+- 业务规则：不建 Item.supplierId 单值字段，建 SupplierItem（一个 Item 多供应商）；ItemCost 只建接口不写算法；Lifecycle 与 Status 分离；附件复用 File Center（businessType=item + attachmentType）
+- 迁移 `0011_item_foundation`：Item 表 ALTER（RENAME COLUMN category→itemType + ADD COLUMN，不改既有列）+ 7 新表 + 枚举演进 + FileAttachment.attachmentType（仅新增/加列）
+- API：items 主档 CRUD + 分类树 + specifications/uom-conversions/costs/supplier-items/revisions/tags/attachments 子资源
+- 权限：item（动作级）+ item-category/item-specification/item-uom/item-cost/item-supplier/item-revision/item-tag/item-attachment 模块，MANAGER 全量
+- seed：SEED_LINEAR_GUIDE_ITEMS 同步（itemType/lifecycle 新枚举）
+
+## 19. 变更记录
+
+### v1.8（2026-08-06，Sprint 3C-3 Item Master Foundation，ADR-0012）
+
+- 新增章节：17. Item Master Foundation（ItemType 10 类/五级层级/多 UOM/ItemSpecification/ItemCost/SupplierItem/ItemRevision/ItemTag）
+- 模型：79 → 86（+ItemCategory 树/ItemSpecification/UomConversion/ItemCost/SupplierItem/ItemRevision/ItemTag）
+- 枚举：37 → 40（+ItemStatus/ItemCostType/AttachmentType；ItemCategory→ItemType 扩展 10 类；ItemLifecycle 重命名五值）
+- Item 升级：itemType/categoryId/series/model/variant/barcode/qrCode/revision/status/多 UOM/isSalable/isPurchasable/isManufacturable
+- FileAttachment + attachmentType（统一放 File Center，CTO #2075）
+
+### v1.7（2026-08-06，Sprint 3C-2 Supplier Foundation，ADR-0010）
+
+- 新增章节：17. Supplier Foundation（BusinessPartnerRole + Partner 五共享 + Supplier 三独有）
+- 模型：69 → 79；枚举：33 → 37
+
+### v1.6（2026-08-05，Sprint 3C-1 Customer Foundation，ADR-0009）
+
+- 新增章节：16. Customer Foundation（Customer/Contact/Address/Tag/Industry/Credit）
+- 模型：62 → 69；枚举：29 → 33
