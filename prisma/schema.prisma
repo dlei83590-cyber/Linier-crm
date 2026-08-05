@@ -1595,3 +1595,60 @@ model UserSetting {
   @@index([userId])
   @@index([deletedAt])
 }
+
+// ============================================================================
+// Sprint 3B - Menu Center（菜单中心：前端直接读取，RouteMeta 内联）
+// ============================================================================
+
+/// 菜单组（顶级分组，如"主数据"）
+model MenuGroup {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  icon        String? // 分组图标
+  sort        Int      @default(0)
+  menus       Menu[]
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([deletedAt])
+}
+
+/// 菜单（树形：parentId 自关联；RouteMeta 内联）
+model Menu {
+  id           String   @id @default(cuid())
+  groupId      String
+  group        MenuGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  parentId     String?
+  parent       Menu?    @relation("MenuTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children     Menu[]   @relation("MenuTree")
+  code         String   @unique
+  name         String
+  path         String? // 路由路径
+  icon         String? // 图标
+  sort         Int      @default(0)
+  hidden       Boolean  @default(false) // 隐藏
+  cache        Boolean  @default(false) // 缓存
+  externalLink String? // 外链（http(s)://）
+  permission   String? // 关联权限码（如 workflow-definition:view）
+  isActive     Boolean  @default(true)
+  createdById  String?
+  updatedById  String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version      Int      @default(1)
+  deletedAt    DateTime?
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([groupId])
+  @@index([parentId])
+  @@index([deletedAt])
+}

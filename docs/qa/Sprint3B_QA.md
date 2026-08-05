@@ -8,7 +8,7 @@
 ## 1. Scope
 
 - Audit Center：AuditLog 升级（ObjectType/ObjectId/BeforeData/AfterData/RequestId/TraceId/IP/Device/Browser/Duration/Result）
-- Menu Center：Menu / MenuGroup / MenuPermission / RouteMeta（Icon/Sort/Hidden/Cache/ExternalLink）
+- Menu Center：Menu / MenuGroup / RouteMeta（Icon/Sort/Hidden/Cache/ExternalLink/Permission）✅ 已开发
 - Dashboard API：/widgets /layouts /kpis /charts（不开发页面）
 - File Center：File / Attachment / Folder / Version / Preview
 
@@ -24,6 +24,7 @@
 | Unit tests | PENDING | request-meta.test.ts 7 用例已编写，待 CI 执行 |
 | Build | PENDING | 远程 CI |
 | Secret scan | PENDING | 远程 CI |
+| Menu Center 迁移 | PASS | 0006_menu_center：2 表 + 索引 + 外键，本地核验 |
 
 ## 3. API Test Matrix（Audit Center）
 
@@ -31,6 +32,10 @@
 |---|---:|---:|---:|---:|---:|
 | GET /api/audit-logs（分页+过滤） | PASS(代码) | PASS(代码) | PASS(代码) | N/A | N/A |
 | GET /api/audit-logs/:id | PASS(代码) | N/A | PASS(代码) | PASS(代码) | N/A |
+| GET/POST /api/menus（列表/树/创建） | PASS(代码) | PASS(代码) | PASS(代码) | N/A | PASS(代码) |
+| GET/PATCH/DELETE /api/menus/:id | PASS(代码) | PASS(代码) | PASS(代码) | PASS(代码) | PASS(代码) |
+| GET/POST /api/menu-groups | PASS(代码) | PASS(代码) | PASS(代码) | N/A | PASS(代码) |
+| GET/PATCH/DELETE /api/menu-groups/:id | PASS(代码) | PASS(代码) | PASS(代码) | PASS(代码) | PASS(代码) |
 
 > PASS(代码) = 静态代码审查通过；运行级验证待 CI/部署环境执行（PENDING）。
 
@@ -56,7 +61,7 @@ RBAC: PASS（audit:view 仅 SUPER_ADMIN/ADMIN）
 API: PASS（代码审查）→ 运行级 PENDING
 State Machine: N/A
 Unit Test: PENDING（已编写待 CI）
-OpenAPI: PASS（/api/audit-logs 已覆盖）
+OpenAPI: PASS（/api/audit-logs + /api/menus + /api/menu-groups 已覆盖）
 CI: PENDING（远程 Quality Gates / Build / Secret Scan）
 Deployment QA: NOT RUN（待 Railway 环境）
 ```

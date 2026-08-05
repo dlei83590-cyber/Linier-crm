@@ -13,6 +13,7 @@ tags:
   - name: Health
   - name: Auth
   - name: Audit Logs
+  - name: Menu Center
   - name: Workflow Definitions
   - name: Workflow Instances
   - name: Approver Groups
@@ -157,6 +158,293 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AuditLogResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/menus:
+    get:
+      tags: [Menu Center]
+      summary: List menus (paginated) or menu tree (front-end direct read)
+      operationId: listMenus
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: groupCode
+          in: query
+          schema: { type: string }
+        - name: tree
+          in: query
+          schema: { type: boolean, default: false }
+          description: true 时返回树形结构
+      responses:
+        "200":
+          description: List or tree（软删除/禁用已过滤）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Menu Center]
+      summary: Create menu（含 RouteMeta：icon/sort/hidden/cache/externalLink/permission）
+      operationId: createMenu
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MenuCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/menus/{id}:
+    get:
+      tags: [Menu Center]
+      summary: Get menu detail
+      operationId: getMenu
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Menu Center]
+      summary: Update menu（乐观锁 version）
+      operationId: updateMenu
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MenuUpdate"
+      responses:
+        "200":
+          description: Updated（version+1）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Menu Center]
+      summary: Soft delete menu (cascade to subtree)
+      operationId: deleteMenu
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Soft deleted（含子树）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/menu-groups:
+    get:
+      tags: [Menu Center]
+      summary: List menu groups (paginated, with menu counts)
+      operationId: listMenuGroups
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: code
+          in: query
+          schema: { type: string }
+        - name: name
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Paginated list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuGroupListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Menu Center]
+      summary: Create menu group
+      operationId: createMenuGroup
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MenuGroupCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuGroupResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/menu-groups/{id}:
+    get:
+      tags: [Menu Center]
+      summary: Get menu group detail (with menus)
+      operationId: getMenuGroup
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuGroupResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Menu Center]
+      summary: Update menu group（乐观锁 version）
+      operationId: updateMenuGroup
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MenuGroupUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuGroupResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Menu Center]
+      summary: Soft delete menu group (cascade to menus)
+      operationId: deleteMenuGroup
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Soft deleted（组下菜单级联隐藏）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -1358,6 +1646,152 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
 
   schemas:
+    # --------------------------------------------------------------------------
+    # Menu Center（Sprint 3B）
+    # --------------------------------------------------------------------------
+    MenuGroup:
+      type: object
+      required: [id, code, name, version]
+      properties:
+        id: { type: string }
+        code: { type: string, description: 唯一编码（DASHBOARD/MASTER_DATA 等） }
+        name: { type: string }
+        icon: { type: [string, "null"] }
+        sort: { type: integer }
+        version: { type: integer, description: 乐观锁 }
+        isActive: { type: boolean }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        menus:
+          type: array
+          items: { $ref: "#/components/schemas/Menu" }
+        _count:
+          type: object
+          properties:
+            menus: { type: integer }
+
+    Menu:
+      type: object
+      required: [id, groupId, code, name, version]
+      properties:
+        id: { type: string }
+        groupId: { type: string, description: FK → MenuGroup }
+        parentId: { type: [string, "null"], description: 树形父节点 }
+        code: { type: string, description: 唯一编码 }
+        name: { type: string }
+        path: { type: [string, "null"], description: 路由路径 }
+        icon: { type: [string, "null"], description: 图标 }
+        sort: { type: integer, description: 排序 }
+        hidden: { type: boolean, description: 隐藏 }
+        cache: { type: boolean, description: 缓存 }
+        externalLink: { type: [string, "null"], description: 外链 }
+        permission: { type: [string, "null"], description: 关联权限码 }
+        version: { type: integer }
+        isActive: { type: boolean }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        children:
+          type: array
+          items: { $ref: "#/components/schemas/Menu" }
+          description: tree=true 时返回
+        group:
+          type: [object, "null"]
+          properties:
+            code: { type: string }
+            name: { type: string }
+
+    MenuCreate:
+      type: object
+      required: [groupId, code, name]
+      properties:
+        groupId: { type: string }
+        parentId: { type: string }
+        code: { type: string, minLength: 1, maxLength: 64 }
+        name: { type: string, minLength: 1, maxLength: 100 }
+        path: { type: string, maxLength: 200 }
+        icon: { type: string, maxLength: 100 }
+        sort: { type: integer, default: 0 }
+        hidden: { type: boolean, default: false }
+        cache: { type: boolean, default: false }
+        externalLink: { type: string, maxLength: 500 }
+        permission: { type: string, maxLength: 100 }
+
+    MenuUpdate:
+      type: object
+      required: [version]
+      properties:
+        version: { type: integer, description: 乐观锁（必须与当前一致） }
+        groupId: { type: string }
+        parentId: { type: [string, "null"], description: null 表示移到根 }
+        code: { type: string }
+        name: { type: string }
+        path: { type: [string, "null"] }
+        icon: { type: [string, "null"] }
+        sort: { type: integer }
+        hidden: { type: boolean }
+        cache: { type: boolean }
+        externalLink: { type: [string, "null"] }
+        permission: { type: [string, "null"] }
+
+    MenuGroupCreate:
+      type: object
+      required: [code, name]
+      properties:
+        code:
+          type: string
+          pattern: "^[A-Z0-9_]+$"
+          minLength: 2
+          maxLength: 64
+        name: { type: string, minLength: 1, maxLength: 100 }
+        icon: { type: string, maxLength: 100 }
+        sort: { type: integer, default: 0 }
+
+    MenuGroupUpdate:
+      type: object
+      required: [version]
+      properties:
+        version: { type: integer }
+        code: { type: string }
+        name: { type: string }
+        icon: { type: [string, "null"] }
+        sort: { type: integer }
+
+    MenuResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/Menu" }
+
+    MenuListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Menu" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    MenuGroupResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/MenuGroup" }
+
+    MenuGroupListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/MenuGroup" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
     # --------------------------------------------------------------------------
     # Audit（Sprint 3B 升级）
     # --------------------------------------------------------------------------

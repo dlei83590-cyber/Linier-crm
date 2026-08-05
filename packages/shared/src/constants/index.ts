@@ -112,6 +112,9 @@ export const PERMISSION_MODULES = [
   "system-setting",
   "tenant-setting",
   "user-setting",
+  // Sprint 3B：平台能力模块
+  "menu",
+  "menu-group",
 ] as const;
 
 /** 生成模块×动作权限码（如 "item:view"） */

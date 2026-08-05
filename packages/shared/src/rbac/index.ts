@@ -61,6 +61,9 @@ const ROLE_PERMISSIONS: Record<RoleCode, PermissionCode[]> = {
     "system-setting:view", "system-setting:create", "system-setting:edit", "system-setting:delete", "system-setting:approve", "system-setting:audit", "system-setting:export", "system-setting:import", "system-setting:assign", "system-setting:close",
     "tenant-setting:view", "tenant-setting:create", "tenant-setting:edit", "tenant-setting:delete", "tenant-setting:approve", "tenant-setting:audit", "tenant-setting:export", "tenant-setting:import", "tenant-setting:assign", "tenant-setting:close",
     "user-setting:view", "user-setting:create", "user-setting:edit", "user-setting:delete", "user-setting:approve", "user-setting:audit", "user-setting:export", "user-setting:import", "user-setting:assign", "user-setting:close",
+    // Sprint 3B：菜单平台
+    "menu:view", "menu:create", "menu:edit", "menu:delete", "menu:approve", "menu:audit", "menu:export", "menu:import", "menu:assign", "menu:close",
+    "menu-group:view", "menu-group:create", "menu-group:edit", "menu-group:delete", "menu-group:approve", "menu-group:audit", "menu-group:export", "menu-group:import", "menu-group:assign", "menu-group:close",
   ],
   MEMBER: [
     PERMISSIONS.USER_READ,

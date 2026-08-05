@@ -1,6 +1,6 @@
 # DOMAIN_MODEL 领域模型
 
-- 版本：v1.2
+- 版本：v1.3
 - 日期：2026-08-05
 - 维护者：CIO（JINZA）｜审核：CTO
 - 关联：[PRODUCT_VISION.md](./PRODUCT_VISION.md) ｜ [ROADMAP.md](./ROADMAP.md) ｜ [ADR](./ADR/)
@@ -91,7 +91,7 @@ Project Expense / 日常 Expense ──> 审批流 ──> Voucher（凭证）
 
 - ✅ 已落地（Sprint 2，PR #4）：Item / LinearGuideSpecification / BusinessPartner / PriceList / TechnicalStandard / UnitOfMeasure / CommercialTerm / DocumentSequence + 项目领域 14 模型
 - ✅ 已落地（Sprint 3A，PR #5）：Workflow Foundation 22 模型（Workflow 6 + Approval 7 + Notification 4 + Dictionary 2 + Settings 3），见第 7-10 节
-- 🔄 进行中（Sprint 3B）：Audit Center 升级（第 12 节）+ Menu / Dashboard API / File Center
+- 🔄 进行中（Sprint 3B）：Audit Center 升级（第 12 节）✅ + Menu Center（第 13 节）✅ + Dashboard API / File Center
 - ⬜ 规划中（Sprint 4-7）：Quotation / Sales Order / Contract / Delivery / Invoice / Payment / Purchase / GRN / Warehouse / Stock / AR / AP / Voucher / Journal / GL
 
 > 详细字段标准见数据库 schema（`prisma/schema.prisma`）与 [architecture/domain-model.md](./architecture/domain-model.md)。
@@ -485,3 +485,45 @@ erDiagram
 - 迁移 `0005_audit_upgrade`：仅 ALTER 加列 + 建索引（表已存在不重建，CTO 规则），新增 requestId/traceId/result 索引
 - API：`GET /api/audit-logs`（分页 + actorId/entityType/entityId/action/result/requestId/traceId/时间过滤）+ `GET /api/audit-logs/:id`；权限 `audit:view`（仅 SUPER_ADMIN/ADMIN）
 - requestMeta() 统一提取 IP/Device/Browser/RequestId/TraceId；所有写操作自动写入完整审计
+
+
+## 13. Menu Center（Sprint 3B，ADR-0006）
+
+```mermaid
+erDiagram
+    MenuGroup ||--o{ Menu : contains
+    Menu ||--o{ Menu : tree
+
+    MenuGroup {
+        string id PK
+        string code UK
+        string name
+        string icon
+        int sort
+        int version
+        datetime deletedAt
+    }
+
+    Menu {
+        string id PK
+        string groupId FK
+        string parentId FK
+        string code UK
+        string name
+        string path
+        string icon
+        int sort
+        bool hidden
+        bool cache
+        string externalLink
+        string permission
+        int version
+        datetime deletedAt
+    }
+```
+
+- RouteMeta 内联：path / icon / sort / hidden（隐藏）/ cache（缓存）/ externalLink（外链）/ permission（权限码）
+- 删除策略：Menu → MenuGroup Cascade；Menu → Menu（parentId）SetNull（父删子提升为根）
+- 迁移 `0006_menu_center`：2 表 + 索引 + 外键
+- API：GET /api/menus（?tree=true 树形，前端直接读取）/ POST / GET / PATCH（乐观锁）/ DELETE（软删除，递归子树）
+- 权限：menu / menu-group 模块，MANAGER 全量
