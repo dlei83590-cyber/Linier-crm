@@ -2,6 +2,38 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [v0.5.0-alpha] - Unreleased（Sprint 3C 全部完成后统一发布）
+
+### 新增（Sprint 3C：Business Foundation）
+
+#### 3C-1 Customer Foundation（PR #7，已合并）
+
+- **Customer 主档**：Customer / CustomerContact / CustomerAddress / CustomerTag / Industry / Tag / CustomerCredit（+7 模型/+4 枚举）
+- **迁移**：0009_customer_foundation（仅新增，不改既有表）
+- **RBAC**：+7 模块动作级权限，MANAGER 全量
+- **API**：customers 主档 CRUD + contacts/addresses/tags/credit 子资源 + industries/tags 字典
+- **文档**：ADR-0009、DOMAIN_MODEL v1.6、OpenAPI 13 端点、Sprint3C1_QA.md、test-cases/Customer_API.md
+- **统一规范三件套**（Sprint 3C 起）：API_GUIDELINES.md / ERROR_CODES.md / EVENTS.md
+
+#### 3C-2 Supplier Foundation（PR #8，已合并）
+
+- **BusinessPartner 唯一主体 + 角色化**：BusinessPartnerRole（PartnerRoleType：CUSTOMER/SUPPLIER/BOTH/LOGISTICS/OUTSOURCING，可无限扩展）
+- **Partner 级共享五件套**：PartnerContact / PartnerAddress（PartnerAddressType 含 Billing/Shipping/Registered/Warehouse/Factory）/ PartnerTag / PartnerBankAccount / PartnerCredit
+- **Supplier 独有仅三项**：SupplierQualification（QualificationType）/ SupplierCertificate / SupplierSettlement
+- **Customer 不返工**：ADR-0011 BusinessPartner Consolidation 规划 Sprint 5 统一迁移
+- **迁移**：0010_supplier_foundation（10 表 + 4 枚举，仅新增）
+- **RBAC**：+10 模块动作级权限（supplier/supplier-qualification/supplier-certificate/supplier-settlement/business-partner-role/partner-contact/partner-address/partner-tag/partner-bank-account/partner-credit）
+- **API**：18 路由文件（suppliers 主档 + 三子资源 + 共享视图 + partner roles）
+- **seed**：SUP-0001/0002 + 3 条 PartnerRole（幂等 upsert）
+- **文档**：ADR-0010、ADR-0011、DOMAIN_MODEL v1.7、OpenAPI 75 paths/203 schemas、Sprint3C2_QA.md、test-cases/Supplier_API.md
+- **Sprint 4 预备（仅设计）**：Sprint4_Quote_Domain / Quote_ERD / Quote_API / Quote_Workflow 四份文档
+
+### 已知限制（后续计划，非本版本交付）
+
+- 3C-1 Customer 子模型（CustomerContact/Address/Tag/Credit）暂未迁移到 Partner 级共享（ADR-0011，Sprint 5）
+- BusinessPartner.type 兼容字段保留，长期以 BusinessPartnerRole 为准（Sprint 5 评估）
+- 运行级 Railway 验证待执行；File 仅元数据建模（对象存储后续接入）
+
 ## [v0.4.0-alpha] - 2026-08-05
 
 ### 新增（Sprint 3B：Platform Capabilities，PR #6，已合并）

@@ -1,5 +1,38 @@
 # Release Notes
 
+## v0.5.0-alpha — Sprint 3C: Business Foundation（Unreleased，3C 全部完成后统一发布）
+
+> PR: #7（3C-1 Customer）、#8（3C-2 Supplier）已合并；3C-3 Item / 3C-4 Project / 3C-5 Price 待完成
+> 状态：IN_PROGRESS（CTO 决定：v0.5.0-alpha 等 Sprint 3C 全部完成统一打 Tag，不单独发布）
+
+### Sprint 3C-1 Customer Foundation（PR #7，已合并）
+
+- **Customer 主档**：Customer / CustomerContact / CustomerAddress / CustomerTag / Industry / Tag / CustomerCredit（+7 模型/+4 枚举）
+- 迁移 0009_customer_foundation；RBAC +7 模块；API 13 端点；ADR-0009；DOMAIN_MODEL v1.6；OpenAPI 13 端点；Sprint3C1_QA.md；test-cases/Customer_API.md
+- 统一规范三件套（Sprint 3C 起）：API_GUIDELINES.md / ERROR_CODES.md / EVENTS.md
+
+### Sprint 3C-2 Supplier Foundation（PR #8，已合并）
+
+- **BusinessPartner 唯一主体 + 角色化**：BusinessPartnerRole（PartnerRoleType：CUSTOMER/SUPPLIER/BOTH/LOGISTICS/OUTSOURCING 无限扩展）
+- **Partner 级共享五件套**：PartnerContact / PartnerAddress（PartnerAddressType 含 Billing/Shipping/Registered/Warehouse/Factory）/ PartnerTag / PartnerBankAccount / PartnerCredit
+- **Supplier 独有仅三项**：SupplierQualification / SupplierCertificate / SupplierSettlement；Customer 不返工（ADR-0011 规划 Sprint 5 统一迁移）
+- 迁移 0010_supplier_foundation（10 表+4 枚举）；RBAC +10 模块；API 18 路由文件；seed SUP-0001/0002 + 3 PartnerRole
+- 文档：ADR-0010/0011、DOMAIN_MODEL v1.7（79 模型/37 枚举）、OpenAPI 75 paths/203 schemas、Sprint3C2_QA.md、test-cases/Supplier_API.md
+- Sprint 4 预备（仅设计）：Sprint4_Quote_Domain/ERD/API/Workflow 四份文档
+
+### Compatibility / Database / Migration / Breaking Changes
+
+- **Compatibility**：向下兼容 v0.4.0，无 Breaking Changes（Customer 子模型保留兼容，不返工）
+- **Database**：新增 17 模型 + 8 枚举（迁移 0009/0010，仅新增不改既有）
+- **Migration**：0009_customer_foundation / 0010_supplier_foundation
+- **Breaking Changes**：无
+
+### Known Risks（后续计划）
+
+- Customer 子模型统一迁移到 Partner 级共享（ADR-0011，Sprint 5）
+- BusinessPartner.type 兼容字段保留，长期以 BusinessPartnerRole 为准（Sprint 5 评估）
+- 运行级 Railway 验证待执行；File 仅元数据建模（对象存储后续接入）
+
 ## v0.4.0-alpha — Sprint 3B: Platform Capabilities（2026-08-05）
 
 > PR: #6 — `feature/sprint3-platform-capabilities`（已合并，merge commit e54567e67c）
