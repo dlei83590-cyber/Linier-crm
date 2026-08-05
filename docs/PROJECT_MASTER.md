@@ -1,5 +1,10 @@
 # Linier CRM Management System Project Master
 
+## Development Roadmap
+
+See [docs/ROADMAP.md](./ROADMAP.md) — the single source of truth for project planning.
+All developers MUST read the roadmap before starting work.
+
 ## Product Vision
 
 Linier CRM Management System gives small and medium-sized teams one dependable workspace for managing organizations, contacts, sales opportunities, activities, and follow-ups.
