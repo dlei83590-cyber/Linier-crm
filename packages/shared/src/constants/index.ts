@@ -133,6 +133,17 @@ export const PERMISSION_MODULES = [
   "customer-credit",
   "industry",
   "tag",
+  // Sprint 3C-2：Supplier Foundation + Partner 共享模块
+  "supplier",
+  "supplier-qualification",
+  "supplier-certificate",
+  "supplier-settlement",
+  "business-partner-role",
+  "partner-contact",
+  "partner-address",
+  "partner-tag",
+  "partner-bank-account",
+  "partner-credit",
 ] as const;
 
 /** 生成模块×动作权限码（如 "item:view"） */

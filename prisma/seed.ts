@@ -544,6 +544,19 @@ const SEED_TAGS = [
   { code: "COOPERATING", name: "合作中", color: "#3498db", sort: 4 },
 ];
 
+/** Sprint 3C-2：供应商（关联既有 BusinessPartner，type=SUPPLIER/BOTH） */
+const SEED_SUPPLIERS = [
+  { code: "SUP-0001", name: "华南轴承科技有限公司", partnerCode: "BP-S-0001", status: "QUALIFIED", rating: 5, defaultLeadTime: 15, minOrderQty: 100, currency: "CNY", isPreferred: true },
+  { code: "SUP-0002", name: "华东机电贸易有限公司", partnerCode: "BP-B-0001", status: "PREFERRED", rating: 4, defaultLeadTime: 20, minOrderQty: 50, currency: "CNY", isPreferred: true },
+];
+
+/** Sprint 3C-2：Partner 角色（BusinessPartnerRole，BusinessPartner 唯一主体） */
+const SEED_PARTNER_ROLES = [
+  { partnerCode: "BP-C-0001", roleType: "CUSTOMER" },
+  { partnerCode: "BP-S-0001", roleType: "SUPPLIER" },
+  { partnerCode: "BP-B-0001", roleType: "BOTH" },
+];
+
 async function main() {
   const email = process.env.SEED_ADMIN_EMAIL ?? "admin@linier.com";
   const password = process.env.SEED_ADMIN_PASSWORD ?? "ChangeMe123!";
@@ -714,6 +727,38 @@ async function main() {
       where: { code: t.code },
       update: {},
       create: t,
+    });
+  }
+
+  // Sprint 3C-2: partner roles（BusinessPartnerRole，BusinessPartner 唯一主体；幂等：稳定 code + upsert）
+  for (const r of SEED_PARTNER_ROLES) {
+    const bp = await prisma.businessPartner.findFirst({ where: { code: r.partnerCode, deletedAt: null } });
+    if (!bp) continue;
+    await prisma.businessPartnerRole.upsert({
+      where: { partnerId_roleType: { partnerId: bp.id, roleType: r.roleType as never } },
+      update: {},
+      create: { partnerId: bp.id, roleType: r.roleType as never },
+    });
+  }
+
+  // Sprint 3C-2: suppliers（关联既有 BusinessPartner，type=SUPPLIER/BOTH；幂等：稳定 code + upsert）
+  for (const s of SEED_SUPPLIERS) {
+    const bp = await prisma.businessPartner.findFirst({ where: { code: s.partnerCode, deletedAt: null } });
+    if (!bp) continue;
+    await prisma.supplier.upsert({
+      where: { code: s.code },
+      update: {},
+      create: {
+        code: s.code,
+        name: s.name,
+        partnerId: bp.id,
+        status: s.status as never,
+        rating: s.rating,
+        defaultLeadTime: s.defaultLeadTime,
+        minOrderQty: s.minOrderQty,
+        currency: s.currency,
+        isPreferred: s.isPreferred,
+      },
     });
   }
 

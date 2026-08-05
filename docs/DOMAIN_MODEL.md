@@ -1,7 +1,7 @@
 # DOMAIN_MODEL 领域模型
 
-- 版本：v1.6
-- 日期：2026-08-05
+- 版本：v1.7
+- 日期：2026-08-06
 - 维护者：CIO（JINZA）｜审核：CTO
 - 关联：[PRODUCT_VISION.md](./PRODUCT_VISION.md) ｜ [ROADMAP.md](./ROADMAP.md) ｜ [ADR](./ADR/)
 
@@ -768,4 +768,148 @@ erDiagram
 - 权限：customer / customer-contact / customer-address / customer-tag / customer-credit / industry / tag 模块，MANAGER 全量
 - seed：6 行业 + 4 标签（稳定 code + upsert）
 
-## 17. 变更记录
+## 17. Supplier Foundation（Sprint 3C-2，ADR-0010）
+
+> 架构原则（CTO 最终模型）：**BusinessPartner 为唯一主体，Customer/Supplier 均为角色（BusinessPartnerRole），
+> 联系人/地址/标签/银行/信用全部 Partner 级共享，绝不建两套**。
+> Customer 3C-1 已交付子模型保留兼容，Sprint 5 统一迁移（ADR-0011）。
+
+```mermaid
+erDiagram
+    BusinessPartner ||--o{ BusinessPartnerRole : has_role
+    BusinessPartner ||--o{ PartnerContact : shared
+    BusinessPartner ||--o{ PartnerAddress : shared
+    BusinessPartner ||--o{ PartnerTag : shared
+    Tag ||--o{ PartnerTag : used_by
+    BusinessPartner ||--o{ PartnerBankAccount : shared
+    BusinessPartner ||--o| PartnerCredit : shared
+    BusinessPartner ||--o{ Supplier : extends
+    Supplier ||--o{ SupplierQualification : has
+    Supplier ||--o{ SupplierCertificate : has
+    Supplier ||--o{ SupplierSettlement : has
+
+    BusinessPartnerRole {
+        string id PK
+        string partnerId FK
+        PartnerRoleType roleType
+        bool isPrimary
+        datetime deletedAt
+    }
+
+    PartnerContact {
+        string id PK
+        string partnerId FK
+        string name
+        string title
+        string department
+        string phone
+        string email
+        string wechat
+        bool isPrimary
+        int sort
+        datetime deletedAt
+    }
+
+    PartnerAddress {
+        string id PK
+        string partnerId FK
+        PartnerAddressType addressType
+        string recipient
+        string province
+        string city
+        string district
+        string detail
+        bool isDefault
+        int sort
+        datetime deletedAt
+    }
+
+    PartnerTag {
+        string id PK
+        string partnerId FK
+        string tagId FK
+        datetime deletedAt
+    }
+
+    PartnerBankAccount {
+        string id PK
+        string partnerId FK
+        string bankName
+        string accountName
+        string accountNo
+        string currency
+        bool isDefault
+        string swiftCode
+        datetime deletedAt
+    }
+
+    PartnerCredit {
+        string id PK
+        string partnerId FK
+        Decimal creditLimit
+        Decimal usedCredit
+        CustomerCreditRating rating
+        CustomerCreditStatus status
+        datetime reviewDate
+        datetime deletedAt
+    }
+
+    Supplier {
+        string id PK
+        string code UK
+        string name
+        string partnerId FK
+        SupplierStatus status
+        int rating
+        int defaultLeadTime
+        Decimal minOrderQty
+        string currency
+        bool isPreferred
+        datetime deletedAt
+    }
+
+    SupplierQualification {
+        string id PK
+        string supplierId FK
+        QualificationType qualType
+        string qualName
+        string certNo
+        datetime issueDate
+        datetime expireDate
+        string status
+        string attachment
+        datetime deletedAt
+    }
+
+    SupplierCertificate {
+        string id PK
+        string supplierId FK
+        string certType
+        string certName
+        string certNo
+        datetime issueDate
+        datetime expireDate
+        string attachment
+        datetime deletedAt
+    }
+
+    SupplierSettlement {
+        string id PK
+        string supplierId FK
+        string paymentTerms
+        int creditDays
+        string paymentMethod
+        string currency
+        datetime deletedAt
+    }
+```
+
+- 枚举：PartnerRoleType（CUSTOMER/SUPPLIER/BOTH/LOGISTICS/OUTSOURCING）、SupplierStatus（POTENTIAL/QUALIFIED/PREFERRED/SUSPENDED/BLACKLISTED）、QualificationType（BUSINESS_LICENSE/ISO9001/ISO14001/IATF16949/CE/ROHS/OTHER）、PartnerAddressType（REGISTERED/BILLING/SHIPPING/WAREHOUSE/FACTORY/INVOICING/CONTACT）
+- 删除策略：Supplier→Qualification/Certificate/Settlement Cascade（逻辑软删）；Supplier→BusinessPartner Restrict；Partner 共享子表→BusinessPartner Cascade（逻辑软删）
+- 业务规则：Supplier.partnerId 必填唯一 + type=SUPPLIER/BOTH 校验；创建自动写入 BusinessPartnerRole(SUPPLIER)；联系人/地址/银行默认唯一；标签去重；信用 1:1 upsert
+- 迁移 `0010_supplier_foundation`：10 表 + 4 枚举 + 索引 + 外键（仅新增不改既有）
+- API：suppliers 主档 CRUD + 子资源（qualifications/certificates/settlements）+ Partner 共享视图（contacts/addresses/tags/bank-accounts/credit）+ business-partners roles
+- 权限：supplier / supplier-qualification / supplier-certificate / supplier-settlement / business-partner-role / partner-contact / partner-address / partner-tag / partner-bank-account / partner-credit 模块，MANAGER 全量
+- seed：SUP-0001/SUP-0002（关联 BP-S-0001/BP-B-0001）+ 3 条 PartnerRole（CUSTOMER/SUPPLIER/BOTH）
+
+## 18. 变更记录
