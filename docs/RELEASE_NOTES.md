@@ -2,7 +2,7 @@
 
 ## v0.5.0-alpha — Sprint 3C: Business Foundation（Unreleased，3C 全部完成后统一发布）
 
-> PR: #7（3C-1 Customer）、#8（3C-2 Supplier）已合并；3C-3 Item / 3C-4 Project / 3C-5 Price 待完成
+> PR: #7（3C-1 Customer）、#8（3C-2 Supplier）、#9（3C-3 Item）已合并；3C-4 Price 设计中、3C-5 Project 待启动
 > 状态：IN_PROGRESS（CTO 决定：v0.5.0-alpha 等 Sprint 3C 全部完成统一打 Tag，不单独发布）
 
 ### Sprint 3C-1 Customer Foundation（PR #7，已合并）
@@ -19,6 +19,25 @@
 - 迁移 0010_supplier_foundation（10 表+4 枚举）；RBAC +10 模块；API 18 路由文件；seed SUP-0001/0002 + 3 PartnerRole
 - 文档：ADR-0010/0011、DOMAIN_MODEL v1.7（79 模型/37 枚举）、OpenAPI 75 paths/203 schemas、Sprint3C2_QA.md、test-cases/Supplier_API.md
 - Sprint 4 预备（仅设计）：Sprint4_Quote_Domain/ERD/API/Workflow 四份文档
+
+### Sprint 3C-3 Item Foundation（PR #9，已合并）
+
+- **Item Master（ERP 核心主数据）**：ItemType 10 类枚举 + 五级层级（Category→SubCategory→Series→Model→Variant）+ Identification（OEM/Barcode/QRCode/DrawingNo/Revision）+ 多 UOM（Stock/Purchase/Sales + UomConversion）+ isSalable/isPurchasable/isManufacturable
+- **SpecificationDefinition（CTO #2138）**：定义/实例分离（code/name/unit/dataType/isRequired），ItemSpecification.definitionId 关联，过滤/排序/范围查询友好
+- **ItemCategory 改 CategoryPath（CTO #2138）**：去 parentId 递归 → 001/001.003/001.003.005（unique），子树 startsWith 查询免递归
+- **ItemStatus 与 ItemLifecycle 分离（CTO #2138）**：系统状态 ACTIVE/INACTIVE/LOCKED/ARCHIVED vs 产品生命周期 DESIGN/TRIAL/MASS_PRODUCTION/DISCONTINUED/OBSOLETE
+- **ItemRevision 独立**：revisionNo/revision/changeSummary/releasedById/releasedAt/status（RELEASED 同步 Item.revision、旧版 SUPERSEDED）
+- **SupplierItem**：一个 Item 多供应商（supplierCode/MOQ/LeadTime/Currency/PurchasePrice/isPreferred/Incoterm/PaymentTerm，不建 Item.supplierId 单值字段）
+- **ItemCost 只建接口**：costType（STANDARD/LAST_PURCHASE/AVERAGE/CURRENT）+ 时间维度 effectiveFrom/effectiveTo/currency/source
+- **AttachmentType 统一放 File Center**（DRAWING/CERTIFICATE/PHOTO/MANUAL/MODEL_3D/VIDEO/INSPECTION_REPORT）
+- 迁移 0011_item_foundation（Item ALTER 加列 + 8 新表，仅新增/加列不改既有列）；RBAC item 动作级 + 8 子模块；API 18 路由文件
+- 文档：ADR-0012、DOMAIN_MODEL v1.8（87 模型/40 枚举）、EVENTS v1.1（ItemCreated 等 5 事件）、Sprint3C3_QA.md、test-cases/Item_API.md、OpenAPI 93 paths/251 schemas
+- Price 前置：PRICE_STRATEGY.md + MASTER_DATA_DEPENDENCY.md（CTO #2138）
+
+### Sprint 3C-4 Price Foundation（设计中）
+
+- 设计（仅设计未实现）：Sprint3C4_Design.md（Schema 草案 + ERD + ADR-0013 要点 + OpenAPI 草稿 + 五项新要求）
+- 待 PR #9 合并后创建 feature/sprint3-price-foundation 分支实现
 
 ### Compatibility / Database / Migration / Breaking Changes
 
