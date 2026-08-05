@@ -363,6 +363,13 @@ model BusinessPartner {
   opportunities       ProjectOpportunity[]
   projects            Project[]
   customers           Customer[]
+  roles               BusinessPartnerRole[]
+  partnerContacts     PartnerContact[]
+  partnerAddresses    PartnerAddress[]
+  partnerTags         PartnerTag[]
+  partnerBankAccounts PartnerBankAccount[]
+  partnerCredit       PartnerCredit?
+  suppliers           Supplier[]
   createdAt           DateTime       @default(now()) @db.Timestamptz(3)
   updatedAt           DateTime       @updatedAt @db.Timestamptz(3)
 
@@ -2026,6 +2033,7 @@ model Tag {
   sort        Int           @default(0)
   enabled     Boolean       @default(true)
   customers   CustomerTag[]
+  partnerTags PartnerTag[]
   isActive    Boolean       @default(true)
   createdById String?
   updatedById String?
@@ -2103,5 +2111,295 @@ model CustomerCredit {
   createdAt   DateTime            @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime            @updatedAt @db.Timestamptz(3)
 
+  @@index([deletedAt])
+}
+
+// ============ Sprint 3C-2 Supplier Foundation（BusinessPartner 唯一主体 + 共享模型）============
+
+enum PartnerRoleType {
+  CUSTOMER
+  SUPPLIER
+  BOTH
+  LOGISTICS
+  OUTSOURCING
+}
+
+enum SupplierStatus {
+  POTENTIAL
+  QUALIFIED
+  PREFERRED
+  SUSPENDED
+  BLACKLISTED
+}
+
+enum QualificationType {
+  BUSINESS_LICENSE
+  ISO9001
+  ISO14001
+  IATF16949
+  CE
+  ROHS
+  OTHER
+}
+
+enum PartnerAddressType {
+  REGISTERED
+  BILLING
+  SHIPPING
+  WAREHOUSE
+  FACTORY
+  INVOICING
+  CONTACT
+}
+
+/// 往来单位角色（BusinessPartner 唯一主体，角色可无限扩展）
+model BusinessPartnerRole {
+  id        String         @id @default(cuid())
+  partnerId String
+  partner   BusinessPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  roleType  PartnerRoleType
+  isPrimary Boolean        @default(false)
+  isActive  Boolean        @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version   Int            @default(1)
+  deletedAt DateTime?
+  createdAt DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime       @updatedAt @db.Timestamptz(3)
+
+  @@unique([partnerId, roleType])
+  @@index([roleType])
+  @@index([deletedAt])
+}
+
+/// 联系人（Partner 级共享：Customer/Supplier 复用）
+model PartnerContact {
+  id         String   @id @default(cuid())
+  partnerId  String
+  partner    BusinessPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  name       String
+  title      String? // 职位
+  department String? // 部门
+  phone      String?
+  email      String?
+  wechat     String?
+  isPrimary  Boolean  @default(false) // 主联系人
+  sort       Int      @default(0)
+  isActive   Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version    Int      @default(1)
+  deletedAt  DateTime?
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([partnerId])
+  @@index([deletedAt])
+}
+
+/// 地址（Partner 级共享：Customer/Supplier 复用）
+model PartnerAddress {
+  id          String            @id @default(cuid())
+  partnerId   String
+  partner     BusinessPartner   @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  addressType PartnerAddressType @default(REGISTERED)
+  recipient   String? // 收件人
+  phone       String?
+  province    String?
+  city        String?
+  district    String?
+  detail      String?
+  isDefault   Boolean           @default(false)
+  sort        Int               @default(0)
+  isActive    Boolean           @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int               @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime          @updatedAt @db.Timestamptz(3)
+
+  @@index([partnerId])
+  @@index([deletedAt])
+}
+
+/// 标签关联（Partner 级共享，复用全局 Tag）
+model PartnerTag {
+  id        String   @id @default(cuid())
+  partnerId String
+  partner   BusinessPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  tagId     String
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  isActive  Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version   Int      @default(1)
+  deletedAt DateTime?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([partnerId, tagId])
+  @@index([tagId])
+  @@index([deletedAt])
+}
+
+/// 银行账户（Partner 级共享：收付款共用）
+model PartnerBankAccount {
+  id          String   @id @default(cuid())
+  partnerId   String
+  partner     BusinessPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  bankName    String
+  accountName String
+  accountNo   String
+  currency    String   @default("CNY")
+  isDefault   Boolean  @default(false)
+  swiftCode   String?
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([partnerId])
+  @@index([deletedAt])
+}
+
+/// 信用（Partner 级共享：AR/AP 统一）
+model PartnerCredit {
+  id          String              @id @default(cuid())
+  partnerId   String              @unique
+  partner     BusinessPartner     @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  creditLimit Decimal?            @db.Decimal(18, 2) // 信用额度
+  usedCredit  Decimal             @default(0) @db.Decimal(18, 2) // 已用额度
+  rating      CustomerCreditRating @default(B)
+  status      CustomerCreditStatus @default(NORMAL)
+  reviewDate  DateTime? // 复核日期
+  isActive    Boolean             @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus   @default(DRAFT)
+  version     Int                 @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime            @updatedAt @db.Timestamptz(3)
+
+  @@index([deletedAt])
+}
+
+/// 供应商（BusinessPartner 角色扩展，partnerId 必填 type=SUPPLIER/BOTH）
+model Supplier {
+  id            String   @id @default(cuid())
+  code          String   @unique // 供应商编码
+  name          String
+  partnerId     String   @unique
+  partner       BusinessPartner @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  status        SupplierStatus @default(POTENTIAL)
+  rating        Int? // 1-5 星
+  defaultLeadTime Int? // 默认交期（天）
+  minOrderQty   Decimal? @db.Decimal(18, 2) // 最小起订量
+  currency      String   @default("CNY")
+  isPreferred   Boolean  @default(false)
+  qualifications SupplierQualification[]
+  certificates  SupplierCertificate[]
+  settlements   SupplierSettlement[]
+  isActive      Boolean  @default(true)
+  createdById   String?
+  updatedById   String?
+  approvedById  String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version       Int      @default(1)
+  deletedAt     DateTime?
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([code])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+/// 供应商资质（认证/资质，含附件 FileId）
+model SupplierQualification {
+  id          String   @id @default(cuid())
+  supplierId  String
+  supplier    Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  qualType    QualificationType
+  qualName    String
+  certNo      String?
+  issueDate   DateTime?
+  expireDate  DateTime?
+  status      String   @default("VALID") // VALID/EXPIRING/EXPIRED
+  attachment  String? // FileId（File Center）
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([supplierId])
+  @@index([deletedAt])
+}
+
+/// 供应商证书
+model SupplierCertificate {
+  id          String   @id @default(cuid())
+  supplierId  String
+  supplier    Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  certType    String
+  certName    String
+  certNo      String?
+  issueDate   DateTime?
+  expireDate  DateTime?
+  attachment  String? // FileId
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([supplierId])
+  @@index([deletedAt])
+}
+
+/// 供应商结算（付款条款）
+model SupplierSettlement {
+  id            String   @id @default(cuid())
+  supplierId    String
+  supplier      Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  paymentTerms  String? // 付款条款（如 NET30）
+  creditDays    Int? // 账期
+  paymentMethod String? // TT/LC/DP/DA
+  currency      String   @default("CNY")
+  isActive      Boolean  @default(true)
+  createdById   String?
+  updatedById   String?
+  approvedById  String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version       Int      @default(1)
+  deletedAt     DateTime?
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([supplierId])
   @@index([deletedAt])
 }

@@ -82,6 +82,17 @@ const ROLE_PERMISSIONS: Record<RoleCode, PermissionCode[]> = {
     "customer-credit:view", "customer-credit:create", "customer-credit:edit", "customer-credit:delete", "customer-credit:approve", "customer-credit:audit", "customer-credit:export", "customer-credit:import", "customer-credit:assign", "customer-credit:close",
     "industry:view", "industry:create", "industry:edit", "industry:delete", "industry:approve", "industry:audit", "industry:export", "industry:import", "industry:assign", "industry:close",
     "tag:view", "tag:create", "tag:edit", "tag:delete", "tag:approve", "tag:audit", "tag:export", "tag:import", "tag:assign", "tag:close",
+    // Sprint 3C-2：Supplier Foundation + Partner 共享（BusinessPartner 唯一主体）
+    "supplier:view", "supplier:create", "supplier:edit", "supplier:delete", "supplier:approve", "supplier:audit", "supplier:export", "supplier:import", "supplier:assign", "supplier:close",
+    "supplier-qualification:view", "supplier-qualification:create", "supplier-qualification:edit", "supplier-qualification:delete", "supplier-qualification:approve", "supplier-qualification:audit", "supplier-qualification:export", "supplier-qualification:import", "supplier-qualification:assign", "supplier-qualification:close",
+    "supplier-certificate:view", "supplier-certificate:create", "supplier-certificate:edit", "supplier-certificate:delete", "supplier-certificate:approve", "supplier-certificate:audit", "supplier-certificate:export", "supplier-certificate:import", "supplier-certificate:assign", "supplier-certificate:close",
+    "supplier-settlement:view", "supplier-settlement:create", "supplier-settlement:edit", "supplier-settlement:delete", "supplier-settlement:approve", "supplier-settlement:audit", "supplier-settlement:export", "supplier-settlement:import", "supplier-settlement:assign", "supplier-settlement:close",
+    "business-partner-role:view", "business-partner-role:create", "business-partner-role:edit", "business-partner-role:delete", "business-partner-role:approve", "business-partner-role:audit", "business-partner-role:export", "business-partner-role:import", "business-partner-role:assign", "business-partner-role:close",
+    "partner-contact:view", "partner-contact:create", "partner-contact:edit", "partner-contact:delete", "partner-contact:approve", "partner-contact:audit", "partner-contact:export", "partner-contact:import", "partner-contact:assign", "partner-contact:close",
+    "partner-address:view", "partner-address:create", "partner-address:edit", "partner-address:delete", "partner-address:approve", "partner-address:audit", "partner-address:export", "partner-address:import", "partner-address:assign", "partner-address:close",
+    "partner-tag:view", "partner-tag:create", "partner-tag:edit", "partner-tag:delete", "partner-tag:approve", "partner-tag:audit", "partner-tag:export", "partner-tag:import", "partner-tag:assign", "partner-tag:close",
+    "partner-bank-account:view", "partner-bank-account:create", "partner-bank-account:edit", "partner-bank-account:delete", "partner-bank-account:approve", "partner-bank-account:audit", "partner-bank-account:export", "partner-bank-account:import", "partner-bank-account:assign", "partner-bank-account:close",
+    "partner-credit:view", "partner-credit:create", "partner-credit:edit", "partner-credit:delete", "partner-credit:approve", "partner-credit:audit", "partner-credit:export", "partner-credit:import", "partner-credit:assign", "partner-credit:close",
   ],
   MEMBER: [
     PERMISSIONS.USER_READ,

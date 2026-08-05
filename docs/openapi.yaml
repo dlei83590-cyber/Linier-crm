@@ -3517,6 +3517,1014 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+
+  /api/suppliers:
+    get:
+      tags: [Supplier Foundation]
+      summary: List suppliers (pagination + filters)
+      operationId: listSuppliers
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: pageSize, in: query, schema: { type: integer } }
+        - { name: code, in: query, schema: { type: string } }
+        - { name: name, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/SupplierStatus" } }
+        - { name: partnerId, in: query, schema: { type: string } }
+        - { name: isPreferred, in: query, schema: { type: boolean } }
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Supplier Foundation]
+      summary: Create supplier (partnerId required, type=SUPPLIER/BOTH)
+      operationId: createSupplier
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/suppliers/{id}:
+    get:
+      tags: [Supplier Foundation]
+      summary: Get supplier detail (with partner + sub-resources)
+      operationId: getSupplier
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Supplier Foundation]
+      summary: Update supplier (optimistic lock)
+      operationId: updateSupplier
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Supplier Foundation]
+      summary: Soft delete supplier (cascade sub-resources)
+      operationId: deleteSupplier
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/suppliers/{id}/qualifications:
+    get:
+      tags: [Supplier Foundation]
+      summary: List supplier qualifications
+      operationId: listSupplierQualifications
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: pageSize, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierQualificationListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Supplier Foundation]
+      summary: Create supplier qualification
+      operationId: createSupplierQualification
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierQualificationCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierQualificationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/suppliers/{id}/qualifications/{qualId}:
+    patch:
+      tags: [Supplier Foundation]
+      summary: Update supplier qualification (optimistic lock)
+      operationId: updateSupplierQualification
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: qualId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierQualificationUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierQualificationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Supplier Foundation]
+      summary: Soft delete supplier qualification
+      operationId: deleteSupplierQualification
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: qualId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/suppliers/{id}/certificates:
+    get:
+      tags: [Supplier Foundation]
+      summary: List supplier certificates
+      operationId: listSupplierCertificates
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: pageSize, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierCertificateListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Supplier Foundation]
+      summary: Create supplier certificate
+      operationId: createSupplierCertificate
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierCertificateCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierCertificateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/suppliers/{id}/certificates/{certId}:
+    patch:
+      tags: [Supplier Foundation]
+      summary: Update supplier certificate (optimistic lock)
+      operationId: updateSupplierCertificate
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: certId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierCertificateUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierCertificateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Supplier Foundation]
+      summary: Soft delete supplier certificate
+      operationId: deleteSupplierCertificate
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: certId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/suppliers/{id}/settlements:
+    get:
+      tags: [Supplier Foundation]
+      summary: List supplier settlements
+      operationId: listSupplierSettlements
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: pageSize, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierSettlementListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Supplier Foundation]
+      summary: Create supplier settlement
+      operationId: createSupplierSettlement
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierSettlementCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierSettlementResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/suppliers/{id}/settlements/{settlementId}:
+    patch:
+      tags: [Supplier Foundation]
+      summary: Update supplier settlement (optimistic lock)
+      operationId: updateSupplierSettlement
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: settlementId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierSettlementUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierSettlementResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Supplier Foundation]
+      summary: Soft delete supplier settlement
+      operationId: deleteSupplierSettlement
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: settlementId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/suppliers/{id}/contacts:
+    get:
+      tags: [Supplier Foundation]
+      summary: List partner contacts (shared via supplier partnerId)
+      operationId: listSupplierContacts
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: pageSize, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerContactListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Supplier Foundation]
+      summary: Create partner contact (shared)
+      operationId: createSupplierContact
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartnerContactCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerContactResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/suppliers/{id}/contacts/{contactId}:
+    patch:
+      tags: [Supplier Foundation]
+      summary: Update partner contact (optimistic lock)
+      operationId: updateSupplierContact
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: contactId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartnerContactUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerContactResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Supplier Foundation]
+      summary: Soft delete partner contact
+      operationId: deleteSupplierContact
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: contactId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/suppliers/{id}/addresses:
+    get:
+      tags: [Supplier Foundation]
+      summary: List partner addresses (shared via supplier partnerId)
+      operationId: listSupplierAddresses
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: pageSize, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerAddressListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Supplier Foundation]
+      summary: Create partner address (shared)
+      operationId: createSupplierAddress
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartnerAddressCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerAddressResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/suppliers/{id}/addresses/{addressId}:
+    patch:
+      tags: [Supplier Foundation]
+      summary: Update partner address (optimistic lock)
+      operationId: updateSupplierAddress
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: addressId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartnerAddressUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerAddressResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Supplier Foundation]
+      summary: Soft delete partner address
+      operationId: deleteSupplierAddress
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: addressId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/suppliers/{id}/tags:
+    get:
+      tags: [Supplier Foundation]
+      summary: List partner tags (shared)
+      operationId: listSupplierTags
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: pageSize, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerTagListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Supplier Foundation]
+      summary: Add tag to partner (shared)
+      operationId: addSupplierTag
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartnerTagCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerTagResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/suppliers/{id}/tags/{tagId}:
+    delete:
+      tags: [Supplier Foundation]
+      summary: Remove tag from partner
+      operationId: removeSupplierTag
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: tagId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/suppliers/{id}/bank-accounts:
+    get:
+      tags: [Supplier Foundation]
+      summary: List partner bank accounts (shared)
+      operationId: listSupplierBankAccounts
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: pageSize, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerBankAccountListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Supplier Foundation]
+      summary: Create partner bank account (shared)
+      operationId: createSupplierBankAccount
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartnerBankAccountCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerBankAccountResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/suppliers/{id}/bank-accounts/{accountId}:
+    patch:
+      tags: [Supplier Foundation]
+      summary: Update partner bank account (optimistic lock)
+      operationId: updateSupplierBankAccount
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: accountId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartnerBankAccountUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerBankAccountResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Supplier Foundation]
+      summary: Soft delete partner bank account
+      operationId: deleteSupplierBankAccount
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: accountId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/suppliers/{id}/credit:
+    get:
+      tags: [Supplier Foundation]
+      summary: Get partner credit (shared, 1:1)
+      operationId: getSupplierCredit
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Credit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerCreditResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Supplier Foundation]
+      summary: Upsert partner credit (shared)
+      operationId: upsertSupplierCredit
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartnerCreditUpsert"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerCreditResponse"
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerCreditResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/business-partners/{id}/roles:
+    get:
+      tags: [Supplier Foundation]
+      summary: List partner roles (BusinessPartnerRole)
+      operationId: listPartnerRoles
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerRoleListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Supplier Foundation]
+      summary: Add partner role (extensible)
+      operationId: addPartnerRole
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartnerRoleCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerRoleResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/business-partners/{id}/roles/{roleId}:
+    delete:
+      tags: [Supplier Foundation]
+      summary: Remove partner role
+      operationId: removePartnerRole
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: roleId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -5380,3 +6388,504 @@ components:
           type: array
           items: { $ref: "#/components/schemas/NotificationTemplate" }
         meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    SupplierStatus:
+      type: string
+      enum: [POTENTIAL, QUALIFIED, PREFERRED, SUSPENDED, BLACKLISTED]
+    QualificationType:
+      type: string
+      enum: [BUSINESS_LICENSE, ISO9001, ISO14001, IATF16949, CE, ROHS, OTHER]
+    PartnerAddressType:
+      type: string
+      enum: [REGISTERED, BILLING, SHIPPING, WAREHOUSE, FACTORY, INVOICING, CONTACT]
+    PartnerRoleType:
+      type: string
+      enum: [CUSTOMER, SUPPLIER, BOTH, LOGISTICS, OUTSOURCING]
+
+    Supplier:
+      type: object
+      required: [id, code, name, partnerId, status, version]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        partnerId: { type: string }
+        status: { $ref: "#/components/schemas/SupplierStatus" }
+        rating: { type: [integer, "null"] }
+        defaultLeadTime: { type: [integer, "null"] }
+        minOrderQty: { type: [number, "null"] }
+        currency: { type: string }
+        isPreferred: { type: boolean }
+        isActive: { type: boolean }
+        approvalStatus: { type: string }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    SupplierCreate:
+      type: object
+      required: [code, name, partnerId]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        partnerId: { type: string }
+        status: { $ref: "#/components/schemas/SupplierStatus" }
+        rating: { type: integer }
+        defaultLeadTime: { type: integer }
+        minOrderQty: { type: number }
+        currency: { type: string }
+        isPreferred: { type: boolean }
+    SupplierUpdate:
+      type: object
+      required: [version]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        partnerId: { type: string }
+        status: { $ref: "#/components/schemas/SupplierStatus" }
+        rating: { type: integer }
+        defaultLeadTime: { type: integer }
+        minOrderQty: { type: number }
+        currency: { type: string }
+        isPreferred: { type: boolean }
+        version: { type: integer }
+    SupplierResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/Supplier" }
+    SupplierListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Supplier" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    SupplierQualification:
+      type: object
+      required: [id, supplierId, qualType, qualName, status, version]
+      properties:
+        id: { type: string }
+        supplierId: { type: string }
+        qualType: { $ref: "#/components/schemas/QualificationType" }
+        qualName: { type: string }
+        certNo: { type: [string, "null"] }
+        issueDate: { type: [string, "null"], format: date-time }
+        expireDate: { type: [string, "null"], format: date-time }
+        status: { type: string }
+        attachment: { type: [string, "null"] }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    SupplierQualificationCreate:
+      type: object
+      required: [qualType, qualName]
+      properties:
+        qualType: { $ref: "#/components/schemas/QualificationType" }
+        qualName: { type: string }
+        certNo: { type: string }
+        issueDate: { type: string, format: date-time }
+        expireDate: { type: string, format: date-time }
+        status: { type: string, default: VALID }
+        attachment: { type: string }
+    SupplierQualificationUpdate:
+      type: object
+      required: [version]
+      properties:
+        qualType: { $ref: "#/components/schemas/QualificationType" }
+        qualName: { type: string }
+        certNo: { type: string }
+        issueDate: { type: string, format: date-time }
+        expireDate: { type: string, format: date-time }
+        status: { type: string }
+        attachment: { type: string }
+        version: { type: integer }
+    SupplierQualificationResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/SupplierQualification" }
+    SupplierQualificationListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/SupplierQualification" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    SupplierCertificate:
+      type: object
+      required: [id, supplierId, certType, certName, version]
+      properties:
+        id: { type: string }
+        supplierId: { type: string }
+        certType: { type: string }
+        certName: { type: string }
+        certNo: { type: [string, "null"] }
+        issueDate: { type: [string, "null"], format: date-time }
+        expireDate: { type: [string, "null"], format: date-time }
+        attachment: { type: [string, "null"] }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    SupplierCertificateCreate:
+      type: object
+      required: [certType, certName]
+      properties:
+        certType: { type: string }
+        certName: { type: string }
+        certNo: { type: string }
+        issueDate: { type: string, format: date-time }
+        expireDate: { type: string, format: date-time }
+        attachment: { type: string }
+    SupplierCertificateUpdate:
+      type: object
+      required: [version]
+      properties:
+        certType: { type: string }
+        certName: { type: string }
+        certNo: { type: string }
+        issueDate: { type: string, format: date-time }
+        expireDate: { type: string, format: date-time }
+        attachment: { type: string }
+        version: { type: integer }
+    SupplierCertificateResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/SupplierCertificate" }
+    SupplierCertificateListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/SupplierCertificate" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    SupplierSettlement:
+      type: object
+      required: [id, supplierId, version]
+      properties:
+        id: { type: string }
+        supplierId: { type: string }
+        paymentTerms: { type: [string, "null"] }
+        creditDays: { type: [integer, "null"] }
+        paymentMethod: { type: [string, "null"] }
+        currency: { type: string }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    SupplierSettlementCreate:
+      type: object
+      properties:
+        paymentTerms: { type: string }
+        creditDays: { type: integer }
+        paymentMethod: { type: string }
+        currency: { type: string, default: CNY }
+    SupplierSettlementUpdate:
+      type: object
+      required: [version]
+      properties:
+        paymentTerms: { type: string }
+        creditDays: { type: integer }
+        paymentMethod: { type: string }
+        currency: { type: string }
+        version: { type: integer }
+    SupplierSettlementResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/SupplierSettlement" }
+    SupplierSettlementListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/SupplierSettlement" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    PartnerContact:
+      type: object
+      required: [id, partnerId, name, version]
+      properties:
+        id: { type: string }
+        partnerId: { type: string }
+        name: { type: string }
+        title: { type: [string, "null"] }
+        department: { type: [string, "null"] }
+        phone: { type: [string, "null"] }
+        email: { type: [string, "null"] }
+        wechat: { type: [string, "null"] }
+        isPrimary: { type: boolean }
+        sort: { type: integer }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PartnerContactCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        title: { type: string }
+        department: { type: string }
+        phone: { type: string }
+        email: { type: string }
+        wechat: { type: string }
+        isPrimary: { type: boolean, default: false }
+        sort: { type: integer, default: 0 }
+    PartnerContactUpdate:
+      type: object
+      required: [version]
+      properties:
+        name: { type: string }
+        title: { type: string }
+        department: { type: string }
+        phone: { type: string }
+        email: { type: string }
+        wechat: { type: string }
+        isPrimary: { type: boolean }
+        sort: { type: integer }
+        version: { type: integer }
+    PartnerContactResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/PartnerContact" }
+    PartnerContactListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/PartnerContact" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    PartnerAddress:
+      type: object
+      required: [id, partnerId, addressType, version]
+      properties:
+        id: { type: string }
+        partnerId: { type: string }
+        addressType: { $ref: "#/components/schemas/PartnerAddressType" }
+        recipient: { type: [string, "null"] }
+        phone: { type: [string, "null"] }
+        province: { type: [string, "null"] }
+        city: { type: [string, "null"] }
+        district: { type: [string, "null"] }
+        detail: { type: [string, "null"] }
+        isDefault: { type: boolean }
+        sort: { type: integer }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PartnerAddressCreate:
+      type: object
+      properties:
+        addressType: { $ref: "#/components/schemas/PartnerAddressType" }
+        recipient: { type: string }
+        phone: { type: string }
+        province: { type: string }
+        city: { type: string }
+        district: { type: string }
+        detail: { type: string }
+        isDefault: { type: boolean, default: false }
+        sort: { type: integer, default: 0 }
+    PartnerAddressUpdate:
+      type: object
+      required: [version]
+      properties:
+        addressType: { $ref: "#/components/schemas/PartnerAddressType" }
+        recipient: { type: string }
+        phone: { type: string }
+        province: { type: string }
+        city: { type: string }
+        district: { type: string }
+        detail: { type: string }
+        isDefault: { type: boolean }
+        sort: { type: integer }
+        version: { type: integer }
+    PartnerAddressResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/PartnerAddress" }
+    PartnerAddressListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/PartnerAddress" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    PartnerTag:
+      type: object
+      required: [id, partnerId, tagId, version]
+      properties:
+        id: { type: string }
+        partnerId: { type: string }
+        tagId: { type: string }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PartnerTagCreate:
+      type: object
+      required: [tagId]
+      properties:
+        tagId: { type: string }
+    PartnerTagResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/PartnerTag" }
+    PartnerTagListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/PartnerTag" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    PartnerBankAccount:
+      type: object
+      required: [id, partnerId, bankName, accountName, accountNo, version]
+      properties:
+        id: { type: string }
+        partnerId: { type: string }
+        bankName: { type: string }
+        accountName: { type: string }
+        accountNo: { type: string }
+        currency: { type: string }
+        isDefault: { type: boolean }
+        swiftCode: { type: [string, "null"] }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PartnerBankAccountCreate:
+      type: object
+      required: [bankName, accountName, accountNo]
+      properties:
+        bankName: { type: string }
+        accountName: { type: string }
+        accountNo: { type: string }
+        currency: { type: string, default: CNY }
+        isDefault: { type: boolean, default: false }
+        swiftCode: { type: string }
+    PartnerBankAccountUpdate:
+      type: object
+      required: [version]
+      properties:
+        bankName: { type: string }
+        accountName: { type: string }
+        accountNo: { type: string }
+        currency: { type: string }
+        isDefault: { type: boolean }
+        swiftCode: { type: string }
+        version: { type: integer }
+    PartnerBankAccountResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/PartnerBankAccount" }
+    PartnerBankAccountListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/PartnerBankAccount" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    PartnerCredit:
+      type: object
+      required: [id, partnerId, usedCredit, rating, status, version]
+      properties:
+        id: { type: string }
+        partnerId: { type: string }
+        creditLimit: { type: [number, "null"] }
+        usedCredit: { type: number }
+        rating: { type: string }
+        status: { type: string }
+        reviewDate: { type: [string, "null"], format: date-time }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PartnerCreditUpsert:
+      type: object
+      properties:
+        creditLimit: { type: number }
+        usedCredit: { type: number }
+        rating: { type: string }
+        status: { type: string }
+        reviewDate: { type: string, format: date-time }
+        version: { type: integer }
+    PartnerCreditResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/PartnerCredit" }
+
+    PartnerRole:
+      type: object
+      required: [id, partnerId, roleType, version]
+      properties:
+        id: { type: string }
+        partnerId: { type: string }
+        roleType: { $ref: "#/components/schemas/PartnerRoleType" }
+        isPrimary: { type: boolean }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PartnerRoleCreate:
+      type: object
+      required: [roleType]
+      properties:
+        roleType: { $ref: "#/components/schemas/PartnerRoleType" }
+        isPrimary: { type: boolean, default: false }
+    PartnerRoleResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/PartnerRole" }
+    PartnerRoleListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/PartnerRole" }
+
