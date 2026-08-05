@@ -525,6 +525,25 @@ const SEED_MENUS = [
   { code: "audit-logs", name: "审计日志", groupCode: "SYSTEM", path: "/audit-logs", icon: "ShieldCheck", sort: 3, permission: "audit:view" },
 ];
 
+
+/** Sprint 3C-1：行业（Customer Foundation） */
+const SEED_INDUSTRIES = [
+  { code: "MACHINERY", name: "机械制造", sort: 1 },
+  { code: "AUTO", name: "汽车零部件", sort: 2 },
+  { code: "ELECTRONICS", name: "电子电器", sort: 3 },
+  { code: "METALLURGY", name: "冶金材料", sort: 4 },
+  { code: "MEDICAL", name: "医疗器械", sort: 5 },
+  { code: "AEROSPACE", name: "航空航天", sort: 6 },
+];
+
+/** Sprint 3C-1：标签 */
+const SEED_TAGS = [
+  { code: "KEY_ACCOUNT", name: "重点客户", color: "#e74c3c", sort: 1 },
+  { code: "NEW_CUSTOMER", name: "新客户", color: "#2ecc71", sort: 2 },
+  { code: "VIP", name: "VIP", color: "#f39c12", sort: 3 },
+  { code: "COOPERATING", name: "合作中", color: "#3498db", sort: 4 },
+];
+
 async function main() {
   const email = process.env.SEED_ADMIN_EMAIL ?? "admin@linier.com";
   const password = process.env.SEED_ADMIN_PASSWORD ?? "ChangeMe123!";
@@ -682,6 +701,22 @@ async function main() {
   }
 
   // Sprint 3B: menu groups + menus（幂等：稳定 code + upsert，菜单按 code 重建子项）
+  // Sprint 3C-1: industries + tags（幂等：稳定 code + upsert）
+  for (const ind of SEED_INDUSTRIES) {
+    await prisma.industry.upsert({
+      where: { code: ind.code },
+      update: {},
+      create: ind,
+    });
+  }
+  for (const t of SEED_TAGS) {
+    await prisma.tag.upsert({
+      where: { code: t.code },
+      update: {},
+      create: t,
+    });
+  }
+
   const menuGroupIds = new Map<string, string>();
   for (const g of SEED_MENU_GROUPS) {
     const saved = await prisma.menuGroup.upsert({

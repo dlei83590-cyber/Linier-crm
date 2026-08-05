@@ -125,6 +125,14 @@ export const PERMISSION_MODULES = [
   "file-folder",
   "file-version",
   "file-attachment",
+  // Sprint 3C：业务底座模块
+  "customer",
+  "customer-contact",
+  "customer-address",
+  "customer-tag",
+  "customer-credit",
+  "industry",
+  "tag",
 ] as const;
 
 /** 生成模块×动作权限码（如 "item:view"） */

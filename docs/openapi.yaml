@@ -16,6 +16,7 @@ tags:
   - name: Menu Center
   - name: Dashboard API
   - name: File Center
+  - name: Customer Foundation
   - name: Workflow Definitions
   - name: Workflow Instances
   - name: Approver Groups
@@ -2658,6 +2659,864 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/customers:
+    get:
+      tags: [Customer Foundation]
+      summary: List customers (paginated, filterable)
+      operationId: listCustomers
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: code
+          in: query
+          schema: { type: string }
+        - name: name
+          in: query
+          schema: { type: string }
+        - name: level
+          in: query
+          schema: { $ref: "#/components/schemas/CustomerLevel" }
+        - name: region
+          in: query
+          schema: { type: string }
+        - name: industryId
+          in: query
+          schema: { type: string }
+        - name: partnerId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Paginated customers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Customer Foundation]
+      summary: Create customer (Customer Foundation 3C-1)
+      operationId: createCustomer
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/customers/{id}:
+    get:
+      tags: [Customer Foundation]
+      summary: Get customer detail (with contacts/addresses/tags/credit)
+      operationId: getCustomer
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Customer Foundation]
+      summary: Update customer (optimistic lock)
+      operationId: updateCustomer
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerUpdate"
+      responses:
+        "200":
+          description: Updated (version+1)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Customer Foundation]
+      summary: Soft delete customer (cascade sub-resources)
+      operationId: deleteCustomer
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/customers/{id}/contacts:
+    get:
+      tags: [Customer Foundation]
+      summary: List customer contacts
+      operationId: listCustomerContacts
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Contacts list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerContactListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Customer Foundation]
+      summary: Create customer contact
+      operationId: createCustomerContact
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerContactCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerContactResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/customers/{id}/contacts/{contactId}:
+    patch:
+      tags: [Customer Foundation]
+      summary: Update customer contact (optimistic lock)
+      operationId: updateCustomerContact
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: contactId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerContactUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerContactResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Customer Foundation]
+      summary: Soft delete customer contact
+      operationId: deleteCustomerContact
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: contactId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/customers/{id}/addresses:
+    get:
+      tags: [Customer Foundation]
+      summary: List customer addresses
+      operationId: listCustomerAddresses
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: addressType
+          in: query
+          schema: { $ref: "#/components/schemas/CustomerAddressType" }
+      responses:
+        "200":
+          description: Addresses list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerAddressListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Customer Foundation]
+      summary: Create customer address
+      operationId: createCustomerAddress
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerAddressCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerAddressResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/customers/{id}/addresses/{addressId}:
+    patch:
+      tags: [Customer Foundation]
+      summary: Update customer address (optimistic lock)
+      operationId: updateCustomerAddress
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: addressId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerAddressUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerAddressResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Customer Foundation]
+      summary: Soft delete customer address
+      operationId: deleteCustomerAddress
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: addressId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/customers/{id}/tags:
+    get:
+      tags: [Customer Foundation]
+      summary: List customer tags
+      operationId: listCustomerTags
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Tags list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerTagListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Customer Foundation]
+      summary: Attach tag to customer (tagId or tagCode)
+      operationId: createCustomerTag
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerTagCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerTagResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/customers/{id}/tags/{tagId}:
+    delete:
+      tags: [Customer Foundation]
+      summary: Detach tag from customer
+      operationId: deleteCustomerTag
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: tagId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/customers/{id}/credit:
+    get:
+      tags: [Customer Foundation]
+      summary: Get customer credit
+      operationId: getCustomerCredit
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Credit (nullable)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerCreditResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Customer Foundation]
+      summary: Upsert customer credit (creditLimit/rating/status)
+      operationId: upsertCustomerCredit
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerCreditUpsert"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerCreditResponse"
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerCreditResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/industries:
+    get:
+      tags: [Customer Foundation]
+      summary: List industries (dictionary, paginated)
+      operationId: listIndustries
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: code
+          in: query
+          schema: { type: string }
+        - name: name
+          in: query
+          schema: { type: string }
+        - name: enabled
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: Paginated industries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IndustryListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Customer Foundation]
+      summary: Create industry
+      operationId: createIndustry
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IndustryCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IndustryResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/industries/{id}:
+    get:
+      tags: [Customer Foundation]
+      summary: Get industry detail
+      operationId: getIndustry
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IndustryResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Customer Foundation]
+      summary: Update industry (optimistic lock)
+      operationId: updateIndustry
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IndustryUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IndustryResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Customer Foundation]
+      summary: Soft delete industry
+      operationId: deleteIndustry
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/tags:
+    get:
+      tags: [Customer Foundation]
+      summary: List tags (dictionary, paginated)
+      operationId: listTags
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: code
+          in: query
+          schema: { type: string }
+        - name: name
+          in: query
+          schema: { type: string }
+        - name: enabled
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: Paginated tags
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Customer Foundation]
+      summary: Create tag
+      operationId: createTag
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/tags/{id}:
+    get:
+      tags: [Customer Foundation]
+      summary: Get tag detail
+      operationId: getTag
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Customer Foundation]
+      summary: Update tag (optimistic lock)
+      operationId: updateTag
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Customer Foundation]
+      summary: Soft delete tag
+      operationId: deleteTag
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2698,6 +3557,420 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
 
   schemas:
+    # --------------------------------------------------------------------------
+    # Customer Foundation（Sprint 3C-1）
+    # --------------------------------------------------------------------------
+    CustomerLevel:
+      type: string
+      enum: [VIP, KEY, REGULAR, PROSPECT]
+
+    CustomerCreditRating:
+      type: string
+      enum: [AAA, AA, A, BBB, BB, B, C]
+
+    CustomerCreditStatus:
+      type: string
+      enum: [NORMAL, WATCH, FROZEN, CLOSED]
+
+    CustomerAddressType:
+      type: string
+      enum: [REGISTERED, SHIPPING, INVOICING, CONTACT]
+
+    Customer:
+      type: object
+      required: [id, code, name, level, version]
+      properties:
+        id: { type: string }
+        code: { type: string, description: 客户编码 }
+        name: { type: string }
+        shortName: { type: [string, "null"] }
+        partnerId: { type: [string, "null"], description: 关联统一往来单位 }
+        level: { $ref: "#/components/schemas/CustomerLevel" }
+        industryId: { type: [string, "null"] }
+        region: { type: [string, "null"] }
+        sourceChannel: { type: [string, "null"] }
+        companySize: { type: [string, "null"] }
+        foundedDate: { type: [string, "null"], format: date-time }
+        website: { type: [string, "null"] }
+        version: { type: integer, description: 乐观锁 }
+        isActive: { type: boolean }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        contacts:
+          type: array
+          items: { $ref: "#/components/schemas/CustomerContact" }
+        addresses:
+          type: array
+          items: { $ref: "#/components/schemas/CustomerAddress" }
+        tags:
+          type: array
+          items: { $ref: "#/components/schemas/CustomerTag" }
+        credit:
+          type: [object, "null"]
+          allOf:
+            - $ref: "#/components/schemas/CustomerCredit"
+
+    CustomerCreate:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string, minLength: 1, maxLength: 64 }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        shortName: { type: string, maxLength: 100 }
+        partnerId: { type: string }
+        level: { $ref: "#/components/schemas/CustomerLevel" }
+        industryId: { type: string }
+        region: { type: string, maxLength: 50 }
+        sourceChannel: { type: string, maxLength: 50 }
+        companySize: { type: string, maxLength: 50 }
+        foundedDate: { type: string, format: date-time }
+        website: { type: string, maxLength: 200 }
+
+    CustomerUpdate:
+      type: object
+      required: [version]
+      properties:
+        version: { type: integer }
+        code: { type: string }
+        name: { type: string }
+        shortName: { type: [string, "null"] }
+        partnerId: { type: [string, "null"] }
+        level: { $ref: "#/components/schemas/CustomerLevel" }
+        industryId: { type: [string, "null"] }
+        region: { type: [string, "null"] }
+        sourceChannel: { type: [string, "null"] }
+        companySize: { type: [string, "null"] }
+        foundedDate: { type: [string, "null"], format: date-time }
+        website: { type: [string, "null"] }
+
+    CustomerResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/Customer" }
+
+    CustomerListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Customer" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    CustomerContact:
+      type: object
+      required: [id, customerId, name, version]
+      properties:
+        id: { type: string }
+        customerId: { type: string }
+        name: { type: string }
+        title: { type: [string, "null"] }
+        department: { type: [string, "null"] }
+        phone: { type: [string, "null"] }
+        email: { type: [string, "null"], format: email }
+        wechat: { type: [string, "null"] }
+        isPrimary: { type: boolean, description: 主联系人（同客户唯一） }
+        sort: { type: integer }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CustomerContactCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        title: { type: string, maxLength: 100 }
+        department: { type: string, maxLength: 100 }
+        phone: { type: string, maxLength: 30 }
+        email: { type: string, format: email }
+        wechat: { type: string, maxLength: 100 }
+        isPrimary: { type: boolean, default: false }
+        sort: { type: integer, default: 0 }
+
+    CustomerContactUpdate:
+      type: object
+      required: [version]
+      properties:
+        version: { type: integer }
+        name: { type: string }
+        title: { type: [string, "null"] }
+        department: { type: [string, "null"] }
+        phone: { type: [string, "null"] }
+        email: { type: [string, "null"], format: email }
+        wechat: { type: [string, "null"] }
+        isPrimary: { type: boolean }
+        sort: { type: integer }
+
+    CustomerContactResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/CustomerContact" }
+
+    CustomerContactListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/CustomerContact" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    CustomerAddress:
+      type: object
+      required: [id, customerId, addressType, version]
+      properties:
+        id: { type: string }
+        customerId: { type: string }
+        addressType: { $ref: "#/components/schemas/CustomerAddressType" }
+        recipient: { type: [string, "null"] }
+        phone: { type: [string, "null"] }
+        province: { type: [string, "null"] }
+        city: { type: [string, "null"] }
+        district: { type: [string, "null"] }
+        detail: { type: [string, "null"] }
+        isDefault: { type: boolean, description: 默认地址（同客户同类型唯一） }
+        sort: { type: integer }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CustomerAddressCreate:
+      type: object
+      properties:
+        addressType: { $ref: "#/components/schemas/CustomerAddressType" }
+        recipient: { type: string, maxLength: 100 }
+        phone: { type: string, maxLength: 30 }
+        province: { type: string, maxLength: 50 }
+        city: { type: string, maxLength: 50 }
+        district: { type: string, maxLength: 50 }
+        detail: { type: string, maxLength: 300 }
+        isDefault: { type: boolean, default: false }
+        sort: { type: integer, default: 0 }
+
+    CustomerAddressUpdate:
+      type: object
+      required: [version]
+      properties:
+        version: { type: integer }
+        addressType: { $ref: "#/components/schemas/CustomerAddressType" }
+        recipient: { type: [string, "null"] }
+        phone: { type: [string, "null"] }
+        province: { type: [string, "null"] }
+        city: { type: [string, "null"] }
+        district: { type: [string, "null"] }
+        detail: { type: [string, "null"] }
+        isDefault: { type: boolean }
+        sort: { type: integer }
+
+    CustomerAddressResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/CustomerAddress" }
+
+    CustomerAddressListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/CustomerAddress" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    Tag:
+      type: object
+      required: [id, code, name, version]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        color: { type: [string, "null"] }
+        sort: { type: integer }
+        enabled: { type: boolean }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    TagCreate:
+      type: object
+      required: [code, name]
+      properties:
+        code:
+          type: string
+          pattern: "^[A-Z0-9_]+$"
+          minLength: 2
+          maxLength: 64
+        name: { type: string, minLength: 1, maxLength: 100 }
+        color: { type: string, maxLength: 20 }
+        sort: { type: integer, default: 0 }
+        enabled: { type: boolean, default: true }
+
+    TagUpdate:
+      type: object
+      required: [version]
+      properties:
+        version: { type: integer }
+        code: { type: string }
+        name: { type: string }
+        color: { type: [string, "null"] }
+        sort: { type: integer }
+        enabled: { type: boolean }
+
+    TagResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/Tag" }
+
+    TagListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Tag" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    CustomerTag:
+      type: object
+      required: [id, customerId, tagId]
+      properties:
+        id: { type: string }
+        customerId: { type: string }
+        tagId: { type: string }
+        createdAt: { type: string, format: date-time }
+        tag:
+          type: [object, "null"]
+          properties:
+            id: { type: string }
+            code: { type: string }
+            name: { type: string }
+            color: { type: [string, "null"] }
+
+    CustomerTagCreate:
+      type: object
+      properties:
+        tagId: { type: string, description: tagId 或 tagCode 二选一 }
+        tagCode: { type: string }
+
+    CustomerTagResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/CustomerTag" }
+
+    CustomerTagListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/CustomerTag" }
+
+    Industry:
+      type: object
+      required: [id, code, name, version]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        sort: { type: integer }
+        enabled: { type: boolean }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    IndustryCreate:
+      type: object
+      required: [code, name]
+      properties:
+        code:
+          type: string
+          pattern: "^[A-Z0-9_]+$"
+          minLength: 2
+          maxLength: 64
+        name: { type: string, minLength: 1, maxLength: 100 }
+        sort: { type: integer, default: 0 }
+        enabled: { type: boolean, default: true }
+
+    IndustryUpdate:
+      type: object
+      required: [version]
+      properties:
+        version: { type: integer }
+        code: { type: string }
+        name: { type: string }
+        sort: { type: integer }
+        enabled: { type: boolean }
+
+    IndustryResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/Industry" }
+
+    IndustryListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Industry" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    CustomerCredit:
+      type: object
+      required: [id, customerId, rating, status, version]
+      properties:
+        id: { type: string }
+        customerId: { type: string }
+        creditLimit: { type: [number, "null"], description: 信用额度 }
+        usedCredit: { type: number, description: 已用额度 }
+        rating: { $ref: "#/components/schemas/CustomerCreditRating" }
+        status: { $ref: "#/components/schemas/CustomerCreditStatus" }
+        reviewDate: { type: [string, "null"], format: date-time }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CustomerCreditUpsert:
+      type: object
+      properties:
+        creditLimit: { type: number, description: 信用额度（创建时可选） }
+        usedCredit: { type: number }
+        rating: { $ref: "#/components/schemas/CustomerCreditRating" }
+        status: { $ref: "#/components/schemas/CustomerCreditStatus" }
+        reviewDate: { type: string, format: date-time }
+        version: { type: integer, description: 已存在时乐观锁（可选） }
+
+    CustomerCreditResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { type: [object, "null"], allOf: [{ $ref: "#/components/schemas/CustomerCredit" }] }
+
     # --------------------------------------------------------------------------
     # File Center（Sprint 3B）
     # --------------------------------------------------------------------------
