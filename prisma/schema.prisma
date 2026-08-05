@@ -103,3 +103,85 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([createdAt])
 }
+
+/// Product master data. Foundation for quotations and sales orders.
+model Product {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  category    String?
+  unit        String?
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([name])
+  @@index([isActive])
+}
+
+/// Supplier master data. Foundation for purchase orders.
+model Supplier {
+  id            String   @id @default(cuid())
+  code          String   @unique
+  name          String
+  contactPerson String?
+  phone         String?
+  email         String?
+  address       String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([name])
+  @@index([isActive])
+}
+
+/// Material master data. Foundation for inventory and purchases.
+model Material {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  unit        String?
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([name])
+  @@index([isActive])
+}
+
+/// Price list master data. Header of a named price list.
+model PriceList {
+  id        String          @id @default(cuid())
+  code      String          @unique
+  name      String
+  currency  String          @default("CNY")
+  isActive  Boolean         @default(true)
+  items     PriceListItem[]
+  createdAt DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime        @updatedAt @db.Timestamptz(3)
+
+  @@index([name])
+  @@index([isActive])
+}
+
+/// Line item of a price list: unit price for a product or material.
+model PriceListItem {
+  id           String    @id @default(cuid())
+  priceListId  String
+  priceList    PriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  productId    String?
+  product      Product?  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  materialId   String?
+  material     Material? @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  unitPrice    Decimal   @db.Decimal(12, 2)
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@index([priceListId])
+  @@index([productId])
+  @@index([materialId])
+}

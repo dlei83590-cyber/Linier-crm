@@ -8,6 +8,10 @@ import { useSession } from "@/lib/session-context";
 
 const NAV_ITEMS: ReadonlyArray<{ href: string; label: string; permission: PermissionCode | null }> = [
   { href: "/dashboard", label: "Dashboard", permission: null },
+  { href: "/products", label: "产品管理", permission: PERMISSIONS.PRODUCT_READ },
+  { href: "/suppliers", label: "供应商管理", permission: PERMISSIONS.SUPPLIER_READ },
+  { href: "/materials", label: "物料管理", permission: PERMISSIONS.MATERIAL_READ },
+  { href: "/price-lists", label: "价格表管理", permission: PERMISSIONS.PRICE_LIST_READ },
   { href: "/users", label: "用户管理", permission: PERMISSIONS.USER_READ },
   { href: "/departments", label: "部门管理", permission: PERMISSIONS.USER_READ },
   { href: "/roles", label: "角色权限", permission: PERMISSIONS.ROLE_READ },
