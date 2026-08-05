@@ -2,9 +2,9 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [v0.2.0-alpha] - 2026-08-05
 
-### 新增（Sprint 2B/2C，PR #4，feature/sprint2-master-data）
+### 新增（Sprint 2B/2C，PR #4，已合并）
 
 - 中国版主数据：Item 统一物料（6 类）+ LinearGuideSpecification + BusinessPartner 统一往来单位（统一社会信用代码/开票/银行/结算）
 - 项目领域 14 模型 + 8 枚举：ProjectOpportunity → Project 双段模型、11 阶段、5 关系人角色、里程碑/任务/预算/费用/风险/走访/进展/验收/结项
@@ -18,6 +18,10 @@
 
 - 前端：移除 products/suppliers/materials 占位页，新增 10 个主数据/项目占位页
 - 默认税率改为环境变量 `DEFAULT_TAX_RATE`（默认 13，不写死）
+
+## [Unreleased]
+
+（Sprint 3 ERP Foundation 开发中）
 
 ## [v0.1.0-alpha] - 2026-08-04
 
