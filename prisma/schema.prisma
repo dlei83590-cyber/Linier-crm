@@ -1652,3 +1652,127 @@ model Menu {
   @@index([parentId])
   @@index([deletedAt])
 }
+
+// ============================================================================
+// Sprint 3B - Dashboard API（只提供数据 API，页面以后开发）
+// ============================================================================
+
+/// Dashboard Widget 类型
+enum DashboardWidgetType {
+  KPI
+  CHART
+  TABLE
+}
+
+/// Dashboard Chart 类型
+enum DashboardChartType {
+  LINE
+  BAR
+  PIE
+  AREA
+  SCATTER
+}
+
+/// KPI 聚合方式
+enum DashboardAggregate {
+  SUM
+  AVG
+  COUNT
+  MIN
+  MAX
+}
+
+/// Dashboard Widget（组件定义）
+model DashboardWidget {
+  id             String              @id @default(cuid())
+  code           String              @unique
+  name           String
+  widgetType     DashboardWidgetType @default(KPI)
+  dataSource     String? // 数据源标识（如 sales-order/project）
+  query          Json? // 查询配置
+  refreshInterval Int? // 刷新间隔（秒）
+  sort           Int                 @default(0)
+  enabled        Boolean             @default(true)
+  isActive       Boolean             @default(true)
+  createdById    String?
+  updatedById    String?
+  approvedById   String?
+  approvalStatus ApprovalStatus      @default(DRAFT)
+  version        Int                 @default(1)
+  deletedAt      DateTime?
+  createdAt      DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime            @updatedAt @db.Timestamptz(3)
+
+  @@index([deletedAt])
+}
+
+/// Dashboard Layout（布局：widget 位置网格）
+model DashboardLayout {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  isDefault   Boolean  @default(false)
+  grid        Json? // [{ widgetId, x, y, w, h }]
+  enabled     Boolean  @default(true)
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([deletedAt])
+}
+
+/// Dashboard KPI（指标定义）
+model DashboardKpi {
+  id          String             @id @default(cuid())
+  code        String             @unique
+  name        String
+  unit        String? // 单位（CNY/%/件）
+  aggregate   DashboardAggregate @default(SUM)
+  dataSource  String? // 数据源（如 project/sales-order）
+  query       Json? // 过滤/统计配置
+  target      Decimal? @db.Decimal(18, 2) // 目标值
+  sort        Int                @default(0)
+  enabled     Boolean            @default(true)
+  isActive    Boolean            @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus  @default(DRAFT)
+  version     Int                @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime           @updatedAt @db.Timestamptz(3)
+
+  @@index([deletedAt])
+}
+
+/// Dashboard Chart（图表定义）
+model DashboardChart {
+  id          String             @id @default(cuid())
+  code        String             @unique
+  name        String
+  chartType   DashboardChartType @default(LINE)
+  dataSource  String? // 数据源（如 sales-order/project）
+  query       Json? // 查询配置
+  xAxis       String? // X 轴字段
+  yAxis       String? // Y 轴字段
+  sort        Int                @default(0)
+  enabled     Boolean            @default(true)
+  isActive    Boolean            @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus  @default(DRAFT)
+  version     Int                @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime           @updatedAt @db.Timestamptz(3)
+
+  @@index([deletedAt])
+}

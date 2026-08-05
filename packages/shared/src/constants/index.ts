@@ -115,6 +115,11 @@ export const PERMISSION_MODULES = [
   // Sprint 3B：平台能力模块
   "menu",
   "menu-group",
+  // Sprint 3B：Dashboard API
+  "dashboard-widget",
+  "dashboard-layout",
+  "dashboard-kpi",
+  "dashboard-chart",
 ] as const;
 
 /** 生成模块×动作权限码（如 "item:view"） */

@@ -9,7 +9,7 @@
 
 - Audit Center：AuditLog 升级（ObjectType/ObjectId/BeforeData/AfterData/RequestId/TraceId/IP/Device/Browser/Duration/Result）
 - Menu Center：Menu / MenuGroup / RouteMeta（Icon/Sort/Hidden/Cache/ExternalLink/Permission）✅ 已开发
-- Dashboard API：/widgets /layouts /kpis /charts（不开发页面）
+- Dashboard API：/widgets /layouts /kpis /charts（不开发页面）✅ 已开发
 - File Center：File / Attachment / Folder / Version / Preview
 
 ## 2. Automated Verification（Audit Center 阶段）
@@ -25,6 +25,7 @@
 | Build | PENDING | 远程 CI |
 | Secret scan | PENDING | 远程 CI |
 | Menu Center 迁移 | PASS | 0006_menu_center：2 表 + 索引 + 外键，本地核验 |
+| Dashboard 迁移 | PASS | 0007_dashboard_api：4 表 + 3 枚举 + code 唯一索引，本地核验 |
 
 ## 3. API Test Matrix（Audit Center）
 
@@ -36,6 +37,8 @@
 | GET/PATCH/DELETE /api/menus/:id | PASS(代码) | PASS(代码) | PASS(代码) | PASS(代码) | PASS(代码) |
 | GET/POST /api/menu-groups | PASS(代码) | PASS(代码) | PASS(代码) | N/A | PASS(代码) |
 | GET/PATCH/DELETE /api/menu-groups/:id | PASS(代码) | PASS(代码) | PASS(代码) | PASS(代码) | PASS(代码) |
+| GET/POST /api/dashboard/widgets|layouts|kpis|charts | PASS(代码) | PASS(代码) | PASS(代码) | N/A | PASS(代码) |
+| GET/PATCH/DELETE /api/dashboard/*/:id | PASS(代码) | PASS(代码) | PASS(代码) | PASS(代码) | PASS(代码) |
 
 > PASS(代码) = 静态代码审查通过；运行级验证待 CI/部署环境执行（PENDING）。
 
@@ -61,7 +64,7 @@ RBAC: PASS（audit:view 仅 SUPER_ADMIN/ADMIN）
 API: PASS（代码审查）→ 运行级 PENDING
 State Machine: N/A
 Unit Test: PENDING（已编写待 CI）
-OpenAPI: PASS（/api/audit-logs + /api/menus + /api/menu-groups 已覆盖）
+OpenAPI: PASS（audit-logs + menus + menu-groups + dashboard 已覆盖）
 CI: PENDING（远程 Quality Gates / Build / Secret Scan）
 Deployment QA: NOT RUN（待 Railway 环境）
 ```

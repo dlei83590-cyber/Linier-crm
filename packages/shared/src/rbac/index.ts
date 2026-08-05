@@ -64,6 +64,11 @@ const ROLE_PERMISSIONS: Record<RoleCode, PermissionCode[]> = {
     // Sprint 3B：菜单平台
     "menu:view", "menu:create", "menu:edit", "menu:delete", "menu:approve", "menu:audit", "menu:export", "menu:import", "menu:assign", "menu:close",
     "menu-group:view", "menu-group:create", "menu-group:edit", "menu-group:delete", "menu-group:approve", "menu-group:audit", "menu-group:export", "menu-group:import", "menu-group:assign", "menu-group:close",
+    // Sprint 3B：Dashboard API
+    "dashboard-widget:view", "dashboard-widget:create", "dashboard-widget:edit", "dashboard-widget:delete", "dashboard-widget:approve", "dashboard-widget:audit", "dashboard-widget:export", "dashboard-widget:import", "dashboard-widget:assign", "dashboard-widget:close",
+    "dashboard-layout:view", "dashboard-layout:create", "dashboard-layout:edit", "dashboard-layout:delete", "dashboard-layout:approve", "dashboard-layout:audit", "dashboard-layout:export", "dashboard-layout:import", "dashboard-layout:assign", "dashboard-layout:close",
+    "dashboard-kpi:view", "dashboard-kpi:create", "dashboard-kpi:edit", "dashboard-kpi:delete", "dashboard-kpi:approve", "dashboard-kpi:audit", "dashboard-kpi:export", "dashboard-kpi:import", "dashboard-kpi:assign", "dashboard-kpi:close",
+    "dashboard-chart:view", "dashboard-chart:create", "dashboard-chart:edit", "dashboard-chart:delete", "dashboard-chart:approve", "dashboard-chart:audit", "dashboard-chart:export", "dashboard-chart:import", "dashboard-chart:assign", "dashboard-chart:close",
   ],
   MEMBER: [
     PERMISSIONS.USER_READ,

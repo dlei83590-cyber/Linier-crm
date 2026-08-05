@@ -1,6 +1,6 @@
 # DOMAIN_MODEL 领域模型
 
-- 版本：v1.3
+- 版本：v1.4
 - 日期：2026-08-05
 - 维护者：CIO（JINZA）｜审核：CTO
 - 关联：[PRODUCT_VISION.md](./PRODUCT_VISION.md) ｜ [ROADMAP.md](./ROADMAP.md) ｜ [ADR](./ADR/)
@@ -91,7 +91,7 @@ Project Expense / 日常 Expense ──> 审批流 ──> Voucher（凭证）
 
 - ✅ 已落地（Sprint 2，PR #4）：Item / LinearGuideSpecification / BusinessPartner / PriceList / TechnicalStandard / UnitOfMeasure / CommercialTerm / DocumentSequence + 项目领域 14 模型
 - ✅ 已落地（Sprint 3A，PR #5）：Workflow Foundation 22 模型（Workflow 6 + Approval 7 + Notification 4 + Dictionary 2 + Settings 3），见第 7-10 节
-- 🔄 进行中（Sprint 3B）：Audit Center 升级（第 12 节）✅ + Menu Center（第 13 节）✅ + Dashboard API / File Center
+- 🔄 进行中（Sprint 3B）：Audit Center（第 12 节）✅ + Menu Center（第 13 节）✅ + Dashboard API（第 14 节）✅ + File Center
 - ⬜ 规划中（Sprint 4-7）：Quotation / Sales Order / Contract / Delivery / Invoice / Payment / Purchase / GRN / Warehouse / Stock / AR / AP / Voucher / Journal / GL
 
 > 详细字段标准见数据库 schema（`prisma/schema.prisma`）与 [architecture/domain-model.md](./architecture/domain-model.md)。
@@ -527,3 +527,71 @@ erDiagram
 - 迁移 `0006_menu_center`：2 表 + 索引 + 外键
 - API：GET /api/menus（?tree=true 树形，前端直接读取）/ POST / GET / PATCH（乐观锁）/ DELETE（软删除，递归子树）
 - 权限：menu / menu-group 模块，MANAGER 全量
+
+
+## 14. Dashboard API（Sprint 3B，ADR-0007）
+
+```mermaid
+erDiagram
+    DashboardWidget {
+        string id PK
+        string code UK
+        string name
+        DashboardWidgetType widgetType
+        string dataSource
+        Json query
+        int refreshInterval
+        int sort
+        bool enabled
+        int version
+        datetime deletedAt
+    }
+
+    DashboardLayout {
+        string id PK
+        string code UK
+        string name
+        bool isDefault
+        Json grid
+        bool enabled
+        int version
+        datetime deletedAt
+    }
+
+    DashboardKpi {
+        string id PK
+        string code UK
+        string name
+        string unit
+        DashboardAggregate aggregate
+        string dataSource
+        Json query
+        Decimal target
+        int sort
+        bool enabled
+        int version
+        datetime deletedAt
+    }
+
+    DashboardChart {
+        string id PK
+        string code UK
+        string name
+        DashboardChartType chartType
+        string dataSource
+        Json query
+        string xAxis
+        string yAxis
+        int sort
+        bool enabled
+        int version
+        datetime deletedAt
+    }
+```
+
+- 枚举：DashboardWidgetType（KPI/CHART/TABLE）、DashboardChartType（LINE/BAR/PIE/AREA/SCATTER）、DashboardAggregate（SUM/AVG/COUNT/MIN/MAX）
+- 只提供数据 API（/api/dashboard/widgets|layouts|kpis|charts），页面 Sprint 8 开发
+- 迁移 `0007_dashboard_api`：4 表 + 3 枚举 + code 唯一索引
+- 权限：dashboard-widget / dashboard-layout / dashboard-kpi / dashboard-chart 模块，MANAGER 全量
+
+## 15. 变更记录
