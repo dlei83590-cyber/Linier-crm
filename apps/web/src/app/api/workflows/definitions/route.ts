@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, clientIp, writeAuditLog } from "@/lib/api-helpers";
-import { ok, fail, failValidation, failConflict, parsePagination } from "@/lib/api/response";
+import { ok, failValidation, failConflict, parsePagination } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { workflowDefinitionCreateSchema } from "@/lib/api/schemas";
@@ -22,14 +22,14 @@ export async function GET(request: NextRequest) {
   const { page, pageSize, skip, take } = parsePagination(searchParams);
   const code = searchParams.get("code")?.trim();
   const name = searchParams.get("name")?.trim();
-  const module = searchParams.get("module")?.trim();
+  const moduleName = searchParams.get("module")?.trim();
   const status = searchParams.get("status")?.trim();
 
   const where = {
     deletedAt: null,
     ...(code ? { code: { contains: code } } : {}),
     ...(name ? { name: { contains: name } } : {}),
-    ...(module ? { module } : {}),
+    ...(moduleName ? { module: moduleName } : {}),
     ...(status ? { status } : {}),
   };
 

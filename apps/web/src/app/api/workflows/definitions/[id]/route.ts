@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, clientIp, writeAuditLog } from "@/lib/api-helpers";
-import { ok, fail, failValidation, failConflict, failNotFound } from "@/lib/api/response";
+import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { workflowDefinitionUpdateSchema } from "@/lib/api/schemas";

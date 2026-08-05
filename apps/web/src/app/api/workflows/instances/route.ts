@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, clientIp, writeAuditLog } from "@/lib/api-helpers";
-import { ok, fail, failValidation, failConflict, failNotFound, parsePagination } from "@/lib/api/response";
+import { ok, failValidation, failConflict, failNotFound, parsePagination } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { workflowInstanceCreateSchema } from "@/lib/api/schemas";
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
   const parsed = workflowInstanceCreateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
-  const { definitionId, businessType, businessId, payload } = parsed.data;
+  const { definitionId, businessType, businessId, payload: _payload } = parsed.data;
 
   const instance = await prisma.$transaction(async (tx) => {
     const definition = await tx.workflowDefinition.findFirst({
