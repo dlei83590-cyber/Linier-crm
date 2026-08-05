@@ -1,6 +1,6 @@
 # DOMAIN_MODEL 领域模型
 
-- 版本：v1.5
+- 版本：v1.6
 - 日期：2026-08-05
 - 维护者：CIO（JINZA）｜审核：CTO
 - 关联：[PRODUCT_VISION.md](./PRODUCT_VISION.md) ｜ [ROADMAP.md](./ROADMAP.md) ｜ [ADR](./ADR/)
@@ -91,7 +91,7 @@ Project Expense / 日常 Expense ──> 审批流 ──> Voucher（凭证）
 
 - ✅ 已落地（Sprint 2，PR #4）：Item / LinearGuideSpecification / BusinessPartner / PriceList / TechnicalStandard / UnitOfMeasure / CommercialTerm / DocumentSequence + 项目领域 14 模型
 - ✅ 已落地（Sprint 3A，PR #5）：Workflow Foundation 22 模型（Workflow 6 + Approval 7 + Notification 4 + Dictionary 2 + Settings 3），见第 7-10 节
-- 🔄 进行中（Sprint 3B）：Audit Center（第 12 节）✅ + Menu Center（第 13 节）✅ + Dashboard API（第 14 节）✅ + File Center（第 15 节）✅
+- 🔄 进行中（Sprint 3C）：Customer Foundation（第 16 节）✅ + Supplier/Item/Project/Price 后续子阶段
 - ⬜ 规划中（Sprint 4-7）：Quotation / Sales Order / Contract / Delivery / Invoice / Payment / Purchase / GRN / Warehouse / Stock / AR / AP / Voucher / Journal / GL
 
 > 详细字段标准见数据库 schema（`prisma/schema.prisma`）与 [architecture/domain-model.md](./architecture/domain-model.md)。
@@ -663,4 +663,109 @@ erDiagram
 - 迁移 `0008_file_center`：4 表 + 索引 + 外键
 - 权限：file / file-folder / file-version / file-attachment 模块，MANAGER 全量
 
-## 16. 变更记录
+
+
+## 16. Customer Foundation（Sprint 3C-1，ADR-0009）
+
+```mermaid
+erDiagram
+    BusinessPartner ||--o{ Customer : extends
+    Industry ||--o{ Customer : classifies
+    Customer ||--o{ CustomerContact : has
+    Customer ||--o{ CustomerAddress : has
+    Customer ||--o{ CustomerTag : tagged
+    Tag ||--o{ CustomerTag : used_by
+    Customer ||--o| CustomerCredit : credit
+
+    Customer {
+        string id PK
+        string code UK
+        string name
+        string shortName
+        string partnerId FK
+        CustomerLevel level
+        string industryId FK
+        string region
+        string sourceChannel
+        string companySize
+        datetime foundedDate
+        string website
+        int version
+        datetime deletedAt
+    }
+
+    CustomerContact {
+        string id PK
+        string customerId FK
+        string name
+        string title
+        string department
+        string phone
+        string email
+        string wechat
+        bool isPrimary
+        int sort
+        datetime deletedAt
+    }
+
+    CustomerAddress {
+        string id PK
+        string customerId FK
+        CustomerAddressType addressType
+        string recipient
+        string phone
+        string province
+        string city
+        string district
+        string detail
+        bool isDefault
+        int sort
+        datetime deletedAt
+    }
+
+    Tag {
+        string id PK
+        string code UK
+        string name
+        string color
+        int sort
+        bool enabled
+        datetime deletedAt
+    }
+
+    CustomerTag {
+        string id PK
+        string customerId FK
+        string tagId FK
+        datetime deletedAt
+    }
+
+    Industry {
+        string id PK
+        string code UK
+        string name
+        int sort
+        bool enabled
+        datetime deletedAt
+    }
+
+    CustomerCredit {
+        string id PK
+        string customerId UK
+        Decimal creditLimit
+        Decimal usedCredit
+        CustomerCreditRating rating
+        CustomerCreditStatus status
+        datetime reviewDate
+        datetime deletedAt
+    }
+```
+
+- 枚举：CustomerLevel（VIP/KEY/REGULAR/PROSPECT）、CustomerCreditRating（AAA~C）、CustomerCreditStatus（NORMAL/WATCH/FROZEN/CLOSED）、CustomerAddressType（REGISTERED/SHIPPING/INVOICING/CONTACT）
+- 删除策略：Customer→Contact/Address/Credit/Tag Cascade（逻辑软删）；Customer→BusinessPartner/Industry SetNull
+- 迁移 `0009_customer_foundation`：7 表 + 4 枚举 + 索引 + 外键
+- API：customers 主档 CRUD + 子资源（contacts/addresses/tags/credit）+ industries/tags 字典 CRUD
+- 权限：customer / customer-contact / customer-address / customer-tag / customer-credit / industry / tag 模块，MANAGER 全量
+- seed：6 行业 + 4 标签（稳定 code + upsert）
+
+## 17. 变更记录

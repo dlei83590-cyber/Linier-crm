@@ -74,6 +74,14 @@ const ROLE_PERMISSIONS: Record<RoleCode, PermissionCode[]> = {
     "file-folder:view", "file-folder:create", "file-folder:edit", "file-folder:delete", "file-folder:approve", "file-folder:audit", "file-folder:export", "file-folder:import", "file-folder:assign", "file-folder:close",
     "file-version:view", "file-version:create", "file-version:edit", "file-version:delete", "file-version:approve", "file-version:audit", "file-version:export", "file-version:import", "file-version:assign", "file-version:close",
     "file-attachment:view", "file-attachment:create", "file-attachment:edit", "file-attachment:delete", "file-attachment:approve", "file-attachment:audit", "file-attachment:export", "file-attachment:import", "file-attachment:assign", "file-attachment:close",
+    // Sprint 3C：业务底座（Customer Foundation）
+    "customer:view", "customer:create", "customer:edit", "customer:delete", "customer:approve", "customer:audit", "customer:export", "customer:import", "customer:assign", "customer:close",
+    "customer-contact:view", "customer-contact:create", "customer-contact:edit", "customer-contact:delete", "customer-contact:approve", "customer-contact:audit", "customer-contact:export", "customer-contact:import", "customer-contact:assign", "customer-contact:close",
+    "customer-address:view", "customer-address:create", "customer-address:edit", "customer-address:delete", "customer-address:approve", "customer-address:audit", "customer-address:export", "customer-address:import", "customer-address:assign", "customer-address:close",
+    "customer-tag:view", "customer-tag:create", "customer-tag:edit", "customer-tag:delete", "customer-tag:approve", "customer-tag:audit", "customer-tag:export", "customer-tag:import", "customer-tag:assign", "customer-tag:close",
+    "customer-credit:view", "customer-credit:create", "customer-credit:edit", "customer-credit:delete", "customer-credit:approve", "customer-credit:audit", "customer-credit:export", "customer-credit:import", "customer-credit:assign", "customer-credit:close",
+    "industry:view", "industry:create", "industry:edit", "industry:delete", "industry:approve", "industry:audit", "industry:export", "industry:import", "industry:assign", "industry:close",
+    "tag:view", "tag:create", "tag:edit", "tag:delete", "tag:approve", "tag:audit", "tag:export", "tag:import", "tag:assign", "tag:close",
   ],
   MEMBER: [
     PERMISSIONS.USER_READ,

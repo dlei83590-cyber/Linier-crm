@@ -362,6 +362,7 @@ model BusinessPartner {
   deletedAt           DateTime?
   opportunities       ProjectOpportunity[]
   projects            Project[]
+  customers           Customer[]
   createdAt           DateTime       @default(now()) @db.Timestamptz(3)
   updatedAt           DateTime       @updatedAt @db.Timestamptz(3)
 
@@ -1883,5 +1884,224 @@ model FileAttachment {
 
   @@index([businessType, businessId])
   @@index([fileId])
+  @@index([deletedAt])
+}
+
+// ============================================================================
+// Sprint 3C-1 - Customer Foundation（客户底座：Customer/Contact/Address/Tag/Industry/Credit）
+// ============================================================================
+
+/// 客户等级
+enum CustomerLevel {
+  VIP
+  KEY
+  REGULAR
+  PROSPECT
+}
+
+/// 客户信用评级
+enum CustomerCreditRating {
+  AAA
+  AA
+  A
+  BBB
+  BB
+  B
+  C
+}
+
+/// 客户信用状态
+enum CustomerCreditStatus {
+  NORMAL
+  WATCH
+  FROZEN
+  CLOSED
+}
+
+/// 地址类型
+enum CustomerAddressType {
+  REGISTERED
+  SHIPPING
+  INVOICING
+  CONTACT
+}
+
+/// 客户主档（关联统一往来单位 BusinessPartner，type=CUSTOMER/BOTH）
+model Customer {
+  id           String         @id @default(cuid())
+  code         String         @unique // 客户编码（DocumentSequence 生成）
+  name         String // 客户名称
+  shortName    String? // 简称
+  partnerId    String? // 关联 BusinessPartner（可选）
+  partner      BusinessPartner? @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  level        CustomerLevel  @default(REGULAR) // 客户等级
+  industryId   String? // 所属行业
+  industry     Industry?      @relation(fields: [industryId], references: [id], onDelete: SetNull)
+  region       String? // 所属区域
+  sourceChannel String? // 来源渠道
+  companySize  String? // 企业规模
+  foundedDate  DateTime? // 成立日期
+  website      String? // 官网
+  contacts     CustomerContact[]
+  addresses    CustomerAddress[]
+  tags         CustomerTag[]
+  credit       CustomerCredit?
+  isActive     Boolean         @default(true)
+  createdById  String?
+  updatedById  String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version      Int             @default(1)
+  deletedAt    DateTime?
+  createdAt    DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime        @updatedAt @db.Timestamptz(3)
+
+  @@index([name])
+  @@index([partnerId])
+  @@index([industryId])
+  @@index([deletedAt])
+}
+
+/// 客户联系人
+model CustomerContact {
+  id          String   @id @default(cuid())
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  name        String
+  title       String? // 职位
+  department  String? // 部门
+  phone       String?
+  email       String?
+  wechat      String?
+  isPrimary   Boolean  @default(false) // 主联系人
+  sort        Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([customerId])
+  @@index([deletedAt])
+}
+
+/// 客户地址（注册/收货/开票/联系）
+model CustomerAddress {
+  id          String             @id @default(cuid())
+  customerId  String
+  customer    Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  addressType CustomerAddressType @default(REGISTERED)
+  recipient   String? // 收件人
+  phone       String?
+  province    String?
+  city        String?
+  district    String?
+  detail      String?
+  isDefault   Boolean            @default(false)
+  sort        Int                @default(0)
+  isActive    Boolean            @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus  @default(DRAFT)
+  version     Int                @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime           @updatedAt @db.Timestamptz(3)
+
+  @@index([customerId])
+  @@index([deletedAt])
+}
+
+/// 标签（全局可复用：客户/供应商/物料）
+model Tag {
+  id          String        @id @default(cuid())
+  code        String        @unique
+  name        String
+  color       String?
+  sort        Int           @default(0)
+  enabled     Boolean       @default(true)
+  customers   CustomerTag[]
+  isActive    Boolean       @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int           @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime      @updatedAt @db.Timestamptz(3)
+
+  @@index([deletedAt])
+}
+
+/// 客户-标签关联
+model CustomerTag {
+  id          String   @id @default(cuid())
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  tagId       String
+  tag         Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([customerId, tagId])
+  @@index([customerId])
+  @@index([tagId])
+  @@index([deletedAt])
+}
+
+/// 行业（字典）
+model Industry {
+  id          String     @id @default(cuid())
+  code        String     @unique
+  name        String
+  sort        Int        @default(0)
+  enabled     Boolean    @default(true)
+  customers   Customer[]
+  isActive    Boolean    @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int        @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime   @updatedAt @db.Timestamptz(3)
+
+  @@index([deletedAt])
+}
+
+/// 客户信用（1:1）
+model CustomerCredit {
+  id          String              @id @default(cuid())
+  customerId  String              @unique
+  customer    Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  creditLimit Decimal?            @db.Decimal(18, 2) // 信用额度
+  usedCredit  Decimal             @default(0) @db.Decimal(18, 2) // 已用额度
+  rating      CustomerCreditRating @default(B)
+  status      CustomerCreditStatus @default(NORMAL)
+  reviewDate  DateTime? // 复核日期
+  isActive    Boolean             @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus   @default(DRAFT)
+  version     Int                 @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime            @updatedAt @db.Timestamptz(3)
+
   @@index([deletedAt])
 }

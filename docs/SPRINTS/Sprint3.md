@@ -50,7 +50,7 @@
 
 | 子阶段 | 内容 | 状态 |
 | --- | --- | --- |
-| 3C-1 | Customer Foundation：Customer / Contact / Address / Tag / Industry / Credit | 🔄 |
+| 3C-1 | Customer Foundation：Customer / Contact / Address / Tag / Industry / Credit | 🔄（PR #7 待审） |
 | 3C-2 | Supplier Foundation：Supplier / Contact / Settlement / Qualification / Certificate | ⬜ |
 | 3C-3 | Item Foundation：Item / Specification / Category / Brand / UOM / Price / Attachment | ⬜ |
 | 3C-4 | Project Foundation：Opportunity / Project / Milestone / Task / Visit / Risk / Expense | ⬜ |
