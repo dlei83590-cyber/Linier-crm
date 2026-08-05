@@ -26,7 +26,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const parsed = workflowActionSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
-  const { actionType, targetUserId, comment, payload: _payload } = parsed.data;
+  const { actionType, targetUserId, comment } = parsed.data;
 
   if (!isValidAction(actionType)) {
     return fail(ERROR_CODES.WORKFLOW_ACTION_INVALID, "无效的工作流动作", 400);

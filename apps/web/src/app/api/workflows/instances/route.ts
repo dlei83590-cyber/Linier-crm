@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
   const parsed = workflowInstanceCreateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
-  const { definitionId, businessType, businessId, payload: _payload } = parsed.data;
+  const { definitionId, businessType, businessId } = parsed.data;
 
   const instance = await prisma.$transaction(async (tx) => {
     const definition = await tx.workflowDefinition.findFirst({
