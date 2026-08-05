@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, parsePagination } from "@/lib/api/response";
@@ -8,33 +9,24 @@ import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
-const createSchema = z
-  .object({
-    code: z.string().min(1).max(64),
-    name: z.string().min(1).max(100),
-    widgetType: z.enum(["KPI", "CHART", "TABLE"]).optional(),
-    chartType: z.enum(["LINE", "BAR", "PIE", "AREA", "SCATTER"]).optional(),
-    aggregate: z.enum(["SUM", "AVG", "COUNT", "MIN", "MAX"]).optional(),
-    unit: z.string().max(20).optional(),
-    dataSource: z.string().max(50).optional(),
-    query: z.record(z.unknown()).optional(),
-    refreshInterval: z.number().int().positive().optional(),
-    isDefault: z.boolean().optional(),
-    grid: z.record(z.unknown()).optional(),
-    xAxis: z.string().max(50).optional(),
-    yAxis: z.string().max(50).optional(),
-    target: z.coerce.number().optional(),
-    sort: z.number().int().default(0),
-    enabled: z.boolean().default(true),
-  })
-  .refine((v) => Object.keys(v).length >= 2, { message: "code 与 name 必填" });
+const createSchema = z.object({
+  code: z.string().min(1).max(64),
+  name: z.string().min(1).max(100),
+  chartType: z.enum(["LINE", "BAR", "PIE", "AREA", "SCATTER"]).optional(),
+  dataSource: z.string().max(50).optional(),
+  query: z.record(z.unknown()).optional(),
+  xAxis: z.string().max(50).optional(),
+  yAxis: z.string().max(50).optional(),
+  sort: z.number().int().default(0),
+  enabled: z.boolean().default(true),
+});
 
 /** GET /api/dashboard/charts（分页 + code/name/enabled 过滤） */
 export async function GET(request: NextRequest) {
   const user = await authenticate(request);
   const denied = requirePermission(user, "dashboard-chart:view");
   if (denied) return denied;
-  requestLog(request, user?.id, "dashboard-chart.list");
+  requestLog(request, user?.id, "charts.list");
 
   const { searchParams } = new URL(request.url);
   const { page, pageSize, skip, take } = parsePagination(searchParams);
@@ -50,8 +42,8 @@ export async function GET(request: NextRequest) {
   };
 
   const [total, items] = await Promise.all([
-    prisma.dashboardChart.count({ where }),
-    prisma.dashboardChart.findMany({ where, orderBy: [{ sort: "asc" }, { updatedAt: "desc" }], skip, take }),
+    prisma.DashboardChart.count({ where }),
+    prisma.DashboardChart.findMany({ where, orderBy: [{ sort: "asc" }, { updatedAt: "desc" }], skip, take }),
   ]);
 
   return ok(items, { page, pageSize, total });
@@ -62,25 +54,30 @@ export async function POST(request: NextRequest) {
   const user = await authenticate(request);
   const denied = requirePermission(user, "dashboard-chart:create");
   if (denied) return denied;
-  requestLog(request, user?.id, "dashboard-chart.create");
+  requestLog(request, user?.id, "charts.create");
 
   const meta = requestMeta(request);
   const parsed = createSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
-  const existing = await prisma.dashboardChart.findUnique({ where: { code: parsed.data.code } });
+  const existing = await prisma.DashboardChart.findUnique({ where: { code: parsed.data.code } });
   if (existing && !existing.deletedAt) {
     return failConflict(ERROR_CODES.CONFLICT, "编码已存在");
   }
 
-  const created = await prisma.dashboardChart.create({
-    data: { ...parsed.data, createdById: user!.id, updatedById: user!.id },
+  const created = await prisma.DashboardChart.create({
+    data: {
+      ...parsed.data,
+      query: parsed.data.query === undefined ? undefined : (parsed.data.query as Prisma.InputJsonValue),
+      createdById: user!.id,
+      updatedById: user!.id,
+    },
   });
 
   await writeAuditLog({
     actorId: user?.id,
-    action: "dashboard-chart.create",
-    entityType: "dashboard-chart",
+    action: "charts.create",
+    entityType: "charts",
     entityId: created.id,
     afterData: { code: created.code, name: created.name },
     ...meta,

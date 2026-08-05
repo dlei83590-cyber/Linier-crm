@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import type { AuditResult } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission } from "@/lib/api-helpers";
 import { ok, failValidation, parsePagination } from "@/lib/api/response";
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
     ...(entityType ? { entityType } : {}),
     ...(entityId ? { entityId } : {}),
     ...(action ? { action: { contains: action } } : {}),
-    ...(result ? { result } : {}),
+    ...(result ? { result: result as AuditResult } : {}),
     ...(requestId ? { requestId } : {}),
     ...(traceId ? { traceId } : {}),
     ...(from || to
