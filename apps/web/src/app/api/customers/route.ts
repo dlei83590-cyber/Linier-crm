@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import type { CustomerLevel } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, parsePagination } from "@/lib/api/response";
@@ -42,7 +43,7 @@ export async function GET(request: NextRequest) {
     deletedAt: null,
     ...(code ? { code: { contains: code } } : {}),
     ...(name ? { name: { contains: name } } : {}),
-    ...(level ? { level } : {}),
+    ...(level ? { level: level as CustomerLevel } : {}),
     ...(region ? { region } : {}),
     ...(industryId ? { industryId } : {}),
     ...(partnerId ? { partnerId } : {}),

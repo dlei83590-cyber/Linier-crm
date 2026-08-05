@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import type { CustomerAddressType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
 import { ok, failValidation, failNotFound, parsePagination } from "@/lib/api/response";
@@ -38,7 +39,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const where = {
     customerId: id,
     deletedAt: null,
-    ...(addressType ? { addressType } : {}),
+    ...(addressType ? { addressType: addressType as CustomerAddressType } : {}),
   };
 
   const [total, items] = await Promise.all([
