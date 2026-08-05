@@ -13,13 +13,18 @@ datasource db {
 }
 
 /// 物料分类：成品 / 原材料 / 配件 / 外购件 / 服务 / 包装物
-enum ItemCategory {
-  FINISHED_GOOD
-  RAW_MATERIAL
-  ACCESSORY
-  PURCHASED_PART
-  SERVICE
-  PACKAGING
+/// 物料分类（CTO #2075：10 类，未来只加枚举值不加字段）
+enum ItemType {
+  FINISHED_GOOD // 成品
+  RAW_MATERIAL // 原材料
+  SEMI_FINISHED // 半成品
+  PURCHASED_PART // 外购件
+  ACCESSORY // 辅料/配件
+  SERVICE // 服务
+  CONSUMABLE // 消耗品
+  ASSET // 资产
+  TOOLING // 工装/模具
+  PACKAGING // 包装材料
 }
 
 /// 审核状态：草稿 / 待审核 / 已审核 / 已驳回
@@ -50,13 +55,40 @@ enum PriceType {
   HISTORICAL // 历史价
 }
 
-/// 物料生命周期（引入期/成长期/成熟期/衰退期/停产）
+/// 物料生命周期（CTO #2075：产品生命周期，与 ItemStatus 系统状态分离）
 enum ItemLifecycle {
-  INTRO
-  GROWTH
-  MATURE
-  DECLINE
-  EOL
+  DESIGN // 设计
+  TRIAL // 试产
+  MASS_PRODUCTION // 量产
+  DISCONTINUED // 停产
+  OBSOLETE // 淘汰
+}
+
+/// 物料系统状态（CTO #2075：是否允许使用，与 Lifecycle 分离）
+enum ItemStatus {
+  ACTIVE // 可用
+  INACTIVE // 停用
+  LOCKED // 锁定（不允许变更）
+  ARCHIVED // 归档（只读）
+}
+
+/// 物料成本类型（CTO #2075：只建接口不写算法，Finance 引用）
+enum ItemCostType {
+  STANDARD // 标准成本
+  LAST_PURCHASE // 最近采购价
+  AVERAGE // 移动平均
+  CURRENT // 现行成本
+}
+
+/// 附件类型（CTO #2075：统一放 File Center，Project/Supplier/Customer/Quotation 共用）
+enum AttachmentType {
+  DRAWING // 图纸
+  CERTIFICATE // 证书
+  PHOTO // 照片
+  MANUAL // 手册
+  MODEL_3D // 3D 模型
+  VIDEO // 视频
+  INSPECTION_REPORT // 检验报告
 }
 
 /// 单据类型（报价/SO/PO/PI/CI/DO/GRN/GI/发票/贷项/借项/付款/收款/费用/日记账/合同/项目）
@@ -203,7 +235,12 @@ model UnitOfMeasure {
   approvalStatus ApprovalStatus @default(DRAFT)
   version       Int      @default(1)
   deletedAt     DateTime?
-  items         Item[]
+  items         Item[]          @relation("ItemUnit")
+  stockItems    Item[]          @relation("ItemStockUom")
+  purchaseItems Item[]          @relation("ItemPurchaseUom")
+  salesItems    Item[]          @relation("ItemSalesUom")
+  fromConversions UomConversion[] @relation("UomConversionFrom")
+  toConversions   UomConversion[] @relation("UomConversionTo")
   createdAt     DateTime @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 
@@ -215,20 +252,30 @@ model UnitOfMeasure {
 /// 名称、型号、规格、计量单位统一维护；品类差异通过扩展模型承载（如直线导轨规格）。
 model Item {
   id            String          @id @default(cuid())
-  code          String          @unique // 内部编码
+  code          String          @unique // InternalCode 内部编码（唯一）
   mnemonic      String? // 助记码
   name          String // 中文名称
-  model         String? // 型号
-  spec          String? // 规格描述
+  itemType      ItemType        @default(FINISHED_GOOD) // 分类枚举（CTO #2075：10 类）
+  // 五级层级（CTO #2075）：Level1 Category → Level2 SubCategory → Level3 Series → Level4 Model → Level5 Variant
+  categoryId    String? // Level2 SubCategory（ItemCategory 树叶子）
+  category      ItemCategory?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  series        String? // Level3 系列（如 SM）
+  model         String? // Level4 型号（如 SMH45A）
+  variant       String? // Level5 变型（如 SMH45A-R1515-Z0）
+  spec          String? // 规格描述（简要）
   brand         String? // 品牌
   manufacturer  String? // 制造商
+  // Identification（CTO #2075）：CustomerCode/SupplierCode 由 SupplierItem（+Sprint 4 CustomerItem）承载
   oemCode       String? // OEM 编码
-  customerItemNo String? // 客户料号
-  supplierItemNo String? // 供应商料号
-  drawingNo     String? // 图号
+  barcode       String? // 条码
+  qrCode        String? // 二维码内容
+  drawingNo     String? // 图号（关联 File Center attachmentType=DRAWING）
   drawingVersion String? // 图纸版本
-  lifecycle     ItemLifecycle? // 生命周期
-  obsolete      Boolean         @default(false) // 停产标记
+  revision      String? // 技术版本标识（如 A/B/1.0）
+  // 生命周期与系统状态（CTO #2075：两者分离）
+  lifecycle     ItemLifecycle? // 产品生命周期（DESIGN/TRIAL/MASS_PRODUCTION/DISCONTINUED/OBSOLETE）
+  status        ItemStatus      @default(ACTIVE) // 系统状态（ACTIVE/INACTIVE/LOCKED/ARCHIVED）
+  obsolete      Boolean         @default(false) // 停产标记（兼容）
   replacementItemId String? // 替代料
   replacementItem Item?          @relation("ItemReplacement", fields: [replacementItemId], references: [id], onDelete: SetNull)
   replacedBy    Item[]          @relation("ItemReplacement")
@@ -236,9 +283,19 @@ model Item {
   procurementLeadTime Int? // 采购周期（天）
   moq           Decimal?        @db.Decimal(14, 2) // MOQ
   safetyStock   Decimal?        @db.Decimal(14, 2) // 安全库存
-  category      ItemCategory    @default(FINISHED_GOOD)
-  unitId        String?
-  unit          UnitOfMeasure?  @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  // 多 UOM（CTO #2075：Stock/Purchase/Sales + Conversion）
+  unitId        String? // 兼容默认单位
+  unit          UnitOfMeasure?  @relation("ItemUnit", fields: [unitId], references: [id], onDelete: SetNull)
+  stockUomId    String? // 库存单位
+  stockUom      UnitOfMeasure?  @relation("ItemStockUom", fields: [stockUomId], references: [id], onDelete: SetNull)
+  purchaseUomId String? // 采购单位
+  purchaseUom   UnitOfMeasure?  @relation("ItemPurchaseUom", fields: [purchaseUomId], references: [id], onDelete: SetNull)
+  salesUomId    String? // 销售单位
+  salesUom      UnitOfMeasure?  @relation("ItemSalesUom", fields: [salesUomId], references: [id], onDelete: SetNull)
+  // 业务开关
+  isSalable       Boolean @default(true) // 可销售
+  isPurchasable   Boolean @default(true) // 可采购
+  isManufacturable Boolean @default(false) // 可生产
   description   String?
   isActive      Boolean         @default(true)
   createdById   String?
@@ -251,13 +308,20 @@ model Item {
   standards     ItemStandard[]
   priceListItems PriceListItem[]
   projectProducts ProjectProduct[]
+  specifications ItemSpecification[]
+  uomConversions UomConversion[]
+  costs          ItemCost[]
+  supplierItems  SupplierItem[]
+  revisions      ItemRevision[]
+  tags           ItemTag[]
   createdAt     DateTime        @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime        @updatedAt @db.Timestamptz(3)
 
   @@index([name])
   @@index([model])
   @@index([mnemonic])
-  @@index([category])
+  @@index([itemType])
+  @@index([categoryId])
   @@index([replacementItemId])
   @@index([deletedAt])
 }
@@ -370,6 +434,7 @@ model BusinessPartner {
   partnerBankAccounts PartnerBankAccount[]
   partnerCredit       PartnerCredit?
   suppliers           Supplier[]
+  supplierItems       SupplierItem[]
   createdAt           DateTime       @default(now()) @db.Timestamptz(3)
   updatedAt           DateTime       @updatedAt @db.Timestamptz(3)
 
@@ -1876,8 +1941,9 @@ model FileAttachment {
   id           String   @id @default(cuid())
   fileId       String
   file         File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
-  businessType String // quotation/contract/sales-order/invoice/project
+  businessType String // quotation/contract/sales-order/invoice/project/item
   businessId   String
+  attachmentType AttachmentType? // CTO #2075：统一放 File Center（Drawing/Certificate/Photo/Manual/3DModel/Video/InspectionReport）
   sort         Int      @default(0)
   isActive     Boolean  @default(true)
   createdById  String?
@@ -2034,6 +2100,7 @@ model Tag {
   enabled     Boolean       @default(true)
   customers   CustomerTag[]
   partnerTags PartnerTag[]
+  itemTags    ItemTag[]
   isActive    Boolean       @default(true)
   createdById String?
   updatedById String?
@@ -2401,5 +2468,194 @@ model SupplierSettlement {
   updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([supplierId])
+  @@index([deletedAt])
+}
+
+// ============ Sprint 3C-3 Item Foundation（Item Master，CTO #2075 定稿）============
+
+/// 物料分类树（CTO #2075 五级层级 Level1 Category → Level2 SubCategory）
+model ItemCategory {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  parentId    String? // Level1 Category 的 parentId=null；Level2 SubCategory 指向 Category
+  parent      ItemCategory? @relation("ItemCategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children    ItemCategory[] @relation("ItemCategoryTree")
+  level       Int      @default(1) // 1=Category, 2=SubCategory（CTO：不设第六层）
+  sort        Int      @default(0)
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  items       Item[]
+  @@index([parentId])
+  @@index([level])
+  @@index([deletedAt])
+}
+
+/// 物料规格（CTO #2075：key/value/unit/sort KV 表，不建几十个字段）
+model ItemSpecification {
+  id        String   @id @default(cuid())
+  itemId    String
+  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  specKey   String
+  specValue String
+  unit      String?
+  sort      Int      @default(0)
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([itemId])
+  @@index([deletedAt])
+}
+
+/// UOM 换算（CTO #2075：Stock/Purchase/Sales 互转，1 from = factor to）
+model UomConversion {
+  id        String   @id @default(cuid())
+  itemId    String
+  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  fromUomId String
+  fromUom   UnitOfMeasure @relation("UomConversionFrom", fields: [fromUomId], references: [id], onDelete: Restrict)
+  toUomId   String
+  toUom     UnitOfMeasure @relation("UomConversionTo", fields: [toUomId], references: [id], onDelete: Restrict)
+  factor    Decimal  @db.Decimal(18, 6)
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([itemId, fromUomId, toUomId])
+  @@index([itemId])
+  @@index([deletedAt])
+}
+
+/// 物料成本（CTO #2075：只建接口不写算法；时间维度 effectiveFrom/effectiveTo/currency/source）
+model ItemCost {
+  id            String   @id @default(cuid())
+  itemId        String
+  item          Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  costType      ItemCostType // STANDARD/LAST_PURCHASE/AVERAGE/CURRENT
+  amount        Decimal  @db.Decimal(18, 4)
+  currency      String   @default("CNY")
+  effectiveFrom DateTime?
+  effectiveTo   DateTime?
+  source        String? // 数据来源（手工/采购单/财务导入）
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([itemId])
+  @@index([costType])
+  @@index([deletedAt])
+}
+
+/// 供应商物料（CTO #2075：一个 Item 多个供应商，不建 SupplierId 单值字段）
+model SupplierItem {
+  id            String   @id @default(cuid())
+  itemId        String
+  item          Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  supplierId    String // BusinessPartner type=SUPPLIER/BOTH
+  supplier      BusinessPartner @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  supplierCode  String? // 供应商料号
+  moq           Decimal? @db.Decimal(18, 4) // MOQ
+  leadTime      Int? // 交期（天）
+  currency      String   @default("CNY")
+  purchasePrice Decimal? @db.Decimal(18, 4) // 采购参考价
+  isPreferred   Boolean  @default(false) // 优选供应商
+  incoterm      String? // 贸易术语（EXW/FOB/CIF...）
+  paymentTerm   String? // 付款条款（NET30/TT/LC...）
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([itemId, supplierId])
+  @@index([itemId])
+  @@index([supplierId])
+  @@index([deletedAt])
+}
+
+/// 物料版本发布（CTO #2075：Revision/ChangeSummary/ReleasedBy/ReleasedAt/Status）
+model ItemRevision {
+  id           String   @id @default(cuid())
+  itemId       String
+  item         Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  revisionNo   Int      // 版本号（1,2,3...）
+  revision     String   // 版本标识（A/B/1.0）
+  changeSummary String  // 变更说明
+  releasedById String?  // 发布人
+  releasedAt   DateTime @default(now())
+  status       String   @default("RELEASED") // DRAFT/RELEASED/SUPERSEDED
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([itemId, revisionNo])
+  @@index([itemId])
+  @@index([deletedAt])
+}
+
+/// 物料标签（CTO #2075：Tag 统一主数据 + PartnerTag/ItemTag/ProjectTag 三张 Relation）
+model ItemTag {
+  id        String   @id @default(cuid())
+  itemId    String
+  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  tagId     String
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([itemId, tagId])
+  @@index([itemId])
+  @@index([tagId])
   @@index([deletedAt])
 }

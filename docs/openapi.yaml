@@ -4525,6 +4525,899 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+
+  /api/items:
+    get:
+      tags: [Item Master]
+      summary: List items (pagination + filters)
+      operationId: listItems
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: pageSize, in: query, schema: { type: integer } }
+        - { name: code, in: query, schema: { type: string } }
+        - { name: name, in: query, schema: { type: string } }
+        - { name: itemType, in: query, schema: { $ref: "#/components/schemas/ItemType" } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/ItemStatus" } }
+        - { name: categoryId, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Item Master]
+      summary: Create item (Item Master)
+      operationId: createItem
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/items/{id}:
+    get:
+      tags: [Item Master]
+      summary: Get item detail (with category/uoms/specs/costs/suppliers/revisions/tags)
+      operationId: getItem
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Item Master]
+      summary: Update item (optimistic lock)
+      operationId: updateItem
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Item Master]
+      summary: Soft delete item (blocked if referenced)
+      operationId: deleteItem
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/items/{id}/specifications:
+    get:
+      tags: [Item Master]
+      summary: List item specifications (KV)
+      operationId: listItemSpecifications
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: pageSize, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemSpecificationListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Item Master]
+      summary: Create item specification
+      operationId: createItemSpecification
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemSpecificationCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemSpecificationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/items/{id}/specifications/{specId}:
+    patch:
+      tags: [Item Master]
+      summary: Update item specification (optimistic lock)
+      operationId: updateItemSpecification
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: specId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemSpecificationUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemSpecificationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Item Master]
+      summary: Soft delete item specification
+      operationId: deleteItemSpecification
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: specId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/items/{id}/uom-conversions:
+    get:
+      tags: [Item Master]
+      summary: List item UOM conversions
+      operationId: listItemUomConversions
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: pageSize, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UomConversionListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Item Master]
+      summary: Create UOM conversion (1 from = factor to)
+      operationId: createUomConversion
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UomConversionCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UomConversionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/items/{id}/uom-conversions/{conversionId}:
+    patch:
+      tags: [Item Master]
+      summary: Update UOM conversion (optimistic lock)
+      operationId: updateUomConversion
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: conversionId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UomConversionUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UomConversionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Item Master]
+      summary: Soft delete UOM conversion
+      operationId: deleteUomConversion
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: conversionId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/items/{id}/costs:
+    get:
+      tags: [Item Master]
+      summary: List item costs (by costType)
+      operationId: listItemCosts
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: costType, in: query, schema: { $ref: "#/components/schemas/ItemCostType" } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: pageSize, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemCostListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Item Master]
+      summary: Create item cost (interface only, no algorithm)
+      operationId: createItemCost
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemCostCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemCostResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/items/{id}/costs/{costId}:
+    patch:
+      tags: [Item Master]
+      summary: Update item cost (optimistic lock)
+      operationId: updateItemCost
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: costId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemCostUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemCostResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Item Master]
+      summary: Soft delete item cost
+      operationId: deleteItemCost
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: costId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/items/{id}/supplier-items:
+    get:
+      tags: [Item Master]
+      summary: List supplier items (one item many suppliers)
+      operationId: listSupplierItems
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: pageSize, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierItemListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Item Master]
+      summary: Add supplier to item (supplierCode/MOQ/LeadTime/Price/Incoterm/PaymentTerm)
+      operationId: createSupplierItem
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierItemCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierItemResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/items/{id}/supplier-items/{supplierItemId}:
+    patch:
+      tags: [Item Master]
+      summary: Update supplier item (optimistic lock)
+      operationId: updateSupplierItem
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: supplierItemId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierItemUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierItemResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Item Master]
+      summary: Soft delete supplier item
+      operationId: deleteSupplierItem
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: supplierItemId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/items/{id}/revisions:
+    get:
+      tags: [Item Master]
+      summary: List item revisions
+      operationId: listItemRevisions
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: pageSize, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemRevisionListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Item Master]
+      summary: Release new item revision (revisionNo+1, sync Item.revision)
+      operationId: releaseItemRevision
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemRevisionCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemRevisionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/items/{id}/tags:
+    get:
+      tags: [Item Master]
+      summary: List item tags
+      operationId: listItemTags
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: pageSize, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemTagListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Item Master]
+      summary: Add tag to item
+      operationId: addItemTag
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemTagCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemTagResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/items/{id}/tags/{tagId}:
+    delete:
+      tags: [Item Master]
+      summary: Remove tag from item
+      operationId: removeItemTag
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: tagId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/items/{id}/attachments:
+    get:
+      tags: [Item Master]
+      summary: List item attachments (File Center, businessType=item)
+      operationId: listItemAttachments
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: pageSize, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileAttachmentListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Item Master]
+      summary: Attach file to item (attachmentType)
+      operationId: createItemAttachment
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemAttachmentCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileAttachmentResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/item-categories:
+    get:
+      tags: [Item Master]
+      summary: List item categories (level/parentId filter)
+      operationId: listItemCategories
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: pageSize, in: query, schema: { type: integer } }
+        - { name: level, in: query, schema: { type: integer } }
+        - { name: parentId, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemCategoryListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Item Master]
+      summary: Create item category (Level1/Level2 only)
+      operationId: createItemCategory
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemCategoryCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemCategoryResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/item-categories/{id}:
+    get:
+      tags: [Item Master]
+      summary: Get item category detail
+      operationId: getItemCategory
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemCategoryResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Item Master]
+      summary: Update item category (optimistic lock)
+      operationId: updateItemCategory
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemCategoryUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemCategoryResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Item Master]
+      summary: Soft delete item category (blocked if has children/items)
+      operationId: deleteItemCategory
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -6888,4 +7781,459 @@ components:
         data:
           type: array
           items: { $ref: "#/components/schemas/PartnerRole" }
+
+
+    ItemType:
+      type: string
+      enum: [FINISHED_GOOD, RAW_MATERIAL, SEMI_FINISHED, PURCHASED_PART, ACCESSORY, SERVICE, CONSUMABLE, ASSET, TOOLING, PACKAGING]
+    ItemStatus:
+      type: string
+      enum: [ACTIVE, INACTIVE, LOCKED, ARCHIVED]
+    ItemCostType:
+      type: string
+      enum: [STANDARD, LAST_PURCHASE, AVERAGE, CURRENT]
+    AttachmentType:
+      type: string
+      enum: [DRAWING, CERTIFICATE, PHOTO, MANUAL, MODEL_3D, VIDEO, INSPECTION_REPORT]
+
+    Item:
+      type: object
+      required: [id, code, name, itemType, status, version]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        itemType: { $ref: "#/components/schemas/ItemType" }
+        categoryId: { type: [string, "null"] }
+        series: { type: [string, "null"] }
+        model: { type: [string, "null"] }
+        variant: { type: [string, "null"] }
+        oemCode: { type: [string, "null"] }
+        barcode: { type: [string, "null"] }
+        qrCode: { type: [string, "null"] }
+        drawingNo: { type: [string, "null"] }
+        revision: { type: [string, "null"] }
+        lifecycle: { type: [string, "null"] }
+        status: { $ref: "#/components/schemas/ItemStatus" }
+        stockUomId: { type: [string, "null"] }
+        purchaseUomId: { type: [string, "null"] }
+        salesUomId: { type: [string, "null"] }
+        isSalable: { type: boolean }
+        isPurchasable: { type: boolean }
+        isManufacturable: { type: boolean }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ItemCreate:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string }
+        mnemonic: { type: string }
+        name: { type: string }
+        itemType: { $ref: "#/components/schemas/ItemType" }
+        categoryId: { type: string }
+        series: { type: string }
+        model: { type: string }
+        variant: { type: string }
+        spec: { type: string }
+        brand: { type: string }
+        manufacturer: { type: string }
+        oemCode: { type: string }
+        barcode: { type: string }
+        qrCode: { type: string }
+        drawingNo: { type: string }
+        revision: { type: string }
+        lifecycle: { type: string }
+        status: { $ref: "#/components/schemas/ItemStatus" }
+        stockUomId: { type: string }
+        purchaseUomId: { type: string }
+        salesUomId: { type: string }
+        isSalable: { type: boolean }
+        isPurchasable: { type: boolean }
+        isManufacturable: { type: boolean }
+        description: { type: string }
+    ItemUpdate:
+      type: object
+      required: [version]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        itemType: { $ref: "#/components/schemas/ItemType" }
+        categoryId: { type: string }
+        series: { type: string }
+        model: { type: string }
+        variant: { type: string }
+        status: { $ref: "#/components/schemas/ItemStatus" }
+        lifecycle: { type: string }
+        stockUomId: { type: string }
+        purchaseUomId: { type: string }
+        salesUomId: { type: string }
+        isSalable: { type: boolean }
+        isPurchasable: { type: boolean }
+        isManufacturable: { type: boolean }
+        version: { type: integer }
+    ItemResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/Item" }
+    ItemListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Item" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    ItemCategory:
+      type: object
+      required: [id, code, name, level, version]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        parentId: { type: [string, "null"] }
+        level: { type: integer }
+        sort: { type: integer }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ItemCategoryCreate:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        parentId: { type: string }
+        level: { type: integer, default: 1 }
+        sort: { type: integer, default: 0 }
+    ItemCategoryUpdate:
+      type: object
+      required: [version]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        parentId: { type: string }
+        sort: { type: integer }
+        version: { type: integer }
+    ItemCategoryResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/ItemCategory" }
+    ItemCategoryListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/ItemCategory" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    ItemSpecification:
+      type: object
+      required: [id, itemId, specKey, specValue, version]
+      properties:
+        id: { type: string }
+        itemId: { type: string }
+        specKey: { type: string }
+        specValue: { type: string }
+        unit: { type: [string, "null"] }
+        sort: { type: integer }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ItemSpecificationCreate:
+      type: object
+      required: [specKey, specValue]
+      properties:
+        specKey: { type: string }
+        specValue: { type: string }
+        unit: { type: string }
+        sort: { type: integer, default: 0 }
+    ItemSpecificationUpdate:
+      type: object
+      required: [version]
+      properties:
+        specKey: { type: string }
+        specValue: { type: string }
+        unit: { type: string }
+        sort: { type: integer }
+        version: { type: integer }
+    ItemSpecificationResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/ItemSpecification" }
+    ItemSpecificationListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/ItemSpecification" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    UomConversion:
+      type: object
+      required: [id, itemId, fromUomId, toUomId, factor, version]
+      properties:
+        id: { type: string }
+        itemId: { type: string }
+        fromUomId: { type: string }
+        toUomId: { type: string }
+        factor: { type: number }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    UomConversionCreate:
+      type: object
+      required: [fromUomId, toUomId, factor]
+      properties:
+        fromUomId: { type: string }
+        toUomId: { type: string }
+        factor: { type: number }
+    UomConversionUpdate:
+      type: object
+      required: [version]
+      properties:
+        fromUomId: { type: string }
+        toUomId: { type: string }
+        factor: { type: number }
+        version: { type: integer }
+    UomConversionResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/UomConversion" }
+    UomConversionListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/UomConversion" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    ItemCost:
+      type: object
+      required: [id, itemId, costType, amount, currency, version]
+      properties:
+        id: { type: string }
+        itemId: { type: string }
+        costType: { $ref: "#/components/schemas/ItemCostType" }
+        amount: { type: number }
+        currency: { type: string }
+        effectiveFrom: { type: [string, "null"], format: date-time }
+        effectiveTo: { type: [string, "null"], format: date-time }
+        source: { type: [string, "null"] }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ItemCostCreate:
+      type: object
+      required: [costType, amount]
+      properties:
+        costType: { $ref: "#/components/schemas/ItemCostType" }
+        amount: { type: number }
+        currency: { type: string, default: CNY }
+        effectiveFrom: { type: string, format: date-time }
+        effectiveTo: { type: string, format: date-time }
+        source: { type: string }
+    ItemCostUpdate:
+      type: object
+      required: [version]
+      properties:
+        costType: { $ref: "#/components/schemas/ItemCostType" }
+        amount: { type: number }
+        currency: { type: string }
+        effectiveFrom: { type: string, format: date-time }
+        effectiveTo: { type: string, format: date-time }
+        source: { type: string }
+        version: { type: integer }
+    ItemCostResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/ItemCost" }
+    ItemCostListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/ItemCost" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    SupplierItem:
+      type: object
+      required: [id, itemId, supplierId, version]
+      properties:
+        id: { type: string }
+        itemId: { type: string }
+        supplierId: { type: string }
+        supplierCode: { type: [string, "null"] }
+        moq: { type: [number, "null"] }
+        leadTime: { type: [integer, "null"] }
+        currency: { type: string }
+        purchasePrice: { type: [number, "null"] }
+        isPreferred: { type: boolean }
+        incoterm: { type: [string, "null"] }
+        paymentTerm: { type: [string, "null"] }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    SupplierItemCreate:
+      type: object
+      required: [supplierId]
+      properties:
+        supplierId: { type: string }
+        supplierCode: { type: string }
+        moq: { type: number }
+        leadTime: { type: integer }
+        currency: { type: string, default: CNY }
+        purchasePrice: { type: number }
+        isPreferred: { type: boolean, default: false }
+        incoterm: { type: string }
+        paymentTerm: { type: string }
+    SupplierItemUpdate:
+      type: object
+      required: [version]
+      properties:
+        supplierCode: { type: string }
+        moq: { type: number }
+        leadTime: { type: integer }
+        currency: { type: string }
+        purchasePrice: { type: number }
+        isPreferred: { type: boolean }
+        incoterm: { type: string }
+        paymentTerm: { type: string }
+        version: { type: integer }
+    SupplierItemResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/SupplierItem" }
+    SupplierItemListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/SupplierItem" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    ItemRevision:
+      type: object
+      required: [id, itemId, revisionNo, revision, changeSummary, version]
+      properties:
+        id: { type: string }
+        itemId: { type: string }
+        revisionNo: { type: integer }
+        revision: { type: string }
+        changeSummary: { type: string }
+        releasedById: { type: [string, "null"] }
+        releasedAt: { type: string, format: date-time }
+        status: { type: string }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ItemRevisionCreate:
+      type: object
+      required: [revision, changeSummary]
+      properties:
+        revision: { type: string }
+        changeSummary: { type: string }
+        status: { type: string, default: RELEASED }
+    ItemRevisionResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/ItemRevision" }
+    ItemRevisionListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/ItemRevision" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    ItemTag:
+      type: object
+      required: [id, itemId, tagId, version]
+      properties:
+        id: { type: string }
+        itemId: { type: string }
+        tagId: { type: string }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ItemTagCreate:
+      type: object
+      required: [tagId]
+      properties:
+        tagId: { type: string }
+    ItemTagResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/ItemTag" }
+    ItemTagListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/ItemTag" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    ItemAttachmentCreate:
+      type: object
+      required: [fileId]
+      properties:
+        fileId: { type: string }
+        attachmentType: { $ref: "#/components/schemas/AttachmentType" }
+        sort: { type: integer, default: 0 }
+    FileAttachmentResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/FileAttachment" }
+    FileAttachmentListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/FileAttachment" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
 

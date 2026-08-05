@@ -93,6 +93,15 @@ const ROLE_PERMISSIONS: Record<RoleCode, PermissionCode[]> = {
     "partner-tag:view", "partner-tag:create", "partner-tag:edit", "partner-tag:delete", "partner-tag:approve", "partner-tag:audit", "partner-tag:export", "partner-tag:import", "partner-tag:assign", "partner-tag:close",
     "partner-bank-account:view", "partner-bank-account:create", "partner-bank-account:edit", "partner-bank-account:delete", "partner-bank-account:approve", "partner-bank-account:audit", "partner-bank-account:export", "partner-bank-account:import", "partner-bank-account:assign", "partner-bank-account:close",
     "partner-credit:view", "partner-credit:create", "partner-credit:edit", "partner-credit:delete", "partner-credit:approve", "partner-credit:audit", "partner-credit:export", "partner-credit:import", "partner-credit:assign", "partner-credit:close",
+    // Sprint 3C-3：Item Master Foundation（item 动作级已存在，新增 8 子模块）
+    "item-category:view", "item-category:create", "item-category:edit", "item-category:delete", "item-category:approve", "item-category:audit", "item-category:export", "item-category:import", "item-category:assign", "item-category:close",
+    "item-specification:view", "item-specification:create", "item-specification:edit", "item-specification:delete", "item-specification:approve", "item-specification:audit", "item-specification:export", "item-specification:import", "item-specification:assign", "item-specification:close",
+    "item-uom:view", "item-uom:create", "item-uom:edit", "item-uom:delete", "item-uom:approve", "item-uom:audit", "item-uom:export", "item-uom:import", "item-uom:assign", "item-uom:close",
+    "item-cost:view", "item-cost:create", "item-cost:edit", "item-cost:delete", "item-cost:approve", "item-cost:audit", "item-cost:export", "item-cost:import", "item-cost:assign", "item-cost:close",
+    "item-supplier:view", "item-supplier:create", "item-supplier:edit", "item-supplier:delete", "item-supplier:approve", "item-supplier:audit", "item-supplier:export", "item-supplier:import", "item-supplier:assign", "item-supplier:close",
+    "item-revision:view", "item-revision:create", "item-revision:edit", "item-revision:delete", "item-revision:approve", "item-revision:audit", "item-revision:export", "item-revision:import", "item-revision:assign", "item-revision:close",
+    "item-tag:view", "item-tag:create", "item-tag:edit", "item-tag:delete", "item-tag:approve", "item-tag:audit", "item-tag:export", "item-tag:import", "item-tag:assign", "item-tag:close",
+    "item-attachment:view", "item-attachment:create", "item-attachment:edit", "item-attachment:delete", "item-attachment:approve", "item-attachment:audit", "item-attachment:export", "item-attachment:import", "item-attachment:assign", "item-attachment:close",
   ],
   MEMBER: [
     PERMISSIONS.USER_READ,

@@ -65,6 +65,10 @@
 | `CustomerCreated` | 客户建档（3C-1） | `{ customerId, code, name }` |
 | `SupplierCreated` | 供应商建档（3C-2） | `{ supplierId, code, name }` |
 | `ItemCreated` | 物料建档（3C-3） | `{ itemId, code, name, itemType }` |
+| `ItemUpdated` | 物料更新（3C-3） | `{ itemId, code, changedFields, updatedBy, updatedAt }` |
+| `ItemObsoleted` | 物料停产/淘汰（lifecycle → DISCONTINUED/OBSOLETE） | `{ itemId, code, lifecycle, obsoletedBy, obsoletedAt }` |
+| `ItemPriceChanged` | 物料成本/价格变更（3C-3 ItemCost） | `{ itemId, code, costType, oldAmount, newAmount, currency, changedBy, changedAt }` |
+| `ItemRevisionReleased` | 物料新版本发布（3C-3 ItemRevision） | `{ itemId, code, revisionNo, revision, changeSummary, releasedBy, releasedAt }` |
 | `PriceListChanged` | 价格表变更（3C-5） | `{ priceListId, code, priceType }` |
 
 ## 3. 订阅方约定
@@ -87,4 +91,5 @@
 
 | 日期 | 版本 | 说明 |
 | --- | --- | --- |
+| 2026-08-06 | v1.1 | 追加 Item Master 事件（ItemCreated/ItemUpdated/ItemObsoleted/ItemPriceChanged/ItemRevisionReleased，CTO #2075） |
 | 2026-08-05 | v1.0 | 初始注册（项目/工作流/业务单据/主数据事件） |

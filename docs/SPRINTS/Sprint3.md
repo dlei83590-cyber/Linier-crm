@@ -51,8 +51,8 @@
 | 子阶段 | 内容 | 状态 |
 | --- | --- | --- |
 | 3C-1 | Customer Foundation：Customer / Contact / Address / Tag / Industry / Credit | ✅ Closed（PR #7 已合并，main=f0839262） |
-| 3C-2 | Supplier Foundation：Supplier + 独有 Qualification/Certificate/Settlement + Partner 共享（Contact/Address/Tag/BankAccount/Credit） | 🔄 Implementation（PR #8） |
-| 3C-3 | Item Foundation：Item / Specification / Category / Brand / UOM / Price / Attachment | ⬜ |
+| 3C-2 | Supplier Foundation：Supplier + 独有 Qualification/Certificate/Settlement + Partner 共享（Contact/Address/Tag/BankAccount/Credit） | ✅ Closed（PR #8 已合并，main=c27c59130b） |
+| 3C-3 | Item Foundation：Item Master（ItemType 10 类/五级层级/多 UOM/ItemSpecification/ItemCost/SupplierItem/ItemRevision/ItemTag） | 🔄 Implementation（PR #9） |
 | 3C-4 | Project Foundation：Opportunity / Project / Milestone / Task / Visit / Risk / Expense | ⬜ |
 | 3C-5 | Price Foundation：Price List / Price Rule / Customer Price / Region Price / History | ⬜ |
 
