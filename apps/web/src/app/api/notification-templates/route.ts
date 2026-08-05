@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import type { NotificationChannelType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, clientIp, writeAuditLog } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, parsePagination } from "@/lib/api/response";
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
     deletedAt: null,
     ...(code ? { code: { contains: code } } : {}),
     ...(name ? { name: { contains: name } } : {}),
-    ...(channel ? { channel } : {}),
+    ...(channel ? { channel: channel as NotificationChannelType } : {}),
   };
 
   const [total, items] = await Promise.all([

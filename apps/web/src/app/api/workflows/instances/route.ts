@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import type { WorkflowInstanceStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, clientIp, writeAuditLog } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound, parsePagination } from "@/lib/api/response";
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
     deletedAt: null,
     ...(businessType ? { businessType } : {}),
     ...(businessId ? { businessId } : {}),
-    ...(status ? { status } : {}),
+    ...(status ? { status: status as WorkflowInstanceStatus } : {}),
     ...(definitionId ? { definitionId } : {}),
     ...(startedBy ? { startedBy } : {}),
   };

@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import type { WorkflowStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, clientIp, writeAuditLog } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, parsePagination } from "@/lib/api/response";
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
     ...(code ? { code: { contains: code } } : {}),
     ...(name ? { name: { contains: name } } : {}),
     ...(moduleName ? { module: moduleName } : {}),
-    ...(status ? { status } : {}),
+    ...(status ? { status: status as WorkflowStatus } : {}),
   };
 
   const [total, items] = await Promise.all([
