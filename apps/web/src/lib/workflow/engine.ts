@@ -103,7 +103,9 @@ export function isStepComplete(
   if (approvalMode === "ANY_ONE") {
     return approvers.some((a) => a.status === "APPROVED");
   }
-  if (approvalMode === "COUNTERSIGN" && countersignCount && countersignCount > 0) {
+  if (approvalMode === "COUNTERSIGN") {
+    // 会签必须明确指定人数；未配置时保守判定为未完成（防误放行）
+    if (!countersignCount || countersignCount <= 0) return false;
     const approved = approvers.filter((a) => a.status === "APPROVED").length;
     return approved >= countersignCount;
   }

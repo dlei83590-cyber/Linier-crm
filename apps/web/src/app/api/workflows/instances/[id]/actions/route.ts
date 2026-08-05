@@ -97,7 +97,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         a.id === target.id ? { ...a, status: "APPROVED" as const } : a,
       );
       const step = definition.steps.find((s) => s.stepNo === currentStepNo);
-      const complete = isStepComplete(step?.approvalMode ?? "SEQUENTIAL", updated);
+      // COUNTERSIGN 会签：默认要求全部审批人通过（等同 PARALLEL），避免无法推进
+      const complete = isStepComplete(
+        step?.approvalMode ?? "SEQUENTIAL",
+        updated,
+        step?.approvalMode === "COUNTERSIGN" ? updated.length : undefined,
+      );
       if (complete) {
         const nextStep = definition.steps.find((s) => s.stepNo > currentStepNo);
         if (nextStep) {
