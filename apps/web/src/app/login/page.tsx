@@ -112,7 +112,7 @@ export default function LoginPage() {
 
         {process.env.NODE_ENV === "development" && (
           <p className="mt-4 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
-            开发环境测试账号：admin@nilier.local / ChangeMe123!
+            开发环境测试账号：admin@linier.com / ChangeMe123!
           </p>
         )}
       </div>

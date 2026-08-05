@@ -1,5 +1,7 @@
 export const APP_NAME = "Linier CRM Management System";
 
+export const APP_VERSION = "v0.1.0-alpha";
+
 export const ROLES = {
   SUPER_ADMIN: "SUPER_ADMIN",
   ADMIN: "ADMIN",

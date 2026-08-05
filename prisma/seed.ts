@@ -21,7 +21,7 @@ const SEED_PERMISSIONS: Array<{ name: string; code: string; module: string; desc
 ];
 
 async function main() {
-  const email = process.env.SEED_ADMIN_EMAIL ?? "admin@nilier.local";
+  const email = process.env.SEED_ADMIN_EMAIL ?? "admin@linier.com";
   const password = process.env.SEED_ADMIN_PASSWORD ?? "ChangeMe123!";
   const passwordHash = await hash(password, 12);
 
@@ -53,13 +53,14 @@ async function main() {
   }
 
   // Admin user
+  const adminName = process.env.SEED_ADMIN_NAME ?? "管理员";
   const user = await prisma.user.upsert({
     where: { email },
-    update: { passwordHash },
+    update: { passwordHash, name: adminName },
     create: {
       email,
       passwordHash,
-      name: "Demo Admin",
+      name: adminName,
       departmentId: engineering.id,
     },
   });

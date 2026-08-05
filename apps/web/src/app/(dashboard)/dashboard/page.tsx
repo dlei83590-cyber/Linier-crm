@@ -13,12 +13,15 @@ export default function DashboardPage() {
   const { state } = useSession();
   const user = state.user;
 
+  const greeting =
+    user?.roles?.includes("SUPER_ADMIN") ? "管理员" : user?.name ?? user?.email ?? "用户";
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-semibold text-slate-800">Dashboard</h1>
         <p className="mt-1 text-sm text-slate-500">
-          欢迎回来，{user?.name ?? user?.email ?? "用户"}。这里是系统概览。
+          欢迎回来，{greeting}。这里是系统概览。
         </p>
       </div>
 
