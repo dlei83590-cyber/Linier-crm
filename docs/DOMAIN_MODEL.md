@@ -1,6 +1,6 @@
 # DOMAIN_MODEL 领域模型
 
-- 版本：v1.0
+- 版本：v1.1
 - 日期：2026-08-05
 - 维护者：CIO（JINZA）｜审核：CTO
 - 关联：[PRODUCT_VISION.md](./PRODUCT_VISION.md) ｜ [ROADMAP.md](./ROADMAP.md) ｜ [ADR](./ADR/)
@@ -90,6 +90,365 @@ Project Expense / 日常 Expense ──> 审批流 ──> Voucher（凭证）
 ## 6. 已落地 vs 规划中
 
 - ✅ 已落地（Sprint 2，PR #4）：Item / LinearGuideSpecification / BusinessPartner / PriceList / TechnicalStandard / UnitOfMeasure / CommercialTerm / DocumentSequence + 项目领域 14 模型
+- ✅ 已落地（Sprint 3A，PR #待创建）：Workflow Foundation 22 模型（Workflow 6 + Approval 7 + Notification 4 + Dictionary 2 + Settings 3），见第 7-10 节
 - ⬜ 规划中（Sprint 4-7）：Quotation / Sales Order / Contract / Delivery / Invoice / Payment / Purchase / GRN / Warehouse / Stock / AR / AP / Voucher / Journal / GL
 
 > 详细字段标准见数据库 schema（`prisma/schema.prisma`）与 [architecture/domain-model.md](./architecture/domain-model.md)。
+
+## 7. Workflow Foundation（Sprint 3A）
+
+### 7.1 模型关系
+
+```mermaid
+erDiagram
+    WorkflowDefinition ||--o{ WorkflowStep : contains
+    WorkflowStep ||--o{ WorkflowCondition : evaluates
+    WorkflowDefinition ||--o{ WorkflowInstance : instantiates
+    WorkflowInstance ||--o{ WorkflowAction : records
+    WorkflowInstance ||--o{ WorkflowHistory : tracks
+    WorkflowInstance ||--o{ Approver : assigns
+
+    WorkflowDefinition {
+        string id PK
+        string code UK
+        string name
+        string module
+        int version
+        WorkflowStatus status
+        bool isActive
+        datetime deletedAt
+    }
+
+    WorkflowStep {
+        string id PK
+        string definitionId FK
+        int stepNo
+        string stepName
+        ApproverType approverType
+        string approverValue
+        ApprovalMode approvalMode
+        int timeoutHours
+        bool allowReject
+        bool allowTransfer
+        bool allowDelegate
+        bool allowWithdraw
+        datetime deletedAt
+    }
+
+    WorkflowCondition {
+        string id PK
+        string stepId FK
+        string expression
+        string field
+        ConditionOperator operator
+        string value
+        datetime deletedAt
+    }
+
+    WorkflowInstance {
+        string id PK
+        string definitionId FK
+        string businessType
+        string businessId
+        WorkflowInstanceStatus status
+        int currentStepNo
+        string startedBy
+        datetime startedAt
+        datetime completedAt
+        int version
+        datetime deletedAt
+    }
+
+    WorkflowAction {
+        string id PK
+        string instanceId FK
+        WorkflowActionType actionType
+        string actorId
+        string targetUserId
+        int stepNo
+        string comment
+        datetime deletedAt
+    }
+
+    WorkflowHistory {
+        string id PK
+        string instanceId FK
+        int stepNo
+        WorkflowActionType actionType
+        string beforeStatus
+        string afterStatus
+        string actorId
+        string ip
+        string device
+        string browser
+        string remark
+        string attachment
+        int duration
+        datetime deletedAt
+    }
+
+    Approver {
+        string id PK
+        string instanceId FK
+        int stepNo
+        string userId
+        ApproverStatus status
+        string delegatedFrom
+        datetime decidedAt
+        string comment
+        datetime deletedAt
+    }
+```
+
+### 7.2 定义状态机（WorkflowStatus）
+
+```mermaid
+stateDiagram-v2
+    [*] --> DRAFT
+    DRAFT --> ACTIVE: publish（需至少一个步骤）
+    ACTIVE --> ARCHIVED: archive
+    ARCHIVED --> [*]
+```
+
+> 注意：已发布（ACTIVE）/归档（ARCHIVED）后禁止修改 code/module/steps，只能修改 name/description；更新必须携带 version（乐观锁）。
+
+### 7.3 实例状态机（WorkflowInstanceStatus）
+
+```mermaid
+stateDiagram-v2
+    [*] --> RUNNING: create（SUBMIT 动作记录）
+    RUNNING --> RUNNING: approve(未到终步)/transfer/delegate/comment
+    RUNNING --> COMPLETED: approve（最后一步）
+    RUNNING --> REJECTED: reject / return（第一步退回=驳回）
+    RUNNING --> TERMINATED: terminate
+    RUNNING --> WITHDRAWN: withdraw（仅发起人）
+    COMPLETED --> RUNNING: submit（重新提交）
+    REJECTED --> RUNNING: submit（重新提交）
+    TERMINATED --> RUNNING: submit（重新提交）
+    WITHDRAWN --> RUNNING: submit（重新提交）
+    COMPLETED --> [*]
+    REJECTED --> [*]
+    TERMINATED --> [*]
+    WITHDRAWN --> [*]
+```
+
+> 审批人状态（ApproverStatus）：PENDING → APPROVED / REJECTED / DELEGATED / SKIPPED。
+
+## 8. Approval Engine（Sprint 3A，与 Workflow 解耦）
+
+```mermaid
+erDiagram
+    ApproverGroup ||--o{ ApproverGroupMember : contains
+    WorkflowInstance ||--o{ ApprovalDelegate : delegates
+    WorkflowInstance ||--o{ ApprovalEscalation : escalates
+    WorkflowInstance ||--o{ ApprovalTimeout : times_out
+    WorkflowInstance ||--o{ ApprovalReminder : reminds
+
+    ApproverGroup {
+        string id PK
+        string code UK
+        string name
+        string description
+        int version
+        datetime deletedAt
+    }
+
+    ApproverGroupMember {
+        string id PK
+        string groupId FK
+        string userId
+        datetime deletedAt
+    }
+
+    ApprovalDelegate {
+        string id PK
+        string fromUserId
+        string toUserId
+        datetime validFrom
+        datetime validTo
+        bool isActive
+        int version
+        datetime deletedAt
+    }
+
+    ApprovalEscalation {
+        string id PK
+        string instanceId FK
+        int stepNo
+        int thresholdHours
+        string escalateToUserId
+        int version
+        datetime deletedAt
+    }
+
+    ApprovalTimeout {
+        string id PK
+        string instanceId FK
+        int stepNo
+        int timeoutHours
+        WorkflowActionType actionOnTimeout
+        int version
+        datetime deletedAt
+    }
+
+    ApprovalReminder {
+        string id PK
+        string instanceId FK
+        int stepNo
+        int intervalHours
+        int maxTimes
+        int version
+        datetime deletedAt
+    }
+```
+
+> Workflow 定义流程（Definition/Step/Condition）；Approval 执行审批（Approver/Group/Delegate/Escalation/Timeout/Reminder）。
+
+## 9. Notification（Sprint 3A，统一事件中心）
+
+```mermaid
+erDiagram
+    NotificationTemplate ||--o{ NotificationMessage : renders
+    NotificationMessage ||--o{ NotificationLog : delivers
+
+    NotificationTemplate {
+        string id PK
+        string code UK
+        string name
+        NotificationChannelType channel
+        string subject
+        string content
+        int version
+        datetime deletedAt
+    }
+
+    NotificationMessage {
+        string id PK
+        string templateId FK
+        string recipientUserId
+        NotificationChannelType channel
+        string subject
+        string content
+        NotificationStatus status
+        datetime sentAt
+        datetime readAt
+        string error
+        int version
+        datetime deletedAt
+    }
+
+    NotificationChannel {
+        string id PK
+        string code UK
+        string name
+        NotificationChannelType channelType
+        Json config
+        int version
+        datetime deletedAt
+    }
+
+    NotificationLog {
+        string id PK
+        string messageId FK
+        NotificationChannelType channel
+        NotificationStatus status
+        Json payload
+        string error
+        int version
+        datetime deletedAt
+    }
+```
+
+> 渠道（NotificationChannelType）：SYSTEM / EMAIL / TELEGRAM / WEBHOOK（本轮仅建模，不真实发送）+ WECHAT / DINGTALK（预留）。
+> 状态（NotificationStatus）：PENDING / SENT / FAILED / READ。
+
+## 10. Dictionary 与 Settings（Sprint 3A）
+
+```mermaid
+erDiagram
+    DictionaryType ||--o{ DictionaryItem : contains
+
+    DictionaryType {
+        string id PK
+        string code UK
+        string name
+        string category
+        string language
+        int sort
+        string icon
+        string color
+        bool enabled
+        int version
+        datetime deletedAt
+    }
+
+    DictionaryItem {
+        string id PK
+        string typeId FK
+        string code
+        string label
+        int sort
+        string color
+        string icon
+        bool enabled
+        int version
+        datetime deletedAt
+    }
+
+    SystemSetting {
+        string id PK
+        string key UK
+        string value
+        SettingDataType dataType
+        bool encrypted
+        string description
+        int version
+        datetime deletedAt
+    }
+
+    TenantSetting {
+        string id PK
+        string tenantId
+        string key
+        string value
+        SettingDataType dataType
+        bool encrypted
+        string description
+        int version
+        datetime deletedAt
+    }
+
+    UserSetting {
+        string id PK
+        string userId
+        string key
+        string value
+        SettingDataType dataType
+        bool encrypted
+        string description
+        int version
+        datetime deletedAt
+    }
+```
+
+> Settings 三层：SYSTEM 全局唯一 key；TENANT 按 tenantId+key；USER 按 userId+key。
+> `encrypted=true` 时 API 返回掩码（******），不返回明文（见 ADR-0004）。
+> 数据类型（SettingDataType）：STRING / NUMBER / BOOLEAN / JSON / SECRET。
+
+## 11. 关系及删除策略（Sprint 3A，真实 Schema）
+
+| 关系 | onDelete | 原因 |
+| --- | --- | --- |
+| WorkflowDefinition → WorkflowStep | Cascade | 步骤依附定义，删定义即删步骤 |
+| WorkflowStep → WorkflowCondition | Cascade | 条件依附步骤 |
+| WorkflowDefinition → WorkflowInstance | Restrict | 已产生实例的模板不可物理删除 |
+| WorkflowInstance → WorkflowAction | Cascade | 动作随实例保留 |
+| WorkflowInstance → WorkflowHistory | Cascade | 历史随实例保留 |
+| WorkflowInstance → Approver | Cascade | 审批人随实例保留 |
+| WorkflowInstance → ApprovalEscalation / Timeout / Reminder | Cascade | 规则随实例保留 |
+| ApproverGroup → ApproverGroupMember | Cascade | 成员依附组 |
+| NotificationTemplate → NotificationMessage | SetNull | 保留发送历史，模板删除后消息置空 |
+| NotificationMessage → NotificationLog | SetNull | 保留发送日志 |
+| DictionaryType → DictionaryItem | Cascade | 字典项依附类型 |
+
+> 统一审计字段（CTO 规则）：id / createdAt / createdBy / updatedAt / updatedBy / version / approvalStatus / isDeleted / deletedAt / deletedBy；业务数据一律软删除，禁止物理删除。

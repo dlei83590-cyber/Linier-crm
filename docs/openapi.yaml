@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: Linier CRM Management System API
-  description: Enterprise customer relationship management platform - Sprint 1 infrastructure surface.
-  version: 0.1.0
+  description: Enterprise customer relationship management platform - Sprint 3A Workflow Foundation surface.
+  version: 0.3.0-alpha
   contact:
     name: JINZA TRADING SDN. BHD.
 servers:
@@ -12,8 +12,17 @@ servers:
 tags:
   - name: Health
   - name: Auth
+  - name: Workflow Definitions
+  - name: Workflow Instances
+  - name: Approver Groups
+  - name: Dictionaries
+  - name: Settings
+  - name: Notification Templates
 
 paths:
+  # ==========================================================================
+  # Health / Auth
+  # ==========================================================================
   /api/health:
     get:
       tags: [Health]
@@ -67,6 +76,1166 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  # ==========================================================================
+  # Workflow Definitions（第一批）
+  # 权限码：workflow-definition:view/create/edit/delete/approve/close
+  # 状态机：DRAFT → ACTIVE(已发布) → ARCHIVED(已归档)
+  # 规则：更新必须携带 version（乐观锁）；删除为软删除；ACTIVE/ARCHIVED 后禁止修改 code/module/steps
+  # ==========================================================================
+  /api/workflows/definitions:
+    get:
+      tags: [Workflow Definitions]
+      summary: List workflow definitions (paginated, searchable)
+      operationId: listWorkflowDefinitions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: code
+          in: query
+          schema: { type: string }
+          description: Fuzzy match on code
+        - name: name
+          in: query
+          schema: { type: string }
+          description: Fuzzy match on name
+        - name: module
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/WorkflowStatus" }
+      responses:
+        "200":
+          description: Paginated list（软删除已过滤）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowDefinitionListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Workflow Definitions]
+      summary: Create workflow definition (with steps & conditions, transactional)
+      operationId: createWorkflowDefinition
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkflowDefinitionCreate"
+      responses:
+        "201":
+          description: Created（初始 status=DRAFT, version=1）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowDefinitionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/workflows/definitions/{id}:
+    get:
+      tags: [Workflow Definitions]
+      summary: Get workflow definition detail (with steps & conditions)
+      operationId: getWorkflowDefinition
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowDefinitionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Workflow Definitions]
+      summary: Update workflow definition（乐观锁 version；发布后禁止修改关键结构）
+      operationId: updateWorkflowDefinition
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkflowDefinitionUpdate"
+      responses:
+        "200":
+          description: Updated（version 自动 +1）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowDefinitionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Workflow Definitions]
+      summary: Soft delete workflow definition
+      operationId: deleteWorkflowDefinition
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Soft deleted（deletedAt 写入，不物理删除）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/workflows/definitions/{id}/publish:
+    post:
+      tags: [Workflow Definitions]
+      summary: Publish workflow definition（DRAFT → ACTIVE）
+      operationId: publishWorkflowDefinition
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Published（要求至少一个步骤；version +1）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowStatusChangeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/workflows/definitions/{id}/archive:
+    post:
+      tags: [Workflow Definitions]
+      summary: Archive workflow definition（ACTIVE → ARCHIVED）
+      operationId: archiveWorkflowDefinition
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Archived（历史实例不受影响；version +1）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowStatusChangeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  # ==========================================================================
+  # Workflow Instances（第二批）
+  # 权限码：workflow-instance:view/create/approve
+  # 统一动作：SUBMIT/APPROVE/REJECT/RETURN/TRANSFER/DELEGATE/WITHDRAW/TERMINATE/COMMENT
+  # ==========================================================================
+  /api/workflows/instances:
+    get:
+      tags: [Workflow Instances]
+      summary: List workflow instances (paginated, filterable)
+      operationId: listWorkflowInstances
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: businessType
+          in: query
+          schema: { type: string }
+        - name: businessId
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/WorkflowInstanceStatus" }
+        - name: definitionId
+          in: query
+          schema: { type: string }
+        - name: startedBy
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Paginated list（软删除已过滤）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowInstanceListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Workflow Instances]
+      summary: Create workflow instance from an ACTIVE definition
+      operationId: createWorkflowInstance
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkflowInstanceCreate"
+      responses:
+        "201":
+          description: Created（status=RUNNING，自动生成 SUBMIT 动作与历史，并创建第一步审批人）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowInstanceResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/workflows/instances/{id}:
+    get:
+      tags: [Workflow Instances]
+      summary: Get workflow instance detail (definition/approvers/actions/history)
+      operationId: getWorkflowInstance
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowInstanceResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/workflows/instances/{id}/actions:
+    post:
+      tags: [Workflow Instances]
+      summary: Execute a unified workflow action（状态机事务）
+      operationId: executeWorkflowAction
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkflowActionRequest"
+      description: |
+        统一动作范围（WorkflowActionType）：
+        SUBMIT / APPROVE / REJECT / RETURN / TRANSFER / DELEGATE / WITHDRAW / TERMINATE / COMMENT
+        - APPROVE/REJECT/TRANSFER/DELEGATE 仅当前步骤待办人可执行
+        - WITHDRAW 仅发起人可执行
+        - TRANSFER/DELEGATE 必须携带 targetUserId
+        - 终态实例（COMPLETED/REJECTED/TERMINATED/WITHDRAWN）仅允许 COMMENT
+        - 每次动作写入 WorkflowAction + WorkflowHistory（含 IP/设备/浏览器/耗时）
+      responses:
+        "200":
+          description: Action executed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowActionResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/workflows/instances/{id}/history:
+    get:
+      tags: [Workflow Instances]
+      summary: List instance history (paginated)
+      operationId: listWorkflowInstanceHistory
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+      responses:
+        "200":
+          description: Paginated history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowHistoryListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ==========================================================================
+  # Approver Groups（第三批）
+  # 权限码：approver-group:view/create/edit/delete
+  # code 唯一；成员 memberUserIds 全量替换；删除为软删除；更新需 version
+  # ==========================================================================
+  /api/approver-groups:
+    get:
+      tags: [Approver Groups]
+      summary: List approver groups (paginated)
+      operationId: listApproverGroups
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: code
+          in: query
+          schema: { type: string }
+        - name: name
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Paginated list（软删除已过滤）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApproverGroupListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Approver Groups]
+      summary: Create approver group (with members, transactional)
+      operationId: createApproverGroup
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApproverGroupCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApproverGroupResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/approver-groups/{id}:
+    get:
+      tags: [Approver Groups]
+      summary: Get approver group detail (with members)
+      operationId: getApproverGroup
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApproverGroupResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Approver Groups]
+      summary: Update approver group（乐观锁 version；成员全量替换）
+      operationId: updateApproverGroup
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApproverGroupUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApproverGroupResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Approver Groups]
+      summary: Soft delete approver group
+      operationId: deleteApproverGroup
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ==========================================================================
+  # Dictionaries（第三批）
+  # 权限码：dictionary-type:view/create/edit/delete；dictionary-item:view/create/edit/delete
+  # type.code / (typeId,item.code) 唯一；enabled 启用/停用；删除为软删除；更新需 version
+  # ==========================================================================
+  /api/dictionaries:
+    get:
+      tags: [Dictionaries]
+      summary: List dictionary types (paginated, searchable)
+      operationId: listDictionaryTypes
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: code
+          in: query
+          schema: { type: string }
+        - name: name
+          in: query
+          schema: { type: string }
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: enabled
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: Paginated list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DictionaryTypeListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Dictionaries]
+      summary: Create dictionary type
+      operationId: createDictionaryType
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DictionaryTypeCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DictionaryTypeResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/dictionaries/{id}:
+    get:
+      tags: [Dictionaries]
+      summary: Get dictionary type detail (with items)
+      operationId: getDictionaryType
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Detail with items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DictionaryTypeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Dictionaries]
+      summary: Update dictionary type（乐观锁 version）
+      operationId: updateDictionaryType
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DictionaryTypeUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DictionaryTypeResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Dictionaries]
+      summary: Soft delete dictionary type
+      operationId: deleteDictionaryType
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/dictionaries/{id}/items:
+    get:
+      tags: [Dictionaries]
+      summary: List dictionary items (paginated)
+      operationId: listDictionaryItems
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: code
+          in: query
+          schema: { type: string }
+        - name: label
+          in: query
+          schema: { type: string }
+        - name: enabled
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: Paginated items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DictionaryItemListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Dictionaries]
+      summary: Create dictionary item（typeId+code 唯一）
+      operationId: createDictionaryItem
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DictionaryItemCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DictionaryItemResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/dictionaries/{id}/items/{itemId}:
+    patch:
+      tags: [Dictionaries]
+      summary: Update dictionary item（乐观锁 version）
+      operationId: updateDictionaryItem
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DictionaryItemUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DictionaryItemResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Dictionaries]
+      summary: Soft delete dictionary item
+      operationId: deleteDictionaryItem
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ==========================================================================
+  # Settings（第三批，三层 Key-Value）
+  # 权限码：system-setting / tenant-setting / user-setting 的 view/create/edit/delete
+  # key 唯一（SYSTEM 全局唯一；TENANT 按 tenantId+key；USER 按 userId+key）
+  # encrypted=true 时 value 返回掩码 ******，不返回明文；删除为软删除；更新需 version
+  # ==========================================================================
+  /api/settings:
+    get:
+      tags: [Settings]
+      summary: List settings by scope (paginated)
+      operationId: listSettings
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: scope
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/SettingScope" }
+        - name: tenantId
+          in: query
+          schema: { type: string }
+          description: Required when scope=TENANT
+        - name: userId
+          in: query
+          schema: { type: string }
+          description: Defaults to current user when scope=USER
+        - name: key
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+      responses:
+        "200":
+          description: Paginated list（encrypted 项 value 为掩码）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettingListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Settings]
+      summary: Create a setting (SYSTEM/TENANT/USER)
+      operationId: createSetting
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettingResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/settings/{id}:
+    get:
+      tags: [Settings]
+      summary: Get setting detail
+      operationId: getSetting
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: scope
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/SettingScope" }
+      responses:
+        "200":
+          description: Detail（encrypted 项 value 为掩码）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettingResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Settings]
+      summary: Update setting（乐观锁 version）
+      operationId: updateSetting
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: scope
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/SettingScope" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettingResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Settings]
+      summary: Soft delete setting
+      operationId: deleteSetting
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: scope
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/SettingScope" }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ==========================================================================
+  # Notification Templates（第三批）
+  # 权限码：notification-template:view/create/edit/delete
+  # code 唯一；删除为软删除；更新需 version
+  # ==========================================================================
+  /api/notification-templates:
+    get:
+      tags: [Notification Templates]
+      summary: List notification templates (paginated, searchable)
+      operationId: listNotificationTemplates
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: code
+          in: query
+          schema: { type: string }
+        - name: name
+          in: query
+          schema: { type: string }
+        - name: channel
+          in: query
+          schema: { $ref: "#/components/schemas/NotificationChannelType" }
+      responses:
+        "200":
+          description: Paginated list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationTemplateListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Notification Templates]
+      summary: Create notification template
+      operationId: createNotificationTemplate
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationTemplateCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationTemplateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/notification-templates/{id}:
+    get:
+      tags: [Notification Templates]
+      summary: Get notification template detail
+      operationId: getNotificationTemplate
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationTemplateResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Notification Templates]
+      summary: Update notification template（乐观锁 version）
+      operationId: updateNotificationTemplate
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationTemplateUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationTemplateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Notification Templates]
+      summary: Soft delete notification template
+      operationId: deleteNotificationTemplate
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -76,7 +1245,7 @@ components:
 
   responses:
     BadRequest:
-      description: Validation error
+      description: Validation error（Zod 校验失败）
       content:
         application/json:
           schema:
@@ -87,75 +1256,73 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Insufficient permission（RBAC 拒绝）
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found（软删除后同样 404）
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: Conflict（code 重复 / version 过期 / 状态不允许）
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
 
   schemas:
+    # --------------------------------------------------------------------------
+    # 基础
+    # --------------------------------------------------------------------------
     HealthResponse:
       type: object
       required: [status, service, timestamp]
       properties:
-        status:
-          type: string
-          example: ok
-        service:
-          type: string
-          example: linier-crm-web
-        timestamp:
-          type: string
-          format: date-time
+        status: { type: string, example: ok }
+        service: { type: string, example: linier-crm-web }
+        timestamp: { type: string, format: date-time }
 
     LoginRequest:
       type: object
       required: [email, password]
       properties:
-        email:
-          type: string
-          format: email
-        password:
-          type: string
-          minLength: 8
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
 
     LoginResponse:
       type: object
       required: [success, data]
       properties:
-        success:
-          type: boolean
-          example: true
+        success: { type: boolean, example: true }
         data:
           type: object
           required: [token, user]
           properties:
-            token:
-              type: string
-              description: JWT session token
-            user:
-              $ref: "#/components/schemas/User"
+            token: { type: string, description: JWT session token }
+            user: { $ref: "#/components/schemas/User" }
 
     MeResponse:
       type: object
       required: [success, data]
       properties:
-        success:
-          type: boolean
-          example: true
-        data:
-          $ref: "#/components/schemas/User"
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/User" }
 
     User:
       type: object
       required: [id, email]
       properties:
-        id:
-          type: string
-        email:
-          type: string
-          format: email
-        name:
-          type: [string, "null"]
+        id: { type: string }
+        email: { type: string, format: email }
+        name: { type: [string, "null"] }
         roles:
           type: array
-          items:
-            type: string
+          items: { type: string }
 
     ErrorResponse:
       type: object
@@ -167,6 +1334,653 @@ components:
           properties:
             code:
               type: string
-              example: AUTHENTICATION_ERROR
+              example: WORKFLOW_DEFINITION_NOT_FOUND
             message:
               type: string
+            details:
+              type: object
+
+    DeleteResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          required: [id, deleted]
+          properties:
+            id: { type: string }
+            deleted: { type: boolean, example: true }
+
+    # --------------------------------------------------------------------------
+    # 枚举
+    # --------------------------------------------------------------------------
+    WorkflowStatus:
+      type: string
+      enum: [DRAFT, ACTIVE, ARCHIVED]
+      description: DRAFT 草稿 / ACTIVE 已发布 / ARCHIVED 已归档
+
+    ApprovalMode:
+      type: string
+      enum: [SEQUENTIAL, PARALLEL, ANY_ONE, COUNTERSIGN]
+      description: 串签 / 会签（全签）/ 或签 / 会签（人数）
+
+    ApproverType:
+      type: string
+      enum: [USER, ROLE, DEPARTMENT, APPROVER_GROUP]
+
+    ConditionOperator:
+      type: string
+      enum: [EQ, NEQ, GT, GTE, LT, LTE, IN, NOT_IN, CONTAINS]
+
+    WorkflowInstanceStatus:
+      type: string
+      enum: [RUNNING, COMPLETED, REJECTED, TERMINATED, WITHDRAWN]
+
+    WorkflowActionType:
+      type: string
+      enum: [SUBMIT, APPROVE, REJECT, RETURN, TRANSFER, DELEGATE, WITHDRAW, TERMINATE, COMMENT]
+
+    ApproverStatus:
+      type: string
+      enum: [PENDING, APPROVED, REJECTED, DELEGATED, SKIPPED]
+
+    SettingScope:
+      type: string
+      enum: [SYSTEM, TENANT, USER]
+
+    SettingDataType:
+      type: string
+      enum: [STRING, NUMBER, BOOLEAN, JSON, SECRET]
+
+    NotificationChannelType:
+      type: string
+      enum: [SYSTEM, EMAIL, TELEGRAM, WEBHOOK, WECHAT, DINGTALK]
+
+    # --------------------------------------------------------------------------
+    # Workflow Definition
+    # --------------------------------------------------------------------------
+    WorkflowCondition:
+      type: object
+      required: [field, operator, value]
+      properties:
+        id: { type: string }
+        expression: { type: [string, "null"], description: 组合表达式（预留） }
+        field: { type: string, example: amount }
+        operator: { $ref: "#/components/schemas/ConditionOperator" }
+        value: { type: string, example: "100000" }
+
+    WorkflowStep:
+      type: object
+      required: [stepNo, stepName, approverType, approvalMode]
+      properties:
+        id: { type: string }
+        stepNo: { type: integer, example: 1 }
+        stepName: { type: string, example: 销售经理审批 }
+        approverType: { $ref: "#/components/schemas/ApproverType" }
+        approverValue: { type: [string, "null"], description: 用户ID/角色编码/部门编码/审批组编码 }
+        approvalMode: { $ref: "#/components/schemas/ApprovalMode" }
+        timeoutHours: { type: [integer, "null"] }
+        allowReject: { type: boolean, default: true }
+        allowTransfer: { type: boolean, default: false }
+        allowDelegate: { type: boolean, default: false }
+        allowWithdraw: { type: boolean, default: false }
+        conditions:
+          type: array
+          items: { $ref: "#/components/schemas/WorkflowCondition" }
+
+    WorkflowDefinition:
+      type: object
+      required: [id, code, name, module, version, status]
+      properties:
+        id: { type: string }
+        code: { type: string, example: QUOTATION_APPROVAL }
+        name: { type: string }
+        module: { type: string, example: quotation }
+        version: { type: integer, description: 乐观锁版本，更新必须携带 }
+        status: { $ref: "#/components/schemas/WorkflowStatus" }
+        description: { type: [string, "null"] }
+        isActive: { type: boolean }
+        deletedAt: { type: [string, "null"], format: date-time, description: 非空即已软删除 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        steps:
+          type: array
+          items: { $ref: "#/components/schemas/WorkflowStep" }
+
+    WorkflowDefinitionCreate:
+      type: object
+      required: [code, name, module, steps]
+      properties:
+        code:
+          type: string
+          pattern: "^[A-Z0-9_]+$"
+          minLength: 2
+          maxLength: 64
+        name: { type: string, minLength: 1, maxLength: 100 }
+        module: { type: string, minLength: 1, maxLength: 50 }
+        description: { type: string, maxLength: 500 }
+        steps:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/WorkflowStep" }
+
+    WorkflowDefinitionUpdate:
+      type: object
+      required: [version]
+      properties:
+        version: { type: integer, description: 乐观锁版本（必须与当前一致，否则 409） }
+        code: { type: string }
+        name: { type: string }
+        module: { type: string }
+        description: { type: string }
+        steps:
+          type: array
+          items: { $ref: "#/components/schemas/WorkflowStep" }
+          description: 仅 DRAFT 状态允许修改 steps/code/module
+
+    WorkflowDefinitionResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/WorkflowDefinition" }
+
+    WorkflowDefinitionListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/WorkflowDefinition" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    WorkflowStatusChangeResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          required: [id, status, version]
+          properties:
+            id: { type: string }
+            status: { $ref: "#/components/schemas/WorkflowStatus" }
+            version: { type: integer }
+
+    PaginationMeta:
+      type: object
+      required: [page, pageSize, total]
+      properties:
+        page: { type: integer, example: 1 }
+        pageSize: { type: integer, example: 20 }
+        total: { type: integer, example: 0 }
+
+    # --------------------------------------------------------------------------
+    # Workflow Instance
+    # --------------------------------------------------------------------------
+    WorkflowInstanceCreate:
+      type: object
+      required: [definitionId, businessType, businessId]
+      properties:
+        definitionId: { type: string }
+        businessType: { type: string, example: quotation }
+        businessId: { type: string }
+        payload:
+          type: object
+          description: 业务字段（用于条件评估，如 amount），可选
+
+    WorkflowInstance:
+      type: object
+      required: [id, definitionId, businessType, businessId, startedBy, status]
+      properties:
+        id: { type: string }
+        definitionId: { type: string }
+        businessType: { type: string }
+        businessId: { type: string }
+        currentStepNo: { type: [integer, "null"] }
+        startedBy: { type: string }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: [string, "null"], format: date-time }
+        status: { $ref: "#/components/schemas/WorkflowInstanceStatus" }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    WorkflowAction:
+      type: object
+      required: [id, instanceId, actionType, actorId]
+      properties:
+        id: { type: string }
+        instanceId: { type: string }
+        actionType: { $ref: "#/components/schemas/WorkflowActionType" }
+        actorId: { type: string }
+        targetUserId: { type: [string, "null"] }
+        stepNo: { type: [integer, "null"] }
+        comment: { type: [string, "null"] }
+        createdAt: { type: string, format: date-time }
+
+    WorkflowHistory:
+      type: object
+      required: [id, instanceId, actionType]
+      properties:
+        id: { type: string }
+        instanceId: { type: string }
+        stepNo: { type: [integer, "null"] }
+        actionType: { $ref: "#/components/schemas/WorkflowActionType" }
+        beforeStatus: { type: [string, "null"] }
+        afterStatus: { type: [string, "null"] }
+        actorId: { type: [string, "null"] }
+        ip: { type: [string, "null"] }
+        device: { type: [string, "null"] }
+        browser: { type: [string, "null"] }
+        remark: { type: [string, "null"] }
+        attachment: { type: [string, "null"] }
+        duration: { type: [integer, "null"], description: 耗时（秒） }
+        createdAt: { type: string, format: date-time }
+
+    Approver:
+      type: object
+      required: [id, instanceId, stepNo, userId, status]
+      properties:
+        id: { type: string }
+        instanceId: { type: string }
+        stepNo: { type: integer }
+        userId: { type: string }
+        status: { $ref: "#/components/schemas/ApproverStatus" }
+        delegatedFrom: { type: [string, "null"] }
+        decidedAt: { type: [string, "null"], format: date-time }
+        comment: { type: [string, "null"] }
+
+    WorkflowInstanceResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          allOf:
+            - $ref: "#/components/schemas/WorkflowInstance"
+            - type: object
+              properties:
+                definition: { $ref: "#/components/schemas/WorkflowDefinition" }
+                approvers:
+                  type: array
+                  items: { $ref: "#/components/schemas/Approver" }
+                actions:
+                  type: array
+                  items: { $ref: "#/components/schemas/WorkflowAction" }
+                history:
+                  type: array
+                  items: { $ref: "#/components/schemas/WorkflowHistory" }
+
+    WorkflowInstanceListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items:
+            allOf:
+              - $ref: "#/components/schemas/WorkflowInstance"
+              - type: object
+                properties:
+                  definition:
+                    type: object
+                    properties:
+                      code: { type: string }
+                      name: { type: string }
+                      module: { type: string }
+                      version: { type: integer }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    WorkflowActionRequest:
+      type: object
+      required: [actionType]
+      properties:
+        actionType: { $ref: "#/components/schemas/WorkflowActionType" }
+        targetUserId: { type: string, description: TRANSFER/DELEGATE 必填 }
+        stepNo: { type: integer }
+        comment: { type: string, maxLength: 1000, description: 备注（remark） }
+        payload:
+          type: object
+          description: 业务字段（重新提交/条件评估用），可选
+
+    WorkflowActionResult:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          required: [instanceId, action]
+          properties:
+            instanceId: { type: string }
+            action: { $ref: "#/components/schemas/WorkflowAction" }
+            afterStatus: { $ref: "#/components/schemas/WorkflowInstanceStatus" }
+            currentStepNo: { type: [integer, "null"] }
+            completedAt: { type: [string, "null"], format: date-time }
+
+    WorkflowHistoryListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/WorkflowHistory" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    # --------------------------------------------------------------------------
+    # Approver Group
+    # --------------------------------------------------------------------------
+    ApproverGroupCreate:
+      type: object
+      required: [code, name]
+      properties:
+        code:
+          type: string
+          pattern: "^[A-Z0-9_]+$"
+          minLength: 2
+          maxLength: 64
+        name: { type: string, minLength: 1, maxLength: 100 }
+        description: { type: string, maxLength: 500 }
+        memberUserIds:
+          type: array
+          items: { type: string }
+          description: 成员用户 ID 列表
+
+    ApproverGroupUpdate:
+      type: object
+      required: [version]
+      properties:
+        version: { type: integer }
+        code: { type: string }
+        name: { type: string }
+        description: { type: string }
+        memberUserIds:
+          type: array
+          items: { type: string }
+          description: 全量替换成员
+
+    ApproverGroup:
+      type: object
+      required: [id, code, name, version]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        description: { type: [string, "null"] }
+        version: { type: integer }
+        isActive: { type: boolean }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        members:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              userId: { type: string }
+
+    ApproverGroupResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/ApproverGroup" }
+
+    ApproverGroupListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/ApproverGroup" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    # --------------------------------------------------------------------------
+    # Dictionary
+    # --------------------------------------------------------------------------
+    DictionaryTypeCreate:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string, minLength: 2, maxLength: 64 }
+        name: { type: string, minLength: 1, maxLength: 100 }
+        category: { type: string, maxLength: 50 }
+        language: { type: string, default: "zh-CN" }
+        sort: { type: integer, default: 0 }
+        icon: { type: string, maxLength: 100 }
+        color: { type: string, maxLength: 20 }
+        enabled: { type: boolean, default: true }
+
+    DictionaryTypeUpdate:
+      type: object
+      required: [version]
+      properties:
+        version: { type: integer }
+        code: { type: string }
+        name: { type: string }
+        category: { type: string }
+        language: { type: string }
+        sort: { type: integer }
+        icon: { type: string }
+        color: { type: string }
+        enabled: { type: boolean }
+
+    DictionaryType:
+      type: object
+      required: [id, code, name, version]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        category: { type: [string, "null"] }
+        language: { type: string }
+        sort: { type: integer }
+        icon: { type: [string, "null"] }
+        color: { type: [string, "null"] }
+        enabled: { type: boolean }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/DictionaryItem" }
+
+    DictionaryTypeResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/DictionaryType" }
+
+    DictionaryTypeListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/DictionaryType" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    DictionaryItemCreate:
+      type: object
+      required: [code, label]
+      properties:
+        code: { type: string, minLength: 1, maxLength: 64 }
+        label: { type: string, minLength: 1, maxLength: 100 }
+        sort: { type: integer, default: 0 }
+        color: { type: string, maxLength: 20 }
+        icon: { type: string, maxLength: 100 }
+        enabled: { type: boolean, default: true }
+
+    DictionaryItemUpdate:
+      type: object
+      required: [version]
+      properties:
+        version: { type: integer }
+        code: { type: string }
+        label: { type: string }
+        sort: { type: integer }
+        color: { type: string }
+        icon: { type: string }
+        enabled: { type: boolean }
+
+    DictionaryItem:
+      type: object
+      required: [id, typeId, code, label, version]
+      properties:
+        id: { type: string }
+        typeId: { type: string }
+        code: { type: string }
+        label: { type: string }
+        sort: { type: integer }
+        color: { type: [string, "null"] }
+        icon: { type: [string, "null"] }
+        enabled: { type: boolean }
+        version: { type: integer }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    DictionaryItemResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/DictionaryItem" }
+
+    DictionaryItemListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/DictionaryItem" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    # --------------------------------------------------------------------------
+    # Settings
+    # --------------------------------------------------------------------------
+    SettingCreate:
+      type: object
+      required: [scope, key]
+      properties:
+        scope: { $ref: "#/components/schemas/SettingScope" }
+        tenantId: { type: string, description: scope=TENANT 必填 }
+        userId: { type: string, description: scope=USER 缺省为当前用户 }
+        key: { type: string, minLength: 1, maxLength: 100 }
+        value: { type: string, maxLength: 4000 }
+        dataType: { $ref: "#/components/schemas/SettingDataType" }
+        encrypted: { type: boolean, default: false, description: true 时存储加密、返回掩码 }
+        description: { type: string, maxLength: 500 }
+
+    SettingUpdate:
+      type: object
+      required: [version]
+      properties:
+        version: { type: integer }
+        value: { type: string }
+        dataType: { $ref: "#/components/schemas/SettingDataType" }
+        encrypted: { type: boolean }
+        description: { type: string }
+
+    Setting:
+      type: object
+      required: [id, key, version]
+      properties:
+        id: { type: string }
+        key: { type: string }
+        value: { type: [string, "null"], description: encrypted=true 时为掩码 ****** }
+        dataType: { $ref: "#/components/schemas/SettingDataType" }
+        encrypted: { type: boolean }
+        description: { type: [string, "null"] }
+        version: { type: integer }
+        tenantId: { type: [string, "null"] }
+        userId: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    SettingResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/Setting" }
+
+    SettingListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Setting" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    # --------------------------------------------------------------------------
+    # Notification Template
+    # --------------------------------------------------------------------------
+    NotificationTemplateCreate:
+      type: object
+      required: [code, name, content]
+      properties:
+        code: { type: string, minLength: 2, maxLength: 64 }
+        name: { type: string, minLength: 1, maxLength: 100 }
+        channel: { $ref: "#/components/schemas/NotificationChannelType" }
+        subject: { type: string, maxLength: 200 }
+        content: { type: string, minLength: 1, maxLength: 4000, description: 支持变量占位 }
+
+    NotificationTemplateUpdate:
+      type: object
+      required: [version]
+      properties:
+        version: { type: integer }
+        code: { type: string }
+        name: { type: string }
+        channel: { $ref: "#/components/schemas/NotificationChannelType" }
+        subject: { type: string }
+        content: { type: string }
+
+    NotificationTemplate:
+      type: object
+      required: [id, code, name, channel, version]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        channel: { $ref: "#/components/schemas/NotificationChannelType" }
+        subject: { type: [string, "null"] }
+        content: { type: string }
+        version: { type: integer }
+        isActive: { type: boolean }
+        deletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    NotificationTemplateResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/NotificationTemplate" }
+
+    NotificationTemplateListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/NotificationTemplate" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
