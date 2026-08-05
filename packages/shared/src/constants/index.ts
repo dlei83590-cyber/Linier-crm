@@ -90,6 +90,28 @@ export const PERMISSION_MODULES = [
   "project",
   "project-visit",
   "project-risk",
+  // Sprint 3A：平台底座模块
+  "workflow-definition",
+  "workflow-step",
+  "workflow-condition",
+  "workflow-instance",
+  "workflow-action",
+  "workflow-history",
+  "approver",
+  "approver-group",
+  "approval-delegate",
+  "approval-escalation",
+  "approval-timeout",
+  "approval-reminder",
+  "notification-template",
+  "notification-message",
+  "notification-channel",
+  "notification-log",
+  "dictionary-type",
+  "dictionary-item",
+  "system-setting",
+  "tenant-setting",
+  "user-setting",
 ] as const;
 
 /** 生成模块×动作权限码（如 "item:view"） */

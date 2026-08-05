@@ -913,3 +913,666 @@ model ProjectClosure {
 
   @@index([deletedAt])
 }
+
+// ============================================================================
+// Sprint 3A - Workflow Foundation（工作流底座）
+// CTO directive: Workflow（定义流程）与 Approval（执行审批）解耦；统一审计字段；
+// 所有引用关系明确 onDelete；枚举集中管理。
+// ============================================================================
+
+/// 工作流状态：草稿 / 已启用 / 已归档
+enum WorkflowStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+/// 审批方式：串签 / 会签 / 或签 / 会签(多人全签)
+enum ApprovalMode {
+  SEQUENTIAL // 串签
+  PARALLEL // 会签（多人并行，全部通过）
+  ANY_ONE // 或签（任一通过）
+  COUNTERSIGN // 会签（指定人数）
+}
+
+/// 审批人类型：用户 / 角色 / 部门 / 审批组
+enum ApproverType {
+  USER
+  ROLE
+  DEPARTMENT
+  APPROVER_GROUP
+}
+
+/// 工作流动作：统一动作，业务模块不各自实现
+enum WorkflowActionType {
+  SUBMIT // 提交
+  APPROVE // 审批通过
+  REJECT // 驳回
+  RETURN // 退回
+  TRANSFER // 转交
+  DELEGATE // 委托
+  WITHDRAW // 撤销
+  TERMINATE // 终止
+  COMMENT // 评论
+}
+
+/// 条件操作符（与业务字段组合，如 amount > 100000）
+enum ConditionOperator {
+  EQ
+  NEQ
+  GT
+  GTE
+  LT
+  LTE
+  IN
+  NOT_IN
+  CONTAINS
+}
+
+/// 工作流实例状态：运行中 / 已完成 / 已驳回 / 已终止 / 已撤销
+enum WorkflowInstanceStatus {
+  RUNNING
+  COMPLETED
+  REJECTED
+  TERMINATED
+  WITHDRAWN
+}
+
+/// 审批人处理状态
+enum ApproverStatus {
+  PENDING // 待处理
+  APPROVED // 已通过
+  REJECTED // 已驳回
+  DELEGATED // 已委托
+  SKIPPED // 已跳过
+}
+
+/// 工作流定义（流程模板）。所有业务模块（报价/合同/采购/付款/费用）引用这里，禁止写死流程。
+model WorkflowDefinition {
+  id          String         @id @default(cuid())
+  code        String         @unique // 工作流编码（如 QUOTATION_APPROVAL）
+  name        String // 工作流名称
+  module      String // 所属模块（quotation/contract/purchase/payment/expense/custom）
+  version     Int            @default(1) // 流程版本
+  status      WorkflowStatus @default(DRAFT)
+  description String?
+  steps       WorkflowStep[]
+  instances   WorkflowInstance[]
+  isActive    Boolean        @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  deletedAt   DateTime?
+  createdAt   DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime       @updatedAt @db.Timestamptz(3)
+
+  @@index([module])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+/// 工作流步骤（节点）。
+model WorkflowStep {
+  id            String         @id @default(cuid())
+  definitionId  String
+  definition    WorkflowDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  stepNo        Int // 步骤序号
+  stepName      String // 步骤名称
+  approverType  ApproverType   @default(USER) // 审批人类型
+  approverValue String? // 审批人值（用户ID/角色编码/部门ID/审批组ID）
+  approvalMode  ApprovalMode   @default(SEQUENTIAL) // 审批方式
+  timeoutHours  Int? // 超时时间（小时）
+  allowReject   Boolean        @default(true) // 允许驳回
+  allowTransfer Boolean        @default(false) // 允许转交
+  allowDelegate Boolean        @default(false) // 允许委托
+  allowWithdraw Boolean        @default(false) // 允许撤销
+  conditions    WorkflowCondition[]
+  isActive      Boolean        @default(true)
+  createdById   String?
+  updatedById   String?
+  approvedById  String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version       Int            @default(1)
+  deletedAt     DateTime?
+  createdAt     DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime       @updatedAt @db.Timestamptz(3)
+
+  @@unique([definitionId, stepNo])
+  @@index([definitionId])
+  @@index([deletedAt])
+}
+
+/// 工作流条件（结构化，不存 JSON）：field + operator + value
+model WorkflowCondition {
+  id          String          @id @default(cuid())
+  stepId      String
+  step        WorkflowStep    @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  expression  String? // 组合表达式（如 A AND B）
+  field       String // 字段名（amount/department/currency 等）
+  operator    ConditionOperator // 操作符
+  value       String // 比较值（如 100000/Sales/CNY）
+  isActive    Boolean         @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int             @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime        @updatedAt @db.Timestamptz(3)
+
+  @@index([stepId])
+  @@index([deletedAt])
+}
+
+/// 工作流实例（真正业务实例，如某张报价单的审批流）。
+model WorkflowInstance {
+  id           String          @id @default(cuid())
+  definitionId String
+  definition   WorkflowDefinition @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+  businessType String // 业务类型（quotation/sales-order/purchase-order/expense 等）
+  businessId   String // 业务单据 ID
+  currentStepNo Int? // 当前步骤
+  startedBy    String // 发起人
+  startedAt    DateTime        @default(now())
+  completedAt  DateTime?
+  status       WorkflowInstanceStatus @default(RUNNING) // 实例状态
+  actions      WorkflowAction[]
+  history      WorkflowHistory[]
+  approvers    Approver[]
+  escalations  ApprovalEscalation[]
+  timeouts     ApprovalTimeout[]
+  reminders    ApprovalReminder[]
+  isActive     Boolean         @default(true)
+  createdById  String?
+  updatedById  String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version      Int             @default(1)
+  deletedAt    DateTime?
+  createdAt    DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime        @updatedAt @db.Timestamptz(3)
+
+  @@unique([businessType, businessId])
+  @@index([definitionId])
+  @@index([startedBy])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+/// 工作流动作（统一动作记录）。
+model WorkflowAction {
+  id          String            @id @default(cuid())
+  instanceId  String
+  instance    WorkflowInstance  @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  actionType  WorkflowActionType // 动作类型
+  actorId     String // 操作人
+  targetUserId String? // 转交/委托目标
+  stepNo      Int? // 所属步骤
+  comment     String? // 备注
+  isActive    Boolean           @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int               @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime          @updatedAt @db.Timestamptz(3)
+
+  @@index([instanceId])
+  @@index([actorId])
+  @@index([deletedAt])
+}
+
+/// 工作流历史（一次做到位，与 Audit 共用字段）。
+model WorkflowHistory {
+  id           String            @id @default(cuid())
+  instanceId   String
+  instance     WorkflowInstance  @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  stepNo       Int?
+  actionType   WorkflowActionType
+  beforeStatus String? // 前状态
+  afterStatus  String? // 后状态
+  actorId      String? // 操作人
+  ip           String? // IP
+  device       String? // 设备
+  browser      String? // 浏览器
+  remark       String? // 备注
+  attachment   String? // 附件
+  duration     Int? // 耗时（秒）
+  isActive     Boolean           @default(true)
+  createdById  String?
+  updatedById  String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version      Int               @default(1)
+  deletedAt    DateTime?
+  createdAt    DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime          @updatedAt @db.Timestamptz(3)
+
+  @@index([instanceId])
+  @@index([actorId])
+  @@index([deletedAt])
+}
+
+// ============================================================================
+// Sprint 3A - Approval Engine（审批执行，与 Workflow 解耦）
+// Workflow 定义流程；Approval 执行审批。两个领域。
+// ============================================================================
+
+/// 审批人（实例级：每个审批步骤的实际处理人）
+model Approver {
+  id          String   @id @default(cuid())
+  instanceId  String
+  instance    WorkflowInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  stepNo      Int // 步骤
+  userId      String // 审批人
+  status      ApproverStatus  @default(PENDING) // 处理状态
+  delegatedFrom String? // 委托来源
+  decidedAt   DateTime?
+  comment     String?
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([instanceId])
+  @@index([userId])
+  @@index([deletedAt])
+}
+
+/// 审批组（可复用审批人集合，如"销售总监组"）
+model ApproverGroup {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  members     ApproverGroupMember[]
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([deletedAt])
+}
+
+/// 审批组成员
+model ApproverGroupMember {
+  id          String   @id @default(cuid())
+  groupId     String
+  group       ApproverGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId      String
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([groupId, userId])
+  @@index([groupId])
+  @@index([deletedAt])
+}
+
+/// 委托规则（用户→用户）
+model ApprovalDelegate {
+  id          String   @id @default(cuid())
+  fromUserId  String
+  toUserId    String
+  validFrom   DateTime
+  validTo     DateTime?
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([fromUserId])
+  @@index([toUserId])
+  @@index([deletedAt])
+}
+
+/// 升级规则（超时/未处理 → 升级到上级）
+model ApprovalEscalation {
+  id          String   @id @default(cuid())
+  instanceId  String
+  instance    WorkflowInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  stepNo      Int
+  thresholdHours Int // 超时阈值（小时）
+  escalateToUserId String? // 升级到
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([instanceId])
+  @@index([deletedAt])
+}
+
+/// 超时规则（实例级）
+model ApprovalTimeout {
+  id          String   @id @default(cuid())
+  instanceId  String
+  instance    WorkflowInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  stepNo      Int
+  timeoutHours Int
+  actionOnTimeout WorkflowActionType @default(TERMINATE) // 超时动作
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([instanceId])
+  @@index([deletedAt])
+}
+
+/// 提醒规则（催办）
+model ApprovalReminder {
+  id          String   @id @default(cuid())
+  instanceId  String
+  instance    WorkflowInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  stepNo      Int
+  intervalHours Int // 提醒间隔（小时）
+  maxTimes    Int      @default(3)
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([instanceId])
+  @@index([deletedAt])
+}
+
+// ============================================================================
+// Sprint 3A - Notification（统一事件中心）
+// ============================================================================
+
+/// 通知渠道类型
+enum NotificationChannelType {
+  SYSTEM
+  EMAIL
+  TELEGRAM
+  WEBHOOK
+  WECHAT // 预留
+  DINGTALK // 预留
+}
+
+/// 通知状态
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  READ
+}
+
+/// 通知模板
+model NotificationTemplate {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  channel     NotificationChannelType @default(SYSTEM)
+  subject     String? // 标题
+  content     String // 内容（支持变量占位）
+  messages    NotificationMessage[]
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([deletedAt])
+}
+
+/// 通知消息
+model NotificationMessage {
+  id          String   @id @default(cuid())
+  templateId  String?
+  template    NotificationTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  recipientUserId String? // 收件人
+  channel     NotificationChannelType @default(SYSTEM)
+  subject     String?
+  content     String
+  status      NotificationStatus @default(PENDING)
+  sentAt      DateTime?
+  readAt      DateTime?
+  error       String?
+  logs        NotificationLog[]
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([recipientUserId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+/// 通知渠道配置（预留 webhook/企业微信/钉钉）
+model NotificationChannel {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  channelType NotificationChannelType @default(SYSTEM)
+  config      Json? // 渠道配置（webhook url/token 等）
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([deletedAt])
+}
+
+/// 通知发送日志
+model NotificationLog {
+  id          String   @id @default(cuid())
+  messageId   String?
+  message     NotificationMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  channel     NotificationChannelType
+  status      NotificationStatus
+  payload     Json?
+  error       String?
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([messageId])
+  @@index([deletedAt])
+}
+
+// ============================================================================
+// Sprint 3A - Dictionary（字典管理）
+// ============================================================================
+
+/// 字典类型
+model DictionaryType {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  category    String? // 分类
+  language    String   @default("zh-CN") // 语言
+  sort        Int      @default(0)
+  icon        String? // 图标
+  color       String? // 颜色
+  enabled     Boolean  @default(true)
+  items       DictionaryItem[]
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([deletedAt])
+}
+
+/// 字典项
+model DictionaryItem {
+  id          String   @id @default(cuid())
+  typeId      String
+  type        DictionaryType @relation(fields: [typeId], references: [id], onDelete: Cascade)
+  code        String
+  label       String
+  sort        Int      @default(0)
+  color       String?
+  icon        String?
+  enabled     Boolean  @default(true)
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([typeId, code])
+  @@index([typeId])
+  @@index([deletedAt])
+}
+
+// ============================================================================
+// Sprint 3A - Settings（参数配置：System / Tenant / User 三层 Key-Value）
+// ============================================================================
+
+/// 设置范围
+enum SettingScope {
+  SYSTEM
+  TENANT
+  USER
+}
+
+/// 设置数据类型
+enum SettingDataType {
+  STRING
+  NUMBER
+  BOOLEAN
+  JSON
+  SECRET // 加密存储
+}
+
+/// 系统设置（Key-Value，支持加密）
+model SystemSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String?
+  dataType    SettingDataType @default(STRING)
+  encrypted   Boolean  @default(false) // 密码类直接加密
+  description String?
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([deletedAt])
+}
+
+/// 租户设置（预留多租户）
+model TenantSetting {
+  id          String   @id @default(cuid())
+  tenantId    String
+  key         String
+  value       String?
+  dataType    SettingDataType @default(STRING)
+  encrypted   Boolean  @default(false)
+  description String?
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@index([deletedAt])
+}
+
+/// 用户设置
+model UserSetting {
+  id          String   @id @default(cuid())
+  userId      String
+  key         String
+  value       String?
+  dataType    SettingDataType @default(STRING)
+  encrypted   Boolean  @default(false)
+  description String?
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([userId, key])
+  @@index([userId])
+  @@index([deletedAt])
+}

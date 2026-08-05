@@ -59,6 +59,28 @@ const SEED_ACTION_MODULES = [
   "project",
   "project-visit",
   "project-risk",
+  // Sprint 3A：平台底座模块
+  "workflow-definition",
+  "workflow-step",
+  "workflow-condition",
+  "workflow-instance",
+  "workflow-action",
+  "workflow-history",
+  "approver",
+  "approver-group",
+  "approval-delegate",
+  "approval-escalation",
+  "approval-timeout",
+  "approval-reminder",
+  "notification-template",
+  "notification-message",
+  "notification-channel",
+  "notification-log",
+  "dictionary-type",
+  "dictionary-item",
+  "system-setting",
+  "tenant-setting",
+  "user-setting",
 ] as const;
 
 const SEED_ACTIONS = ["view", "create", "edit", "delete", "approve", "audit", "export", "import", "assign", "close"] as const;
@@ -396,6 +418,88 @@ const SEED_DOCUMENT_SEQUENCES = [
   { code: "PJ", name: "项目", docType: "PROJECT", prefix: "PJ", nextNo: 1, padLength: 6 },
 ];
 
+/** Sprint 3A：工作流定义示例（Workflow Foundation） */
+const SEED_WORKFLOW_DEFINITIONS = [
+  {
+    code: "QUOTATION_APPROVAL",
+    name: "报价审批",
+    module: "quotation",
+    version: 1,
+    status: "ACTIVE",
+    description: "报价单审批流：金额 > 100000 需总监审批",
+    steps: [
+      {
+        stepNo: 1,
+        stepName: "销售经理审批",
+        approverType: "ROLE",
+        approverValue: "MANAGER",
+        approvalMode: "SEQUENTIAL",
+        timeoutHours: 24,
+        allowReject: true,
+        allowTransfer: true,
+        allowDelegate: true,
+        allowWithdraw: false,
+        conditions: [],
+      },
+      {
+        stepNo: 2,
+        stepName: "销售总监审批",
+        approverType: "ROLE",
+        approverValue: "DIRECTOR",
+        approvalMode: "SEQUENTIAL",
+        timeoutHours: 48,
+        allowReject: true,
+        allowTransfer: true,
+        allowDelegate: true,
+        allowWithdraw: false,
+        conditions: [{ field: "amount", operator: "GT", value: "100000" }],
+      },
+    ],
+  },
+  {
+    code: "EXPENSE_APPROVAL",
+    name: "费用报销审批",
+    module: "expense",
+    version: 1,
+    status: "ACTIVE",
+    description: "费用报销审批流：部门负责人 → 财务",
+    steps: [
+      {
+        stepNo: 1,
+        stepName: "部门负责人审批",
+        approverType: "DEPARTMENT",
+        approverValue: "ENG",
+        approvalMode: "SEQUENTIAL",
+        timeoutHours: 24,
+        allowReject: true,
+        allowTransfer: false,
+        allowDelegate: true,
+        allowWithdraw: false,
+        conditions: [],
+      },
+      {
+        stepNo: 2,
+        stepName: "财务审批",
+        approverType: "ROLE",
+        approverValue: "FINANCE",
+        approvalMode: "SEQUENTIAL",
+        timeoutHours: 48,
+        allowReject: true,
+        allowTransfer: true,
+        allowDelegate: false,
+        allowWithdraw: false,
+        conditions: [{ field: "department", "operator": "EQ", value: "Sales" }],
+      },
+    ],
+  },
+];
+
+/** Sprint 3A：审批组示例 */
+const SEED_APPROVER_GROUPS = [
+  { code: "DIRECTORS", name: "总监组", description: "各业务线总监" },
+  { code: "FINANCE", name: "财务组", description: "财务审批人" },
+];
+
 async function main() {
   const email = process.env.SEED_ADMIN_EMAIL ?? "admin@linier.com";
   const password = process.env.SEED_ADMIN_PASSWORD ?? "ChangeMe123!";
@@ -520,6 +624,35 @@ async function main() {
       where: { code: d.code },
       update: {},
       create: d,
+    });
+  }
+
+  // Sprint 3A: workflow definitions (Workflow Foundation)
+  for (const wf of SEED_WORKFLOW_DEFINITIONS) {
+    const { steps, ...definition } = wf;
+    const savedWf = await prisma.workflowDefinition.upsert({
+      where: { code: definition.code },
+      update: {},
+      create: definition,
+    });
+    await prisma.workflowStep.deleteMany({ where: { definitionId: savedWf.id } });
+    for (const step of steps) {
+      const { conditions, ...stepData } = step;
+      const savedStep = await prisma.workflowStep.create({
+        data: { ...stepData, definitionId: savedWf.id },
+      });
+      for (const cond of conditions) {
+        await prisma.workflowCondition.create({ data: { ...cond, stepId: savedStep.id } });
+      }
+    }
+  }
+
+  // Sprint 3A: approver groups
+  for (const g of SEED_APPROVER_GROUPS) {
+    await prisma.approverGroup.upsert({
+      where: { code: g.code },
+      update: {},
+      create: g,
     });
   }
 
