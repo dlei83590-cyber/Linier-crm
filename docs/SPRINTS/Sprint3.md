@@ -1,39 +1,51 @@
-# Sprint 3：System Foundation（系统底座）⬜
+# Sprint 3：ERP Foundation（ERP 底座）⬜
 
-**原则：不开发业务页面，优先 ERP 底座能力；完成后再开发业务模块效率更高。**
+**原则：不开发业务页面，优先 ERP 底座能力；Sprint 3C 只做 CRUD 不做业务。**
 
 | 字段 | 值 |
 | --- | --- |
-| 状态 | ⬜ 未开始 |
-| 上游 | Sprint 2（PR #4 合并后） |
+| 状态 | ⬜ 未开始（分支 feature/sprint3-platform-foundation） |
+| 上游 | Sprint 2 ✅ Closed（v0.2.0-alpha，main 冻结） |
+| 分支规范 | `feature/sprint3-platform-foundation`（以后所有 Sprint 统一 `feature/sprintX-xxxx`） |
 
-## Phase A：系统底座
+## Sprint 3A：系统引擎
 
-| 模块 | 内容 | 依赖 |
+| 模块 | 内容 | 支持 |
 | --- | --- | --- |
-| Workflow Engine | 流程定义 / 流程实例 / 节点 / 流转 / 条件分支 | RBAC |
-| Approval Engine | 审批单 / 审批人 / 会签 / 或签 / 委托 / 加签 / 驳回 | Workflow + RBAC |
-| Notification | 站内信 / 邮件 / 消息模板 / 已读未读 | — |
-| Dictionary | 字典类型 / 字典项（通用下拉数据源） | — |
-| System Settings | 参数配置（税率/币种/单据规则等） | — |
-| File Center | 文件上传 / 附件关联任意业务 / 下载 / 权限 | Notification |
-| Dashboard API | 统计接口（销售漏斗/项目看板/应收/库存/利润） | 业务数据 |
-| Menu Management | 菜单树 / 菜单权限绑定（数据驱动导航） | RBAC |
+| Workflow Engine | Workflow Definition / Instance / Step / Action / History / Condition | 审批 / 退回 / 驳回 / 撤销 / 转交 / 结束 |
+| Approval Engine | 审批流（基于 Workflow） | 串签 / 会签 / 或签 / 加签 / 抄送 |
+| Notification | Notification / Email / System Message / Telegram / Webhook（预留） | 以后企业微信 / 钉钉直接接入 |
+| Dictionary | Dictionary Type / Dictionary Item | 行业 / 城市 / 单位 / 品牌等 |
+| Settings | System Setting / Tenant Setting / User Setting（Key-Value） | 税率/币种/单据规则等 |
 
-## Phase B：业务底座（主数据 CRUD 完整化）
+## Sprint 3B：平台能力
 
-| 模块 | 内容 | 依赖 |
-| --- | --- | --- |
-| Customer CRUD | 客户完整增删改查（含 2C 企业字段） | 2A/2B 模型 |
-| Supplier CRUD | 供应商完整增删改查 | 2A/2B 模型 |
-| Item CRUD | 物料完整增删改查（含工业字段/规格扩展） | 2A/2B 模型 |
-| Price List CRUD | 价格表完整增删改查（9 类价格/阶梯/审批） | 2A/2B 模型 |
-| Project CRUD | 项目完整增删改查（机会→项目全生命周期） | 2B 模型 |
+| 模块 | 内容 |
+| --- | --- |
+| Menu | Menu / Menu Permission / Menu Tree / Menu Sort |
+| Dashboard API | Dashboard Widget / Layout / KPI |
+| Audit（升级） | 在 AuditLog 基础上增加：Object Type / Object ID / IP / Device / Browser / Duration |
+| File Center | File / Folder / Version / Preview / Attachment（合同/报价/图片共用） |
 
-> CRUD 复用 `apps/web/src/lib/api-helpers.ts`（鉴权/权限/审计）+ 动作级权限 + 审计日志。
+## Sprint 3C：业务底座（仅 CRUD，不业务）
+
+- Customer / Supplier / Item / Project / Price List
+- 统一能力：List / Search / Filter / Create / Edit / Delete / Export / Import
+
+## QA 规则（CTO 批准）
+
+从 Sprint 3 开始，每个 PR 必须新增 `docs/qa/` 验收文档：
+
+- `docs/qa/Sprint3A_QA.md` / `Sprint3B_QA.md` / `Sprint3C_QA.md`
+- 记录：测试内容、测试结果、截图、已知问题、风险、验收人
+
+## Release 六项同步（CTO 批准）
+
+每个 Sprint 完成后：**Tag / Release / CHANGELOG / QA / ADR / ROADMAP** 六项全部同步。
 
 ## 验收
 
-- 系统底座 8 模块 API 可用，审批流可驱动任意业务单
-- 主数据 5 模块 CRUD 完整（搜索/分页/排序/审计/软删除）
-- 详见 [ROADMAP.md](../ROADMAP.md) Sprint 3
+- Workflow + Approval 可驱动任意业务单（串签/会签/或签/加签/抄送）
+- Notification 四通道 + Webhook 预留；Dictionary/Settings 可用
+- Menu 数据驱动导航；Dashboard API 可统计；Audit 增强字段；File Center 附件通用
+- 主数据 5 模块 CRUD 完整（复用 api-helpers + 动作级权限 + 审计）

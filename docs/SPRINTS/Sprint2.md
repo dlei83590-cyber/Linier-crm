@@ -4,7 +4,7 @@
 
 | 字段 | 值 |
 | --- | --- |
-| 状态 | ✅ 已完成（PR #4 open，待 CTO 最终审核） |
+| 状态 | ✅ Closed（Release v0.2.0-alpha，PR #4 已合并） |
 | 分支 | feature/sprint2-master-data |
 
 ## Sprint 2A：中国版主数据
@@ -40,4 +40,6 @@
 
 ## 验收
 
-- PR #4：open | mergeable | clean，交 CTO 最终审核
+- PR #4：merged ✅（a00d4223e6）
+- Release v0.2.0-alpha ✅（id 365324749）
+- main 已冻结，Sprint 3 ERP Foundation 启动
