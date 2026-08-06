@@ -55,6 +55,75 @@ enum PriceType {
   HISTORICAL // 历史价
 }
 
+/// 价格策略类型（CTO #2204/#2225：独立建模，不写死在 PriceList）
+enum PricePolicyType {
+  STANDARD   // 标准价
+  VIP        // VIP 价
+  PROJECT    // 项目价
+  DEALER     // 经销商价
+  REGIONAL   // 区域价
+  PROMOTION  // 促销价
+}
+
+/// 价目表版本状态（CTO #2204：Draft/Published/Archived，报价可追溯）
+enum PriceListStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+/// 税率类型（CTO #2204/#2225：0%/6%/13%/免税/自定义）
+enum TaxRateType {
+  ZERO      // 0%
+  SIX       // 6%
+  THIRTEEN  // 13%
+  EXEMPT    // 免税
+  CUSTOM    // 自定义
+}
+
+/// 价格来源（CTO #2225：BI 分析价格来源）
+enum PriceSource {
+  MANUAL    // 手工
+  IMPORT    // 导入
+  FORMULA   // 公式计算
+  PROMOTION // 促销
+  SUPPLIER  // 供应商
+  MARKET    // 市场行情
+}
+
+/// 价格匹配策略（CTO #2249：priority 不够，需策略）
+enum PriceMatchStrategy {
+  FIRST_MATCH      // 第一条命中即停止
+  BEST_PRICE       // 最优价（业务定义）
+  LOWEST_PRICE     // 最低价
+  HIGHEST_PRIORITY // 最高优先级
+  COMBINE          // 多规则叠加
+}
+
+/// 促销类型（CTO #2225：PromotionRule 独立模型）
+enum PromotionType {
+  PERCENT // 折扣百分比
+  AMOUNT  // 固定金额
+}
+
+/// 汇率类型（CTO #2345：央行/ERP/人工可区分）
+enum ExchangeRateType {
+  CENTRAL_BANK // 央行
+  BANK         // 银行
+  MANUAL       // 人工
+}
+
+/// 价格规则类型（CTO #2345：PriceRule 独立，Pricing Engine 直接执行）
+enum PriceRuleType {
+  CUSTOMER_LEVEL // 客户等级
+  REGION         // 区域
+  QUANTITY_BREAK // 数量阶梯
+  BRAND          // 品牌
+  PROJECT_TYPE   // 项目类型
+  CURRENCY       // 币种
+  CHANNEL        // 渠道
+}
+
 /// 物料生命周期（CTO #2075：产品生命周期，与 ItemStatus 系统状态分离）
 enum ItemLifecycle {
   DESIGN // 设计
@@ -307,6 +376,7 @@ model Item {
   linearGuide   LinearGuideSpecification?
   standards     ItemStandard[]
   priceListItems PriceListItem[]
+  partnerPrices  PartnerPrice[]
   projectProducts ProjectProduct[]
   specifications ItemSpecification[]
   uomConversions UomConversion[]
@@ -435,6 +505,7 @@ model BusinessPartner {
   partnerCredit       PartnerCredit?
   suppliers           Supplier[]
   supplierItems       SupplierItem[]
+  partnerPrices       PartnerPrice[]
   createdAt           DateTime       @default(now()) @db.Timestamptz(3)
   updatedAt           DateTime       @updatedAt @db.Timestamptz(3)
 
@@ -444,15 +515,23 @@ model BusinessPartner {
   @@index([deletedAt])
 }
 
-/// 价格表主数据。币种默认 CNY；税率默认由配置（DEFAULT_TAX_RATE）提供，不在代码写死。
+/// 价格表主数据（CTO #2225 双轨：pricePolicyId FK + policyType 快照；Base/Quote Currency；Status 版本化）
 model PriceList {
   id              String          @id @default(cuid())
   code            String          @unique
   name            String
   priceType       PriceType       @default(SALES) // 价格类型
-  currency        String          @default("CNY")
-  validFrom       DateTime? // 报价有效期起
-  validTo         DateTime? // 报价有效期止
+  currency        String          @default("CNY") // 兼容旧字段
+  pricePolicyId   String? // 双轨：FK 关联当前策略
+  policyType      PricePolicyType? // 双轨：策略类型快照（历史可解释）
+  baseCurrency    String          @default("CNY") // CTO #2204：基准币种
+  quoteCurrency   String          @default("CNY") // CTO #2204：报价币种
+  status          PriceListStatus @default(DRAFT) // CTO #2204：Draft/Published/Archived
+  effectiveFrom   DateTime? // CTO #2204：统一时间窗口
+  effectiveTo     DateTime? // CTO #2204
+  validFrom       DateTime? // 兼容旧字段
+  validTo         DateTime? // 兼容旧字段
+  priceSource     PriceSource     @default(MANUAL) // CTO #2225：价格来源
   freightIncluded Boolean         @default(false) // 是否含运费
   isActive        Boolean         @default(true)
   createdById     String?
@@ -461,15 +540,19 @@ model PriceList {
   approvalStatus  ApprovalStatus  @default(DRAFT)
   version         Int             @default(1)
   deletedAt       DateTime?
+  policy          PricePolicy?    @relation(fields: [pricePolicyId], references: [id], onDelete: SetNull)
+  versions        PriceListVersion[]
   items           PriceListItem[]
   createdAt       DateTime        @default(now()) @db.Timestamptz(3)
   updatedAt       DateTime        @updatedAt @db.Timestamptz(3)
 
   @@index([name])
+  @@index([status])
+  @@index([pricePolicyId])
   @@index([deletedAt])
 }
 
-/// 价格表明细：未税价 / 税率 / 税额 / 含税价 / 最小起订量 / 阶梯价
+/// 价格表明细（CTO #2225/#2345：未税价/税率/税额/含税价/阶梯价 + 时间窗口 + 价格来源）
 model PriceListItem {
   id               String        @id @default(cuid())
   priceListId      String
@@ -482,6 +565,12 @@ model PriceListItem {
   unitPriceInclTax Decimal       @db.Decimal(14, 4) // 含税价
   minOrderQty      Decimal?      @db.Decimal(14, 2) // 最小起订量
   tieredPricing    Json? // 阶梯价（如 [{qty, price}])
+  priceSource      PriceSource   @default(MANUAL) // CTO #2225：价格来源
+  effectiveFrom    DateTime? // CTO #2204：时间窗口
+  effectiveTo      DateTime? // CTO #2204
+  discountRate     Decimal?      @db.Decimal(5, 2) // 折扣率 %
+  taxProfileId     String? // CTO #2225：税率档案
+  taxProfile       TaxProfile?   @relation(fields: [taxProfileId], references: [id], onDelete: SetNull)
   isActive         Boolean       @default(true)
   createdById      String?
   updatedById      String?
@@ -494,7 +583,305 @@ model PriceListItem {
 
   @@index([priceListId])
   @@index([itemId])
+  @@index([taxProfileId])
   @@index([deletedAt])
+}
+
+/// 价格策略（CTO #2204/#2225/#2249：独立建模；matchStrategy + stopOnMatch）
+model PricePolicy {
+  id            String          @id @default(cuid())
+  code          String          @unique
+  name          String
+  policyType    PricePolicyType
+  priority      Int             @default(100) // 数值越小优先级越高（基础排序）
+  matchStrategy PriceMatchStrategy @default(HIGHEST_PRIORITY) // CTO #2249
+  stopOnMatch   Boolean         @default(true) // CTO #2249：命中即停/继续叠加
+  description   String?
+  isActive      Boolean         @default(true)
+  createdById   String?
+  updatedById   String?
+  approvedById  String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version       Int             @default(1)
+  deletedAt     DateTime?
+  priceLists    PriceList[]
+  rules         PriceRule[]
+  createdAt     DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime        @updatedAt @db.Timestamptz(3)
+
+  @@index([policyType])
+  @@index([deletedAt])
+}
+
+/// 价格规则（CTO #2345：规则独立于 Policy，Pricing Engine 直接执行）
+model PriceRule {
+  id            String       @id @default(cuid())
+  policyId      String
+  policy        PricePolicy  @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  ruleType      PriceRuleType // CUSTOMER_LEVEL/REGION/QUANTITY_BREAK/BRAND/PROJECT_TYPE/CURRENCY/CHANNEL
+  ruleName      String       // 规则名（如 "VIP 客户 9 折"）
+  conditions    Json?        // 条件（如 {customerLevel: "VIP", minQty: 100}）
+  discountRate  Decimal?     @db.Decimal(5, 2) // 折扣率 %
+  priority      Int          @default(100)
+  isActive      Boolean      @default(true)
+  createdById   String?
+  updatedById   String?
+  approvedById  String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version       Int          @default(1)
+  deletedAt     DateTime?
+  createdAt     DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime     @updatedAt @db.Timestamptz(3)
+
+  @@index([policyId])
+  @@index([ruleType])
+  @@index([deletedAt])
+}
+
+/// 价目表版本（CTO #2204/#2345：Draft/Published/Archived + revisionNo + workflowInstanceId）
+model PriceListVersion {
+  id                String        @id @default(cuid())
+  priceListId       String
+  priceList         PriceList     @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  versionNo         Int           // 版本号（递增）
+  revisionNo        Int           @default(1) // CTO #2345：修订号
+  status            PriceListStatus @default(DRAFT)
+  publishedBy       String? // CTO #2345
+  publishedAt       DateTime? // CTO #2345
+  workflowInstanceId String? // CTO #2345：审批完成后直接发布
+  changeSummary     String?
+  isActive          Boolean       @default(true)
+  createdById       String?
+  updatedById       String?
+  approvedById      String?
+  approvalStatus    ApprovalStatus @default(DRAFT)
+  version           Int           @default(1)
+  deletedAt         DateTime?
+  createdAt         DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime      @updatedAt @db.Timestamptz(3)
+
+  @@unique([priceListId, versionNo])
+  @@index([priceListId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+/// 专属价（CTO #2225/#2249/#2345：Partner 级 + 枚举/快照 + priority/approvalRequired）
+model PartnerPrice {
+  id               String        @id @default(cuid())
+  partnerId        String
+  partner          BusinessPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  partnerRoleType  PartnerRoleType // CTO #2249：枚举（业务逻辑/查询/权限）
+  partnerRoleName  String? // CTO #2249：名称快照（历史显示）
+  itemId           String
+  item             Item          @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  unitPrice        Decimal       @db.Decimal(18, 4)
+  currency         String        @default("CNY")
+  taxProfileId     String?
+  taxProfile       TaxProfile?   @relation(fields: [taxProfileId], references: [id], onDelete: SetNull)
+  effectiveFrom    DateTime?
+  effectiveTo      DateTime?
+  priceSource      PriceSource   @default(MANUAL) // CTO #2225
+  priority         Int           @default(100) // CTO #2345：优先级
+  approvalRequired Boolean       @default(false) // CTO #2345：VIP 价可审批
+  isActive         Boolean       @default(true)
+  createdById      String?
+  updatedById      String?
+  approvedById     String?
+  approvalStatus   ApprovalStatus @default(DRAFT)
+  version          Int           @default(1)
+  deletedAt        DateTime?
+  createdAt        DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime      @updatedAt @db.Timestamptz(3)
+
+  @@index([partnerId])
+  @@index([itemId])
+  @@index([partnerRoleType])
+  @@index([deletedAt])
+}
+
+/// 促销规则（CTO #2225/#2345：独立模型 + priority/stackable/exclusive）
+model PromotionRule {
+  id            String        @id @default(cuid())
+  code          String        @unique
+  name          String
+  promotionType PromotionType // PERCENT/AMOUNT
+  discountValue Decimal       @db.Decimal(18, 4) // 折扣% 或 固定金额
+  startAt       DateTime?
+  endAt         DateTime?
+  priority      Int           @default(100) // CTO #2345
+  stackable     Boolean       @default(false) // CTO #2345：可叠加
+  exclusive     Boolean       @default(false) // CTO #2345：互斥（不与其他促销叠加）
+  priceSource   PriceSource   @default(PROMOTION)
+  status        String        @default("DRAFT") // DRAFT/ACTIVE/PAUSED/EXPIRED
+  isActive      Boolean       @default(true)
+  createdById   String?
+  updatedById   String?
+  approvedById  String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version       Int           @default(1)
+  deletedAt     DateTime?
+  createdAt     DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime      @updatedAt @db.Timestamptz(3)
+
+  @@index([startAt, endAt])
+  @@index([deletedAt])
+}
+
+/// 税率档案（CTO #2204/#2225/#2345：多国支持 country/region/taxIncluded）
+model TaxProfile {
+  id            String       @id @default(cuid())
+  code          String       @unique
+  name          String
+  country       String? // CTO #2345：CN/MY/SG
+  region        String? // CTO #2345：区域
+  taxIncluded   Boolean      @default(false) // CTO #2345：含税价标志
+  rateType      TaxRateType
+  rate          Decimal?     @db.Decimal(5, 2) // CUSTOM 时填写
+  isActive      Boolean      @default(true)
+  createdById   String?
+  updatedById   String?
+  approvedById  String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version       Int          @default(1)
+  deletedAt     DateTime?
+  priceListItems PriceListItem[]
+  partnerPrices PartnerPrice[]
+  taxRates      TaxRate[]
+  taxProfileRules TaxProfileRule[]
+  createdAt     DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime     @updatedAt @db.Timestamptz(3)
+
+  @@index([deletedAt])
+}
+
+/// 税率（CTO #2225：TaxProfile → TaxRate → Environment Default；ENV 只选默认 Profile 不存税率）
+model TaxRate {
+  id            String    @id @default(cuid())
+  taxProfileId  String
+  taxProfile    TaxProfile @relation(fields: [taxProfileId], references: [id], onDelete: Cascade)
+  rate          Decimal   @db.Decimal(5, 2)
+  effectiveFrom DateTime?
+  effectiveTo   DateTime?
+  isActive      Boolean   @default(true)
+  createdById   String?
+  updatedById   String?
+  approvedById  String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version       Int       @default(1)
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@index([taxProfileId])
+  @@index([deletedAt])
+}
+
+/// 税率规则（CTO #2249：多国税制不改核心代码）
+model TaxProfileRule {
+  id            String     @id @default(cuid())
+  country       String? // 国家（CN/MY/SG），空=全局
+  itemCategory  String? // Item Category
+  customerType  String? // Customer Type
+  supplierType  String? // Supplier Type
+  taxCode       String     // 税码（对应 TaxProfile）
+  taxProfileId  String
+  taxProfile    TaxProfile @relation(fields: [taxProfileId], references: [id], onDelete: Cascade)
+  priority      Int        @default(100)
+  isActive      Boolean    @default(true)
+  createdById   String?
+  updatedById   String?
+  approvedById  String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version       Int        @default(1)
+  deletedAt     DateTime?
+  createdAt     DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime   @updatedAt @db.Timestamptz(3)
+
+  @@index([country, itemCategory, customerType, supplierType])
+  @@index([priority])
+  @@index([deletedAt])
+}
+
+/// 汇率（CTO #2249/#2345：独立维护，不依赖外部实时查询；provider/rateType/manualOverride）
+model ExchangeRate {
+  id             String           @id @default(cuid())
+  baseCurrency   String           // 基准币种
+  quoteCurrency  String           // 报价币种
+  rate           Decimal          @db.Decimal(18, 8)
+  effectiveDate  DateTime         @db.Timestamptz(3)
+  provider       String? // CTO #2345：数据来源机构
+  source         String? // CTO #2249：来源（央行/银行/自定义）
+  rateType       ExchangeRateType @default(MANUAL) // CTO #2345：央行/ERP/人工
+  manualOverride Boolean          @default(false) // CTO #2345：人工覆盖标志
+  isActive       Boolean          @default(true)
+  createdById    String?
+  updatedById    String?
+  approvedById   String?
+  approvalStatus ApprovalStatus   @default(DRAFT)
+  version        Int              @default(1)
+  deletedAt      DateTime?
+  createdAt      DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime         @updatedAt @db.Timestamptz(3)
+
+  @@unique([baseCurrency, quoteCurrency, effectiveDate])
+  @@index([effectiveDate])
+  @@index([deletedAt])
+}
+
+/// 报价价格快照（CTO #2225/#2249：完整定价链 + PricingEngineVersion；Sprint 4 Quotation 引用）
+model QuotationPriceSnapshot {
+  id                   String    @id @default(cuid())
+  quotationId          String    // Sprint 4 建 Quotation 后补 FK（CTO #2225）
+  quotationLineId      String?
+  itemId               String
+  priceListId          String?
+  pricePolicyId        String?
+  promotionRuleId      String?
+  promotionDiscount    Decimal?  @db.Decimal(18, 4) // 促销命中折扣金额
+  currency             String    @default("CNY")
+  exchangeRateId       String?
+  exchangeRate         Decimal?  @db.Decimal(18, 8)
+  taxProfileId         String?
+  taxRate              Decimal?  @db.Decimal(5, 2) // 税率快照
+  baseUnitPrice        Decimal   @db.Decimal(18, 4) // Base Price
+  discountRate         Decimal   @default(0) @db.Decimal(5, 2)
+  finalUnitPrice       Decimal   @db.Decimal(18, 4) // Final Price
+  finalAmount          Decimal   @db.Decimal(18, 4)
+  pricingTime          DateTime  @default(now()) @db.Timestamptz(3)
+  pricingEngineVersion String    @default("v1") // CTO #2249
+  isActive             Boolean   @default(true)
+  createdById          String?
+  updatedById          String?
+  approvedById         String?
+  approvalStatus       ApprovalStatus @default(DRAFT)
+  version              Int       @default(1)
+  deletedAt            DateTime?
+  createdAt            DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@index([quotationId])
+  @@index([itemId])
+  @@index([deletedAt])
+}
+
+/// 价格变更审计（CTO #2345：独立审计，Sprint 7 财务复用）
+model PriceAudit {
+  id                 String    @id @default(cuid())
+  entityType         String    // PriceList/PriceListItem/PartnerPrice/PromotionRule
+  entityId           String
+  oldPrice           Decimal?  @db.Decimal(18, 4)
+  newPrice           Decimal?  @db.Decimal(18, 4)
+  reason             String?
+  approvedBy         String?
+  workflowInstanceId String?
+  effectiveTime      DateTime  @default(now()) @db.Timestamptz(3)
+  createdById        String?
+  createdAt          DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@index([entityType, entityId])
+  @@index([workflowInstanceId])
 }
 
 /// 商业条款主数据（如 EXW/FOB/CIF/月结30天）

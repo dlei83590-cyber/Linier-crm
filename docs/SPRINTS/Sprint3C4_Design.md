@@ -665,3 +665,65 @@ model TaxProfileRule {
   @@index([priority])
 }
 ```
+
+
+## 9. CTO #2345 领域模型锁定（实现前最终调整）
+
+### 9.1 PriceRule（新增：规则独立于 Policy）
+- PricePolicy 只保留策略元数据（code/name/policyType/priority/matchStrategy/stopOnMatch）。
+- **PriceRule** 独立建模：Customer Level / Region / Quantity Break / Brand / Project Type / Currency / Channel。
+- Pricing Engine 直接执行 Rule（Policy → Rules 展开执行），不再把规则塞进 Policy 字段。
+
+### 9.2 PricingContext（新增：统一上下文，非数据库表）
+- resolvePrice() 参数统一为一个上下文对象，避免参数无限膨胀：
+```ts
+interface PricingContext {
+  partnerId?: string;      // 客户/供应商（Partner 级）
+  partnerRole?: PartnerRoleType;
+  currency: string;
+  warehouse?: string;
+  region?: string;
+  projectId?: string;
+  salespersonId?: string;
+  quantity: number;
+  uom?: string;
+  taxProfile?: string;     // TaxProfile code/id
+  pricingDate: Date;
+  itemId: string;
+  priceListId?: string;    // 指定价目表（可选）
+}
+```
+- 所有价格计算（Selling/Purchase/Promotion/Tax/Currency）都走同一个上下文。
+
+### 9.3 PriceAudit（建议：价格独立审计）
+- 非普通 Audit；记录价格变更全过程：
+  OldPrice / NewPrice / Reason / ApprovedBy / WorkflowInstance / EffectiveTime。
+- Sprint 7 财务非常有用；本 Sprint **先建表**（轻量，随 Price 一起交付）。
+
+### 9.4 PriceListVersion 增强
+- 增加 revisionNo / publishedBy / publishedAt / workflowInstanceId。
+- 价格审批完成 → Workflow 通过 → 直接发布（Draft → Workflow → Approved → Published）。
+
+### 9.5 ExchangeRate 增强
+- 增加 provider / source / rateType / manualOverride：
+  - rateType：CENTRAL_BANK / BANK / MANUAL
+  - provider：数据来源机构
+  - manualOverride：人工覆盖标志
+- 央行 / ERP / 人工汇率都能区分。
+
+### 9.6 PromotionRule 增强
+- 增加 priority / stackable / exclusive：多个促销不冲突（priority 排序、stackable 叠加、exclusive 互斥）。
+
+### 9.7 PartnerPrice 增强
+- 增加 priority / approvalRequired：VIP 客户价格可走审批。
+
+### 9.8 TaxProfile 增强
+- 增加 country / region / taxIncluded：中国 / 马来西亚 / 新加坡都支持（taxIncluded 含税价标志）。
+
+### 9.9 API 资源拆分（9 组）
+- price-policies / price-lists / price-list-versions / partner-prices / promotions / tax-profiles / tax-rates / exchange-rates / pricing。
+- **POST /pricing/resolve 唯一入口**（统一 resolvePrice()），不拆 resolveCustomerPrice / resolveSupplierPrice / resolveProjectPrice。
+
+### 9.10 与 Workflow 集成
+- Price 发布状态机：Draft → Workflow（Approval）→ Approved → Published。
+- 审批自动触发发布，不手动改状态。
