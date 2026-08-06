@@ -1,6 +1,6 @@
 # ADR-0014：Project Foundation Enhancement（项目领域增强）
 
-- 状态：**Proposed**（Sprint 3C-5 设计文档，待 CTO 审核后进入实现）
+- 状态：**Accepted**（CTO 审核通过，2026-08-06；5 项决策锁定：priority+progressPercent / priceSnapshotId / 强制结项双权限 / ProjectDependency 延期 / 复用全局 Tag；Sprint 3C-5 实现中）
 - 日期：2026-08-06
 - 关联：ADR-0003（Project 领域，Sprint 2C 双段模型）、ADR-0008（File Center）、ADR-0013（Price Foundation）、Sprint3C5_Design.md、ROADMAP.md
 - 背景：Sprint 3C-4 Price Foundation 验收通过（PR #10 合并，v0.5.0-alpha 发布）。Sprint 3C 剩余最后一个子阶段 3C-5 Project Foundation，定位为 **Enhancement + CRUD/API Foundation**——Sprint 2C 已建完整双段模型（迁移 0003_project_domain），本轮**不重建 Project Schema**。
