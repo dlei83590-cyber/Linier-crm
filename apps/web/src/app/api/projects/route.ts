@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
         _count: {
           select: {
             members: { where: { deletedAt: null, isActive: true } },
-            tasks: { where: { deletedAt: null, status: { not: "DONE" }, status: { not: "CANCELLED" } } },
+            tasks: { where: { deletedAt: null, status: { notIn: ["DONE", "CANCELLED"] } } },
             risks: { where: { deletedAt: null, status: { not: "CLOSED" } } },
           },
         },
