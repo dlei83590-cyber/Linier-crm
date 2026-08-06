@@ -35,6 +35,10 @@ tags:
   - name: Tax Rates
   - name: Exchange Rates
   - name: Pricing Engine
+  # Sprint 3C-5 Project Foundation
+  - name: Project Opportunities
+  - name: Projects
+  - name: Project Sub-resources
 
 paths:
   # ==========================================================================
@@ -6698,6 +6702,342 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # ==========================================================================
+  # Sprint 3C-5 Project Foundation（Opportunity / Project 主档 + convert / transition / close + 12 子资源）
+  # ==========================================================================
+  /api/project-opportunities:
+    get:
+      tags: [Project Opportunities]
+      summary: List project opportunities
+      operationId: listProjectOpportunities
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectOpportunityListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Project Opportunities]
+      summary: Create project opportunity
+      operationId: createProjectOpportunity
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectOpportunityCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectOpportunityResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/project-opportunities/{id}:
+    get:
+      tags: [Project Opportunities]
+      summary: Get project opportunity
+      operationId: getProjectOpportunity
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectOpportunityResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Project Opportunities]
+      summary: Update project opportunity
+      operationId: updateProjectOpportunity
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectOpportunityUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectOpportunityResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Project Opportunities]
+      summary: Soft delete project opportunity
+      operationId: deleteProjectOpportunity
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/project-opportunities/{id}/convert:
+    post:
+      tags: [Project Opportunities]
+      summary: Convert opportunity to project (single entry, transaction)
+      operationId: convertProjectOpportunity
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Converted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectConvertResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/projects:
+    get:
+      tags: [Projects]
+      summary: List projects
+      operationId: listProjects
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Projects]
+      summary: Create project (convert via dedicated endpoint)
+      operationId: createProject
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/projects/{id}:
+    get:
+      tags: [Projects]
+      summary: Get project detail with sub-resources
+      operationId: getProject
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Projects]
+      summary: Update project (stage via /transition)
+      operationId: updateProject
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Projects]
+      summary: Soft delete project
+      operationId: deleteProject
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/projects/{id}/transition:
+    post:
+      tags: [Projects]
+      summary: Transition project stage (centralized validation)
+      operationId: transitionProjectStage
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectTransitionRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectTransitionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/projects/{id}/close:
+    post:
+      tags: [Projects]
+      summary: Close project (force close with dual permission)
+      operationId: closeProject
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectCloseRequest"
+      responses:
+        "200":
+          description: Closed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectCloseResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -10174,3 +10514,231 @@ components:
             finalUnitPrice: { type: number }
             finalAmount: { type: number }
             snapshotId: { type: string }
+
+    # --------------------------------------------------------------------------
+    # Project Foundation（Sprint 3C-5）
+    # --------------------------------------------------------------------------
+    ProjectStage:
+      type: string
+      enum: [LEAD, QUALIFIED, SOLUTION, QUOTATION, SAMPLING, TESTING, SMALL_BATCH, MASS_SUPPLY, PAUSED, FAILED, CLOSED]
+    StakeholderRole:
+      type: string
+      enum: [REQUESTER, TECHNICAL, PURCHASER, DECISION_MAKER, END_USER]
+    PaymentStatus:
+      type: string
+      enum: [UNPAID, PARTIAL, PAID, OVERDUE]
+    MilestoneStatus:
+      type: string
+      enum: [PLANNED, IN_PROGRESS, COMPLETED, DELAYED]
+    TaskStatus:
+      type: string
+      enum: [TODO, IN_PROGRESS, DONE, CANCELLED]
+    RiskStatus:
+      type: string
+      enum: [OPEN, MITIGATING, CLOSED]
+    VisitType:
+      type: string
+      enum: [VISIT, PHONE, VIDEO, MEETING, OTHER]
+    AcceptanceResult:
+      type: string
+      enum: [PASSED, CONDITIONAL_PASS, FAILED, PENDING]
+
+    ProjectOpportunity:
+      type: object
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        customerId: { type: string }
+        stage: { $ref: "#/components/schemas/ProjectStage" }
+        customerInvestment: { type: number, nullable: true }
+        expectedRevenue: { type: number, nullable: true }
+        expectedCost: { type: number, nullable: true }
+        grossProfit: { type: number, nullable: true }
+        expenseBudget: { type: number, nullable: true }
+        salesTarget: { type: number, nullable: true }
+        paymentStatus: { $ref: "#/components/schemas/PaymentStatus" }
+        competitors: { type: object, nullable: true }
+        successProbability: { type: number, nullable: true }
+        ownerId: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        convertedAt: { type: string, format: date-time, nullable: true }
+        convertedBy: { type: string, nullable: true }
+        isActive: { type: boolean, default: true }
+        approvalStatus: { type: string, enum: [DRAFT, PENDING, APPROVED, REJECTED] }
+        version: { type: integer, default: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ProjectOpportunityCreate:
+      type: object
+      required: [code, name, customerId]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        customerId: { type: string }
+        stage: { $ref: "#/components/schemas/ProjectStage" }
+        customerInvestment: { type: number }
+        expectedRevenue: { type: number }
+        expectedCost: { type: number }
+        grossProfit: { type: number }
+        expenseBudget: { type: number }
+        salesTarget: { type: number }
+        paymentStatus: { $ref: "#/components/schemas/PaymentStatus" }
+        competitors: { type: array, items: { type: object } }
+        successProbability: { type: number }
+        ownerId: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+    ProjectOpportunityUpdate:
+      type: object
+      required: [version]
+      properties:
+        name: { type: string }
+        stage: { $ref: "#/components/schemas/ProjectStage" }
+        customerInvestment: { type: number, nullable: true }
+        expectedRevenue: { type: number, nullable: true }
+        expectedCost: { type: number, nullable: true }
+        grossProfit: { type: number, nullable: true }
+        expenseBudget: { type: number, nullable: true }
+        salesTarget: { type: number, nullable: true }
+        paymentStatus: { $ref: "#/components/schemas/PaymentStatus" }
+        competitors: { type: array, items: { type: object }, nullable: true }
+        successProbability: { type: number, nullable: true }
+        ownerId: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        version: { type: integer }
+    ProjectOpportunityResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/ProjectOpportunity" }
+    ProjectOpportunityListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/ProjectOpportunity" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    Project:
+      type: object
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        opportunityId: { type: string, nullable: true }
+        customerId: { type: string }
+        stage: { $ref: "#/components/schemas/ProjectStage" }
+        priority: { type: string, enum: [HIGH, MEDIUM, LOW], nullable: true }
+        progressPercent: { type: number, nullable: true }
+        expectedContractAmount: { type: number, nullable: true }
+        expectedProfit: { type: number, nullable: true }
+        expectedGrossMarginRate: { type: number, nullable: true }
+        paymentStatus: { $ref: "#/components/schemas/PaymentStatus" }
+        receivedAmount: { type: number, nullable: true }
+        invoicedAmount: { type: number, nullable: true }
+        uninvoicedAmount: { type: number, nullable: true }
+        receivableBalance: { type: number, nullable: true }
+        projectRating: { type: string, nullable: true }
+        failureReason: { type: string, nullable: true }
+        ownerId: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        isActive: { type: boolean, default: true }
+        approvalStatus: { type: string, enum: [DRAFT, PENDING, APPROVED, REJECTED] }
+        version: { type: integer, default: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ProjectCreate:
+      type: object
+      required: [code, name, customerId]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        customerId: { type: string }
+        stage: { $ref: "#/components/schemas/ProjectStage" }
+        priority: { type: string, enum: [HIGH, MEDIUM, LOW], nullable: true }
+        ownerId: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        expectedContractAmount: { type: number, nullable: true }
+        expectedProfit: { type: number, nullable: true }
+        expectedGrossMarginRate: { type: number, nullable: true }
+        paymentStatus: { $ref: "#/components/schemas/PaymentStatus" }
+    ProjectUpdate:
+      type: object
+      required: [version]
+      properties:
+        name: { type: string }
+        priority: { type: string, enum: [HIGH, MEDIUM, LOW], nullable: true }
+        ownerId: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        progressPercent: { type: number, nullable: true }
+        projectRating: { type: string, nullable: true }
+        version: { type: integer }
+    ProjectResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/Project" }
+    ProjectListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Project" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+    ProjectConvertResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            project: { $ref: "#/components/schemas/Project" }
+            opportunityId: { type: string }
+            converted: { type: boolean, example: true }
+    ProjectTransitionRequest:
+      type: object
+      required: [targetStage, version]
+      properties:
+        targetStage: { $ref: "#/components/schemas/ProjectStage" }
+        remark: { type: string }
+        version: { type: integer }
+    ProjectTransitionResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            id: { type: string }
+            fromStage: { $ref: "#/components/schemas/ProjectStage" }
+            toStage: { $ref: "#/components/schemas/ProjectStage" }
+            remark: { type: string, nullable: true }
+            stage: { $ref: "#/components/schemas/ProjectStage" }
+    ProjectCloseRequest:
+      type: object
+      required: [reason, version]
+      properties:
+        reason: { type: string }
+        summary: { type: string }
+        force: { type: boolean, default: false }
+        version: { type: integer }
+    ProjectCloseResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            id: { type: string }
+            stage: { type: string, example: CLOSED }
+            closureId: { type: string }
+            force: { type: boolean, default: false }
