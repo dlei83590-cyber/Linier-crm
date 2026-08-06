@@ -859,6 +859,7 @@ model QuotationPriceSnapshot {
   deletedAt            DateTime?
   createdAt            DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt            DateTime  @updatedAt @db.Timestamptz(3)
+  projectProducts      ProjectProduct[]
 
   @@index([quotationId])
   @@index([itemId])
@@ -1069,6 +1070,8 @@ model Project {
   receivableBalance Decimal?               @db.Decimal(14, 2) // 应收余额
   projectRating String? // 项目评级
   failureReason String? // 失败原因
+  priority     String? // 优先级（高/中/低，CTO #3C5 最小增量）
+  progressPercent Decimal? @db.Decimal(5, 2) // 汇总进度 %（明细在 ProjectProgress）
   ownerId            String? // 项目负责人
   description        String?
   stakeholders       ProjectStakeholder[]
@@ -1083,6 +1086,7 @@ model Project {
   progresses         ProjectProgress[]
   acceptances        ProjectAcceptance[]
   closure            ProjectClosure?
+  tags               ProjectTag[]
   isActive           Boolean             @default(true)
   createdById        String?
   updatedById        String?
@@ -1257,7 +1261,9 @@ model ProjectProduct {
   itemId      String
   item        Item     @relation(fields: [itemId], references: [id], onDelete: Restrict)
   quantity    Decimal? @db.Decimal(14, 2) // 数量
-  unitPrice   Decimal? @db.Decimal(14, 4) // 单价
+  unitPrice   Decimal? @db.Decimal(14, 4) // 单价（历史快照兼容字段）
+  priceSnapshotId String? // CTO #3C5：价格快照引用（resolvePrice 生成，可空）
+  priceSnapshot QuotationPriceSnapshot? @relation(fields: [priceSnapshotId], references: [id], onDelete: SetNull)
   note        String?
   isActive    Boolean  @default(true)
   createdById String?
@@ -1271,6 +1277,7 @@ model ProjectProduct {
 
   @@index([projectId])
   @@index([itemId])
+  @@index([priceSnapshotId])
   @@index([deletedAt])
 }
 
@@ -2477,7 +2484,7 @@ model CustomerAddress {
   @@index([deletedAt])
 }
 
-/// 标签（全局可复用：客户/供应商/物料）
+/// 标签（全局可复用：客户/供应商/物料/项目）
 model Tag {
   id          String        @id @default(cuid())
   code        String        @unique
@@ -2488,6 +2495,7 @@ model Tag {
   customers   CustomerTag[]
   partnerTags PartnerTag[]
   itemTags    ItemTag[]
+  projectTags ProjectTag[]
   isActive    Boolean       @default(true)
   createdById String?
   updatedById String?
@@ -3070,6 +3078,30 @@ model ItemTag {
 
   @@unique([itemId, tagId])
   @@index([itemId])
+  @@index([tagId])
+  @@index([deletedAt])
+}
+
+/// 项目标签（CTO #3C5：复用全局 Tag 主数据，与 CustomerTag/PartnerTag/ItemTag 同构；不建项目私有标签字典）
+model ProjectTag {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tagId     String
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([projectId, tagId])
+  @@index([projectId])
   @@index([tagId])
   @@index([deletedAt])
 }
