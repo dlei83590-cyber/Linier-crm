@@ -23,6 +23,18 @@ tags:
   - name: Dictionaries
   - name: Settings
   - name: Notification Templates
+  - name: Item Master
+  # Sprint 3C-4 Price Foundation
+  - name: Price Policies
+  - name: Price Rules
+  - name: Price Lists
+  - name: Price List Versions
+  - name: Partner Prices
+  - name: Promotions
+  - name: Tax Profiles
+  - name: Tax Rates
+  - name: Exchange Rates
+  - name: Pricing Engine
 
 paths:
   # ==========================================================================
@@ -5545,6 +5557,1147 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
+  # ==========================================================================
+  # Sprint 3C-4 Price Foundation（Price Policies / Rules / Lists / Versions / Partner Prices / Promotions / Tax / Exchange Rates / Pricing Engine）
+  # ==========================================================================
+  /api/price-policies:
+    get:
+      tags: [Price Policies]
+      summary: List price policies
+      operationId: listPricePolicies
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PricePolicyListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Price Policies]
+      summary: Create price policy
+      operationId: createPricePolicy
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PricePolicyCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PricePolicyResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/price-policies/{id}:
+    get:
+      tags: [Price Policies]
+      summary: Get price policy
+      operationId: getPricePolicy
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PricePolicyResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Price Policies]
+      summary: Update price policy
+      operationId: updatePricePolicy
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PricePolicyUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PricePolicyResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Price Policies]
+      summary: Soft delete price policy
+      operationId: deletePricePolicy
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/price-rules:
+    get:
+      tags: [Price Rules]
+      summary: List price rules
+      operationId: listPriceRules
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceRuleListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Price Rules]
+      summary: Create price rule
+      operationId: createPriceRule
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PriceRuleCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceRuleResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/price-rules/{id}:
+    get:
+      tags: [Price Rules]
+      summary: Get price rule
+      operationId: getPriceRule
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceRuleResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Price Rules]
+      summary: Update price rule
+      operationId: updatePriceRule
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PriceRuleUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceRuleResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Price Rules]
+      summary: Soft delete price rule
+      operationId: deletePriceRule
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/price-lists:
+    get:
+      tags: [Price Lists]
+      summary: List price lists
+      operationId: listPriceLists
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceListListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Price Lists]
+      summary: Create price list
+      operationId: createPriceList
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PriceListCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/price-lists/{id}:
+    get:
+      tags: [Price Lists]
+      summary: Get price list
+      operationId: getPriceList
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Price Lists]
+      summary: Update price list
+      operationId: updatePriceList
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PriceListUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Price Lists]
+      summary: Soft delete price list
+      operationId: deletePriceList
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/price-list-versions:
+    get:
+      tags: [Price List Versions]
+      summary: List price list versions
+      operationId: listPriceListVersions
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceListVersionListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Price List Versions]
+      summary: Create price list version
+      operationId: createPriceListVersion
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PriceListVersionCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceListVersionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/price-list-versions/{id}:
+    get:
+      tags: [Price List Versions]
+      summary: Get price list version
+      operationId: getPriceListVersion
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceListVersionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Price List Versions]
+      summary: Update price list version (publish via workflow)
+      operationId: updatePriceListVersion
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PriceListVersionUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceListVersionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Price List Versions]
+      summary: Soft delete price list version
+      operationId: deletePriceListVersion
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/partner-prices:
+    get:
+      tags: [Partner Prices]
+      summary: List partner prices
+      operationId: listPartnerPrices
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerPriceListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Partner Prices]
+      summary: Create partner price
+      operationId: createPartnerPrice
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartnerPriceCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerPriceResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/partner-prices/{id}:
+    get:
+      tags: [Partner Prices]
+      summary: Get partner price
+      operationId: getPartnerPrice
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerPriceResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Partner Prices]
+      summary: Update partner price
+      operationId: updatePartnerPrice
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartnerPriceUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerPriceResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Partner Prices]
+      summary: Soft delete partner price
+      operationId: deletePartnerPrice
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/promotions:
+    get:
+      tags: [Promotions]
+      summary: List promotions
+      operationId: listPromotions
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromotionListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Promotions]
+      summary: Create promotion
+      operationId: createPromotion
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PromotionCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromotionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/promotions/{id}:
+    get:
+      tags: [Promotions]
+      summary: Get promotion
+      operationId: getPromotion
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromotionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Promotions]
+      summary: Update promotion
+      operationId: updatePromotion
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PromotionUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromotionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Promotions]
+      summary: Soft delete promotion
+      operationId: deletePromotion
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/tax-profiles:
+    get:
+      tags: [Tax Profiles]
+      summary: List tax profiles
+      operationId: listTaxProfiles
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxProfileListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Tax Profiles]
+      summary: Create tax profile
+      operationId: createTaxProfile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaxProfileCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxProfileResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/tax-profiles/{id}:
+    get:
+      tags: [Tax Profiles]
+      summary: Get tax profile
+      operationId: getTaxProfile
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxProfileResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Tax Profiles]
+      summary: Update tax profile
+      operationId: updateTaxProfile
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaxProfileUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxProfileResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Tax Profiles]
+      summary: Soft delete tax profile
+      operationId: deleteTaxProfile
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/tax-rates:
+    get:
+      tags: [Tax Rates]
+      summary: List tax rates
+      operationId: listTaxRates
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxRateListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Tax Rates]
+      summary: Create tax rate
+      operationId: createTaxRate
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaxRateCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxRateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/tax-rates/{id}:
+    get:
+      tags: [Tax Rates]
+      summary: Get tax rate
+      operationId: getTaxRate
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxRateResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Tax Rates]
+      summary: Update tax rate
+      operationId: updateTaxRate
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaxRateUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxRateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Tax Rates]
+      summary: Soft delete tax rate
+      operationId: deleteTaxRate
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/exchange-rates:
+    get:
+      tags: [Exchange Rates]
+      summary: List exchange rates
+      operationId: listExchangeRates
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExchangeRateListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Exchange Rates]
+      summary: Create exchange rate
+      operationId: createExchangeRate
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExchangeRateCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExchangeRateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/exchange-rates/{id}:
+    get:
+      tags: [Exchange Rates]
+      summary: Get exchange rate
+      operationId: getExchangeRate
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExchangeRateResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Exchange Rates]
+      summary: Update exchange rate
+      operationId: updateExchangeRate
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExchangeRateUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExchangeRateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Exchange Rates]
+      summary: Soft delete exchange rate
+      operationId: deleteExchangeRate
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Soft deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/pricing/resolve:
+    post:
+      tags: [Pricing Engine]
+      summary: Resolve price (single entry - Quotation/Project/Sales all call this)
+      description: |
+        价格解析唯一入口（CTO #2249/#2345）。业务模块禁止自行计算，统一调用本接口。
+
+        Sequence：
+        1. Resolve Price（POST /api/pricing/resolve）
+        2. Load Context（校验物料/伙伴/币种）
+        3. Match Policy（按 priority 取策略）
+        4. Match Rule（规则命中取折扣）
+        5. Partner Price / Price List（专属价优先，价目表兜底）
+        6. Promotion（促销命中）
+        7. Currency Conversion（汇率换算）
+        8. Tax（税率快照）
+        9. Snapshot（固化 QuotationPriceSnapshot，完整定价链）
+        10. Response（返回最终价 + 快照 id）
+      operationId: resolvePrice
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PricingResolveRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PricingResolveResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          description: Pricing failed (ITEM_NOT_FOUND / PRICE_NOT_FOUND)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -8417,3 +9570,607 @@ components:
           items: { $ref: "#/components/schemas/SpecificationDefinition" }
         meta: { $ref: "#/components/schemas/PaginationMeta" }
 
+
+    # --------------------------------------------------------------------------
+    # Price Foundation（Sprint 3C-4）
+    # --------------------------------------------------------------------------
+    PricePolicyType:
+      type: string
+      enum: [STANDARD, VIP, PROJECT, DEALER, REGIONAL, PROMOTION]
+    PriceMatchStrategy:
+      type: string
+      enum: [FIRST_MATCH, BEST_PRICE, LOWEST_PRICE, HIGHEST_PRIORITY, COMBINE]
+    PriceRuleType:
+      type: string
+      enum: [CUSTOMER_LEVEL, REGION, QUANTITY_BREAK, BRAND, PROJECT_TYPE, CURRENCY, CHANNEL]
+    PriceListStatus:
+      type: string
+      enum: [DRAFT, PUBLISHED, ARCHIVED]
+    PriceSource:
+      type: string
+      enum: [MANUAL, IMPORT, FORMULA, PROMOTION, SUPPLIER, MARKET]
+    TaxRateType:
+      type: string
+      enum: [ZERO, SIX, THIRTEEN, EXEMPT, CUSTOM]
+    ExchangeRateType:
+      type: string
+      enum: [CENTRAL_BANK, BANK, MANUAL]
+    PromotionType:
+      type: string
+      enum: [PERCENT, AMOUNT]
+    PartnerRoleType:
+      type: string
+      enum: [CUSTOMER, SUPPLIER, BOTH, LOGISTICS, OUTSOURCING]
+
+    PricePolicy:
+      type: object
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        policyType: { $ref: "#/components/schemas/PricePolicyType" }
+        priority: { type: integer, default: 100 }
+        matchStrategy: { $ref: "#/components/schemas/PriceMatchStrategy" }
+        stopOnMatch: { type: boolean, default: true }
+        description: { type: string, nullable: true }
+        isActive: { type: boolean, default: true }
+        approvalStatus: { type: string, enum: [DRAFT, PENDING, APPROVED, REJECTED] }
+        version: { type: integer, default: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PricePolicyCreate:
+      type: object
+      required: [code, name, policyType]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        policyType: { $ref: "#/components/schemas/PricePolicyType" }
+        priority: { type: integer, default: 100 }
+        matchStrategy: { $ref: "#/components/schemas/PriceMatchStrategy" }
+        stopOnMatch: { type: boolean, default: true }
+        description: { type: string, nullable: true }
+    PricePolicyUpdate:
+      type: object
+      required: [version]
+      properties:
+        name: { type: string }
+        policyType: { $ref: "#/components/schemas/PricePolicyType" }
+        priority: { type: integer }
+        matchStrategy: { $ref: "#/components/schemas/PriceMatchStrategy" }
+        stopOnMatch: { type: boolean }
+        description: { type: string, nullable: true }
+        isActive: { type: boolean }
+        version: { type: integer }
+    PricePolicyResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/PricePolicy" }
+    PricePolicyListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/PricePolicy" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    PriceRule:
+      type: object
+      properties:
+        id: { type: string }
+        policyId: { type: string }
+        ruleType: { $ref: "#/components/schemas/PriceRuleType" }
+        ruleName: { type: string }
+        conditions: { type: object, nullable: true }
+        discountRate: { type: number, nullable: true }
+        priority: { type: integer, default: 100 }
+        isActive: { type: boolean, default: true }
+        approvalStatus: { type: string, enum: [DRAFT, PENDING, APPROVED, REJECTED] }
+        version: { type: integer, default: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PriceRuleCreate:
+      type: object
+      required: [policyId, ruleType, ruleName]
+      properties:
+        policyId: { type: string }
+        ruleType: { $ref: "#/components/schemas/PriceRuleType" }
+        ruleName: { type: string }
+        conditions: { type: object }
+        discountRate: { type: number }
+        priority: { type: integer, default: 100 }
+    PriceRuleUpdate:
+      type: object
+      required: [version]
+      properties:
+        ruleType: { $ref: "#/components/schemas/PriceRuleType" }
+        ruleName: { type: string }
+        conditions: { type: object, nullable: true }
+        discountRate: { type: number, nullable: true }
+        priority: { type: integer }
+        isActive: { type: boolean }
+        version: { type: integer }
+    PriceRuleResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/PriceRule" }
+    PriceRuleListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/PriceRule" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    PriceList:
+      type: object
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        priceType: { type: string, enum: [PURCHASE, SALES, VIP, AGENT, ENGINEERING, STRATEGIC, REGIONAL, CUSTOMER, HISTORICAL] }
+        currency: { type: string, default: CNY }
+        pricePolicyId: { type: string, nullable: true }
+        policyType: { $ref: "#/components/schemas/PricePolicyType" }
+        baseCurrency: { type: string, default: CNY }
+        quoteCurrency: { type: string, default: CNY }
+        status: { $ref: "#/components/schemas/PriceListStatus" }
+        effectiveFrom: { type: string, format: date-time, nullable: true }
+        effectiveTo: { type: string, format: date-time, nullable: true }
+        priceSource: { $ref: "#/components/schemas/PriceSource" }
+        freightIncluded: { type: boolean, default: false }
+        isActive: { type: boolean, default: true }
+        approvalStatus: { type: string, enum: [DRAFT, PENDING, APPROVED, REJECTED] }
+        version: { type: integer, default: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PriceListCreate:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        priceType: { type: string, enum: [PURCHASE, SALES, VIP, AGENT, ENGINEERING, STRATEGIC, REGIONAL, CUSTOMER, HISTORICAL] }
+        currency: { type: string }
+        pricePolicyId: { type: string, nullable: true }
+        policyType: { $ref: "#/components/schemas/PricePolicyType" }
+        baseCurrency: { type: string }
+        quoteCurrency: { type: string }
+        status: { $ref: "#/components/schemas/PriceListStatus" }
+        effectiveFrom: { type: string, format: date-time, nullable: true }
+        effectiveTo: { type: string, format: date-time, nullable: true }
+        priceSource: { $ref: "#/components/schemas/PriceSource" }
+        freightIncluded: { type: boolean }
+    PriceListUpdate:
+      type: object
+      required: [version]
+      properties:
+        name: { type: string }
+        priceType: { type: string, enum: [PURCHASE, SALES, VIP, AGENT, ENGINEERING, STRATEGIC, REGIONAL, CUSTOMER, HISTORICAL] }
+        currency: { type: string }
+        pricePolicyId: { type: string, nullable: true }
+        policyType: { $ref: "#/components/schemas/PricePolicyType" }
+        baseCurrency: { type: string }
+        quoteCurrency: { type: string }
+        status: { $ref: "#/components/schemas/PriceListStatus" }
+        effectiveFrom: { type: string, format: date-time, nullable: true }
+        effectiveTo: { type: string, format: date-time, nullable: true }
+        priceSource: { $ref: "#/components/schemas/PriceSource" }
+        freightIncluded: { type: boolean }
+        isActive: { type: boolean }
+        version: { type: integer }
+    PriceListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/PriceList" }
+    PriceListListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/PriceList" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    PriceListVersion:
+      type: object
+      properties:
+        id: { type: string }
+        priceListId: { type: string }
+        versionNo: { type: integer }
+        revisionNo: { type: integer, default: 1 }
+        status: { $ref: "#/components/schemas/PriceListStatus" }
+        publishedBy: { type: string, nullable: true }
+        publishedAt: { type: string, format: date-time, nullable: true }
+        workflowInstanceId: { type: string, nullable: true }
+        changeSummary: { type: string, nullable: true }
+        isActive: { type: boolean, default: true }
+        approvalStatus: { type: string, enum: [DRAFT, PENDING, APPROVED, REJECTED] }
+        version: { type: integer, default: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PriceListVersionCreate:
+      type: object
+      required: [priceListId, versionNo]
+      properties:
+        priceListId: { type: string }
+        versionNo: { type: integer }
+        revisionNo: { type: integer, default: 1 }
+        status: { $ref: "#/components/schemas/PriceListStatus" }
+        changeSummary: { type: string, nullable: true }
+        workflowInstanceId: { type: string, nullable: true }
+    PriceListVersionUpdate:
+      type: object
+      required: [version]
+      properties:
+        revisionNo: { type: integer }
+        status: { $ref: "#/components/schemas/PriceListStatus" }
+        changeSummary: { type: string, nullable: true }
+        workflowInstanceId: { type: string, nullable: true }
+        publishedBy: { type: string, nullable: true }
+        publishedAt: { type: string, format: date-time, nullable: true }
+        isActive: { type: boolean }
+        version: { type: integer }
+    PriceListVersionResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/PriceListVersion" }
+    PriceListVersionListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/PriceListVersion" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    PartnerPrice:
+      type: object
+      properties:
+        id: { type: string }
+        partnerId: { type: string }
+        partnerRoleType: { $ref: "#/components/schemas/PartnerRoleType" }
+        partnerRoleName: { type: string, nullable: true }
+        itemId: { type: string }
+        unitPrice: { type: number }
+        currency: { type: string, default: CNY }
+        taxProfileId: { type: string, nullable: true }
+        effectiveFrom: { type: string, format: date-time, nullable: true }
+        effectiveTo: { type: string, format: date-time, nullable: true }
+        priceSource: { $ref: "#/components/schemas/PriceSource" }
+        priority: { type: integer, default: 100 }
+        approvalRequired: { type: boolean, default: false }
+        isActive: { type: boolean, default: true }
+        approvalStatus: { type: string, enum: [DRAFT, PENDING, APPROVED, REJECTED] }
+        version: { type: integer, default: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PartnerPriceCreate:
+      type: object
+      required: [partnerId, itemId, unitPrice]
+      properties:
+        partnerId: { type: string }
+        partnerRoleType: { $ref: "#/components/schemas/PartnerRoleType" }
+        partnerRoleName: { type: string, nullable: true }
+        itemId: { type: string }
+        unitPrice: { type: number }
+        currency: { type: string }
+        taxProfileId: { type: string, nullable: true }
+        effectiveFrom: { type: string, format: date-time, nullable: true }
+        effectiveTo: { type: string, format: date-time, nullable: true }
+        priceSource: { $ref: "#/components/schemas/PriceSource" }
+        priority: { type: integer, default: 100 }
+        approvalRequired: { type: boolean, default: false }
+    PartnerPriceUpdate:
+      type: object
+      required: [version]
+      properties:
+        unitPrice: { type: number }
+        currency: { type: string }
+        partnerRoleType: { $ref: "#/components/schemas/PartnerRoleType" }
+        partnerRoleName: { type: string, nullable: true }
+        taxProfileId: { type: string, nullable: true }
+        effectiveFrom: { type: string, format: date-time, nullable: true }
+        effectiveTo: { type: string, format: date-time, nullable: true }
+        priceSource: { $ref: "#/components/schemas/PriceSource" }
+        priority: { type: integer }
+        approvalRequired: { type: boolean }
+        isActive: { type: boolean }
+        version: { type: integer }
+    PartnerPriceResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/PartnerPrice" }
+    PartnerPriceListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/PartnerPrice" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    PromotionRule:
+      type: object
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        promotionType: { $ref: "#/components/schemas/PromotionType" }
+        discountValue: { type: number }
+        startAt: { type: string, format: date-time, nullable: true }
+        endAt: { type: string, format: date-time, nullable: true }
+        priority: { type: integer, default: 100 }
+        stackable: { type: boolean, default: false }
+        exclusive: { type: boolean, default: false }
+        priceSource: { $ref: "#/components/schemas/PriceSource" }
+        status: { type: string, enum: [DRAFT, ACTIVE, PAUSED, EXPIRED] }
+        isActive: { type: boolean, default: true }
+        approvalStatus: { type: string, enum: [DRAFT, PENDING, APPROVED, REJECTED] }
+        version: { type: integer, default: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PromotionCreate:
+      type: object
+      required: [code, name, promotionType, discountValue]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        promotionType: { $ref: "#/components/schemas/PromotionType" }
+        discountValue: { type: number }
+        startAt: { type: string, format: date-time, nullable: true }
+        endAt: { type: string, format: date-time, nullable: true }
+        priority: { type: integer, default: 100 }
+        stackable: { type: boolean, default: false }
+        exclusive: { type: boolean, default: false }
+        priceSource: { $ref: "#/components/schemas/PriceSource" }
+        status: { type: string, enum: [DRAFT, ACTIVE, PAUSED, EXPIRED] }
+        description: { type: string, nullable: true }
+    PromotionUpdate:
+      type: object
+      required: [version]
+      properties:
+        name: { type: string }
+        promotionType: { $ref: "#/components/schemas/PromotionType" }
+        discountValue: { type: number }
+        startAt: { type: string, format: date-time, nullable: true }
+        endAt: { type: string, format: date-time, nullable: true }
+        priority: { type: integer }
+        stackable: { type: boolean }
+        exclusive: { type: boolean }
+        priceSource: { $ref: "#/components/schemas/PriceSource" }
+        status: { type: string, enum: [DRAFT, ACTIVE, PAUSED, EXPIRED] }
+        description: { type: string, nullable: true }
+        isActive: { type: boolean }
+        version: { type: integer }
+    PromotionResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/PromotionRule" }
+    PromotionListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/PromotionRule" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    TaxProfile:
+      type: object
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        country: { type: string, nullable: true }
+        region: { type: string, nullable: true }
+        taxIncluded: { type: boolean, default: false }
+        rateType: { $ref: "#/components/schemas/TaxRateType" }
+        rate: { type: number, nullable: true }
+        isActive: { type: boolean, default: true }
+        approvalStatus: { type: string, enum: [DRAFT, PENDING, APPROVED, REJECTED] }
+        version: { type: integer, default: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    TaxProfileCreate:
+      type: object
+      required: [code, name, rateType]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        country: { type: string, nullable: true }
+        region: { type: string, nullable: true }
+        taxIncluded: { type: boolean, default: false }
+        rateType: { $ref: "#/components/schemas/TaxRateType" }
+        rate: { type: number, nullable: true }
+    TaxProfileUpdate:
+      type: object
+      required: [version]
+      properties:
+        name: { type: string }
+        country: { type: string, nullable: true }
+        region: { type: string, nullable: true }
+        taxIncluded: { type: boolean }
+        rateType: { $ref: "#/components/schemas/TaxRateType" }
+        rate: { type: number, nullable: true }
+        isActive: { type: boolean }
+        version: { type: integer }
+    TaxProfileResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/TaxProfile" }
+    TaxProfileListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/TaxProfile" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    TaxRate:
+      type: object
+      properties:
+        id: { type: string }
+        taxProfileId: { type: string }
+        rate: { type: number }
+        effectiveFrom: { type: string, format: date-time, nullable: true }
+        effectiveTo: { type: string, format: date-time, nullable: true }
+        isActive: { type: boolean, default: true }
+        approvalStatus: { type: string, enum: [DRAFT, PENDING, APPROVED, REJECTED] }
+        version: { type: integer, default: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    TaxRateCreate:
+      type: object
+      required: [taxProfileId, rate]
+      properties:
+        taxProfileId: { type: string }
+        rate: { type: number }
+        effectiveFrom: { type: string, format: date-time, nullable: true }
+        effectiveTo: { type: string, format: date-time, nullable: true }
+    TaxRateUpdate:
+      type: object
+      required: [version]
+      properties:
+        rate: { type: number }
+        effectiveFrom: { type: string, format: date-time, nullable: true }
+        effectiveTo: { type: string, format: date-time, nullable: true }
+        isActive: { type: boolean }
+        version: { type: integer }
+    TaxRateResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/TaxRate" }
+    TaxRateListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/TaxRate" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    ExchangeRate:
+      type: object
+      properties:
+        id: { type: string }
+        baseCurrency: { type: string }
+        quoteCurrency: { type: string }
+        rate: { type: number }
+        effectiveDate: { type: string, format: date-time }
+        provider: { type: string, nullable: true }
+        source: { type: string, nullable: true }
+        rateType: { $ref: "#/components/schemas/ExchangeRateType" }
+        manualOverride: { type: boolean, default: false }
+        isActive: { type: boolean, default: true }
+        approvalStatus: { type: string, enum: [DRAFT, PENDING, APPROVED, REJECTED] }
+        version: { type: integer, default: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ExchangeRateCreate:
+      type: object
+      required: [baseCurrency, quoteCurrency, rate, effectiveDate]
+      properties:
+        baseCurrency: { type: string }
+        quoteCurrency: { type: string }
+        rate: { type: number }
+        effectiveDate: { type: string, format: date-time }
+        provider: { type: string, nullable: true }
+        source: { type: string, nullable: true }
+        rateType: { $ref: "#/components/schemas/ExchangeRateType" }
+        manualOverride: { type: boolean, default: false }
+    ExchangeRateUpdate:
+      type: object
+      required: [version]
+      properties:
+        rate: { type: number }
+        provider: { type: string, nullable: true }
+        source: { type: string, nullable: true }
+        rateType: { $ref: "#/components/schemas/ExchangeRateType" }
+        manualOverride: { type: boolean }
+        isActive: { type: boolean }
+        version: { type: integer }
+    ExchangeRateResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/ExchangeRate" }
+    ExchangeRateListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/ExchangeRate" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    PricingResolveRequest:
+      type: object
+      required: [itemId, quantity]
+      properties:
+        partnerId: { type: string }
+        partnerRole: { $ref: "#/components/schemas/PartnerRoleType" }
+        itemId: { type: string }
+        quantity: { type: number }
+        pricingDate: { type: string, format: date-time }
+        currency: { type: string, default: CNY }
+        priceListId: { type: string }
+        policyId: { type: string }
+        region: { type: string }
+        projectId: { type: string }
+        salespersonId: { type: string }
+        uom: { type: string }
+        taxProfileId: { type: string }
+        taxIncluded: { type: boolean }
+    PricingResolveResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            unitPrice: { type: number }
+            discountRate: { type: number }
+            taxRate: { type: number }
+            currency: { type: string }
+            source: { type: string, enum: [PRICE_LIST, PARTNER_PRICE, PROMOTION] }
+            priceListId: { type: string, nullable: true }
+            priceListVersionId: { type: string, nullable: true }
+            policyId: { type: string, nullable: true }
+            policyType: { type: string, nullable: true }
+            promotionRuleId: { type: string, nullable: true }
+            promotionDiscount: { type: number }
+            exchangeRate: { type: number }
+            baseUnitPrice: { type: number }
+            finalUnitPrice: { type: number }
+            finalAmount: { type: number }
+            snapshotId: { type: string }
