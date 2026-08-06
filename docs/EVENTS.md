@@ -31,9 +31,15 @@
 | --- | --- | --- |
 | `ProjectCreated` | 项目建档 | `{ projectId, code, customerId, stage }` |
 | `ProjectOpportunityCreated` | 机会建档 | `{ opportunityId, code, customerId, stage }` |
-| `ProjectStageChanged` | 项目阶段变更 | `{ projectId, fromStage, toStage }` |
+| `ProjectOpportunityConverted` | 机会转项目（唯一入口 convert，事务） | `{ opportunityId, projectId, code, customerId, convertedBy }` |
+| `ProjectStageChanged` | 项目阶段变更 | `{ projectId, fromStage, toStage, remark }` |
+| `ProjectMemberAssigned` | 项目成员分配 | `{ projectId, memberId, userId, name, roleInProject }` |
 | `ProjectMilestoneCompleted` | 里程碑完成 | `{ projectId, milestoneId, name }` |
-| `ProjectClosed` | 项目结项 | `{ projectId, closedAt, reason }` |
+| `ProjectRiskRaised` | 风险提出 | `{ projectId, riskId, description, ownerId }` |
+| `ProjectRiskClosed` | 风险关闭 | `{ projectId, riskId, closedAt }` |
+| `ProjectAccepted` | 项目验收通过 | `{ projectId, acceptanceId, name, result }` |
+| `ProjectClosed` | 项目结项（正常） | `{ projectId, closedAt, reason }` |
+| `ProjectForceClosed` | 项目强制结项（带权限+原因） | `{ projectId, closedAt, reason, force, closedBy }` |
 
 ### 2.2 工作流
 
