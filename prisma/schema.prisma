@@ -1026,6 +1026,8 @@ model ProjectOpportunity {
   ownerId            String? // 负责人
   description        String?
   project            Project?
+  convertedAt        DateTime? // CTO #3C5：机会转项目时间（唯一入口 convert 回写）
+  convertedBy        String? // CTO #3C5：机会转项目操作人
   isActive           Boolean          @default(true)
   createdById        String?
   updatedById        String?

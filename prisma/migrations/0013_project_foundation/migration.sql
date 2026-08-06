@@ -1,6 +1,11 @@
 -- Sprint 3C-5 Project Foundation Enhancement（仅新增/加列，不重建 14 个既有 Project 模型）
 -- CTO #3C5 决策：Project 最小增量 priority+progressPercent；ProjectProduct.priceSnapshotId（SetNull）；
--- ProjectTag 复用全局 Tag 主数据（与 CustomerTag/PartnerTag/ItemTag 同构）。
+-- ProjectTag 复用全局 Tag 主数据（与 CustomerTag/PartnerTag/ItemTag 同构）；
+-- ProjectOpportunity.convertedAt/convertedBy（唯一入口 convert 回写）。
+
+-- AlterTable: ProjectOpportunity 补 convert 回写字段（CTO #3C5：convert 唯一入口回写）
+ALTER TABLE "ProjectOpportunity" ADD COLUMN "convertedAt" TIMESTAMP(3) WITH TIME ZONE,
+ADD COLUMN "convertedBy" TEXT;
 
 -- AlterTable: Project 补字段（最小增量，不加 stageChanged*）
 ALTER TABLE "Project" ADD COLUMN "priority" TEXT,
