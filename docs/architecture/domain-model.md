@@ -20,9 +20,15 @@ CommercialTerm                  ├─ ProjectExpense (费用)
 DocumentSequence (编号规则)     ├─ ProjectProduct (项目物料 → Item)
                                 ├─ ProjectRisk (风险)
                                 ├─ ProjectVisit (走访/沟通)
-                                ├─ ProjectProgress (进展)
-                                ├─ ProjectAcceptance (验收)
-                                └─ ProjectClosure (结项, 1:1)
+Price Foundation（Sprint 3C-4）  ├─ ProjectProgress (进展)
+PricePolicy ── PriceRule        ├─ ProjectAcceptance (验收)
+PriceList ── PriceListVersion   └─ ProjectClosure (结项, 1:1)
+PartnerPrice（Partner 专属价）
+PromotionRule（促销）
+TaxProfile ── TaxRate / TaxProfileRule
+ExchangeRate（汇率主数据）
+QuotationPriceSnapshot（报价快照）
+PriceAudit（价格审计）
 ```
 
 ## 2. 主数据（ADR-0002）
@@ -104,6 +110,7 @@ createdAt / updatedAt (Timestamptz(3))
 - 权限码格式：`${module}:${action}`
 - 动作（PERMISSION_ACTIONS）：`view / create / edit / delete / approve / audit / export / import / assign / close`
 - 模块（PERMISSION_MODULES）：user / role / audit / item / business-partner / price-list / technical-standard / unit-of-measure / commercial-term / document-sequence / project-opportunity / project / project-visit / project-risk
+- **Price Foundation（Sprint 3C-4 追加）**：price-policy / price-rule / price-list-version / partner-price / promotion / tax-profile / tax-rate / exchange-rate / pricing-engine / price-audit（动作级 view/create/edit/delete/approve/audit/export/import/assign/close）
 - RBAC：SUPER_ADMIN/ADMIN 全量；MANAGER 主数据+项目读写 + 动作级；MEMBER 只读 + view
 - seed 预置全部 read/write + 动作级权限（`SEED_ACTION_PERMISSIONS` 生成）
 
@@ -121,6 +128,23 @@ erDiagram
     TechnicalStandard ||--o{ ItemStandard : links
     Item ||--o{ PriceListItem : priced
     PriceList ||--o{ PriceListItem : contains
+
+    %% Sprint 3C-4 Price Foundation
+    PricePolicy ||--o{ PriceRule : has
+    PricePolicy ||--o{ PriceList : policy
+    PriceList ||--o{ PriceListVersion : versions
+    PriceList ||--o{ PriceListItem : items
+    BusinessPartner ||--o{ PartnerPrice : partner
+    Item ||--o{ PartnerPrice : priced
+    TaxProfile ||--o{ TaxRate : rates
+    TaxProfile ||--o{ TaxProfileRule : rules
+    TaxProfile ||--o{ PriceListItem : taxProfile
+    TaxProfile ||--o{ PartnerPrice : taxProfile
+    PricePolicy ||--o{ QuotationPriceSnapshot : policy
+    PromotionRule ||--o{ QuotationPriceSnapshot : promotion
+    TaxProfile ||--o{ QuotationPriceSnapshot : taxProfile
+    Item ||--o{ QuotationPriceSnapshot : snapshots
+    ExchangeRate ||--o{ QuotationPriceSnapshot : exchangeRate
 
     BusinessPartner ||--o{ ProjectOpportunity : customer
     BusinessPartner ||--o{ Project : customer

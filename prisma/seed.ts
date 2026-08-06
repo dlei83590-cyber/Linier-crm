@@ -51,6 +51,17 @@ const SEED_ACTION_MODULES = [
   "item",
   "business-partner",
   "price-list",
+  // Sprint 3C-4：Price Foundation 模块
+  "price-policy",
+  "price-rule",
+  "price-list-version",
+  "partner-price",
+  "promotion",
+  "tax-profile",
+  "tax-rate",
+  "exchange-rate",
+  "pricing-engine",
+  "price-audit",
   "technical-standard",
   "unit-of-measure",
   "commercial-term",
@@ -547,6 +558,47 @@ const SEED_PARTNER_ROLES = [
   { partnerCode: "BP-B-0001", roleType: "BOTH" },
 ];
 
+// ============ Sprint 3C-4 Price Foundation（CTO #2360：业务规则首次进入 Seed，严格幂等）============
+
+/** 价格策略（code 唯一 + upsert + 幂等；policyType 取现有枚举，code 为业务唯一键） */
+const SEED_PRICE_POLICIES = [
+  { code: "STANDARD_PRICE", name: "标准价", policyType: "STANDARD", priority: 100, matchStrategy: "HIGHEST_PRIORITY", stopOnMatch: true, description: "标准销售价（价目表兜底）" },
+  { code: "VIP_PRICE", name: "VIP 客户价", policyType: "VIP", priority: 90, matchStrategy: "HIGHEST_PRIORITY", stopOnMatch: true, description: "VIP 客户专属价" },
+  { code: "PROJECT_PRICE", name: "项目价", policyType: "PROJECT", priority: 80, matchStrategy: "HIGHEST_PRIORITY", stopOnMatch: true, description: "工程项目价" },
+  { code: "SUPPLIER_PRICE", name: "供应商价", policyType: "DEALER", priority: 70, matchStrategy: "HIGHEST_PRIORITY", stopOnMatch: true, description: "供应商/渠道价（DEALER 枚举近似）" },
+  { code: "PURCHASE_PRICE", name: "采购价", policyType: "STANDARD", priority: 60, matchStrategy: "HIGHEST_PRIORITY", stopOnMatch: true, description: "采购标准价（枚举无 PURCHASE，以 STANDARD 近似）" },
+  { code: "PROMOTION_PRICE", name: "促销价", policyType: "PROMOTION", priority: 50, matchStrategy: "HIGHEST_PRIORITY", stopOnMatch: true, description: "促销价（优先级最高）" },
+];
+
+/** 价格规则示例（CTO #2360：至少 Quantity/VIP/Region 三条，不空数据；ruleType 与 schema 枚举一致） */
+const SEED_PRICE_RULES = [
+  { policyCode: "STANDARD_PRICE", ruleType: "QUANTITY_BREAK", ruleName: "数量≥100 享 5% 折扣", conditions: { minQty: 100 }, discountRate: 5, priority: 100, description: "Quantity >= 100 → 5% Discount" },
+  { policyCode: "VIP_PRICE", ruleType: "CUSTOMER_LEVEL", ruleName: "VIP 客户价", conditions: { customerLevel: "VIP" }, discountRate: 0, priority: 100, description: "Customer Level = VIP → VIP Price" },
+  { policyCode: "PROJECT_PRICE", ruleType: "REGION", ruleName: "华东区域价", conditions: { region: "East China" }, discountRate: 0, priority: 100, description: "Region = East China → Regional Price" },
+];
+
+/** 税率档案（多国复用：中国 13% / 马来西亚 SST / 新加坡 GST） */
+const SEED_TAX_PROFILES = [
+  { code: "CN_VAT_13", name: "中国增值税 13%", country: "CN", region: null, taxIncluded: false, rateType: "THIRTEEN", rate: 13 },
+  { code: "MY_SST", name: "马来西亚销售与服务税", country: "MY", region: null, taxIncluded: false, rateType: "CUSTOM", rate: 8 },
+  { code: "SG_GST", name: "新加坡消费税", country: "SG", region: null, taxIncluded: false, rateType: "CUSTOM", rate: 9 },
+];
+
+/** 汇率示例（base/quote/effectiveDate 复合唯一；来源：PBOC 央行 / ECB / Manual 人工） */
+const SEED_EXCHANGE_RATES = [
+  { baseCurrency: "USD", quoteCurrency: "CNY", rate: 7.1, effectiveDate: new Date("2026-08-06T00:00:00Z"), provider: "PBOC", source: "央行", rateType: "CENTRAL_BANK", manualOverride: false },
+  { baseCurrency: "CNY", quoteCurrency: "USD", rate: 0.1408, effectiveDate: new Date("2026-08-06T00:00:00Z"), provider: "PBOC", source: "央行", rateType: "CENTRAL_BANK", manualOverride: false },
+  { baseCurrency: "MYR", quoteCurrency: "CNY", rate: 1.65, effectiveDate: new Date("2026-08-06T00:00:00Z"), provider: "ECB", source: "ECB", rateType: "CENTRAL_BANK", manualOverride: false },
+  { baseCurrency: "CNY", quoteCurrency: "MYR", rate: 0.606, effectiveDate: new Date("2026-08-06T00:00:00Z"), provider: "ECB", source: "ECB", rateType: "CENTRAL_BANK", manualOverride: false },
+  { baseCurrency: "SGD", quoteCurrency: "CNY", rate: 5.35, effectiveDate: new Date("2026-08-06T00:00:00Z"), provider: "Manual", source: "人工", rateType: "MANUAL", manualOverride: true },
+  { baseCurrency: "CNY", quoteCurrency: "SGD", rate: 0.187, effectiveDate: new Date("2026-08-06T00:00:00Z"), provider: "Manual", source: "人工", rateType: "MANUAL", manualOverride: true },
+];
+
+/** 促销示例（Demo Promotion，保持简单） */
+const SEED_PROMOTIONS = [
+  { code: "PROMO-DEMO-2026", name: "Demo Promotion", promotionType: "PERCENT", discountValue: 10, startAt: new Date("2026-08-01T00:00:00Z"), endAt: new Date("2026-12-31T23:59:59Z"), priority: 100, stackable: false, exclusive: false, priceSource: "PROMOTION", status: "ACTIVE", description: "演示促销：全场 10%" },
+];
+
 async function main() {
   const email = process.env.SEED_ADMIN_EMAIL ?? "admin@linier.com";
   const password = process.env.SEED_ADMIN_PASSWORD ?? "ChangeMe123!";
@@ -815,6 +867,126 @@ async function main() {
         taxAmount,
         unitPriceInclTax,
         minOrderQty: 1,
+        approvalStatus: "APPROVED",
+      },
+    });
+  }
+
+  // Sprint 3C-4: price policies（幂等：code 唯一 + upsert）
+  const pricePolicyMap = new Map<string, string>();
+  for (const p of SEED_PRICE_POLICIES) {
+    const saved = await prisma.pricePolicy.upsert({
+      where: { code: p.code },
+      update: {},
+      create: {
+        code: p.code,
+        name: p.name,
+        policyType: p.policyType as never,
+        priority: p.priority,
+        matchStrategy: p.matchStrategy as never,
+        stopOnMatch: p.stopOnMatch,
+        description: p.description,
+        approvalStatus: "APPROVED",
+      },
+    });
+    pricePolicyMap.set(p.code, saved.id);
+  }
+
+  // Sprint 3C-4: price rules（幂等：policyId + ruleName 存在则跳过）
+  for (const r of SEED_PRICE_RULES) {
+    const policyId = pricePolicyMap.get(r.policyCode);
+    if (!policyId) continue;
+    const exists = await prisma.priceRule.findFirst({
+      where: { policyId, ruleName: r.ruleName, deletedAt: null },
+    });
+    if (exists) continue;
+    await prisma.priceRule.create({
+      data: {
+        policyId,
+        ruleType: r.ruleType as never,
+        ruleName: r.ruleName,
+        conditions: r.conditions as object,
+        discountRate: r.discountRate,
+        priority: r.priority,
+        approvalStatus: "APPROVED",
+      },
+    });
+  }
+
+  // Sprint 3C-4: tax profiles + rates（幂等：code 唯一 + upsert）
+  for (const t of SEED_TAX_PROFILES) {
+    const saved = await prisma.taxProfile.upsert({
+      where: { code: t.code },
+      update: {},
+      create: {
+        code: t.code,
+        name: t.name,
+        country: t.country,
+        region: t.region,
+        taxIncluded: t.taxIncluded,
+        rateType: t.rateType as never,
+        rate: t.rate,
+        approvalStatus: "APPROVED",
+      },
+    });
+    const rateExists = await prisma.taxRate.findFirst({
+      where: { taxProfileId: saved.id, rate: t.rate, deletedAt: null },
+    });
+    if (!rateExists) {
+      await prisma.taxRate.create({
+        data: {
+          taxProfileId: saved.id,
+          rate: t.rate,
+          effectiveFrom: new Date("2026-01-01T00:00:00Z"),
+          isActive: true,
+          approvalStatus: "APPROVED",
+        },
+      });
+    }
+  }
+
+  // Sprint 3C-4: exchange rates（幂等：复合唯一键 upsert）
+  for (const e of SEED_EXCHANGE_RATES) {
+    await prisma.exchangeRate.upsert({
+      where: {
+        baseCurrency_quoteCurrency_effectiveDate: {
+          baseCurrency: e.baseCurrency,
+          quoteCurrency: e.quoteCurrency,
+          effectiveDate: e.effectiveDate,
+        },
+      },
+      update: {},
+      create: {
+        baseCurrency: e.baseCurrency,
+        quoteCurrency: e.quoteCurrency,
+        rate: e.rate,
+        effectiveDate: e.effectiveDate,
+        provider: e.provider,
+        source: e.source,
+        rateType: e.rateType as never,
+        manualOverride: e.manualOverride,
+        approvalStatus: "APPROVED",
+      },
+    });
+  }
+
+  // Sprint 3C-4: promotions（幂等：code 唯一 + upsert）
+  for (const p of SEED_PROMOTIONS) {
+    await prisma.promotionRule.upsert({
+      where: { code: p.code },
+      update: {},
+      create: {
+        code: p.code,
+        name: p.name,
+        promotionType: p.promotionType as never,
+        discountValue: p.discountValue,
+        startAt: p.startAt,
+        endAt: p.endAt,
+        priority: p.priority,
+        stackable: p.stackable,
+        exclusive: p.exclusive,
+        priceSource: p.priceSource as never,
+        status: p.status,
         approvalStatus: "APPROVED",
       },
     });
