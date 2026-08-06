@@ -1,9 +1,9 @@
 # Release Notes
 
-## v0.5.0-alpha — Sprint 3C: Business Foundation（Unreleased，3C 全部完成后统一发布）
+## v0.5.0-alpha — Sprint 3C: Business Foundation（2026-08-06 发布）
 
-> PR: #7（3C-1 Customer）、#8（3C-2 Supplier）、#9（3C-3 Item）已合并；3C-4 Price 设计中、3C-5 Project 待启动
-> 状态：IN_PROGRESS（CTO 决定：v0.5.0-alpha 等 Sprint 3C 全部完成统一打 Tag，不单独发布）
+> PR: #7（3C-1 Customer）、#8（3C-2 Supplier）、#9（3C-3 Item）、#10（3C-4 Price）已合并；3C-5 Project Foundation 进行中
+> 状态：RELEASED（v0.5.0-alpha：3C-1~3C-4 已发布；3C-5 Project Foundation 完成后再评估是否需要新版本）
 
 ### Sprint 3C-1 Customer Foundation（PR #7，已合并）
 
@@ -34,10 +34,18 @@
 - 文档：ADR-0012、DOMAIN_MODEL v1.8（87 模型/40 枚举）、EVENTS v1.1（ItemCreated 等 5 事件）、Sprint3C3_QA.md、test-cases/Item_API.md、OpenAPI 93 paths/251 schemas
 - Price 前置：PRICE_STRATEGY.md + MASTER_DATA_DEPENDENCY.md（CTO #2138）
 
-### Sprint 3C-4 Price Foundation（设计中）
+### Sprint 3C-4 Price Foundation（PR #10，已合并）
 
-- 设计（仅设计未实现）：Sprint3C4_Design.md（Schema 草案 + ERD + ADR-0013 要点 + OpenAPI 草稿 + 五项新要求）
-- 待 PR #9 合并后创建 feature/sprint3-price-foundation 分支实现
+- **价格领域完整建模（+11 模型 / +9 枚举 → 总计 98 模型 / 49 枚举）**：PricePolicy / PriceRule / PriceListVersion / PartnerPrice / PromotionRule / TaxProfile / TaxRate / TaxProfileRule / ExchangeRate / QuotationPriceSnapshot / PriceAudit
+- **PricePolicy 双轨**（pricePolicyId FK + policyType 快照）+ matchStrategy/stopOnMatch（CTO #2249）；**PriceRule 独立建模**（7 类规则，CTO #2345）
+- **PartnerPrice 统一**（partnerRoleType 枚举 + partnerRoleName 快照 + priority/approvalRequired）；**PromotionRule 独立**（PERCENT/AMOUNT + priority/stackable/exclusive）
+- **TaxProfile 多国复用**（CN 13%/MY SST/SG GST + taxIncluded）+ TaxRate 时间维度 + TaxProfileRule 规则
+- **ExchangeRate 独立维护**（base/quote/rate/effectiveDate 复合唯一 + provider/source/rateType/manualOverride）
+- **QuotationPriceSnapshot 完整定价链**（Base→Policy→Discount→Promotion→Tax→ExchangeRate→Final）+ **PriceAudit 独立审计**
+- **PricingEngineService**：resolvePrice() 唯一入口（Policy→Rules→PartnerPrice/PriceList→Promotion→Currency→Tax→Snapshot→Audit），全程 Decimal 禁止 Float
+- 迁移 0012_price_foundation（12 新表 + 92 ALTER，仅新增）；RBAC +10 模块；API 10 资源（含 POST /api/pricing/resolve 唯一入口）
+- Seed 幂等：6 策略 + 3 规则 + 3 税档 + 6 汇率 + Demo Promotion
+- 文档：ADR-0013（Implemented）、OpenAPI 10 资源 + Resolve Price Sequence、Sprint3C4_QA.md（8 关键场景）、test-cases/Price_API.md、ERD 更新
 
 ### Compatibility / Database / Migration / Breaking Changes
 
