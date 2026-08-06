@@ -21,7 +21,6 @@ const promotionUpdateSchema = z
     exclusive: z.boolean().optional(),
     priceSource: z.enum(["MANUAL", "IMPORT", "FORMULA", "PROMOTION", "SUPPLIER", "MARKET"]).optional(),
     status: z.enum(["DRAFT", "ACTIVE", "PAUSED", "EXPIRED"]).optional(),
-    description: z.string().max(500).nullable().optional(),
     isActive: z.boolean().optional(),
     version: z.number().int().positive(),
   })

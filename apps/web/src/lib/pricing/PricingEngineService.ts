@@ -53,9 +53,8 @@ function matchRuleConditions(conditions: Prisma.JsonValue | null, ctx: PricingCo
 
   // 数量阶梯：minQty ≤ quantity
   if (typeof cond.minQty === "number" && ctx.quantity < cond.minQty) return false;
-  // 客户等级
-  if (cond.customerLevel !== undefined && ctx.partnerRole !== "CUSTOMER") {
-    // 客户等级规则仅在客户场景生效（有 partnerId 且为 CUSTOMER/BOTH）
+  // 客户等级：仅在客户场景（CUSTOMER/BOTH）生效
+  if (cond.customerLevel !== undefined) {
     if (ctx.partnerRole !== "CUSTOMER" && ctx.partnerRole !== "BOTH") return false;
   }
   // 区域

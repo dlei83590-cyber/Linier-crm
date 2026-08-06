@@ -21,7 +21,6 @@ const promotionCreateSchema = z.object({
   exclusive: z.boolean().optional(),
   priceSource: z.enum(["MANUAL", "IMPORT", "FORMULA", "PROMOTION", "SUPPLIER", "MARKET"]).optional(),
   status: z.enum(["DRAFT", "ACTIVE", "PAUSED", "EXPIRED"]).optional(),
-  description: z.string().max(500).nullable().optional(),
 });
 
 /** GET /api/promotions（分页 + code/name/status/promotionType 过滤，Sprint 3C-4 Price Foundation） */
@@ -88,7 +87,6 @@ export async function POST(request: NextRequest) {
       exclusive: parsed.data.exclusive ?? false,
       priceSource: (parsed.data.priceSource as PriceSource) ?? "PROMOTION",
       status: parsed.data.status ?? "DRAFT",
-      description: parsed.data.description ?? null,
       approvalStatus: "APPROVED",
       createdById: user!.id,
       updatedById: user!.id,

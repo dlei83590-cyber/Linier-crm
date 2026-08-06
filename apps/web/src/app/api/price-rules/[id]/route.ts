@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import type { PriceRuleType } from "@prisma/client";
+import { Prisma, type PriceRuleType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
@@ -49,7 +49,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const parsed = priceRuleUpdateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
-  const { version, ...updates } = parsed.data;
+  const { version, conditions, ...rest } = parsed.data;
   const existing = await prisma.priceRule.findFirst({ where: { id, deletedAt: null } });
   if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "规则不存在");
   if (existing.version !== version) {
@@ -59,8 +59,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const updated = await prisma.priceRule.update({
     where: { id },
     data: {
-      ...updates,
-      ruleType: updates.ruleType as PriceRuleType | undefined,
+      ...rest,
+      ruleType: rest.ruleType as PriceRuleType | undefined,
+      conditions: conditions === undefined ? undefined : conditions === null ? Prisma.DbNull : (conditions as Prisma.InputJsonValue),
       version: { increment: 1 },
       updatedById: user!.id,
     },
