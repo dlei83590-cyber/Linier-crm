@@ -51,11 +51,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   // 结项检查（CTO #3C5：默认强制阻断）
-  const [openTasks, openRisks, acceptances, closure] = await Promise.all([
+  const [openTasks, openRisks, acceptances] = await Promise.all([
     prisma.projectTask.count({ where: { projectId: id, deletedAt: null, status: { notIn: ["DONE", "CANCELLED"] } } }),
     prisma.projectRisk.count({ where: { projectId: id, deletedAt: null, status: { not: "CLOSED" } } }),
     prisma.projectAcceptance.findMany({ where: { projectId: id, deletedAt: null }, select: { result: true } }),
-    prisma.projectClosure.findFirst({ where: { projectId: id, deletedAt: null } }),
   ]);
 
   const hasAcceptancePassed = acceptances.some((a) => a.result === "PASSED");
@@ -121,7 +120,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Domain Event：ProjectClosed / ProjectForceClosed（EVENTS.md 注册；事件总线 Sprint 4 前落地）
 
     return ok({ id, stage: "CLOSED", closureId: result.createdClosure.id, force });
-  } catch (error) {
+  } catch {
     return failServer("结项失败，请稍后重试");
   }
 }

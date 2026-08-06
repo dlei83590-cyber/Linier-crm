@@ -1,5 +1,4 @@
 import { NextRequest } from "next/server";
-import type { ProjectStage, PaymentStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
@@ -22,8 +21,10 @@ const projectUpdateSchema = z
   })
   .refine((v) => Object.keys(v).length > 1, { message: "至少提供一个更新字段" });
 
-/** 结项后禁止修改的关键字段（CTO #3C5：结项后锁定） */
-const LOCKED_AFTER_CLOSE = ["stage", "customerId", "expectedContractAmount", "expectedProfit", "receivedAmount", "invoicedAmount", "receivableBalance", "failureReason"] as const;
+/**
+ * 结项后禁止修改关键字段（CTO #3C5：结项后锁定）。
+ * 实现：PATCH 内先查 ProjectClosure，若已结项直接 409 拒绝全部关键字段更新。
+ */
 
 /** GET /api/projects/:id（详情含全部子资源计数与阶段信息） */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
