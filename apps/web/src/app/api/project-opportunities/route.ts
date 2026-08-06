@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import type { ProjectStage, PaymentStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
@@ -100,7 +101,10 @@ export async function POST(request: NextRequest) {
       expenseBudget: parsed.data.expenseBudget ?? null,
       salesTarget: parsed.data.salesTarget ?? null,
       paymentStatus: (parsed.data.paymentStatus as PaymentStatus) ?? "UNPAID",
-      competitors: parsed.data.competitors ?? undefined,
+      competitors:
+        parsed.data.competitors === undefined
+          ? undefined
+          : (parsed.data.competitors as Prisma.InputJsonValue),
       successProbability: parsed.data.successProbability ?? null,
       ownerId: parsed.data.ownerId ?? null,
       description: parsed.data.description ?? null,

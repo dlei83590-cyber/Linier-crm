@@ -51,7 +51,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       orderBy: { createdAt: "asc" },
       skip,
       take,
-      include: { milestone: { select: { id: true, name: true, status: true } } },
     }),
   ]);
 

@@ -58,7 +58,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   ]);
 
   const hasAcceptancePassed = acceptances.some((a) => a.result === "PASSED");
-  const hasReceivable = existing.paymentStatus !== "PAID" || (existing.receivableBalance ?? 0) > 0;
+  const hasReceivable = existing.paymentStatus !== "PAID" || (existing.receivableBalance?.greaterThan(0) ?? false);
 
   const issues: string[] = [];
   if (openTasks > 0) issues.push(`存在 ${openTasks} 个未完成任务`);

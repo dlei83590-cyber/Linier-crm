@@ -27,7 +27,8 @@ function isLegalTransition(from: ProjectStage, to: ProjectStage): boolean {
   // 任意阶段 → 暂停/失败/结项（结项仅批量供货/失败/暂停后可）
   if (to === "PAUSED" || to === "FAILED") return true;
   if (to === "CLOSED") {
-    return from === "MASS_SUPPLY" || from === "FAILED" || from === "PAUSED";
+    // PAUSED → CLOSED 已由上方 from === "PAUSED" 分支处理，此处无需重复比较
+    return from === "MASS_SUPPLY" || from === "FAILED";
   }
   // 正向推进：只能前进，不能倒退/跳级
   const fromIdx = STAGE_ORDER.indexOf(from);

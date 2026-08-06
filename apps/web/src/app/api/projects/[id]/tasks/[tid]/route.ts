@@ -32,7 +32,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { id, tid } = await params;
   const item = await prisma.projectTask.findFirst({
     where: { id: tid, projectId: id, deletedAt: null },
-    include: { milestone: { select: { id: true, name: true, status: true } } },
   });
   if (!item) return failNotFound(ERROR_CODES.NOT_FOUND, "任务不存在");
   return ok(item);

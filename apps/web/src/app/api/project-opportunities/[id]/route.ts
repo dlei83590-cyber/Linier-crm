@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import type { ProjectStage, PaymentStatus } from "@prisma/client";
+import { Prisma, type ProjectStage, type PaymentStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
@@ -59,24 +59,29 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const parsed = opportunityUpdateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
-  const { version, ...updates } = parsed.data;
+  const { version, stage, paymentStatus, competitors, ...rest } = parsed.data;
   const existing = await prisma.projectOpportunity.findFirst({ where: { id, deletedAt: null } });
   if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "销售机会不存在");
   if (existing.version !== version) {
     return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
   }
   // 业务规则：已转换的机会禁止修改关键字段（转换走唯一入口 convert）
-  if (existing.convertedAt && (updates.stage !== undefined || updates.customerId !== undefined)) {
-    return failConflict(ERROR_CODES.CONFLICT, "机会已转换为项目，禁止修改阶段/客户等关键字段");
+  if (existing.convertedAt && stage !== undefined) {
+    return failConflict(ERROR_CODES.CONFLICT, "机会已转换为项目，禁止修改阶段等关键字段");
   }
 
   const updated = await prisma.projectOpportunity.update({
     where: { id },
     data: {
-      ...updates,
-      stage: updates.stage as ProjectStage | undefined,
-      paymentStatus: updates.paymentStatus as PaymentStatus | undefined,
-      competitors: updates.competitors === undefined ? undefined : updates.competitors,
+      ...rest,
+      stage: stage as ProjectStage | undefined,
+      paymentStatus: paymentStatus as PaymentStatus | undefined,
+      competitors:
+        competitors === undefined
+          ? undefined
+          : competitors === null
+            ? Prisma.DbNull
+            : (competitors as Prisma.InputJsonValue),
       version: { increment: 1 },
       updatedById: user!.id,
     },
