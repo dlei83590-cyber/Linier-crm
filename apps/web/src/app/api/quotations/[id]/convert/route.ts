@@ -107,6 +107,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           lineAmount: line.lineAmount,
           taxAmount: line.taxAmount,
           totalAmount: line.totalAmount,
+          // Sprint 4C 交付投影初始化（CTO Review：remainingQty 初始 = ordered quantity；deliveredQty 初始 0）
+          deliveredQty: new Prisma.Decimal(0),
+          remainingQty: line.quantity,
           createdById: user!.id,
           updatedById: user!.id,
         },

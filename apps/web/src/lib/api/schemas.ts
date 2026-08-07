@@ -243,3 +243,76 @@ export const salesOrderLineUpdateSchema = z
 export const salesOrderRevisionCreateSchema = z.object({
   changeReason: z.string().min(1).max(500),
 });
+
+// ============================================================================
+// 第六批：Delivery（Sprint 4C）
+// ============================================================================
+
+/** 创建 Delivery：头 + 指定行（从 SO Line 选择，不默认复制全部剩余行；空行则只建头） */
+export const deliveryCreateSchema = z.object({
+  deliveryDate: z.string().datetime().optional(), // 计划交付日期（默认 now）
+  expectedArrivalDate: z.string().datetime().nullable().optional(),
+  carrier: z.string().max(100).nullable().optional(),
+  trackingNo: z.string().max(100).nullable().optional(),
+  remark: z.string().max(1000).nullable().optional(),
+  lines: z
+    .array(
+      z.object({
+        sourceSalesOrderLineId: z.string().min(1),
+        quantity: z.coerce.number().positive(),
+      }),
+    )
+    .min(1)
+    .optional(),
+  changeReason: z.string().max(500).optional(),
+});
+
+/** 头更新：仅 DRAFT 可编辑；salesOrderId/customerId/status 不可改 */
+export const deliveryUpdateSchema = z
+  .object({
+    deliveryDate: z.string().datetime().optional(),
+    expectedArrivalDate: z.string().datetime().nullable().optional(),
+    carrier: z.string().max(100).nullable().optional(),
+    trackingNo: z.string().max(100).nullable().optional(),
+    remark: z.string().max(1000).nullable().optional(),
+    changeReason: z.string().max(500).optional(),
+    version: z.number().int().positive(),
+  })
+  .refine((v) => Object.keys(v).length > 1, { message: "至少提供一个更新字段" });
+
+/** 行更新：仅 DRAFT 可编辑；quantity 变更必须过 availableQty 动态校验（防超交） */
+export const deliveryLineUpdateSchema = z
+  .object({
+    quantity: z.coerce.number().positive().optional(),
+    description: z.string().max(500).optional(),
+    uomId: z.string().min(1).nullable().optional(),
+    lineNo: z.number().int().positive().optional(),
+    changeReason: z.string().max(500).optional(),
+    version: z.number().int().positive(),
+  })
+  .refine((v) => Object.keys(v).length > 1, { message: "至少提供一个更新字段" });
+
+/** ready：无业务字段，仅可选变更原因 */
+export const deliveryReadySchema = z.object({
+  changeReason: z.string().max(500).optional(),
+});
+
+/** dispatch：可更新承运方/运单号/预计到达（READY → DISPATCHED 时可选补充物流信息） */
+export const deliveryDispatchSchema = z.object({
+  carrier: z.string().max(100).nullable().optional(),
+  trackingNo: z.string().max(100).nullable().optional(),
+  expectedArrivalDate: z.string().datetime().nullable().optional(),
+  changeReason: z.string().max(500).optional(),
+});
+
+/** confirm-delivery：POD 门禁（podStatus ∈ {RECEIVED, WAIVED}，否则 409）；RECEIVED 时回填签收投影 */
+export const deliveryConfirmSchema = z.object({
+  podStatus: z.enum(["RECEIVED", "WAIVED"]).optional(),
+  podReceivedAt: z.string().datetime().optional(),
+  changeReason: z.string().max(500).optional(),
+});
+
+/** cancel：无业务字段，仅可选变更原因 */
+export const deliveryCancelSchema = z.object({
+  changeReason: z.string().max(500).optional(),
+});

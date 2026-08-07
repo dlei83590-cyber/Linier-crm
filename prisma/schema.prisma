@@ -312,6 +312,7 @@ model UnitOfMeasure {
   toConversions   UomConversion[] @relation("UomConversionTo")
   quotationLines  QuotationLine[]
   salesOrderLines SalesOrderLine[]
+  deliveryLines   DeliveryLine[]
   createdAt     DateTime @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 
@@ -388,6 +389,7 @@ model Item {
   tags           ItemTag[]
   quotationLines QuotationLine[]
   salesOrderLines SalesOrderLine[]
+  deliveryLines   DeliveryLine[]
   createdAt     DateTime        @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime        @updatedAt @db.Timestamptz(3)
 
@@ -2429,6 +2431,7 @@ model Customer {
   credit       CustomerCredit?
   quotations   Quotation[]
   salesOrders  SalesOrder[]
+  deliveries   Delivery[]
   isActive     Boolean         @default(true)
   createdById  String?
   updatedById  String?
@@ -3425,6 +3428,7 @@ model SalesOrder {
   lines        SalesOrderLine[]
   revisions    SalesOrderRevision[]
   snapshots    SalesOrderSnapshot[]
+  deliveries   Delivery[]
 
   @@index([code])
   @@index([customerId])
@@ -3454,6 +3458,9 @@ model SalesOrderLine {
   lineAmount   Decimal  @db.Decimal(18, 4) // 行未税金额
   taxAmount    Decimal  @db.Decimal(18, 4) // 行税额
   totalAmount  Decimal  @db.Decimal(18, 4) // 行含税金额
+  // 交付投影（Sprint 4C Delivery 聚合回写，只读；禁止手工 PATCH）
+  deliveredQty Decimal  @default(0) @db.Decimal(18, 4) // 已实际交付量（仅 confirm-delivery 后累计）
+  remainingQty Decimal  @db.Decimal(18, 4) // 剩余可交付量 = quantity - deliveredQty（0016 迁移初始化为 quantity）
   // 统一审计字段
   isActive    Boolean  @default(true)
   createdById String?
@@ -3471,6 +3478,8 @@ model SalesOrderLine {
   @@index([itemId])
   @@index([priceSnapshotId])
   @@index([deletedAt])
+
+  deliveryLines DeliveryLine[]
 }
 
 /// 销售订单修订（系统生成，不开放自由编辑；商业条件变更自动递增 revisionNo）
@@ -3521,5 +3530,169 @@ model SalesOrderSnapshot {
 
   @@unique([salesOrderId, snapshotType])
   @@index([salesOrderId])
+  @@index([deletedAt])
+}
+
+// ============================================================================
+// Sprint 4C - Delivery Foundation（交付领域，CTO Review 94/100 锁定；Delivery 为交付事实源）
+// ============================================================================
+
+/// 交付状态（Delivery 自身生命周期；不含 Invoice/Payment——发票/收款由 4D 模块承载）
+/// CTO Review：DELIVERED=客户确认收货（业务确认动作，非物流自动更新）；COMPLETED 仅枚举不实现 action
+enum DeliveryStatus {
+  DRAFT              // 草稿（创建后初始态，可编辑行）
+  READY              // 就绪（行彻底冻结、可发运；READY 后行只读，不支持修改/重新 ready）
+  DISPATCHED         // 已发运（已出库/运输中）
+  DELIVERED          // 已交付（客户确认收货或存在可靠交付确认）
+  COMPLETED          // 已完成（交付业务闭环；4C 仅保留枚举，不提供 /complete action）
+  CANCELLED          // 已取消（DRAFT/READY 可取消；DISPATCHED+ 禁止）
+}
+
+/// 交付快照类型（仅固化节点）
+enum DeliverySnapshotType {
+  CREATED            // 创建时固化（初始交付快照）
+  READY              // ready 时固化（行冻结后）
+  DISPATCHED         // dispatch 时固化（发运证据）
+  DELIVERED          // confirm-delivery 时固化（交付证据）
+  CANCELLED          // cancel 时固化
+}
+
+/// 交付修订状态（与 SalesOrder/Quotation 同构）
+enum DeliveryRevisionStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  SUPERSEDED
+}
+
+/// POD（Proof of Delivery）签收状态（CTO Review ④拍板：File Center 存文件 + 最小投影字段，不建 DeliveryPOD 表）
+enum DeliveryPodStatus {
+  PENDING            // 待签收
+  RECEIVED           // 已签收（podReceivedAt/podConfirmedById 回填）
+  WAIVED             // 豁免（业务不需要 POD 时可置此状态后允许 confirm-delivery）
+}
+
+/// 交付单头（交付事实源；CTO Review ①拍板：Direct Delivery 禁止，salesOrderId NOT NULL）
+model Delivery {
+  id           String   @id @default(cuid())
+  code         String   @unique // 单据编号（DocumentSequence docType=DELIVERY_ORDER，前缀 DO，位数 6）
+  salesOrderId String   // 来源销售订单（必填 NOT NULL；唯一入口 POST /api/sales-orders/:id/deliveries）
+  salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Restrict)
+  customerId   String   // 收货客户（继承 SalesOrder.customerId）
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  status       DeliveryStatus @default(DRAFT)
+  deliveryDate DateTime @default(now()) @db.Timestamptz(3) // 交付日期（计划/实际）
+  expectedArrivalDate DateTime? @db.Timestamptz(3) // 预计到达（DISPATCHED 后）
+  carrier      String?  // 承运方（物流公司/车次/单号，可空）
+  trackingNo   String?  // 运单号（可空）
+  // POD 最小投影（CTO Review ④拍板；原始文件走 FileAttachment businessType="delivery" attachmentType="POD"）
+  podStatus    DeliveryPodStatus @default(PENDING)
+  podReceivedAt DateTime? @db.Timestamptz(3) // 签收时间（RECEIVED 时回填）
+  podConfirmedById String? // 签收确认人（RECEIVED 时回填）
+  remark       String?  // 备注
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  lines        DeliveryLine[]
+  revisions    DeliveryRevision[]
+  snapshots    DeliverySnapshot[]
+
+  @@index([salesOrderId])
+  @@index([customerId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+/// 交付单行（本次实际交付量；交付事实表；availableQty 动态校验防超交）
+model DeliveryLine {
+  id           String   @id @default(cuid())
+  deliveryId   String
+  delivery     Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  sourceSalesOrderLineId String? // 溯源 → SalesOrderLine（SalesOrderLine 软删后 SetNull）
+  sourceSalesOrderLine SalesOrderLine? @relation(fields: [sourceSalesOrderLineId], references: [id], onDelete: SetNull)
+  lineNo       Int      @default(10) // 行号（10/20/30/40 步进）
+  itemId       String?  // 物料（继承 SalesOrderLine.itemId，可空）
+  item         Item?    @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  description  String   // 描述（快照）
+  quantity     Decimal  @db.Decimal(18, 4) // 本次实际交付量（正数；防超交由事务层校验）
+  uomId        String?  // 交付单位（继承 SalesOrderLine.uomId）
+  uom          UnitOfMeasure? @relation(fields: [uomId], references: [id], onDelete: SetNull)
+  // 只读投影（由 SalesOrderLine 回写值快照展示，非事实源；禁止手工填写）
+  orderedQty   Decimal  @db.Decimal(18, 4) // 订单行订购量快照（校验用）
+  deliveredQty Decimal  @db.Decimal(18, 4) // 已实际交付量快照（仅 DELIVERED/COMPLETED 累计；校验用）
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([deliveryId, lineNo])
+  @@index([deliveryId])
+  @@index([sourceSalesOrderLineId])
+  @@index([itemId])
+  @@index([deletedAt])
+}
+
+/// 交付修订（系统生成，不开放自由编辑；交付内容变更自动递增 revisionNo）
+model DeliveryRevision {
+  id           String   @id @default(cuid())
+  deliveryId   String
+  delivery     Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  revisionNo   Int      // 版本号（1,2,3...）
+  revisionStatus DeliveryRevisionStatus @default(DRAFT)
+  changeReason String   // 变更原因
+  snapshotData Json?    // 变更前快照（Header + Lines 集合）
+  createdById  String?
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([deliveryId, revisionNo])
+  @@index([deliveryId])
+  @@index([deletedAt])
+}
+
+/// 交付快照（仅固化节点生成，只读）
+model DeliverySnapshot {
+  id           String   @id @default(cuid())
+  deliveryId   String
+  delivery     Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  snapshotType DeliverySnapshotType
+  revisionNo   Int      // 快照对应的修订号
+  snapshotData Json?    // 完整快照（Header + Lines + sourceSalesOrderLineId 集合 + 金额参考）
+  generatedById String?
+  generatedAt  DateTime @default(now()) @db.Timestamptz(3)
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([deliveryId, snapshotType])
+  @@index([deliveryId])
   @@index([deletedAt])
 }

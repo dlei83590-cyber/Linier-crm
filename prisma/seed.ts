@@ -95,6 +95,11 @@ const SEED_ACTION_MODULES = [
   "sales-order-line",
   "sales-order-revision",
   "sales-order-snapshot",
+  // Sprint 4C：Delivery Foundation 模块（动作映射：ready/dispatch→edit；confirm-delivery→approve；cancel→close）
+  "delivery",
+  "delivery-line",
+  "delivery-revision",
+  "delivery-snapshot",
   // Sprint 3A：平台底座模块
   "workflow-definition",
   "workflow-step",
@@ -430,6 +435,7 @@ const SEED_DOCUMENT_SEQUENCES = [
   { code: "PO", name: "采购订单", docType: "PURCHASE_ORDER", prefix: "PO", nextNo: 1, padLength: 6 },
   { code: "PI", name: "形式发票", docType: "PROFORMA_INVOICE", prefix: "PI", nextNo: 1, padLength: 6 },
   { code: "CI", name: "商业发票", docType: "COMMERCIAL_INVOICE", prefix: "CI", nextNo: 1, padLength: 6 },
+  // Sprint 4C：Delivery Foundation 单据序列（CTO 锁定：DELIVERY_ORDER / prefix DO / padLength 6；幂等 upsert）
   { code: "DO", name: "送货单", docType: "DELIVERY_ORDER", prefix: "DO", nextNo: 1, padLength: 6 },
   { code: "GRN", name: "收货单", docType: "GOODS_RECEIPT_NOTE", prefix: "GRN", nextNo: 1, padLength: 6 },
   { code: "GI", name: "出库单", docType: "GOODS_ISSUE", prefix: "GI", nextNo: 1, padLength: 6 },

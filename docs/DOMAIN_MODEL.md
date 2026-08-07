@@ -1171,7 +1171,221 @@ erDiagram
 - 集成：submit → ApprovalPolicy 匹配 → WorkflowInstance（复用 Sprint 3A Workflow Engine）；审批终态回写 syncQuotationApproval（COMPLETED → APPROVED，REJECTED → REJECTED）
 - 预留：convert 返回 501（Sprint 4B Sales Order Foundation 落地）；SENT 状态为下游预留，4A 无独立发送 API
 
-## 20. 变更记录
+## 20. Sales Order Foundation（Sprint 4B，ADR-0017）
+
+> 定位（CTO 审核锁定）：**SalesOrder 是 Sales 主链第二环**（Quotation → Sales Order → Delivery → Invoice → Payment）。
+> 唯一创建入口：`POST /api/quotations/{id}/convert`（Quotation ACCEPTED 后转单）；**不开放 `POST /api/sales-orders`**（Direct SO 禁止，ADR-0017 决策①）。
+> 价格红线（ADR-0015/0017）：SO 继承 Quotation 商业价格，schema 无 unitPrice 字段；仅当数量/UOM 商业条件变更时重新走 PricingEngine 生成新快照。
+> 审批复用 Workflow（不建 SalesOrderApproval 表）：workflowInstanceId/approvalStatus/approvedAt 为投影，条件触发（商业字段变更）。
+> 交付投影（Sprint 4C 联动）：SalesOrderLine.deliveredQty/remainingQty + SalesOrder.status（PARTIALLY_DELIVERED/DELIVERED）由 Delivery 聚合回写，禁止手工 PATCH。
+
+```mermaid
+erDiagram
+    Quotation ||--|| SalesOrder : converted_from
+    Customer ||--o{ SalesOrder : places
+    Project ||--o{ SalesOrder : relates
+    WorkflowInstance ||--o{ SalesOrder : approves
+    SalesOrder ||--o{ SalesOrderLine : contains
+    Item ||--o{ SalesOrderLine : references
+    QuotationPriceSnapshot ||--o{ SalesOrderLine : prices
+    UnitOfMeasure ||--o{ SalesOrderLine : measures
+    SalesOrder ||--o{ SalesOrderRevision : versions
+    SalesOrder ||--o{ SalesOrderSnapshot : snapshots
+    SalesOrder ||--o{ Delivery : fulfilled_by
+    DeliveryLine ||--o{ SalesOrderLine : traces_to
+
+    SalesOrder {
+        string id PK
+        string code UK
+        string quotationId FK UK
+        string customerId FK
+        string projectId FK
+        SalesOrderStatus status
+        string currency
+        Decimal subtotal
+        Decimal taxAmount
+        Decimal totalAmount
+        string workflowInstanceId FK
+        datetime approvedAt
+        datetime deliveredAt
+        int version
+        datetime deletedAt
+    }
+
+    SalesOrderLine {
+        string id PK
+        string salesOrderId FK
+        string sourceQuotationLineId FK
+        int lineNo
+        string itemId FK
+        string priceSnapshotId FK
+        Decimal quantity
+        Decimal unitPrice
+        Decimal lineAmount
+        Decimal taxAmount
+        Decimal totalAmount
+        Decimal deliveredQty
+        Decimal remainingQty
+        int version
+        datetime deletedAt
+    }
+
+    SalesOrderRevision {
+        string id PK
+        string salesOrderId FK
+        int revisionNo
+        SalesOrderRevisionStatus revisionStatus
+        string changeReason
+        Json snapshotData
+        datetime deletedAt
+    }
+
+    SalesOrderSnapshot {
+        string id PK
+        string salesOrderId FK
+        SalesOrderSnapshotType snapshotType
+        int revisionNo
+        Json snapshotData
+        datetime deletedAt
+    }
+```
+
+### 关系与约束（真实 Schema，migration 0015）
+
+| 关系 | 基数 | onDelete | 说明 |
+| --- | --- | --- | --- |
+| Quotation → SalesOrder | 1:1 | Restrict | 一报价一订单（quotationId UK）；唯一入口 convert |
+| Customer → SalesOrder | 1:N | Restrict | 有订单的客户不可物理删 |
+| Project → SalesOrder | 1:N | Restrict | 项目可空 |
+| WorkflowInstance → SalesOrder | 1:N | SetNull | 审批实例删除不影响投影 |
+| SalesOrder → SalesOrderLine | 1:N | Cascade | 行随单据软删 |
+| Item → SalesOrderLine | 1:N | Restrict | 物料可空 |
+| QuotationPriceSnapshot → SalesOrderLine | 1:N | SetNull | 价格快照（继承 Quotation，ADR-0015） |
+| SalesOrder → SalesOrderRevision | 1:N | Cascade | 修订历史随单据 |
+| SalesOrder → SalesOrderSnapshot | 1:N | Cascade | 快照随单据 |
+| SalesOrder → Delivery | 1:N | Restrict | 交付事实源（Sprint 4C，ADR-0018）；有交付的订单不可物理删 |
+| SalesOrderLine → DeliveryLine | 1:N | SetNull | 交付行溯源（SO Line 软删后 SetNull） |
+
+### 状态机与业务规则（Sprint 4B）
+
+- **状态流转**：DRAFT → CONFIRMED → PARTIALLY_DELIVERED → DELIVERED（→ COMPLETED 待 4D）；DRAFT/CONFIRMED → CANCELLED
+- **Action API 锁定**：convert（唯一入口）/ confirm / cancel 独立端点，不 PATCH status
+- **Revision 系统生成**：头/行商业内容变更自动 revisionNo+1；不开放自由编辑
+- **Snapshot 固化节点**：CREATED / CONFIRMED / CANCELLED（DELIVERED 由 4C 补充）
+- **乐观锁**：头/行 PATCH 必带 version，冲突 409 VERSION_CONFLICT
+- **审批门禁**：confirm 时若 workflowInstanceId 非空必须 approvalStatus=APPROVED（CTO Final Review 阻断项③）
+- **交付联动（4C）**：confirm-delivery 后按全部 SO Line remainingQty<=0 判定 DELIVERED / PARTIALLY_DELIVERED + deliveredAt 回写
+
+## 21. Delivery Foundation（Sprint 4C，ADR-0018）
+
+> 定位（CTO Review 94/100 锁定）：**Delivery 是交付事实源，SalesOrder 仅保存聚合投影**；
+> Direct Delivery 禁止（salesOrderId NOT NULL，唯一入口 `POST /api/sales-orders/{id}/deliveries`）；超交禁止（availableQty 动态计算，不新增 allocatedQty 列）；
+> DELIVERED=客户确认收货（业务确认动作）；POD=File Center 存文件 + Delivery 最小投影（不建 DeliveryPOD 表）；
+> READY 后行彻底冻结（不支持重新 ready，错误→cancel→新建）；COMPLETED 仅枚举不提供 /complete。
+
+```mermaid
+erDiagram
+    SalesOrder ||--o{ Delivery : fulfills
+    Customer ||--o{ Delivery : receives
+    Delivery ||--o{ DeliveryLine : contains
+    SalesOrderLine ||--o{ DeliveryLine : traces_to
+    Item ||--o{ DeliveryLine : references
+    UnitOfMeasure ||--o{ DeliveryLine : measures
+    Delivery ||--o{ DeliveryRevision : versions
+    Delivery ||--o{ DeliverySnapshot : snapshots
+
+    Delivery {
+        string id PK
+        string code UK
+        string salesOrderId FK
+        string customerId FK
+        DeliveryStatus status
+        datetime deliveryDate
+        datetime expectedArrivalDate
+        string carrier
+        string trackingNo
+        DeliveryPodStatus podStatus
+        datetime podReceivedAt
+        string podConfirmedById
+        int version
+        datetime deletedAt
+    }
+
+    DeliveryLine {
+        string id PK
+        string deliveryId FK
+        string sourceSalesOrderLineId FK
+        int lineNo
+        string itemId FK
+        string description
+        Decimal quantity
+        string uomId FK
+        Decimal orderedQty
+        Decimal deliveredQty
+        int version
+        datetime deletedAt
+    }
+
+    DeliveryRevision {
+        string id PK
+        string deliveryId FK
+        int revisionNo
+        DeliveryRevisionStatus revisionStatus
+        string changeReason
+        Json snapshotData
+        datetime deletedAt
+    }
+
+    DeliverySnapshot {
+        string id PK
+        string deliveryId FK
+        DeliverySnapshotType snapshotType
+        int revisionNo
+        Json snapshotData
+        string generatedById
+        datetime generatedAt
+        datetime deletedAt
+    }
+```
+
+### 关系与约束（真实 Schema，migration 0016）
+
+| 关系 | 基数 | onDelete | 说明 |
+| --- | --- | --- | --- |
+| SalesOrder → Delivery | 1:N | Restrict | Direct Delivery 禁止；有交付的订单不可物理删 |
+| Customer → Delivery | 1:N | Restrict | 收货客户（继承 SO.customerId） |
+| Delivery → DeliveryLine | 1:N | Cascade | 行随单据软删 |
+| SalesOrderLine → DeliveryLine | 1:N | SetNull | 交付行溯源（SO Line 软删后 SetNull） |
+| Item → DeliveryLine | 1:N | Restrict | 物料可空 |
+| UnitOfMeasure → DeliveryLine | 1:N | SetNull | 交付单位 |
+| Delivery → DeliveryRevision | 1:N | Cascade | 修订历史随单据 |
+| Delivery → DeliverySnapshot | 1:N | Cascade | 快照随单据 |
+
+- `Delivery.code` 唯一（DocumentSequence docType=DELIVERY_ORDER，前缀 DO，位数 6）；`DeliveryLine @@unique([deliveryId, lineNo])`；`DeliveryRevision @@unique([deliveryId, revisionNo])`；`DeliverySnapshot @@unique([deliveryId, snapshotType])`
+- SalesOrderLine 投影列（0016 新增）：`deliveredQty Decimal @default(0)`（仅 confirm-delivery 回写累计）、`remainingQty Decimal`（迁移初始化为 quantity）
+
+### 状态机与业务规则（Sprint 4C）
+
+- **状态流转**：DRAFT → READY → DISPATCHED → DELIVERED（→ COMPLETED 仅枚举，4D 再实现）；DRAFT/READY → CANCELLED
+- **Action API 锁定**：ready / dispatch / confirm-delivery / cancel 独立端点，不 PATCH status；
+- **防超交（核心）**：创建/编辑行与 ready/confirm 时事务内动态计算 `confirmedDeliveredQty`（DELIVERED/COMPLETED 合计）+ `openDeliveryQty`（其他 DRAFT/READY/DISPATCHED 合计，PATCH 自身行排除当前行）→ `availableQty = orderedQty - confirmed - open` → 校验 quantity <= availableQty，超出 → 409 DELIVERY_QUANTITY_EXCEEDED
+- **锁序防死锁**：confirm-delivery 固定顺序（锁 Delivery → 锁 SalesOrder → 按 id ASC 锁全部源行），多 Delivery 并发 confirm 同一 SO Line 不产生死锁
+- **聚合回写**：confirm-delivery 后对每个 SalesOrderLine 回写 deliveredQty/remainingQty，再聚合 SO（全部行 remainingQty<=0 → DELIVERED + deliveredAt=now；否则有 confirmed → PARTIALLY_DELIVERED）；不因 READY/DISPATCHED 提前标记
+- **POD 门禁**：confirm-delivery 要求 podStatus ∈ {RECEIVED, WAIVED}，否则 409；RECEIVED 时回填 podReceivedAt/podConfirmedById
+- **快照固化节点**：CREATED / READY / DISPATCHED / DELIVERED / CANCELLED（金额/数量一律 toString，禁止 toNumber）
+- **Decimal 全程**：数量/聚合/快照全部 Prisma.Decimal，不转 number 做加减
+- **红线**：不开发 Invoice/Payment；无 DeliveryPOD 独立表；物流不自动触发 DELIVERED
+
+## 22. 变更记录
+
+### v1.10（2026-08-07，Sprint 4B/4C Sales Order + Delivery Foundation，ADR-0017/0018）
+
+- 新增章节：20. Sales Order Foundation（Sprint 4B，convert 唯一入口 + CRUD/Lines/Actions + Workflow 条件触发 + 交付投影）
+- 新增章节：21. Delivery Foundation（Sprint 4C，交付事实源 + 4 模型 + 防超交 + 12 步 confirm 事务 + SO 聚合回写）
+- 模型：+8（SalesOrder/SalesOrderLine/SalesOrderRevision/SalesOrderSnapshot + Delivery/DeliveryLine/DeliveryRevision/DeliverySnapshot）；枚举：+7（SalesOrderStatus/SalesOrderSnapshotType/SalesOrderRevisionStatus + DeliveryStatus/DeliverySnapshotType/DeliveryRevisionStatus/DeliveryPodStatus）
+- SalesOrderLine +2 投影列（deliveredQty/remainingQty）；SalesOrder +deliveredAt（交付完成时间投影）
+- 第 6 节已落地列表：Sales Order Foundation（4B，PR #13 已合并）+ Delivery Foundation（4C，PR #14 待验收）移入已落地
+
 
 ### v1.9（2026-08-07，Sprint 4A Quotation Foundation，ADR-0015/0016）
 
