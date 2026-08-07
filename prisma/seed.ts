@@ -100,6 +100,11 @@ const SEED_ACTION_MODULES = [
   "delivery-line",
   "delivery-revision",
   "delivery-snapshot",
+  // Sprint 4D：Invoice Foundation 模块（动作映射：create→invoice:create；issue→invoice:approve；cancel draft→invoice:close；line 系统生成仅 view/edit 语义；revision/snapshot 只读）
+  "invoice",
+  "invoice-line",
+  "invoice-revision",
+  "invoice-snapshot",
   // Sprint 3A：平台底座模块
   "workflow-definition",
   "workflow-step",
@@ -439,6 +444,7 @@ const SEED_DOCUMENT_SEQUENCES = [
   { code: "DO", name: "送货单", docType: "DELIVERY_ORDER", prefix: "DO", nextNo: 1, padLength: 6 },
   { code: "GRN", name: "收货单", docType: "GOODS_RECEIPT_NOTE", prefix: "GRN", nextNo: 1, padLength: 6 },
   { code: "GI", name: "出库单", docType: "GOODS_ISSUE", prefix: "GI", nextNo: 1, padLength: 6 },
+  // Sprint 4D：Invoice Foundation 单据序列（CTO Review 必改①：DRAFT 不占号，仅 ISSUE 时取号 INV-2026-000123；幂等 upsert）
   { code: "INV", name: "发票", docType: "INVOICE", prefix: "INV", nextNo: 1, padLength: 6 },
   { code: "CN", name: "贷项通知单", docType: "CREDIT_NOTE", prefix: "CN", nextNo: 1, padLength: 6 },
   { code: "DN", name: "借项通知单", docType: "DEBIT_NOTE", prefix: "DN", nextNo: 1, padLength: 6 },

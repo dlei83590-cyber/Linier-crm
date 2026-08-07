@@ -2,7 +2,23 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased] - Sprint 4A + 4B + 4C（Quotation / Sales Order / Delivery Foundation，2026-08-07，PR #12/#13/#14 已合并，未打 Tag）
+## [Unreleased] - Sprint 4A + 4B + 4C + 4D（Quotation / Sales Order / Delivery / Invoice Foundation，2026-08-08，PR #12/#13/#14 已合并 + PR #15 Ready for Final Review，未打 Tag）
+
+### 新增（Sprint 4D：Invoice Foundation，PR #15，Ready for Final Review）
+
+- **Invoice 发票领域（财务事实源）**：Invoice / InvoiceLine / InvoiceRevision / InvoiceSnapshot（+4 模型 / +4 枚举，迁移 `0017_invoice_foundation`，仅新增不改既有）；DeliveryLine +2 开票投影列（invoicedQty / remainingInvoiceQty，remainingInvoiceQty 由迁移初始化为 quantity）；Invoice.code 可空（DRAFT 不占号）
+- **唯一创建入口（CTO 锁定①）**：无 Direct Invoice（不开放 `POST /api/invoices`）；`POST /api/deliveries/{id}/invoice`：按 id ASC 锁全部来源 Delivery（primary + deliveryIds[]）→ 校验全部 DELIVERED（仅已确认收货可开票）→ 按 id ASC 锁 DeliveryLine → 防超开票（qty>0 且 ≤ remainingInvoiceQty，否则 409 INVOICE_QUANTITY_EXCEEDED）→ 建头（DRAFT，code=NULL）+ 行 → 回写投影 → Revision + CREATED 快照（含税务/汇率）
+- **Partial Billing（CTO 拍板①）**：DeliveryLine 投影 invoicedQty/remainingInvoiceQty 支持一张 Delivery 拆多张发票，累计不超已交付量
+- **Consolidated Invoice（CTO 拍板②）**：primaryDeliveryId + deliveryIds[] 合并开票，Customer/Currency/TaxProfile/PaymentTerm 必须一致，否则 409 INVOICE_SOURCE_NOT_COMPATIBLE
+- **金额红线（CTO 锁定② + ADR-0019 §4）**：四段溯源链取价（DeliveryLine→sourceSalesOrderLineId→SalesOrderLine→priceSnapshotId→QuotationPriceSnapshot），直接复制价格快照（priceSnapshotId/unitPrice/discountRate/lineAmount/taxAmount/totalAmount），**永不重算、不调用 Pricing Engine**；头金额 Decimal 加总
+- **编号延后生成（CTO 必改①）**：DRAFT code=NULL 不占号；issue 事务内 FOR UPDATE 锁 → 校验（DRAFT+有行+total>0+code=null）→ nextInvoiceCode 原子取号 INV-2026-000123 → ISSUED；并发 issue 第二个请求稳定 409 不消耗编号
+- **快照税务/汇率（CTO 必改②）**：InvoiceSnapshot 含 taxProfileId/taxRate/sstNo/currencyRate/exchangeRate，多年后 100% 还原；快照节点 CREATED/ISSUED/CANCELLED（ISSUED 快照 snapshotData 记 issuedAt/issuedById）
+- **Lifecycle（CTO 拍板③④）**：DRAFT→ISSUED（→PARTIALLY_PAID/PAID 4E 投影）+ DRAFT→CANCELLED；InvoiceLine 系统生成只读（无 lines PATCH）；仅 DRAFT 可取消，ISSUED+ 走 Credit Note（无 VOID）；cancel 按 id ASC 锁 DeliveryLine 回滚投影（invoicedQty -= qty / remainingInvoiceQty += qty）
+- **Workflow 集成（CTO 拍板同构）**：ApprovalPolicy(module=INVOICE)→WorkflowDefinition→WorkflowInstance 单实例；终态回写投影（COMPLETED→APPROVED + approvedAt/approvedById；REJECTED→REJECTED）；不建 InvoiceApproval 表、不生成 APPROVED 快照；issue 审批门禁（有实例须 APPROVED）；PATCH 重审（paymentTerm/dueDate 变更→同事务 maybeTriggerInvoiceApproval，无实例创建/RUNNING 保持/终态复用 resubmit；remark 不触发；策略缺失→409 INVOICE_WORKFLOW_FAILED 整体回滚）
+- **查询 API（CTO Phase 4 指令）**：GET 列表（分页 + code/customerId/status/approvalStatus/dateFrom/dateTo/dueDateFrom/dueDateTo/currency/salesOrderId/deliveryId 过滤）+ GET 详情一次带出（Invoice/Customer/Workflow/Delivery/SalesOrder 摘要/Lines/Latest Revision/Latest Snapshot）+ lines/revisions/snapshots 只读 + PATCH 头（仅 DRAFT + 乐观锁 + 严格 remark/dueDate/paymentTerm）
+- **API**：8 端点（创建 1 + 主档 3 + 行 1 + 历史 2 + 动作 2）；**RBAC**：4 模块×10 动作（invoice* / invoice-line* / invoice-revision* / invoice-snapshot*；create→invoice:create、issue→invoice:approve、cancel→invoice:close）
+- **事件**：EVENTS.md v1.8——InvoiceCreated/Issued/Cancelled ✅ 已实现；PartiallyPaid/Paid ⏳ 注册待实现（Sprint 4E）
+- **文档**：OpenAPI +8 端点/+19 schemas（156 paths/410 schemas）、docs/qa/Sprint4D_QA.md（T1-T18）、docs/test-cases/Invoice_API.md（137 用例，A-M 13 组）、DOMAIN_MODEL v1.11（第 22 章 Invoice Foundation）、ADR-0019（Accepted+Implemented）、docs/reviews/Sprint4D_CTO_Review_Cover.md（CTO Final Review 待验收）
 
 ### 新增（Sprint 4C：Delivery Foundation，PR #14）
 

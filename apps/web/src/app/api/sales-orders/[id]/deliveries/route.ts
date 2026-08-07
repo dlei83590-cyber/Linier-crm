@@ -120,6 +120,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             uomId: soLine.uomId,
             orderedQty: soLine.quantity,
             deliveredQty: soLine.deliveredQty,
+            invoicedQty: new Prisma.Decimal(0),
+            remainingInvoiceQty: quantity,
             createdById: user!.id,
             updatedById: user!.id,
           },

@@ -96,7 +96,10 @@ Project Expense / 日常 Expense ──> 审批流 ──> Voucher（凭证）
 - ✅ 已落地（Sprint 3A，PR #5）：Workflow Foundation 22 模型（Workflow 6 + Approval 7 + Notification 4 + Dictionary 2 + Settings 3），见第 7-10 节
 - 🔄 进行中（Sprint 3C）：Customer Foundation（第 16 节）✅ + Supplier/Item/Project/Price 后续子阶段
 - ✅ 已落地（Sprint 4A，PR #12 验收中）：Quotation Foundation（Quotation/QuotationLine/QuotationRevision/QuotationSnapshot + ApprovalPolicy 复用），见第 19 节
-- ⬜ 规划中（Sprint 4B-7）：Sales Order / Contract / Delivery / Invoice / Payment / Purchase / GRN / Warehouse / Stock / AR / AP / Voucher / Journal / GL
+- ✅ 已落地（Sprint 4B，PR #13 已合并）：Sales Order Foundation，见第 20 节
+- ✅ 已落地（Sprint 4C，PR #14 已合并）：Delivery Foundation，见第 21 节
+- 🔄 验收中（Sprint 4D，PR #15 待合并）：Invoice Foundation（Invoice/InvoiceLine/InvoiceRevision/InvoiceSnapshot + DeliveryLine 开票投影），见第 22 节
+- ⬜ 规划中（Sprint 4E-7）：Payment（4E）/ Purchase / GRN / Warehouse / Stock / AR / AP / Voucher / Journal / GL
 
 > 详细字段标准见数据库 schema（`prisma/schema.prisma`）与 [architecture/domain-model.md](./architecture/domain-model.md)。
 
@@ -1376,7 +1379,138 @@ erDiagram
 - **Decimal 全程**：数量/聚合/快照全部 Prisma.Decimal，不转 number 做加减
 - **红线**：不开发 Invoice/Payment；无 DeliveryPOD 独立表；物流不自动触发 DELIVERED
 
-## 22. 变更记录
+## 22. Invoice Foundation（Sprint 4D，ADR-0019）
+
+> 定位（CTO Review 96/100 锁定）：**Invoice 是财务事实源**（Delivery 为物流事实源，Invoice 为财务事实源，职责分离互不重算）；
+> Invoice 唯一来源 Delivery（禁 Direct Invoice，唯一入口 `POST /api/deliveries/{id}/invoice`）；
+> 金额永不重算（四段溯源链取价：DeliveryLine→sourceSalesOrderLineId→SalesOrderLine→priceSnapshotId→QuotationPriceSnapshot，不调用 Pricing Engine——Pricing 到 SO 为止）；
+> 不建 InvoiceApproval/Attachment/Price（复用 Workflow/File Center/价格快照）；无 VOID；Payment 属 4E（paidAmount/balanceAmount 仅投影）。
+
+```mermaid
+erDiagram
+    Customer ||--o{ Invoice : billed_to
+    Delivery ||--o{ Invoice : invoiced_from
+    Invoice ||--o{ InvoiceLine : contains
+    DeliveryLine ||--o{ InvoiceLine : traces_to
+    Item ||--o{ InvoiceLine : references
+    UnitOfMeasure ||--o{ InvoiceLine : measures
+    QuotationPriceSnapshot ||--o{ InvoiceLine : priced_by
+    WorkflowInstance ||--o{ Invoice : approves
+    Invoice ||--o{ InvoiceRevision : versions
+    Invoice ||--o{ InvoiceSnapshot : snapshots
+
+    Invoice {
+        string id PK
+        string code UK nullable
+        string deliveryId FK
+        string salesOrderId
+        string customerId FK
+        InvoiceStatus status
+        datetime invoiceDate
+        datetime dueDate
+        string currency
+        string taxProfileId
+        string paymentTerm
+        Decimal subtotal
+        Decimal taxAmount
+        Decimal invoiceTotal
+        Decimal paidAmount
+        Decimal balanceAmount
+        string workflowInstanceId FK
+        ApprovalStatus approvalStatus
+        datetime approvedAt
+        string approvedById
+        int version
+        datetime deletedAt
+    }
+
+    InvoiceLine {
+        string id PK
+        string invoiceId FK
+        string sourceDeliveryLineId FK
+        int lineNo
+        string itemId FK
+        string description
+        Decimal quantity
+        string uomId FK
+        string priceSnapshotId FK
+        Decimal unitPrice
+        Decimal discountRate
+        Decimal lineAmount
+        Decimal taxAmount
+        Decimal totalAmount
+        int version
+        datetime deletedAt
+    }
+
+    InvoiceRevision {
+        string id PK
+        string invoiceId FK
+        int revisionNo
+        InvoiceRevisionStatus revisionStatus
+        string changeReason
+        Json snapshotData
+        datetime deletedAt
+    }
+
+    InvoiceSnapshot {
+        string id PK
+        string invoiceId FK
+        InvoiceSnapshotType snapshotType
+        int revisionNo
+        Json snapshotData
+        string taxProfileId
+        Decimal taxRate
+        string sstNo
+        Decimal currencyRate
+        Decimal exchangeRate
+        string generatedById
+        datetime generatedAt
+        datetime deletedAt
+    }
+```
+
+### 关系与约束（真实 Schema，migration 0017）
+
+| 关系 | 基数 | onDelete | 说明 |
+| --- | --- | --- | --- |
+| Delivery → Invoice | 1:N | Restrict | Invoice 唯一来源 Delivery（Direct Invoice 禁止）；有发票的交付不可物理删 |
+| Customer → Invoice | 1:N | Restrict | 开票客户（继承 Delivery.customerId） |
+| Invoice → InvoiceLine | 1:N | Cascade | 行随单据软删 |
+| DeliveryLine → InvoiceLine | 1:N | SetNull | 开票行溯源（DeliveryLine 软删后 SetNull） |
+| Item → InvoiceLine | 1:N | Restrict | 物料可空（继承 DeliveryLine.itemId） |
+| UnitOfMeasure → InvoiceLine | 1:N | SetNull | 开票单位 |
+| QuotationPriceSnapshot → InvoiceLine | 1:N | SetNull | 价格快照（四段溯源链末端，直接复制不重算） |
+| WorkflowInstance → Invoice | 1:N | SetNull | 审批实例（Workflow 唯一事实源；不建 InvoiceApproval 表） |
+| Invoice → InvoiceRevision | 1:N | Cascade | 修订历史随单据 |
+| Invoice → InvoiceSnapshot | 1:N | Cascade | 快照随单据 |
+
+- `Invoice.code` **可空唯一**（CTO 必改①：DRAFT 不占号 code=NULL，仅 ISSUE 时 DocumentSequence 取号 INV-2026-000123）；`InvoiceLine @@unique([invoiceId, lineNo])`；`InvoiceRevision @@unique([invoiceId, revisionNo])`；`InvoiceSnapshot @@unique([invoiceId, snapshotType])`
+- DeliveryLine 开票投影列（0017 新增）：`invoicedQty Decimal @default(0)`（仅开票/cancel 回写）、`remainingInvoiceQty Decimal`（迁移初始化为 quantity）
+- InvoiceSnapshot 税务/汇率快照（CTO 必改②）：`taxProfileId / taxRate / sstNo / currencyRate / exchangeRate`，多年后 100% 还原
+
+### 状态机与业务规则（Sprint 4D）
+
+- **状态流转**：DRAFT → ISSUED → PARTIALLY_PAID → PAID；DRAFT → CANCELLED（PARTIALLY_PAID/PAID 由 4E Receipt 回写，本阶段仅枚举；无 VOID，ISSUED+ 取消语义后续交 Credit Note）
+- **Action API 锁定**：create（POST /api/deliveries/{id}/invoice）/ issue / cancel 独立端点，不 PATCH status；InvoiceLine 无 PATCH（系统生成只读）
+- **唯一入口**：禁 Direct Invoice（无 POST /api/invoices）；开票前置 Delivery.status = DELIVERED（仅已确认收货可开票，否则 409 INVOICE_INVALID_STATE）
+- **Partial Billing（CTO 拍板①）**：DeliveryLine 加 invoicedQty/remainingInvoiceQty 投影；开票 qty>0 且 ≤ remainingInvoiceQty（锁内读），超出 → 409 INVOICE_QUANTITY_EXCEEDED；cancel 对称回滚（invoicedQty -= qty / remainingInvoiceQty += qty）
+- **Consolidated Invoice（CTO 拍板②）**：primaryDeliveryId + deliveryIds[]，Customer/Currency/TaxProfile/PaymentTerm 必须一致，否则 409 INVOICE_SOURCE_NOT_COMPATIBLE；锁序按 id ASC 防死锁
+- **四段溯源链取价（金额红线）**：InvoiceLine ← DeliveryLine.sourceSalesOrderLineId ← SalesOrderLine.priceSnapshotId ← QuotationPriceSnapshot（priceSnapshotId/unitPrice/discountRate/lineAmount/taxAmount/totalAmount 直接复制，不调用 Pricing Engine）
+- **DRAFT 不占号 + Issue 原子取号（CTO 必改①）**：创建 code=NULL；issue 事务内 FOR UPDATE 锁 Invoice → 校验（DRAFT + 有行 + total>0 + code=null）→ 审批门禁（workflowInstanceId ≠ null 时仅 APPROVED 可开票，否则 409）→ nextInvoiceCode 原子取号 → ISSUED；并发 issue 第二个请求稳定 409 不消耗编号
+- **Workflow 集成（CTO 拍板同构）**：ApprovalPolicy(module=INVOICE) → WorkflowDefinition → WorkflowInstance 单实例（@@unique([businessType, businessId])）；终态回写投影（COMPLETED→APPROVED + approvedAt/approvedById；REJECTED→REJECTED）；不建 InvoiceApproval 表、不生成 APPROVED 快照（快照仅 CREATED/ISSUED/CANCELLED）；PATCH 重审：paymentTerm/dueDate 变更 → 同事务 maybeTriggerInvoiceApproval（无实例创建 / RUNNING 保持 / 终态复用 resubmit）；remark 不触发；策略缺失 → 409 INVOICE_WORKFLOW_FAILED 整体回滚
+- **快照固化节点**：CREATED / ISSUED / CANCELLED（Header + Lines + sourceDeliveryLineId 集合；金额/数量一律 toString 禁止 toNumber；ISSUED 快照 snapshotData 含 issuedAt/issuedById——schema 无 issuedAt/issuedById 列，与 4C deliveredAt 同款模式）
+- **Decimal 全程**：金额/数量/投影/快照全部 Prisma.Decimal（金额 18,4 / 汇率 18,8），不转 number 做加减
+- **红线**：不开发 AR/Payment/Credit Note（paidAmount/balanceAmount 固定 0 投影，4E 回写）；无 InvoiceApproval/Attachment/Price 表；不调用 Pricing Engine；InvoiceLine 不自由编辑
+
+## 23. 变更记录
+
+### v1.11（2026-08-08，Sprint 4D Invoice Foundation，ADR-0019）
+
+- 新增章节：22. Invoice Foundation（Sprint 4D，Invoice 财务事实源 + 4 模型 + 四段溯源链取价 + Partial/Consolidated Billing + Issue 原子取号 + Workflow 集成）
+- 模型：+4（Invoice/InvoiceLine/InvoiceRevision/InvoiceSnapshot）；枚举：+4（InvoiceStatus/InvoiceSnapshotType/InvoiceRevisionStatus/InvoiceLineStatus）
+- DeliveryLine +2 投影列（invoicedQty/remainingInvoiceQty，remainingInvoiceQty 迁移初始化为 quantity）；Invoice.code 可空（DRAFT 不占号）；InvoiceSnapshot +5 税务/汇率快照字段
+- 第 6 节已落地列表：Invoice Foundation（4D，PR #15 待验收）移入验收中
 
 ### v1.10（2026-08-07，Sprint 4B/4C Sales Order + Delivery Foundation，ADR-0017/0018）
 

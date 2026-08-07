@@ -316,3 +316,41 @@ export const deliveryConfirmSchema = z.object({
 export const deliveryCancelSchema = z.object({
   changeReason: z.string().max(500).optional(),
 });
+
+/** Invoice 创建：唯一入口 POST /api/deliveries/{id}/invoice（{id}=primaryDeliveryId；deliveryIds[] 附加来源=Consolidated） */
+export const invoiceCreateSchema = z.object({
+  deliveryIds: z.array(z.string().min(1)).optional(), // Consolidated Invoice 附加 Delivery 来源（财务属性必须一致）
+  lines: z
+    .array(
+      z.object({
+        deliveryLineId: z.string().min(1),
+        quantity: z.coerce.number().positive(),
+      }),
+    )
+    .min(1),
+  invoiceDate: z.string().datetime().optional(),
+  dueDate: z.string().datetime().nullable().optional(),
+  remark: z.string().max(1000).nullable().optional(),
+  changeReason: z.string().max(500).optional(),
+});
+
+/** issue：DRAFT → ISSUED（DocumentSequence 原子取号；编号延后生成；并发 issue 第二个请求 409 不消耗编号） */
+export const invoiceIssueSchema = z.object({
+  changeReason: z.string().max(500).optional(),
+});
+
+/** cancel：仅 DRAFT → CANCELLED（释放 DeliveryLine 已占用的开票数量投影） */
+export const invoiceCancelSchema = z.object({
+  changeReason: z.string().max(500).optional(),
+});
+
+/** 头更新：仅 DRAFT 可编辑；只允许非财务字段（remark/dueDate/paymentTerm——schema 无 reference 列）；金额/数量/code/status 禁止 PATCH */
+export const invoiceUpdateSchema = z
+  .object({
+    remark: z.string().max(1000).nullable().optional(),
+    dueDate: z.string().datetime().nullable().optional(),
+    paymentTerm: z.string().max(50).nullable().optional(),
+    changeReason: z.string().max(500).optional(),
+    version: z.number().int().positive(),
+  })
+  .refine((v) => Object.keys(v).length > 1, { message: "至少提供一个更新字段" });

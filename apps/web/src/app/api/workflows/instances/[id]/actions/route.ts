@@ -8,6 +8,7 @@ import { workflowActionSchema } from "@/lib/api/schemas";
 import { isValidAction, isStepComplete, resolveStepApprovers } from "@/lib/workflow/engine";
 import { syncQuotationApproval } from "@/lib/quotation/workflow-sync";
 import { syncSalesOrderApproval } from "@/lib/sales-order/workflow-sync";
+import { syncInvoiceApproval } from "@/lib/invoice/workflow-sync";
 
 export const dynamic = "force-dynamic";
 
@@ -325,6 +326,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   ) {
     await syncSalesOrderApproval({
       salesOrderId: instance.businessId,
+      workflowStatus: result.afterStatus,
+      actorId: user!.id,
+    });
+  }
+
+  // Sprint 4D：Invoice 审批终态回写（ADR-0019：Workflow 唯一事实源，Invoice 仅保存投影；不建 InvoiceApproval）
+  // issue 前审批门禁：workflowInstanceId != null 时仅 approvalStatus=APPROVED 允许 Issue（issue 路由校验）
+  if (
+    instance.businessType === "invoice" &&
+    (result.afterStatus === "COMPLETED" || result.afterStatus === "REJECTED")
+  ) {
+    await syncInvoiceApproval({
+      invoiceId: instance.businessId,
       workflowStatus: result.afterStatus,
       actorId: user!.id,
     });

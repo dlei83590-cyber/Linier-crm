@@ -1,5 +1,27 @@
 # Release Notes
 
+## Sprint 4D — Invoice Foundation（2026-08-08，PR #15 Ready for Final Review，未发布 Tag）
+
+> PR: #15（Sprint 4D Invoice Foundation，feature/sprint4-sales）
+> 状态：READY FOR FINAL REVIEW（CTO Final Review 待验收；合并后再改 Completed；未打 Tag；待 Sprint 4 Sales 完整闭环（4D Invoice + 4E AR/Payment）后统一发布下一个 Alpha）
+> CTO 结论：待验收（CTO Final Review Cover：docs/reviews/Sprint4D_CTO_Review_Cover.md，Checklist 14 项）
+
+### Sprint 4D Invoice Foundation（PR #15，Ready for Final Review）
+
+- **发票领域模型（财务事实源）**：Invoice / InvoiceLine / InvoiceRevision / InvoiceSnapshot（+4 模型 / +4 枚举，迁移 0017_invoice_foundation，仅新增不改既有）；DeliveryLine +2 开票投影列（invoicedQty / remainingInvoiceQty，remainingInvoiceQty 由迁移初始化为 quantity）；Invoice.code 可空（DRAFT 不占号）
+- **唯一创建入口（CTO 锁定①）**：无 Direct Invoice（不开放 POST /api/invoices）；`POST /api/deliveries/{id}/invoice`（按 id ASC 锁全部来源 Delivery → 校验 DELIVERED → 按 id ASC 锁 DeliveryLine 防超开票 → 四段溯源链取价 → DRAFT 建头 + 行 → 回写投影 → Revision + CREATED 快照）
+- **Partial Billing（CTO 拍板①）**：DeliveryLine 投影支持一张 Delivery 拆多张发票；超开票 409 INVOICE_QUANTITY_EXCEEDED；cancel 对称回滚投影
+- **Consolidated Invoice（CTO 拍板②）**：多 Delivery 合并开票，Customer/Currency/TaxProfile/PaymentTerm 必须一致，否则 409 INVOICE_SOURCE_NOT_COMPATIBLE
+- **金额红线（ADR-0019 §4）**：四段溯源链取价（DeliveryLine→sourceSalesOrderLineId→SalesOrderLine→priceSnapshotId→QuotationPriceSnapshot），直接复制价格快照，永不重算、不调用 Pricing Engine
+- **编号延后生成（CTO 必改①）**：DRAFT code=NULL 不占号；issue 原子取号 INV-2026-000123；并发 issue 第二个请求稳定 409 不消耗编号
+- **快照税务/汇率（CTO 必改②）**：InvoiceSnapshot 含 taxProfileId/taxRate/sstNo/currencyRate/exchangeRate，多年后 100% 还原
+- **Lifecycle（CTO 拍板③④）**：DRAFT→ISSUED→（PARTIALLY_PAID/PAID 4E 投影）+ DRAFT→CANCELLED；InvoiceLine 系统生成只读（无 lines PATCH）；仅 DRAFT 可取消（ISSUED+ 走 Credit Note，无 VOID）
+- **Workflow 集成**：ApprovalPolicy(module=INVOICE)→WorkflowInstance 单实例；终态回写投影；不建 InvoiceApproval 表；issue 审批门禁（有实例须 APPROVED）；PATCH 重审（paymentTerm/dueDate 变更触发，remark 不触发，策略缺失 409 INVOICE_WORKFLOW_FAILED）
+- **查询 API（CTO Phase 4 指令）**：GET 列表（含 approvalStatus 过滤）+ GET 详情一次带出（Customer/Workflow/Delivery/SalesOrder 摘要/Lines/Latest Revision/Snapshot）+ lines/revisions/snapshots 只读 + PATCH 头（仅 DRAFT + 乐观锁 + 严格 remark/dueDate/paymentTerm）
+- **API**：8 端点；**RBAC**：4 模块×10 动作（create→invoice:create、issue→invoice:approve、cancel→invoice:close）；**事件**：EVENTS.md v1.8（InvoiceCreated/Issued/Cancelled 已发布；PartiallyPaid/Paid 注册待 4E）
+- **文档**：OpenAPI +8 端点/+19 schemas（156 paths/410 schemas）、Sprint4D_QA.md（T1-T18）、Invoice_API.md（137 用例，A-M 13 组）、DOMAIN_MODEL v1.11（第 22 章）、ADR-0019（Accepted+Implemented）、Review Cover
+- **质量门禁**：Phase 1-4 全绿（#31192127210/#31193316359/#31199349323/#31201507334/#31201664772/#31202368518）；CI 修复 1 轮（fail helper import）
+
 ## Sprint 4C — Delivery Foundation（2026-08-07，PR #14 已合并，未发布 Tag）
 
 > PR: #14（Sprint 4C Delivery Foundation，feature/sprint4-sales）
