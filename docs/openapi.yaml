@@ -39,6 +39,12 @@ tags:
   - name: Project Opportunities
   - name: Projects
   - name: Project Sub-resources
+  # Sprint 4B Sales Order Foundation
+  - name: Sales Orders
+  - name: Sales Order Lines
+  - name: Sales Order Revisions
+  - name: Sales Order Snapshots
+  - name: Sales Order Actions
 
 paths:
   # ==========================================================================
@@ -7528,22 +7534,303 @@ paths:
   /api/quotations/{id}/convert:
     post:
       tags: [Quotation Actions]
-      summary: Convert quotation to Sales Order (reserved; Sprint 4B implements)
+      summary: Convert accepted quotation to Sales Order (unique creation entry, Sprint 4B)
       description: |
-        Sprint 4A 预留接口：仅 status=ACCEPTED 且未转换（convertedAt/salesOrderId 为空）可调用。
-        当前返回 501（Quotation → Sales Order 在 Sprint 4B Sales Order Foundation 落地）。
+        唯一创建入口（CTO 锁定项①：不允许 Direct Sales Order，quotationId 必填）。
+        仅 status=ACCEPTED 且未过期、未转换（convertedAt/salesOrderId 为空）可调用。
+        事务：FOR UPDATE 真实行锁 → 原子取号（DocumentSequence SALES_ORDER，前缀 SO）→ 创建 DRAFT SO
+        + 复制有效 Line（继承价格 + priceSnapshotId + 溯源 quotationLineId，不重新定价）→ CREATED 快照
+        → 回写 Quotation（salesOrderId/convertedAt/convertedById/status=CONVERTED）→ AuditLog
+        → 发布 QuotationConverted + SalesOrderCreated 双事件；唯一约束冲突（P2002）稳定转 409。
       operationId: convertQuotation
       security:
         - bearerAuth: []
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
       responses:
-        "501":
-          description: Not Implemented（Sprint 4B 预留）
+        "200":
+          description: OK（SalesOrder DRAFT 已创建，含 quotationId 溯源）
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: "#/components/schemas/SalesOrderResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/sales-orders:
+    get:
+      tags: [Sales Orders]
+      summary: List sales orders (paginated, filterable by code/quotationId/customerId/status/dateFrom/dateTo)
+      description: |
+        本阶段不开放 POST /api/sales-orders——Direct Sales Order 未获 CTO 批准（锁定项①），
+        唯一创建入口为 POST /api/quotations/{id}/convert。
+      operationId: listSalesOrders
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: code
+          in: query
+          schema: { type: string, description: 销售订单号模糊查询（insensitive） }
+        - name: quotationId
+          in: query
+          schema: { type: string }
+        - name: customerId
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, description: SalesOrderStatus 存储态 }
+        - name: dateFrom
+          in: query
+          schema: { type: string, format: date, description: orderDate >= dateFrom }
+        - name: dateTo
+          in: query
+          schema: { type: string, format: date, description: orderDate <= dateTo }
+      responses:
+        "200":
+          description: Paginated list（软删除已过滤；每项含 customer/quotation 摘要与 lines 计数）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalesOrderListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/sales-orders/{id}:
+    get:
+      tags: [Sales Orders]
+      summary: Get sales order detail (lines/revisions/snapshots + customer + quotation summary)
+      operationId: getSalesOrder
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalesOrderResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Sales Orders]
+      summary: Update sales order header (only DRAFT; optimistic lock version)
+      description: |
+        CTO 锁定项②：允许改交期/付款条件/贸易术语/备注等商业条件；禁止直接改价格（schema 无 unitPrice）。
+        仅 DRAFT 可编辑；CONFIRMED 后禁止直接改数量/UOM，走后续 amendment 流程。
+        商业条件变更 → 系统自动生成 Revision（revisionNo+1）并发布 SalesOrderUpdated；
+        修改付款条件/交货条件等关键商业字段时触发新审批（Workflow 条件触发，有策略时）。
+      operationId: updateSalesOrder
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SalesOrderUpdate"
+      responses:
+        "200":
+          description: OK（version+1）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalesOrderResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/sales-orders/{id}/lines:
+    get:
+      tags: [Sales Order Lines]
+      summary: List sales order lines (item + priceSnapshot; read-only)
+      description: |
+        原则上不开放 POST——SO Line 来自 Quotation Convert（锁定项①）；如支持追加订单行再单独决策。
+      operationId: listSalesOrderLines
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalesOrderLineListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/sales-orders/{id}/lines/{lineId}:
+    patch:
+      tags: [Sales Order Lines]
+      summary: Update sales order line (only DRAFT; optimistic lock; commercial change re-prices)
+      description: |
+        价格红线（CTO 锁定项②）：SO 从已接受报价继承价格，禁止前端传 unitPrice（schema 无该字段）。
+        quantity/uomId 变化 = 商业条件变化 → 先 PricingEngine（事务外）→ 成功后单事务：更新 line
+        + 新 priceSnapshotId + 重算头合计 + 创建 SalesOrderRevision → AuditLog → SalesOrderUpdated。
+        定价失败不留半更新；sourceQuotationLineId 溯源永不清除，priceSnapshotId 更新为新有效快照；
+        金额全程 Decimal，JSON 中不 toNumber()；触发新审批（Workflow 条件触发，有策略时）。
+      operationId: updateSalesOrderLine
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: lineId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SalesOrderLineUpdate"
+      responses:
+        "200":
+          description: OK（version+1）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalesOrderLineResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/sales-orders/{id}/revisions:
+    get:
+      tags: [Sales Order Revisions]
+      summary: List sales order revisions (revisionNo desc; read-only)
+      description: Revision 只能系统生成（商业条件变更/头更新时），不开放自由编辑（ADR-0017）。
+      operationId: listSalesOrderRevisions
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalesOrderRevisionListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/sales-orders/{id}/snapshots:
+    get:
+      tags: [Sales Order Snapshots]
+      summary: List sales order snapshots (generatedAt desc; read-only)
+      description: 快照全部由系统在固化节点生成（CREATED/CONFIRMED/CANCELLED），只读；金额 Decimal 字符串，禁止 toNumber()。
+      operationId: listSalesOrderSnapshots
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalesOrderSnapshotListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/sales-orders/{id}/confirm:
+    post:
+      tags: [Sales Order Actions]
+      summary: Confirm sales order (DRAFT → CONFIRMED; no re-approval)
+      description: |
+        CTO 锁定项③：SO Confirm 不重复审批——Accepted Quotation 已完成商业审批，confirm 只做订单确认
+        与状态流转。成功：status=CONFIRMED + SalesOrderSnapshot(CONFIRMED) + 发布 SalesOrderConfirmed。
+      operationId: confirmSalesOrder
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK（status=CONFIRMED）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalesOrderActionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/sales-orders/{id}/cancel:
+    post:
+      tags: [Sales Order Actions]
+      summary: Cancel sales order (DRAFT/CONFIRMED → CANCELLED)
+      description: |
+        允许 DRAFT / CONFIRMED 取消；禁止 PARTIALLY_DELIVERED / DELIVERED / COMPLETED（需走后续变更流程）。
+        成功：status=CANCELLED + SalesOrderSnapshot(CANCELLED) + 发布 SalesOrderCancelled。
+      operationId: cancelSalesOrder
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK（status=CANCELLED）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalesOrderActionResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -11582,3 +11869,186 @@ components:
           properties:
             id: { type: string }
             deleted: { type: boolean, example: true }
+
+    SalesOrderStatus:
+      type: string
+      enum: [DRAFT, CONFIRMED, PARTIALLY_DELIVERED, DELIVERED, COMPLETED, CANCELLED]
+
+    SalesOrderSnapshotType:
+      type: string
+      description: 快照类型（仅固化节点）；DELIVERED/COMPLETED 待 Sprint 4C 交付联动补充
+      enum: [CREATED, CONFIRMED, CANCELLED]
+
+    SalesOrderRevisionStatus:
+      type: string
+      enum: [DRAFT, SUBMITTED, APPROVED, SUPERSEDED]
+
+    SalesOrder:
+      type: object
+      required: [id, code, quotationId, customerId, status, currency, version]
+      properties:
+        id: { type: string }
+        code: { type: string, description: 单据编号（DocumentSequence，前缀 SO，位数 6） }
+        quotationId: { type: string, description: 来源报价（必填；Direct SO 禁止，CTO 锁定项①） }
+        customerId: { type: string }
+        projectId: { type: [string, "null"] }
+        orderDate: { type: [string, "null"], format: date-time }
+        requestedDeliveryDate: { type: [string, "null"], format: date-time }
+        paymentTerm: { type: [string, "null"] }
+        incoterm: { type: [string, "null"] }
+        status: { $ref: "#/components/schemas/SalesOrderStatus" }
+        currency: { type: string, example: CNY }
+        taxProfileId: { type: [string, "null"] }
+        remark: { type: [string, "null"] }
+        subtotal: { type: number }
+        taxAmount: { type: number }
+        totalAmount: { type: number }
+        workflowInstanceId: { type: [string, "null"], description: 审批实例投影（Workflow 为唯一审批事实源，ADR-0017） }
+        approvalStatus: { type: [string, "null"] }
+        approvedAt: { type: [string, "null"], format: date-time }
+        approvedById: { type: [string, "null"] }
+        deliveredAt: { type: [string, "null"], format: date-time, description: 交付投影（Delivery 聚合回写，Sprint 4C） }
+        version: { type: integer, description: 乐观锁版本 }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+
+    SalesOrderUpdate:
+      type: object
+      required: [version]
+      properties:
+        requestedDeliveryDate: { type: [string, "null"], format: date-time }
+        paymentTerm: { type: [string, "null"], maxLength: 50 }
+        incoterm: { type: [string, "null"], maxLength: 50 }
+        remark: { type: [string, "null"], maxLength: 1000 }
+        changeReason: { type: string, maxLength: 500 }
+        version: { type: integer, description: 乐观锁版本（冲突返回 409 VERSION_CONFLICT） }
+        # 无 unitPrice 字段：价格继承 Quotation，禁止直接改价（CTO 锁定项②）
+
+    SalesOrderLine:
+      type: object
+      required: [id, salesOrderId, itemId, quantity, version]
+      properties:
+        id: { type: string }
+        salesOrderId: { type: string }
+        quotationLineId: { type: [string, "null"], description: 来源报价行溯源（永不清除，即使重定价） }
+        lineNo: { type: integer }
+        itemId: { type: string }
+        description: { type: string }
+        quantity: { type: number }
+        uomId: { type: [string, "null"] }
+        priceSnapshotId: { type: [string, "null"], description: 当前有效价格快照 FK（重定价时更新为新快照，ADR-0015） }
+        unitPrice: { type: number, description: 快照冗余展示，禁止前端直接填写 }
+        lineAmount: { type: number }
+        taxAmount: { type: number }
+        totalAmount: { type: number }
+        version: { type: integer }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+
+    SalesOrderLineUpdate:
+      type: object
+      required: [version]
+      properties:
+        description: { type: string, maxLength: 500 }
+        quantity: { type: number, exclusiveMinimum: 0, description: 数量变更 → 重新走 Pricing Engine 生成新快照 }
+        uomId: { type: [string, "null"] }
+        lineNo: { type: integer }
+        changeReason: { type: string, maxLength: 500 }
+        version: { type: integer }
+        # 无 unitPrice 字段：禁止直接改价（CTO 锁定项②）
+
+    SalesOrderRevision:
+      type: object
+      required: [id, salesOrderId, revisionNo, changeReason]
+      properties:
+        id: { type: string }
+        salesOrderId: { type: string }
+        revisionNo: { type: integer, description: 系统自动递增（唯一版本载体，ADR-0017） }
+        revisionStatus: { $ref: "#/components/schemas/SalesOrderRevisionStatus" }
+        changeReason: { type: string }
+        snapshotData: { type: object, description: 系统生成的当前状态快照（金额 Decimal 字符串） }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+
+    SalesOrderSnapshot:
+      type: object
+      required: [id, salesOrderId, snapshotType, revisionNo]
+      properties:
+        id: { type: string }
+        salesOrderId: { type: string }
+        snapshotType: { $ref: "#/components/schemas/SalesOrderSnapshotType" }
+        revisionNo: { type: integer }
+        snapshotData: { type: object, description: 完整快照（Header + Lines；金额 Decimal 字符串，禁止 toNumber） }
+        generatedById: { type: [string, "null"] }
+        generatedAt: { type: [string, "null"], format: date-time }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+
+    SalesOrderResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/SalesOrder" }
+
+    SalesOrderListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/SalesOrder" }
+
+    SalesOrderLineResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/SalesOrderLine" }
+
+    SalesOrderLineListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/SalesOrderLine" }
+
+    SalesOrderRevisionListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/SalesOrderRevision" }
+
+    SalesOrderSnapshotListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/SalesOrderSnapshot" }
+
+    SalesOrderActionResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            id: { type: string }
+            status: { $ref: "#/components/schemas/SalesOrderStatus" }
