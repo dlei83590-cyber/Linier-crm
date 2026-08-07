@@ -343,3 +343,14 @@ export const invoiceIssueSchema = z.object({
 export const invoiceCancelSchema = z.object({
   changeReason: z.string().max(500).optional(),
 });
+
+/** 头更新：仅 DRAFT 可编辑；只允许非财务字段（remark/dueDate/paymentTerm——schema 无 reference 列）；金额/数量/code/status 禁止 PATCH */
+export const invoiceUpdateSchema = z
+  .object({
+    remark: z.string().max(1000).nullable().optional(),
+    dueDate: z.string().datetime().nullable().optional(),
+    paymentTerm: z.string().max(50).nullable().optional(),
+    changeReason: z.string().max(500).optional(),
+    version: z.number().int().positive(),
+  })
+  .refine((v) => Object.keys(v).length > 1, { message: "至少提供一个更新字段" });
