@@ -7,6 +7,7 @@ import { requestLog } from "@/lib/api/logger";
 import { workflowActionSchema } from "@/lib/api/schemas";
 import { isValidAction, isStepComplete, resolveStepApprovers } from "@/lib/workflow/engine";
 import { syncQuotationApproval } from "@/lib/quotation/workflow-sync";
+import { syncSalesOrderApproval } from "@/lib/sales-order/workflow-sync";
 
 export const dynamic = "force-dynamic";
 
@@ -311,6 +312,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   ) {
     await syncQuotationApproval({
       quotationId: instance.businessId,
+      workflowStatus: result.afterStatus,
+      actorId: user!.id,
+    });
+  }
+
+  // Sprint 4B：SalesOrder 审批终态回写（ADR-0017 §6：Workflow 唯一事实源，SO 仅保存投影）
+  // CTO 锁定项③：SO Confirm 不重复审批；仅当 SO 修改关键商业字段时才触发新审批（编辑路由触发创建实例）
+  if (
+    instance.businessType === "sales-order" &&
+    (result.afterStatus === "COMPLETED" || result.afterStatus === "REJECTED")
+  ) {
+    await syncSalesOrderApproval({
+      salesOrderId: instance.businessId,
       workflowStatus: result.afterStatus,
       actorId: user!.id,
     });

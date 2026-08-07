@@ -80,6 +80,24 @@
 | `QuotationConverted` | 报价转 Sales Order（CONVERTED） | `{ quotationId, quotationCode, revisionNo, customerId, projectId, workflowInstanceId, currency, totalAmount, salesOrderId, convertedBy }` | ⏳ 注册待实现（Sprint 4B convert 落地） |
 | `QuotationCancelled` | 报价取消（CANCELLED） | `{ quotationId, quotationCode, revisionNo, customerId, projectId, workflowInstanceId, currency, totalAmount, cancelledBy, reason }` | ✅ 已发布 |
 
+#### 2.3.2 销售订单领域（Sprint 4B 注册，先注册后开发）
+
+> 统一载荷：所有 SalesOrder 事件 payload 至少包含 `eventId / eventType / occurredAt / actorId / salesOrderId / salesOrderCode / quotationId / customerId / currency / totalAmount`（eventId/eventType/occurredAt 由 Event Envelope 提供）。
+> 来源：Sprint4B_SO_Design.md / ADR-0017；事件总线落地前以 AuditLog 留痕（与 Quotation 一致）。
+
+| eventType | 触发时机 | 载荷示例 | 实现状态 |
+| --- | --- | --- | --- |
+| `SalesOrderCreated` | Quotation convert 成功（DRAFT） | `{ salesOrderId, salesOrderCode, quotationId, quotationCode, customerId, projectId, currency, totalAmount, createdBy }` | ✅ 已发布（Sprint 4B convert 落地） |
+| `SalesOrderUpdated` | 订单头/行商业条件变更（Revision） | `{ salesOrderId, salesOrderCode, revisionNo, changeReason, changedBy }` | ✅ 已发布（头/行 PATCH） |
+| `SalesOrderConfirmed` | 确认订单（DRAFT → CONFIRMED） | `{ salesOrderId, salesOrderCode, customerId, totalAmount, confirmedBy }` | ✅ 已发布（confirm） |
+| `SalesOrderCancelled` | 取消订单（DRAFT/CONFIRMED → CANCELLED） | `{ salesOrderId, salesOrderCode, cancelledBy, reason }` | ✅ 已发布（cancel） |
+| `SalesOrderApprovalStarted` | Workflow 条件触发创建审批实例（Sprint 4B 新增留痕） | `{ salesOrderId, salesOrderCode, workflowInstanceId, currency, totalAmount }` | ✅ 已发布（workflow-sync，AuditLog 留痕；未注册独立领域事件） |
+| `SalesOrderDeliveryStarted` | 首次交付触发（Sprint 4C 联动） | `{ salesOrderId, salesOrderCode, deliveryId, startedBy }` | ⏳ 注册待实现（4C） |
+| `SalesOrderDelivered` | 全部交付完成（Sprint 4C 联动） | `{ salesOrderId, salesOrderCode, deliveryId, deliveredAt }` | ⏳ 注册待实现（4C） |
+| `SalesOrderCompleted` | 交付+回款完成终态（Sprint 4C/4D） | `{ salesOrderId, salesOrderCode, completedAt }` | ⏳ 注册待实现（4C/4D） |
+
+> 注：§2.3 业务单据表原有 `SalesOrderCreated { orderId, code, customerId, amount }` 占位，v1.4 升级为统一载荷并补齐 7 个事件。
+
 ### 2.4 主数据
 
 | eventType | 触发时机 | 载荷示例 |
@@ -113,6 +131,7 @@
 
 | 日期 | 版本 | 说明 |
 | --- | --- | --- |
+| 2026-08-07 | v1.4 | Sprint 4B 注册 SalesOrder 事件 7 个（Created/Updated/Confirmed/Cancelled/DeliveryStarted/Delivered/Completed，统一载荷，CTO 决策：先注册后开发；见 2.3.2）；SalesOrderCreated 占位升级为统一载荷 |
 | 2026-08-07 | v1.3 | Sprint 4A 实现状态标注：11 个 Quotation 事件中已发布 7 个（Created/Updated/Submitted/Approved/Rejected/Accepted/Cancelled），4 个注册待实现（RevisionCreated/Sent/Expired/Converted，见 2.3.1 表格）；事件总线落地前以 AuditLog 留痕 |
 | 2026-08-07 | v1.2 | Sprint 4A 注册完整 Quotation 事件 11 个（Created/Updated/RevisionCreated/Submitted/Approved/Rejected/Sent/Expired/Accepted/Converted/Cancelled，统一载荷，CTO 决策：先注册后开发） |
 | 2026-08-06 | v1.1 | 追加 Item Master 事件（ItemCreated/ItemUpdated/ItemObsoleted/ItemPriceChanged/ItemRevisionReleased，CTO #2075） |
