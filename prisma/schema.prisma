@@ -2437,6 +2437,7 @@ model Customer {
   salesOrders  SalesOrder[]
   deliveries   Delivery[]
   invoices     Invoice[]
+  accountsReceivables AccountsReceivable[] // 应收余额（4E-1；余额事实源，Customer 对账用）
   isActive     Boolean         @default(true)
   createdById  String?
   updatedById  String?
@@ -3778,6 +3779,7 @@ model Invoice {
   lines     InvoiceLine[]
   revisions InvoiceRevision[]
   snapshots InvoiceSnapshot[]
+  accountsReceivable AccountsReceivable? // 余额事实源（4E-1；1:1，Invoice 为单据事实源，AR 持真实余额）
 
   @@index([deliveryId])
   @@index([salesOrderId])
@@ -3881,5 +3883,124 @@ model InvoiceSnapshot {
 
   @@unique([invoiceId, snapshotType])
   @@index([invoiceId])
+  @@index([deletedAt])
+}
+
+/// 应收状态（余额生命周期；OVERDUE 惰性判定，非数据库真实状态——CTO 拍板②：effectiveStatus Projection）
+enum AccountsReceivableStatus {
+  OPEN            // 未收款（余额 > 0 且未逾期）
+  PARTIALLY_PAID  // 部分收款（0 < paidAmount < balance 且未逾期）
+  PAID            // 已收清（balanceAmount = 0）
+  OVERDUE         // 已逾期（惰性投影：OPEN/PARTIALLY_PAID + dueDate < now）
+  CLOSED          // 已关闭（余额=0 且生命周期结束；与 OPEN/PAID 余额状态区分）
+}
+
+/// 应收快照类型（仅固化节点生成，只读）
+enum AccountsReceivableSnapshotType {
+  CREATED          // 创建时固化（ISSUED 后 AR 初始快照，snapshotSource=ISSUE）
+  PARTIALLY_PAID   // 部分收款时固化（4E-2 回写，snapshotSource=PAYMENT）
+  PAID             // 收清时固化（4E-2 回写，snapshotSource=PAYMENT）
+  ADJUSTED         // 金额调整时固化（4E-3 CN/DN 聚合后，snapshotSource=ADJUSTMENT）
+  WRITTEN_OFF      // 坏账核销时固化（4E-2，snapshotSource=WRITE_OFF）
+  CLOSED           // 关闭时固化（snapshotSource=MANUAL/PAYMENT/WRITE_OFF）
+}
+
+/// 应收快照来源类型（CTO Review 必改②：Receipt/CN/DN/WriteOff 全部可复用）
+enum AccountsReceivableSnapshotSource {
+  ISSUE       // Invoice ISSUED 自动创建 AR 时
+  PAYMENT     // 4E-2 Receipt 核销回写时
+  WRITE_OFF   // 4E-2 WriteOff 回写时
+  ADJUSTMENT  // 4E-3 CN/DN 聚合调整时
+  MANUAL      // 手动关闭/人工调整时
+}
+
+/// 应收（余额事实源；Invoice 1:1；Invoice=单据事实源，AR=余额事实源，Invoice 上 paidAmount/balanceAmount 仅投影回写）
+/// 余额唯一口径：balanceAmount = originalAmount + adjustedAmount - paidAmount - writeOffAmount（禁止前端 PATCH，服务端唯一计算）
+model AccountsReceivable {
+  id           String   @id @default(cuid())
+  invoiceId    String   @unique // 1:1 绑定 Invoice（单据事实源）；Invoice 软删防御；有 AR 的发票禁止删除（CTO 必改③）
+  invoice      Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  customerId   String   // 客户（继承 Invoice.customerId；对账用）
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  currency     String   @default("CNY") // 币种（继承 Invoice.currency）
+
+  // 余额计算四输入（CTO 锁定：前端禁止 PATCH 这些金额；由 4E-2 Receipt/WriteOff、4E-3 CN/DN 动作或下游事实表驱动）
+  originalAmount Decimal @db.Decimal(18, 4) // 原始金额（= Invoice.invoiceTotal，AR 创建时复制，不重算）
+  adjustedAmount Decimal @default(0) @db.Decimal(18, 4) // 调整金额（4E-3 CN/DN 聚合，可正可负）
+  paidAmount     Decimal @default(0) @db.Decimal(18, 4) // 已收款（4E-2 Receipt 回写）
+  writeOffAmount Decimal @default(0) @db.Decimal(18, 4) // 坏账核销金额（4E-2 WriteOff 回写）
+
+  // 余额（唯一计算口径，禁止手工写）
+  balanceAmount  Decimal @db.Decimal(18, 4) // = originalAmount + adjustedAmount - paidAmount - writeOffAmount
+
+  // 状态与账龄
+  status     AccountsReceivableStatus @default(OPEN)
+  effectiveStatus AccountsReceivableStatus // 惰性投影（OVERDUE 判定；CTO 拍板②：Projection，非数据库状态）
+  dueDate    DateTime? @db.Timestamptz(3) // 到期日（继承 Invoice.dueDate；逾期判定基准）
+  lastPaymentAt DateTime? @db.Timestamptz(3) // 最近收款时间（4E-2 回写）
+  // 注意：**不持久化 agingBucket**（CTO 必改①：effectiveAgingBucket 读取时动态计算 0-30/31-60/61-90/90+，只依赖 today/dueDate/balance，属 Projection，不每天更新数据库）
+
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  revisions AccountsReceivableRevision[]
+  snapshots AccountsReceivableSnapshot[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([deletedAt])
+}
+
+/// 应收修订（余额变更留痕；系统生成，禁止手工编辑）
+model AccountsReceivableRevision {
+  id           String   @id @default(cuid())
+  accountsReceivableId String
+  accountsReceivable AccountsReceivable @relation(fields: [accountsReceivableId], references: [id], onDelete: Cascade)
+  revisionNo   Int
+  changeReason String
+  snapshotData Json?    // 当前余额状态快照（金额 Decimal 字符串，禁止 toNumber）
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([accountsReceivableId, revisionNo])
+  @@index([accountsReceivableId])
+  @@index([deletedAt])
+}
+
+/// 应收快照（关键节点固化；金额 Decimal 字符串；含 snapshotSource 来源类型——CTO 必改②）
+model AccountsReceivableSnapshot {
+  id           String   @id @default(cuid())
+  accountsReceivableId String
+  accountsReceivable AccountsReceivable @relation(fields: [accountsReceivableId], references: [id], onDelete: Cascade)
+  snapshotType AccountsReceivableSnapshotType
+  snapshotSource AccountsReceivableSnapshotSource // CTO 必改②：来源枚举（ISSUE/PAYMENT/WRITE_OFF/ADJUSTMENT/MANUAL）
+  revisionNo   Int
+  snapshotData Json?    // 完整快照（Header + 四金额输入 + balanceAmount + customerId/currency/dueDate；Decimal 字符串）
+  generatedById String?
+  generatedAt  DateTime @default(now()) @db.Timestamptz(3)
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([accountsReceivableId, snapshotType])
+  @@index([accountsReceivableId])
   @@index([deletedAt])
 }
