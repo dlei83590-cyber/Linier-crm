@@ -1,5 +1,26 @@
 # Release Notes
 
+## Sprint 4E-1 — Accounts Receivable Foundation（2026-08-08，PR #16 Ready for Final Review，未发布 Tag）
+
+> PR: #16（Sprint 4E-1 Accounts Receivable Foundation，feature/sprint4-sales）
+> 状态：READY FOR FINAL REVIEW（CTO Review 97/100 APPROVED WITH CHANGES 已落实；CTO Final Review 待验收；合并后再改 Completed；未打 Tag；待 Sprint 4 Sales 完整闭环（4E-1 AR + 4E-2 Receipt + 4E-3 CN/DN）后统一发布下一个 Alpha）
+> CTO 结论：待验收（CTO Final Review Cover：docs/reviews/Sprint4E1_CTO_Review_Cover.md，Checklist 12 项）
+
+### Sprint 4E-1 Accounts Receivable Foundation（PR #16，Ready for Final Review）
+
+- **应收领域模型（余额事实源）**：AccountsReceivable / AccountsReceivableRevision / AccountsReceivableSnapshot（+3 模型 / +3 枚举，迁移 0018_accounts_receivable_foundation，仅新增不改既有；**禁止修改 Invoice 表**——CTO 拍板）；Invoice 1:1 AR（invoiceId @unique）；**Invoice = 单据事实源，AR = 余额事实源**（Invoice 上 paidAmount/balanceAmount 仅投影回写）
+- **余额唯一口径（CTO 锁定）**：balanceAmount = originalAmount + adjustedAmount - paidAmount - writeOffAmount；服务端唯一计算（computeBalance 单入口），前端禁止 PATCH 金额，由 4E-2 Receipt/4E-3 CN-DN 动作或下游事实表驱动
+- **AR 唯一来源 Invoice（拍板①）**：Invoice ISSUED 后同事务自动创建（不延迟，失败整体回滚）；无独立创建端点
+- **OVERDUE 惰性投影（拍板②）**：status ∈ {OPEN, PARTIALLY_PAID} 且 dueDate < now → effectiveStatus = OVERDUE（不落库、不新增 Scheduler，与 Quotation EXPIRED 一致）
+- **agingBucket 不存库（必改①）**：effectiveAgingBucket 读取时动态计算（0-30/31-60/61-90/90+，属 Projection）
+- **Snapshot 来源枚举（必改②）**：snapshotSource = ISSUE/PAYMENT/WRITE_OFF/ADJUSTMENT/MANUAL
+- **Invoice 删除保护（必改③）**：AR exists → 禁止删除 Invoice（Restrict）；Cancel 也不删 AR，只能 CLOSED
+- **Workflow 边界（必改④）**：AR 不审批；Receipt × ApprovalPolicy、WriteOff × ApprovalPolicy 属 4E-2
+- **查询 API（只读）**：GET 列表（含 effectiveStatus 惰性过滤 + 摘要 + 投影）、GET /aging（账龄分析）、GET 详情、GET revisions/snapshots；无 POST/PATCH
+- **RBAC**：3 模块×10 动作（accounts-receivable* 全 view 语义）；**事件**：EVENTS.md v1.9（8 个 AR 事件注册，Closed 为 CTO Review 追加）
+- **文档**：OpenAPI +5 端点/+13 schemas（161 paths/423 schemas）、Sprint4E1_QA.md（T1-T15）、AccountsReceivable_API.md（76 用例）、DOMAIN_MODEL v1.12（第 23 章）、ADR-0020（Approved with Changes → Accepted + Implemented）、Review Cover
+- **质量门禁**：Phase 1-3 全绿（#31206666645/#31206929056/#31207456840）；OpenAPI/QA/TestCases 文档 commit 已推送（#31207456840 后）
+
 ## Sprint 4D — Invoice Foundation（2026-08-08，PR #15 已合并，未发布 Tag）
 
 > PR: #15（Sprint 4D Invoice Foundation，feature/sprint4-sales）

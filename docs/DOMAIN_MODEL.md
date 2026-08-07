@@ -99,7 +99,8 @@ Project Expense / 日常 Expense ──> 审批流 ──> Voucher（凭证）
 - ✅ 已落地（Sprint 4B，PR #13 已合并）：Sales Order Foundation，见第 20 节
 - ✅ 已落地（Sprint 4C，PR #14 已合并）：Delivery Foundation，见第 21 节
 - ✅ 已落地（Sprint 4D，PR #15 已合并）：Invoice Foundation（Invoice/InvoiceLine/InvoiceRevision/InvoiceSnapshot + DeliveryLine 开票投影），见第 22 节
-- ⬜ 规划中（Sprint 4E-7）：Payment（4E）/ Purchase / GRN / Warehouse / Stock / AR / AP / Voucher / Journal / GL
+- 🔄 验收中（Sprint 4E-1，PR #16 待合并）：Accounts Receivable Foundation（AccountsReceivable/AccountsReceivableRevision/AccountsReceivableSnapshot + 1:1 Invoice），见第 23 节
+- ⬜ 规划中（Sprint 4E-2~7）：Receipt/Payment（4E-2）/ Credit Note/Debit Note（4E-3）/ Purchase / GRN / Warehouse / Stock / AR 扩展 / AP / Voucher / Journal / GL
 
 > 详细字段标准见数据库 schema（`prisma/schema.prisma`）与 [architecture/domain-model.md](./architecture/domain-model.md)。
 
@@ -1503,7 +1504,92 @@ erDiagram
 - **Decimal 全程**：金额/数量/投影/快照全部 Prisma.Decimal（金额 18,4 / 汇率 18,8），不转 number 做加减
 - **红线**：不开发 AR/Payment/Credit Note（paidAmount/balanceAmount 固定 0 投影，4E 回写）；无 InvoiceApproval/Attachment/Price 表；不调用 Pricing Engine；InvoiceLine 不自由编辑
 
-## 23. 变更记录
+## 23. Accounts Receivable Foundation（Sprint 4E-1，ADR-0020）
+
+> 定位（CTO Review 97/100 APPROVED WITH CHANGES 锁定）：**Invoice = 单据事实源；AccountsReceivable = 余额事实源**（Invoice 上 paidAmount/balanceAmount 仅投影回写）；
+> AR 唯一来源 Invoice（1:1，invoiceId @unique；Invoice ISSUED 后自动创建——拍板①）；
+> 余额唯一口径 `balanceAmount = originalAmount + adjustedAmount - paidAmount - writeOffAmount`（服务端唯一计算，前端禁止 PATCH 金额，由 4E-2 Receipt/4E-3 CN-DN 动作或下游事实表驱动）；
+> OVERDUE 惰性投影（拍板②：不落库、不新增 Scheduler，与 Quotation EXPIRED 一致）；agingBucket 不存库（必改①：effectiveAgingBucket 读取时动态计算 0-30/31-60/61-90/90+）；
+> Snapshot 含 snapshotSource 来源枚举（必改②：ISSUE/PAYMENT/WRITE_OFF/ADJUSTMENT/MANUAL）；Invoice 删除保护（必改③：Restrict，Cancel 也不删 AR 只能 CLOSED）；
+> Workflow 边界（必改④：AR 不审批；Receipt/WriteOff × ApprovalPolicy 属 4E-2）；Migration 0018 只新增不动 Invoice；无 VOID（CLOSED 承载生命周期结束）。
+
+```mermaid
+erDiagram
+    Invoice ||--|| AccountsReceivable : balances
+    Customer ||--o{ AccountsReceivable : owes
+    AccountsReceivable ||--o{ AccountsReceivableRevision : versions
+    AccountsReceivable ||--o{ AccountsReceivableSnapshot : snapshots
+
+    AccountsReceivable {
+        string id PK
+        string invoiceId FK UK
+        string customerId FK
+        string currency
+        Decimal originalAmount
+        Decimal adjustedAmount
+        Decimal paidAmount
+        Decimal writeOffAmount
+        Decimal balanceAmount
+        AccountsReceivableStatus status
+        AccountsReceivableStatus effectiveStatus
+        datetime dueDate
+        datetime lastPaymentAt
+        int version
+        datetime deletedAt
+    }
+
+    AccountsReceivableRevision {
+        string id PK
+        string accountsReceivableId FK
+        int revisionNo
+        string changeReason
+        Json snapshotData
+        datetime deletedAt
+    }
+
+    AccountsReceivableSnapshot {
+        string id PK
+        string accountsReceivableId FK
+        AccountsReceivableSnapshotType snapshotType
+        AccountsReceivableSnapshotSource snapshotSource
+        int revisionNo
+        Json snapshotData
+        string generatedById
+        datetime generatedAt
+        datetime deletedAt
+    }
+```
+
+### 关系与约束（真实 Schema，migration 0018）
+
+| 关系 | 基数 | onDelete | 说明 |
+| --- | --- | --- | --- |
+| Invoice → AccountsReceivable | 1:1 | Restrict | 单据事实源 → 余额事实源；有 AR 的发票禁止删除（必改③） |
+| Customer → AccountsReceivable | 1:N | Restrict | 客户对账 |
+| AR → ARRevision | 1:N | Cascade | 修订历史随记录 |
+| AR → ARSnapshot | 1:N | Cascade | 快照随记录 |
+
+- `AccountsReceivable.invoiceId @unique`（1:1）；`ARRevision @@unique([accountsReceivableId, revisionNo])`；`ARSnapshot @@unique([accountsReceivableId, snapshotType])`
+- **无 agingBucket 列**（必改①：effectiveAgingBucket 动态计算，只依赖 today/dueDate/balance，属 Projection，不每天更新数据库）
+- **无审批字段**（必改④：AR 不建审批表、不挂 ApprovalPolicy——Receipt/WriteOff × ApprovalPolicy 属 4E-2）
+
+### 状态机与业务规则（Sprint 4E-1）
+
+- **状态流转**：Invoice ISSUED → 自动创建 AR（OPEN）→（4E-2）PARTIALLY_PAID → PAID；OVERDUE 惰性投影（status∈{OPEN,PARTIALLY_PAID} + dueDate<now，不落库）；CLOSED = 余额=0 且生命周期结束（CTO Review 追加 AccountsReceivableClosed 事件）
+- **Action API 锁定**：本阶段仅查询（列表/详情/aging/revisions/snapshots）；无 POST/PATCH——AR 由 Invoice ISSUED 自动创建（拍板①），金额由 4E-2/4E-3 动作驱动
+- **余额唯一口径**：balanceAmount = originalAmount + adjustedAmount - paidAmount - writeOffAmount（computeBalance 单入口，禁止多处计算）
+- **快照固化节点**：CREATED / PARTIALLY_PAID / PAID / ADJUSTED / WRITTEN_OFF / CLOSED（金额一律 toString 禁止 toNumber）；snapshotSource 来源枚举（必改②）
+- **Decimal 全程**：金额 Decimal(18,4)；投影计算 Number 仅用于展示不写库
+- **红线**：不开发 4E-2（Receipt/Payment）/ 4E-3（CN/DN）；无 WriteOff/Adjustment 独立表；不修改 Invoice 表；AR 不审批
+
+## 24. 变更记录
+
+### v1.12（2026-08-08，Sprint 4E-1 Accounts Receivable Foundation，ADR-0020，PR #16 待验收）
+
+- 新增章节：23. Accounts Receivable Foundation（Sprint 4E-1，AR 余额事实源 + 3 模型 + 1:1 Invoice + 余额唯一口径 + 惰性投影）
+- 模型：+3（AccountsReceivable/AccountsReceivableRevision/AccountsReceivableSnapshot）；枚举：+3（AccountsReceivableStatus/AccountsReceivableSnapshotType/AccountsReceivableSnapshotSource）
+- Invoice +1 反向关系（accountsReceivable）；Customer +1 反向关系（accountsReceivables）；无 agingBucket 列（CTO 必改①动态计算）
+- 第 6 节已落地列表：Accounts Receivable Foundation（4E-1，PR #16 待验收）移入验收中
 
 ### v1.11（2026-08-08，Sprint 4D Invoice Foundation，ADR-0019，PR #15 已合并）
 

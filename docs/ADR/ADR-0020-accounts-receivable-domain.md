@@ -1,6 +1,6 @@
 # ADR-0020：Accounts Receivable Domain（应收领域模型边界与余额事实源决策）
 
-- 状态：**Approved with Changes（CTO Review 2026-08-08，97/100）**——4 项 Pending 全部拍板（① ISSUED 自动创建 AR ② OVERDUE 惰性投影 ③ WriteOff 独立实体 ④ CN/DN 先生成调整事实）+ **4 项必改已纳入设计**（① agingBucket 不存库改 effectiveAgingBucket 动态计算 ② Snapshot 增加 snapshotSource 枚举 ③ Invoice 删除保护 ④ Workflow 边界锁定）；**无需第二轮设计评审**，直接进入 Schema → Migration 0018 实现阶段
+- 状态：**Accepted + Implemented（2026-08-08，Sprint 4E-1 完成）**——CTO Review（2026-08-08，97/100 APPROVED WITH CHANGES）4 项 Pending 全部拍板 + 4 项必改已落地；Schema（0018）、Migration、Seed、RBAC、查询 API（5 端点）全部实现并通过 CI（PR #16）；等待 CTO Final Review 合并
 - 日期：2026-08-08
 - 关联：ADR-0015（Pricing Engine 唯一入口）、ADR-0016（Quotation Domain）、ADR-0017（Sales Order Domain）、ADR-0018（Delivery Domain）、ADR-0019（Invoice Domain）、Sprint4E1_AR_Design.md、EVENTS.md（v1.9 注册）、Sprint4D_Invoice_Design.md（已实现，PR #15 已合并）
 - 背景：Sprint 4D Invoice Foundation 已合并（PR #15，cea4162）。Sprint 4E 进入应收/收款设计。CTO 启动令（2026-08-08）：**Invoice = 单据事实源；AccountsReceivable = 余额事实源；Invoice 上的 paidAmount/balanceAmount 只做投影回写**。本阶段仅设计（3 文件），不写代码；Receipt/Payment 属 4E-2，Credit/Debit Note 属 4E-3。

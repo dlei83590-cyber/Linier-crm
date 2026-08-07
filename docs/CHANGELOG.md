@@ -2,7 +2,23 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased] - Sprint 4A + 4B + 4C + 4D（Quotation / Sales Order / Delivery / Invoice Foundation，2026-08-08，PR #12/#13/#14/#15 已合并，未打 Tag）
+## [Unreleased] - Sprint 4A + 4B + 4C + 4D + 4E-1（Quotation / Sales Order / Delivery / Invoice / Accounts Receivable Foundation，2026-08-08，PR #12/#13/#14/#15 已合并 + PR #16 Ready for Final Review，未打 Tag）
+
+### 新增（Sprint 4E-1：Accounts Receivable Foundation，PR #16，Ready for Final Review）
+
+- **应收领域（余额事实源）**：AccountsReceivable / AccountsReceivableRevision / AccountsReceivableSnapshot（+3 模型 / +3 枚举，迁移 `0018_accounts_receivable_foundation`，仅新增不改既有）；Invoice 1:1 AR（invoiceId @unique）；**Invoice = 单据事实源，AR = 余额事实源**（Invoice 上 paidAmount/balanceAmount 仅投影回写）
+- **余额唯一口径（CTO 锁定）**：`balanceAmount = originalAmount + adjustedAmount - paidAmount - writeOffAmount`；服务端唯一计算（computeBalance 单入口），前端禁止 PATCH 金额，由 4E-2 Receipt/4E-3 CN-DN 动作或下游事实表驱动
+- **AR 唯一来源 Invoice（拍板①）**：Invoice ISSUED 后同事务自动创建（不延迟，失败整体回滚）；无独立创建端点（无 POST /api/accounts-receivables）
+- **OVERDUE 惰性投影（拍板②）**：status ∈ {OPEN, PARTIALLY_PAID} 且 dueDate < now → effectiveStatus = OVERDUE（不落库、不新增 Scheduler，与 Quotation EXPIRED 一致）；API 返回 status/effectiveStatus/isOverdue
+- **agingBucket 不存库（必改①）**：effectiveAgingBucket 读取时动态计算（0-30/31-60/61-90/90+，只依赖 today/dueDate/balance，属 Projection，不每天更新数据库）
+- **Snapshot 来源枚举（必改②）**：snapshotSource = ISSUE/PAYMENT/WRITE_OFF/ADJUSTMENT/MANUAL，Receipt/CN/DN/WriteOff 全部可复用
+- **Invoice 删除保护（必改③）**：Invoice → AR exists → 禁止删除（onDelete: Restrict）；Invoice Cancel 也不删 AR，只能 CLOSED
+- **Workflow 边界（必改④）**：AR 不审批；Receipt × ApprovalPolicy、WriteOff × ApprovalPolicy 明确属 Sprint 4E-2，避免后续重复讨论
+- **WriteOff/CN-DN 边界（拍板③④）**：本阶段只留 writeOffAmount / adjustedAmount 字段；WriteOff 独立实体（4E-2）、Adjustment 事实（4E-3）后续实现，不直接 UPDATE balance
+- **查询 API（只读）**：GET 列表（customerId/status/effectiveStatus/currency/dueDate 过滤 + customer/invoice 摘要 + 惰性投影）、GET /aging（账龄分析 0-30/31-60/61-90/90+ + settled）、GET 详情（一次带出 invoice/customer + 最近 revision/snapshot）、GET revisions/snapshots 只读
+- **RBAC**：3 模块×10 动作（accounts-receivable* / accounts-receivable-revision* / accounts-receivable-snapshot*，全部 view 语义）
+- **事件**：EVENTS.md v1.9——AR 事件 8 个注册（Created/Updated/Overdue 属 4E-1；PartiallyPaid/Paid/WrittenOff 属 4E-2；Adjusted 属 4E-3；**Closed 为 CTO Review 追加**）
+- **文档**：OpenAPI +5 端点/+13 schemas（161 paths/423 schemas）、docs/qa/Sprint4E1_QA.md（T1-T15）、docs/test-cases/AccountsReceivable_API.md（76 用例，A-H 8 组）、DOMAIN_MODEL v1.12（第 23 章）、ADR-0020（Approved with Changes → Accepted + Implemented）、docs/reviews/Sprint4E1_CTO_Review_Cover.md（CTO Final Review 待验收）
 
 ### 新增（Sprint 4D：Invoice Foundation，PR #15，已合并）
 
