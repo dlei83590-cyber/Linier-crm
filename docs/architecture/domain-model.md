@@ -162,4 +162,7 @@ erDiagram
     Project ||--o{ ProjectAcceptance : has
     Project ||--o| ProjectClosure : closes
     Item ||--o{ ProjectProduct : referenced
+    Project ||--o{ ProjectTag : has
+    Tag ||--o{ ProjectTag : used
+    ProjectProduct ||--o| QuotationPriceSnapshot : priceSnapshot
 ```
