@@ -13,13 +13,14 @@ export const dynamic = "force-dynamic";
 
 /**
  * POST /api/deliveries/:id/invoice —— 唯一开票入口（Direct Invoice 禁止；不开放 POST /api/invoices）
- * 路径 {id} = primaryDeliveryId（本阶段单 Delivery + Partial Billing；Consolidated deliveryIds[] 扩展见后续 commit）
+ * 路径 {id} = primaryDeliveryId；请求体允许 deliveryIds[] 附加来源（Consolidated Invoice）
+ * 最终来源集合 = primaryDeliveryId + deliveryIds[]（去重）
  *
  * Create 事务链路（CTO Review 96/100 锁定 + 用户锁定顺序）：
- *  1. FOR UPDATE 锁定来源 Delivery
- *  2. 校验 DELIVERED（仅已确认收货可开票）
- *  3. 读取 SalesOrder 财务属性（currency/taxProfileId/paymentTerm）填充 Invoice 头
- *  4. 按 id ASC 锁定涉及的 DeliveryLine（FOR UPDATE）+ 校验归属本 Delivery
+ *  1. 按 id ASC 锁定所有来源 Delivery（FOR UPDATE，防死锁）
+ *  2. 校验全部 DELIVERED（仅已确认收货可开票）
+ *  3. 校验 Customer / Currency / TaxProfile / PaymentTerm 一致（Consolidated；否则 409 INVOICE_SOURCE_NOT_COMPATIBLE）
+ *  4. 按 id ASC 锁定涉及的 DeliveryLine（FOR UPDATE）+ 校验归属来源集合
  *  5. 防超开票：requestedQty > 0 且 <= remainingInvoiceQty（锁内读；否则 409 INVOICE_QUANTITY_EXCEEDED）
  *  6. 沿四段溯源链取价：DeliveryLine → sourceSalesOrderLineId → SalesOrderLine → priceSnapshotId → QuotationPriceSnapshot
  *     （不调用 Pricing Engine——Pricing 到 SalesOrder 为止；价格参数复制，行金额 = unitPrice × quantity 算术）
@@ -39,28 +40,57 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { id: primaryDeliveryId } = await params;
   const parsed = invoiceCreateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
-  const { lines, invoiceDate, dueDate, remark, changeReason } = parsed.data;
+  const { deliveryIds = [], lines, invoiceDate, dueDate, remark, changeReason } = parsed.data;
   const meta = requestMeta(request);
 
-  const result = await prisma.$transaction(async (tx) => {
-    // ── 1. FOR UPDATE 锁定来源 Delivery ────────────────────────────────────
-    const lockedDelivery = await tx.$queryRaw<Array<{ id: string }>>(
-      Prisma.sql`SELECT "id" FROM "Delivery" WHERE "id" = ${primaryDeliveryId} AND "deletedAt" IS NULL FOR UPDATE`,
-    );
-    if (lockedDelivery.length === 0) return { error: "DELIVERY_NOT_FOUND" as const };
-    const delivery = await tx.delivery.findFirst({ where: { id: primaryDeliveryId, deletedAt: null } });
-    if (!delivery) return { error: "DELIVERY_NOT_FOUND" as const };
+  // 最终来源集合 = primaryDeliveryId + deliveryIds[]（去重，Consolidated Invoice 支持）
+  const sourceDeliveryIds = [...new Set([primaryDeliveryId, ...deliveryIds])];
 
-    // ── 2. 校验 DELIVERED（仅已确认收货可开票） ────────────────────────────
-    if (delivery.status !== "DELIVERED") {
-      return { error: "SOURCE_NOT_DELIVERED" as const, status: delivery.status };
+  const result = await prisma.$transaction(async (tx) => {
+    // ── 1. 按 id ASC 锁定所有来源 Delivery（稳定锁序防死锁） ────────────────
+    const sortedDeliveryIds = [...sourceDeliveryIds].sort();
+    const deliveries: Array<{ id: string; status: string; salesOrderId: string; customerId: string }> = [];
+    for (const did of sortedDeliveryIds) {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>(
+        Prisma.sql`SELECT "id" FROM "Delivery" WHERE "id" = ${did} AND "deletedAt" IS NULL FOR UPDATE`,
+      );
+      if (locked.length === 0) return { error: "DELIVERY_NOT_FOUND" as const, deliveryId: did };
+      const d = await tx.delivery.findFirst({ where: { id: did, deletedAt: null } });
+      if (!d) return { error: "DELIVERY_NOT_FOUND" as const, deliveryId: did };
+      deliveries.push(d);
     }
 
-    // ── 3. 读取 SalesOrder 财务属性（currency/taxProfileId/paymentTerm） ────
-    const salesOrder = await tx.salesOrder.findFirst({ where: { id: delivery.salesOrderId, deletedAt: null } });
-    if (!salesOrder) return { error: "SO_NOT_FOUND" as const };
+    // ── 2. 校验全部 DELIVERED（仅已确认收货可开票） ─────────────────────────
+    for (const d of deliveries) {
+      if (d.status !== "DELIVERED") {
+        return { error: "SOURCE_NOT_DELIVERED" as const, deliveryId: d.id, status: d.status };
+      }
+    }
 
-    // ── 4. 按 id ASC 锁定涉及的 DeliveryLine（FOR UPDATE）+ 校验归属本 Delivery ──
+    // ── 3. Consolidated 一致性校验：Customer / Currency / TaxProfile / PaymentTerm ──
+    //    Delivery 无 currency/taxProfileId/paymentTerm 字段，经 SalesOrder 读取财务属性
+    const soIds = [...new Set(deliveries.map((d) => d.salesOrderId))];
+    const soMap = new Map<string, { currency: string; taxProfileId: string | null; paymentTerm: string | null }>();
+    for (const sid of soIds) {
+      const so = await tx.salesOrder.findFirst({ where: { id: sid, deletedAt: null } });
+      if (!so) return { error: "SO_NOT_FOUND" as const, salesOrderId: sid };
+      soMap.set(sid, { currency: so.currency, taxProfileId: so.taxProfileId ?? null, paymentTerm: so.paymentTerm ?? null });
+    }
+    const primary = deliveries[0];
+    const primarySo = soMap.get(primary.salesOrderId)!;
+    for (const d of deliveries) {
+      const so = soMap.get(d.salesOrderId)!;
+      const compatible =
+        d.customerId === primary.customerId &&
+        so.currency === primarySo.currency &&
+        so.taxProfileId === primarySo.taxProfileId &&
+        so.paymentTerm === primarySo.paymentTerm;
+      if (!compatible) {
+        return { error: "SOURCE_NOT_COMPATIBLE" as const, deliveryId: d.id };
+      }
+    }
+
+    // ── 4. 按 id ASC 锁定涉及的 DeliveryLine（FOR UPDATE）+ 校验归属来源集合 ──
     const lineIds = [...new Set(lines.map((l) => l.deliveryLineId))].sort();
     const lineMap = new Map<
       string,
@@ -86,7 +116,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         include: { sourceSalesOrderLine: { include: { priceSnapshot: true } } },
       });
       if (!dl) return { error: "LINE_NOT_FOUND" as const, lineId: lid };
-      if (dl.deliveryId !== primaryDeliveryId) {
+      if (!sourceDeliveryIds.includes(dl.deliveryId)) {
         return { error: "LINE_NOT_IN_SOURCE" as const, lineId: lid, deliveryId: dl.deliveryId };
       }
       lineMap.set(lid, dl as never);
@@ -156,18 +186,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       lineNo += 10;
     }
 
-    // ── 6. 创建 Invoice（DRAFT, code=null——编号延后生成） ───────────────────
+    // ── 6. 创建 Invoice（DRAFT, code=null——编号延后生成；Header 财务属性以 primary 为准，已校验一致） ──
     const invoice = await tx.invoice.create({
       data: {
         deliveryId: primaryDeliveryId,
-        salesOrderId: delivery.salesOrderId,
-        customerId: delivery.customerId,
+        salesOrderId: primary.salesOrderId,
+        customerId: primary.customerId,
         status: "DRAFT",
         invoiceDate: invoiceDate ? new Date(invoiceDate) : new Date(),
         ...(dueDate !== undefined ? { dueDate: dueDate ? new Date(dueDate) : null } : {}),
-        currency: salesOrder.currency,
-        taxProfileId: salesOrder.taxProfileId,
-        paymentTerm: salesOrder.paymentTerm,
+        currency: primarySo.currency,
+        taxProfileId: primarySo.taxProfileId,
+        paymentTerm: primarySo.paymentTerm,
         subtotal,
         taxAmount: taxTotal,
         invoiceTotal: grandTotal,
@@ -222,11 +252,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       code: null,
       status: "DRAFT",
       deliveryId: primaryDeliveryId,
-      salesOrderId: delivery.salesOrderId,
-      customerId: delivery.customerId,
-      currency: salesOrder.currency,
-      taxProfileId: salesOrder.taxProfileId,
-      paymentTerm: salesOrder.paymentTerm,
+      sourceDeliveryIds,
+      salesOrderId: primary.salesOrderId,
+      customerId: primary.customerId,
+      currency: primarySo.currency,
+      taxProfileId: primarySo.taxProfileId,
+      paymentTerm: primarySo.paymentTerm,
       subtotal: subtotal.toString(),
       taxAmount: taxTotal.toString(),
       invoiceTotal: grandTotal.toString(),
@@ -255,7 +286,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       snapshotData,
       user?.id,
       {
-        taxProfileId: salesOrder.taxProfileId,
+        taxProfileId: primarySo.taxProfileId,
         taxRate: firstPs?.taxRate ?? null,
         sstNo: null, // SST 注册号（TaxProfile 无此字段，待配置来源）
         currencyRate: null, // 汇率快照（待币种汇率配置；4E 前可扩展）
@@ -269,20 +300,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if ("error" in result) {
     switch (result.error) {
       case "DELIVERY_NOT_FOUND":
-        return failNotFound(ERROR_CODES.DELIVERY_NOT_FOUND, "来源交付单不存在");
+        return failNotFound(ERROR_CODES.DELIVERY_NOT_FOUND, `来源交付单不存在（${result.deliveryId}）`);
       case "SO_NOT_FOUND":
         return failNotFound(ERROR_CODES.SALES_ORDER_NOT_FOUND, "来源销售订单不存在");
       case "SOURCE_NOT_DELIVERED":
         return failConflict(
           ERROR_CODES.INVOICE_INVALID_STATE,
-          `仅 DELIVERED 状态可开票（当前 ${result.status}）`,
+          `仅 DELIVERED 状态可开票（交付单 ${result.deliveryId} 当前 ${result.status}）`,
+        );
+      case "SOURCE_NOT_COMPATIBLE":
+        return failConflict(
+          ERROR_CODES.INVOICE_SOURCE_NOT_COMPATIBLE,
+          `Consolidated Invoice 来源交付单财务属性不一致（交付单 ${result.deliveryId} 的 Customer/Currency/TaxProfile/PaymentTerm 与主来源不同）`,
         );
       case "LINE_NOT_FOUND":
         return failNotFound(ERROR_CODES.INVOICE_LINE_NOT_FOUND, "开票行（DeliveryLine）不存在");
       case "LINE_NOT_IN_SOURCE":
         return failConflict(
           ERROR_CODES.INVOICE_INVALID_STATE,
-          `开票行 ${result.lineId} 不属于该交付单（属于 ${result.deliveryId}）`,
+          `开票行 ${result.lineId} 不属于任何来源交付单（属于 ${result.deliveryId}）`,
         );
       case "SOURCE_LINE_INVALID":
         return fail(ERROR_CODES.DELIVERY_SOURCE_LINE_INVALID, "交付行来源销售订单行无效或已删除", 400, { lineId: result.lineId });
@@ -321,6 +357,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       entityId: result.invoice.id,
       afterData: {
         deliveryId: primaryDeliveryId,
+        sourceDeliveryIds,
         status: "DRAFT",
         invoiceTotal: result.invoice.invoiceTotal.toString(),
         lineCount: result.lineCount,

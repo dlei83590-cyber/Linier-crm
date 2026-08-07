@@ -317,10 +317,9 @@ export const deliveryCancelSchema = z.object({
   changeReason: z.string().max(500).optional(),
 });
 
-/** Invoice 创建：唯一入口 POST /api/deliveries/{id}/invoice（{id}=primaryDeliveryId；单 Delivery + Partial Billing）
- * 注意：Consolidated（deliveryIds[]）扩展在后续 commit 加入。
- */
+/** Invoice 创建：唯一入口 POST /api/deliveries/{id}/invoice（{id}=primaryDeliveryId；deliveryIds[] 附加来源=Consolidated） */
 export const invoiceCreateSchema = z.object({
+  deliveryIds: z.array(z.string().min(1)).optional(), // Consolidated Invoice 附加 Delivery 来源（财务属性必须一致）
   lines: z
     .array(
       z.object({
