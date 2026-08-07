@@ -413,7 +413,7 @@ const SEED_COMMERCIAL_TERMS = [
 ];
 
 const SEED_DOCUMENT_SEQUENCES = [
-  { code: "QUO", name: "报价单", docType: "QUOTATION", prefix: "QUO", nextNo: 1, padLength: 6 },
+  { code: "QUO", name: "报价单", docType: "QUOTATION", prefix: "QT", nextNo: 1, padLength: 6 },
   { code: "SO", name: "销售订单", docType: "SALES_ORDER", prefix: "SO", nextNo: 1, padLength: 6 },
   { code: "PO", name: "采购订单", docType: "PURCHASE_ORDER", prefix: "PO", nextNo: 1, padLength: 6 },
   { code: "PI", name: "形式发票", docType: "PROFORMA_INVOICE", prefix: "PI", nextNo: 1, padLength: 6 },
@@ -504,6 +504,37 @@ const SEED_WORKFLOW_DEFINITIONS = [
         allowWithdraw: false,
         conditions: [{ field: "department", "operator": "EQ", value: "Sales" }],
       },
+    ],
+  },
+];
+
+/** Sprint 4A：报价审批策略（Quotation Foundation；ApprovalPolicy 只负责选择 Workflow，不执行审批） */
+const SEED_APPROVAL_POLICIES: Array<{
+  code: string;
+  name: string;
+  module: string;
+  priority: number;
+  enabled: boolean;
+  rules: Array<{
+    minAmount: number | null;
+    maxAmount: number | null;
+    priority: number;
+    workflowDefinitionCode: string;
+  }>;
+}> = [
+  {
+    code: "QUOTATION_DEFAULT",
+    name: "报价默认审批策略",
+    module: "QUOTATION",
+    priority: 100,
+    enabled: true,
+    rules: [
+      // < 50,000 CNY → Sales Manager（QUOTATION_APPROVAL 流程）
+      { minAmount: null, maxAmount: 50000, priority: 300, workflowDefinitionCode: "QUOTATION_APPROVAL" },
+      // 50,000–200,000 CNY → Department Manager
+      { minAmount: 50000, maxAmount: 200000, priority: 200, workflowDefinitionCode: "QUOTATION_APPROVAL" },
+      // > 200,000 CNY → General Manager
+      { minAmount: 200000, maxAmount: null, priority: 100, workflowDefinitionCode: "QUOTATION_APPROVAL" },
     ],
   },
 ];
@@ -756,6 +787,31 @@ async function main() {
       for (const cond of conditions) {
         await prisma.workflowCondition.create({ data: { ...cond, stepId: savedStep.id } });
       }
+    }
+  }
+
+  // Sprint 4A: approval policies（Quotation Foundation；只选择 Workflow，不执行审批；幂等：稳定 code + upsert + 重建 rules）
+  for (const policy of SEED_APPROVAL_POLICIES) {
+    const { rules, ...policyData } = policy;
+    const savedPolicy = await prisma.approvalPolicy.upsert({
+      where: { code: policyData.code },
+      update: {},
+      create: { ...policyData, approvalStatus: "APPROVED" },
+    });
+    await prisma.approvalPolicyRule.deleteMany({ where: { policyId: savedPolicy.id } });
+    for (const rule of rules) {
+      const wf = await prisma.workflowDefinition.findFirst({ where: { code: rule.workflowDefinitionCode, deletedAt: null } });
+      if (!wf) continue;
+      await prisma.approvalPolicyRule.create({
+        data: {
+          policyId: savedPolicy.id,
+          minAmount: rule.minAmount,
+          maxAmount: rule.maxAmount,
+          priority: rule.priority,
+          workflowDefinitionId: wf.id,
+          approvalStatus: "APPROVED",
+        },
+      });
     }
   }
 
