@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
 import { ok, failConflict, failNotFound } from "@/lib/api/response";
@@ -11,8 +12,10 @@ export const dynamic = "force-dynamic";
  * POST /api/project-opportunities/:id/convert — Opportunity → Project 唯一转换入口（CTO #3C5）
  * 规则：
  *  - 只能转换一次（Project.opportunityId 唯一约束 + convertedAt 回写双重校验）
- *  - 事务：锁定并读取 Opportunity → 检查已转换 → 生成项目编号（DocumentSequence docType=PROJECT）
+ *  - 事务：SELECT ... FOR UPDATE 真实行锁 → 检查已转换 → 原子递增生成项目编号
  *    → 创建 Project（复制客户/财务/负责人/描述）→ 回写 convertedAt/convertedBy → AuditLog
+ *  - 并发安全（CTO 架构审核）：行锁串行化同一机会的并发转换；nextNo 原子递增避免重复编号；
+ *    唯一约束冲突（P2002）兜底映射为 409，不暴露 Prisma 原始错误
  *  - 禁止通过普通 POST /projects 模拟转换
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -25,26 +28,35 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const meta = requestMeta(request);
 
   const result = await prisma.$transaction(async (tx) => {
-    // ① 锁定并读取 Opportunity（FOR UPDATE 语义由事务隔离保证）
+    // ① 真实数据库行锁：SELECT ... FOR UPDATE 锁定 Opportunity 行，串行化同一机会的并发转换
+    const locked = await tx.$queryRaw<Array<{ id: string }>>(
+      Prisma.sql`SELECT "id" FROM "ProjectOpportunity" WHERE "id" = ${id} AND "deletedAt" IS NULL FOR UPDATE`,
+    );
+    if (locked.length === 0) return { error: "NOT_FOUND" as const };
+
+    // ② 读取 Opportunity（行已锁定）并检查是否已转换（convertedAt 回写 + Project.opportunityId 唯一双重校验）
     const opportunity = await tx.projectOpportunity.findFirst({
       where: { id, deletedAt: null },
       include: { project: { select: { id: true } } },
     });
     if (!opportunity) return { error: "NOT_FOUND" as const };
-
-    // ② 检查是否已转换（双重校验：convertedAt 回写 + Project.opportunityId 唯一）
     if (opportunity.convertedAt || opportunity.project) {
       return { error: "ALREADY_CONVERTED" as const };
     }
 
-    // ③ 生成项目编号（DocumentSequence docType=PROJECT，幂等递增）
+    // ③ 生成项目编号：nextNo 数据库原子递增（increment），并发取号不重复
     const seq = await tx.documentSequence.findFirst({ where: { docType: "PROJECT", isActive: true, deletedAt: null } });
     const prefix = seq?.prefix ?? "PJ";
     const padLength = seq?.padLength ?? 6;
-    const nextNo = seq?.nextNo ?? 1;
-    const projectCode = `${prefix}${String(nextNo).padStart(padLength, "0")}`;
+    let projectCode: string;
     if (seq) {
-      await tx.documentSequence.update({ where: { id: seq.id }, data: { nextNo: nextNo + 1 } });
+      const updated = await tx.documentSequence.update({
+        where: { id: seq.id },
+        data: { nextNo: { increment: 1 } },
+      });
+      projectCode = `${prefix}${String(updated.nextNo - 1).padStart(padLength, "0")}`;
+    } else {
+      projectCode = `${prefix}${String(1).padStart(padLength, "0")}`;
     }
 
     // ④ 创建 Project（复制客户/财务/负责人/描述；stage 默认 SAMPLING）
@@ -79,6 +91,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     });
 
     return { error: null as null, opportunity, project };
+  }).catch((err: unknown) => {
+    // 兜底：唯一约束冲突（并发重复转换/编号冲突）稳定返回 409，不暴露 Prisma P2002
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return { error: "ALREADY_CONVERTED" as const };
+    }
+    throw err;
   });
 
   if (result.error === "NOT_FOUND") {
