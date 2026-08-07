@@ -7,7 +7,7 @@ import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { quotationLineUpdateSchema } from "@/lib/api/schemas";
 import { recalcQuotationTotals, createQuotationRevision } from "@/lib/quotation/helpers";
-import { quotationPricingService } from "@/lib/pricing/QuotationPricingService";
+import { quotationPricingService, type QuotationPricingLineResult } from "@/lib/pricing/QuotationPricingService";
 import { publishQuotationEvent } from "@/lib/quotation/events";
 
 export const dynamic = "force-dynamic";
@@ -43,22 +43,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 
   const nextQuantity = quantity !== undefined ? new Prisma.Decimal(quantity) : line.quantity;
-  const repricing = quantity !== undefined && !line.quantity.equals(nextQuantity);
+  const nextUomId = fields.uomId !== undefined ? fields.uomId : line.uomId;
+  // quantity 或 uomId 变更都必须重新定价（ADR-0015：新快照，禁止手工填价）
+  const repricing =
+    (quantity !== undefined && !line.quantity.equals(nextQuantity)) ||
+    (fields.uomId !== undefined && fields.uomId !== line.uomId);
 
-  // ① 更新业务字段（价格字段不动，等待定价回写）
-  const updatedLine = await prisma.quotationLine.update({
-    where: { id: lineId },
-    data: {
-      ...(fields.description !== undefined ? { description: fields.description } : {}),
-      ...(fields.uomId !== undefined ? { uomId: fields.uomId } : {}),
-      ...(fields.lineNo !== undefined ? { lineNo: fields.lineNo } : {}),
-      ...(quantity !== undefined ? { quantity: nextQuantity } : {}),
-      version: { increment: 1 },
-      updatedById: user!.id,
-    },
-  });
-
-  // ② 数量变更 → 重新定价（ADR-0015：新快照，禁止手工填价）
+  // ① 先定价（事务外；失败时数据库保持原状态，直接返回 400，不产生任何写入）
+  let pricingResult: QuotationPricingLineResult | null = null;
   if (repricing) {
     try {
       const pricing = await quotationPricingService.priceLines({
@@ -67,27 +59,36 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         currency: quotation.currency,
         pricingDate: new Date(),
         taxProfileId: quotation.taxProfileId ?? undefined,
-        lines: [{ lineId, itemId: line.itemId!, quantity: nextQuantity, uom: updatedLine.uomId ?? undefined }],
+        lines: [{ lineId, itemId: line.itemId!, quantity: nextQuantity, uom: nextUomId ?? undefined }],
       });
-      const r = pricing[0];
-      await prisma.quotationLine.update({
-        where: { id: lineId },
-        data: {
-          priceSnapshotId: r.priceSnapshotId,
-          unitPrice: r.unitPrice,
-          lineAmount: r.lineAmount,
-          taxAmount: r.taxAmount,
-          totalAmount: r.totalAmount,
-          updatedById: user!.id,
-        },
-      });
+      pricingResult = pricing[0];
     } catch {
       return fail(ERROR_CODES.QUOTATION_PRICE_FAILED, "报价定价失败：请检查物料价格配置", 400);
     }
   }
 
-  // ③ 重算头合计 + Revision + 事件 + 审计
+  // ② 单事务：更新行（业务字段 + 定价回写）→ 重算头合计 → Revision（原子，任一步失败整体回滚）
   const saved = await prisma.$transaction(async (tx) => {
+    await tx.quotationLine.update({
+      where: { id: lineId },
+      data: {
+        ...(fields.description !== undefined ? { description: fields.description } : {}),
+        ...(fields.uomId !== undefined ? { uomId: fields.uomId } : {}),
+        ...(fields.lineNo !== undefined ? { lineNo: fields.lineNo } : {}),
+        ...(quantity !== undefined ? { quantity: nextQuantity } : {}),
+        ...(pricingResult
+          ? {
+              priceSnapshotId: pricingResult.priceSnapshotId,
+              unitPrice: pricingResult.unitPrice,
+              lineAmount: pricingResult.lineAmount,
+              taxAmount: pricingResult.taxAmount,
+              totalAmount: pricingResult.totalAmount,
+            }
+          : {}),
+        version: { increment: 1 },
+        updatedById: user!.id,
+      },
+    });
     const lines = await tx.quotationLine.findMany({ where: { quotationId: id, deletedAt: null }, orderBy: { lineNo: "asc" } });
     await recalcQuotationTotals(tx, id, lines);
     const q = await tx.quotation.findFirst({ where: { id } });

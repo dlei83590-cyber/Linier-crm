@@ -39,6 +39,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   });
 
   try {
+    const latestRevision = await prisma.quotationRevision.findFirst({
+      where: { quotationId: id, deletedAt: null },
+      orderBy: { revisionNo: "desc" },
+    });
     await publishQuotationEvent({
       eventType: "QuotationCancelled",
       actorId,
@@ -46,7 +50,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       payload: {
         quotationId: id,
         quotationCode: updated.code,
-        revisionNo: 1,
+        revisionNo: latestRevision?.revisionNo ?? 1,
         customerId: updated.customerId,
         projectId: updated.projectId,
         workflowInstanceId: updated.workflowInstanceId,

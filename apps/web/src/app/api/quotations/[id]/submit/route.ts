@@ -157,7 +157,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         revisionNo: latestRevision?.revisionNo ?? 1,
         snapshotData: {
           status: "SUBMITTED",
-          totalAmount: totalAmount.toNumber(),
+          totalAmount: totalAmount.toString(),
           currency: quotation.currency,
           workflowInstanceId: created.id,
           submittedBy: actorId,
@@ -195,6 +195,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   try {
+    const latestRevision = await prisma.quotationRevision.findFirst({
+      where: { quotationId: id, deletedAt: null },
+      orderBy: { revisionNo: "desc" },
+    });
     await publishQuotationEvent({
       eventType: "QuotationSubmitted",
       actorId,
@@ -202,7 +206,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       payload: {
         quotationId: id,
         quotationCode: quotation.code,
-        revisionNo: 1,
+        revisionNo: latestRevision?.revisionNo ?? 1,
         customerId: quotation.customerId,
         projectId: quotation.projectId,
         workflowInstanceId: instance.id,

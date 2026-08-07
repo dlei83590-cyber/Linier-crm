@@ -304,6 +304,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   });
 
   // Sprint 4A：Quotation 审批终态回写（Workflow 为唯一事实源，Quotation 仅保存投影 + 发布事件）
+  // CTO Final Review（PR #12）：Quotation 投影失败不能被静默吞掉（不 catch）；事件发布降级在 sync 内部处理
   if (
     instance.businessType === "quotation" &&
     (result.afterStatus === "COMPLETED" || result.afterStatus === "REJECTED")
@@ -312,7 +313,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       quotationId: instance.businessId,
       workflowStatus: result.afterStatus,
       actorId: user!.id,
-    }).catch(() => undefined);
+    });
   }
 
   return ok({ instanceId: id, ...result });
