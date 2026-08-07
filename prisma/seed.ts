@@ -95,6 +95,11 @@ const SEED_ACTION_MODULES = [
   "sales-order-line",
   "sales-order-revision",
   "sales-order-snapshot",
+  // Sprint 4C：Delivery Foundation 模块（动作映射：ready/dispatch→edit；confirm-delivery→approve；cancel→close）
+  "delivery",
+  "delivery-line",
+  "delivery-revision",
+  "delivery-snapshot",
   // Sprint 3A：平台底座模块
   "workflow-definition",
   "workflow-step",
