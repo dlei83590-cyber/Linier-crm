@@ -1,6 +1,6 @@
 # ADR-0018：Delivery Domain（交付领域模型边界与交付事实源/聚合投影决策）
 
-- 状态：**Approved with Changes（CTO Review 94/100，2026-08-07；Sprint 4C 设计阶段，禁止写业务代码）**
+- 状态：**Accepted + Implemented（Sprint 4C 实现完成，2026-08-07；PR #14 待验收合并）**
 - 日期：2026-08-07
 - 关联：ADR-0015（Quotation must consume Pricing Engine）、ADR-0016（Quotation Domain）、ADR-0017（Sales Order Domain）、Sprint4C_Delivery_Design.md、EVENTS.md（v1.5 已注册）、Sprint4B_SO_Design.md（已实现，PR #13）、ROADMAP.md
 - 背景：Sprint 4B Sales Order Foundation 已合并（PR #13，3747eba）。Sprint 4C 进入 Delivery 设计。CTO 决策：**先设计后实现**；**Delivery 是交付事实源，SalesOrder 只保存聚合投影**；本阶段不开发 Invoice/Payment；本 ADR 锁定模型边界，保证 Sales 模块（4A Quote / 4B SO / 4C Delivery / 4D Invoice）与 Sprint 3 平台能力（Workflow、Pricing、File Center、BusinessPartner）完全一致。

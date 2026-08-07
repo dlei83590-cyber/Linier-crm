@@ -1,6 +1,6 @@
 # EVENTS 领域事件注册表（Domain Events）
 
-- 版本：v1.2
+- 版本：v1.6
 - 日期：2026-08-07
 - 维护者：CIO（JINZA）｜审核：CTO
 - 关联：[API_GUIDELINES.md](./API_GUIDELINES.md) ｜ [ARCHITECTURE_BASELINE.md](./ARCHITECTURE_BASELINE.md)
@@ -92,8 +92,8 @@
 | `SalesOrderConfirmed` | 确认订单（DRAFT → CONFIRMED） | `{ salesOrderId, salesOrderCode, customerId, totalAmount, confirmedBy }` | ✅ 已发布（confirm） |
 | `SalesOrderCancelled` | 取消订单（DRAFT/CONFIRMED → CANCELLED） | `{ salesOrderId, salesOrderCode, cancelledBy, reason }` | ✅ 已发布（cancel） |
 | `SalesOrderApprovalStarted` | Workflow 条件触发创建审批实例（Sprint 4B 新增留痕） | `{ salesOrderId, salesOrderCode, workflowInstanceId, currency, totalAmount }` | ✅ 已发布（workflow-sync，AuditLog 留痕；未注册独立领域事件） |
-| `SalesOrderDeliveryStarted` | 首次交付触发（Sprint 4C 联动） | `{ salesOrderId, salesOrderCode, deliveryId, startedBy }` | ⏳ 注册待实现（4C） |
-| `SalesOrderDelivered` | 全部交付完成（Sprint 4C 联动） | `{ salesOrderId, salesOrderCode, deliveryId, deliveredAt }` | ⏳ 注册待实现（4C） |
+| `SalesOrderDeliveryStarted` | 首次交付触发（Sprint 4C 联动） | `{ salesOrderId, salesOrderCode, deliveryId, startedBy }` | ⏳ 注册待实现（4C，首次 confirm-delivery 可联动发布） |
+| `SalesOrderDelivered` | 全部交付完成（Sprint 4C 联动） | `{ salesOrderId, salesOrderCode, deliveryId, deliveredAt }` | ✅ 已发布（confirm-delivery 聚合联动，v1.6 标注） |
 | `SalesOrderCompleted` | 交付+回款完成终态（Sprint 4C/4D） | `{ salesOrderId, salesOrderCode, completedAt }` | ⏳ 注册待实现（4C/4D） |
 
 > 注：§2.3 业务单据表原有 `SalesOrderCreated { orderId, code, customerId, amount }` 占位，v1.4 升级为统一载荷并补齐 7 个事件。
@@ -105,14 +105,14 @@
 
 | eventType | 触发时机 | 载荷示例 | 实现状态 |
 | --- | --- | --- | --- |
-| `DeliveryCreated` | 创建交付单（DRAFT，经 SO 创建） | `{ deliveryId, deliveryCode, salesOrderId, salesOrderCode, customerId, createdBy }` | ⏳ 注册待实现（Sprint 4C） |
-| `DeliveryUpdated` | 头/行内容变更（Revision） | `{ deliveryId, deliveryCode, revisionNo, changeReason, changedBy }` | ⏳ 注册待实现 |
-| `DeliveryReady` | ready（DRAFT → READY，行锁定） | `{ deliveryId, deliveryCode, salesOrderId, readyBy }` | ⏳ 注册待实现 |
-| `DeliveryDispatched` | dispatch（READY → DISPATCHED，发运） | `{ deliveryId, deliveryCode, carrier, trackingNo, dispatchedBy }` | ⏳ 注册待实现 |
-| `DeliveryConfirmed` | confirm-delivery（DISPATCHED → DELIVERED） | `{ deliveryId, deliveryCode, deliveredAt, confirmedBy }` | ⏳ 注册待实现 |
-| `DeliveryCancelled` | cancel（DRAFT/READY → CANCELLED） | `{ deliveryId, deliveryCode, cancelledBy, reason }` | ⏳ 注册待实现 |
-| `SalesOrderPartiallyDelivered` | Delivery 聚合回写：SO 部分交付（投影） | `{ salesOrderId, salesOrderCode, deliveryId, remainingQty, updatedAt }` | ⏳ 注册待实现（confirm-delivery 联动） |
-| `SalesOrderDelivered` | Delivery 聚合回写：SO 全部交付（投影 + deliveredAt） | `{ salesOrderId, salesOrderCode, deliveryId, deliveredAt }` | ⏳ 注册待实现（confirm-delivery 联动） |
+| `DeliveryCreated` | 创建交付单（DRAFT，经 SO 创建） | `{ deliveryId, deliveryCode, salesOrderId, salesOrderCode, customerId, createdBy }` | ✅ 已实现（Phase 3 POST /api/sales-orders/{id}/deliveries） |
+| `DeliveryUpdated` | 头/行内容变更（Revision） | `{ deliveryId, deliveryCode, revisionNo, changeReason, changedBy }` | ✅ 已实现（Phase 3 PATCH 头/行） |
+| `DeliveryReady` | ready（DRAFT → READY，行锁定） | `{ deliveryId, deliveryCode, salesOrderId, readyBy }` | ✅ 已实现（Phase 4 POST /ready） |
+| `DeliveryDispatched` | dispatch（READY → DISPATCHED，发运） | `{ deliveryId, deliveryCode, carrier, trackingNo, dispatchedBy }` | ✅ 已实现（Phase 4 POST /dispatch） |
+| `DeliveryConfirmed` | confirm-delivery（DISPATCHED → DELIVERED） | `{ deliveryId, deliveryCode, deliveredAt, confirmedBy }` | ✅ 已实现（Phase 4 POST /confirm-delivery） |
+| `DeliveryCancelled` | cancel（DRAFT/READY → CANCELLED） | `{ deliveryId, deliveryCode, cancelledBy, reason }` | ✅ 已实现（Phase 4 POST /cancel） |
+| `SalesOrderPartiallyDelivered` | Delivery 聚合回写：SO 部分交付（投影） | `{ salesOrderId, salesOrderCode, deliveryId, remainingQty, updatedAt }` | ✅ 已实现（confirm-delivery 聚合联动） |
+| `SalesOrderDelivered` | Delivery 聚合回写：SO 全部交付（投影 + deliveredAt） | `{ salesOrderId, salesOrderCode, deliveryId, deliveredAt }` | ✅ 已实现（confirm-delivery 聚合联动） |
 
 > 注：`SalesOrderDeliveryStarted` / `SalesOrderCompleted`（v1.4 注册）——前者由首次 confirm-delivery 联动发布，后者待 Sprint 4D（交付+回款完成）。
 
@@ -149,6 +149,7 @@
 
 | 日期 | 版本 | 说明 |
 | --- | --- | --- |
+| 2026-08-07 | v1.6 | Sprint 4C 实现状态标注：Delivery 8 事件（Created/Updated/Ready/Dispatched/Confirmed/Cancelled + SalesOrderPartiallyDelivered/SalesOrderDelivered）全部 ✅ 已发布（Phase 3 CRUD/Lines + Phase 4 lifecycle/aggregation）；2.3.2 SalesOrderDelivered 同步标注 |
 | 2026-08-07 | v1.5 | Sprint 4C 注册 Delivery 事件 8 个（Created/Updated/Ready/Dispatched/Confirmed/Cancelled + SalesOrderPartiallyDelivered/SalesOrderDelivered，统一载荷，CTO 决策：先注册后开发；见 2.3.3）；Delivery 为交付事实源，SalesOrder 聚合投影事件联动发布 |
 | 2026-08-07 | v1.4 | Sprint 4B 注册 SalesOrder 事件 7 个（Created/Updated/Confirmed/Cancelled/DeliveryStarted/Delivered/Completed，统一载荷，CTO 决策：先注册后开发；见 2.3.2）；SalesOrderCreated 占位升级为统一载荷 |
 | 2026-08-07 | v1.3 | Sprint 4A 实现状态标注：11 个 Quotation 事件中已发布 7 个（Created/Updated/Submitted/Approved/Rejected/Accepted/Cancelled），4 个注册待实现（RevisionCreated/Sent/Expired/Converted，见 2.3.1 表格）；事件总线落地前以 AuditLog 留痕 |
