@@ -1,5 +1,20 @@
 # Release Notes
 
+## Sprint 4A — Quotation Foundation（2026-08-07，PR #12 已合并，未发布 Tag）
+
+> PR: #12（Sprint 4A Quotation Foundation，feature/sprint4-sales）
+> 状态：MERGED（未打 Tag；待 Sprint 4 Sales 更完整后统一发布）
+
+### Sprint 4A Quotation Foundation（PR #12，已合并）
+
+- **报价领域模型**：Quotation / QuotationLine / QuotationRevision / QuotationSnapshot（+4 模型 / +3 枚举，迁移 0014_quotation_foundation，仅新增不改既有）
+- **定价红线（ADR-0015）**：行价必须来自 PricingEngine.resolvePrice() → QuotationPriceSnapshot → priceSnapshotId；schema 无 unitPrice 字段；quantity/uomId 变更均触发重新定价
+- **审批集成（ADR-0016）**：Workflow 唯一事实源；submit 创建 WorkflowInstance；审批终态事务化回写投影 + APPROVED 快照；不建 QuotationApproval 表
+- **API**：12 路由文件 / 18 端点（主档 CRUD + lines/revisions/snapshots + submit/accept/cancel/convert，convert 预留 501）
+- **RBAC**：13 权限码；**事件**：EVENTS.md v1.3（11 注册 / 7 发布，总线前 AuditLog 留痕）
+- **文档**：OpenAPI +12 路径/+26 schemas、Sprint4A_QA.md、Quotation_API.md、DOMAIN_MODEL v1.9、ADR-0015/0016 Implemented
+- **质量门禁**：lint/type 修复 → CI #76 全绿；CTO Final Review 3 阻断项修复（lines PATCH 原子化 / Workflow 投影事务化 / Snapshot Decimal.toString()）→ CI #78 全绿
+
 ## v0.5.0-alpha — Sprint 3C: Business Foundation（2026-08-07 发布）
 
 > PR: #7（3C-1 Customer）、#8（3C-2 Supplier）、#9（3C-3 Item）、#10（3C-4 Price）、#11（3C-5 Project Foundation）已全部合并
