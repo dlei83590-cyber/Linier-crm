@@ -1,6 +1,7 @@
 # Sprint 3C-5 QA — Project Foundation（项目领域增强 + CRUD/API Foundation）
 
-> Sprint：3C-5 | 模块：Project Foundation Enhancement | PR：#11（待创建） | 日期：2026-08-06
+> Sprint：3C-5 | 模块：Project Foundation Enhancement | PR：#11（已合并，merge commit 60c785b） | 日期：2026-08-07
+> 状态：✅ Completed（v0.5.0-alpha 发布，Sprint 3 全部完成）
 > 关联：ADR-0014（Accepted）、Sprint3C5_Design.md、EVENTS.md、API_GUIDELINES.md、ERROR_CODES.md
 > 架构原则（CTO 审核锁定，5 项决策）：Project 最小增量 priority+progressPercent；ProjectProduct.priceSnapshotId（SetNull）；
 > 结项默认强制阻断 + 带权限强制结项（project:close + project:approve）；ProjectDependency 延期；ProjectTag 复用全局 Tag。

@@ -1,9 +1,9 @@
 # Release Notes
 
-## v0.5.0-alpha — Sprint 3C: Business Foundation（2026-08-06 发布）
+## v0.5.0-alpha — Sprint 3C: Business Foundation（2026-08-07 发布）
 
-> PR: #7（3C-1 Customer）、#8（3C-2 Supplier）、#9（3C-3 Item）、#10（3C-4 Price）已合并；3C-5 Project Foundation 进行中
-> 状态：RELEASED（v0.5.0-alpha：3C-1~3C-4 已发布；3C-5 Project Foundation 完成后再评估是否需要新版本）
+> PR: #7（3C-1 Customer）、#8（3C-2 Supplier）、#9（3C-3 Item）、#10（3C-4 Price）、#11（3C-5 Project Foundation）已全部合并
+> 状态：RELEASED（v0.5.0-alpha：Sprint 3C 完整交付，Sprint 3 全部完成）
 
 ### Sprint 3C-1 Customer Foundation（PR #7，已合并）
 
@@ -47,18 +47,38 @@
 - Seed 幂等：6 策略 + 3 规则 + 3 税档 + 6 汇率 + Demo Promotion
 - 文档：ADR-0013（Implemented）、OpenAPI 10 资源 + Resolve Price Sequence、Sprint3C4_QA.md（8 关键场景）、test-cases/Price_API.md、ERD 更新
 
+### Sprint 3C-5 Project Foundation（PR #11，已合并）
+
+- **项目领域增强（+1 模型 → 总计 99 模型 / 48 枚举）**：ProjectTag 复用全局 Tag；Project +priority + progressPercent；ProjectProduct +priceSnapshotId（引用 QuotationPriceSnapshot，SetNull）；ProjectOpportunity +convertedAt/convertedBy
+- **Opportunity → Project 唯一转换入口**：convert 事务（**真实行锁 SELECT ... FOR UPDATE** + DocumentSequence.nextNo **原子 increment** + P2002 兜底 409，并发安全）
+- **阶段流转集中校验 + 结项规则**：transition 集中校验；结项默认强制阻断 + 双权限（project:close + project:approve）强制结项
+- 迁移 0013_project_foundation（仅新增/加列，不重建既有 14 个 Project 模型）；RBAC +12 子模块；API 16 路由 / 34 文件
+- Domain Events（EVENTS.md 注册）：ProjectOpportunityConverted / ProjectCreated / ProjectStageChanged / ProjectMemberAssigned / ProjectMilestoneCompleted / ProjectRiskRaised / ProjectRiskClosed / ProjectAccepted / ProjectClosed / ProjectForceClosed
+- 文档：ADR-0014（Accepted）、Sprint3C5_QA.md、test-cases/Project_API.md、OpenAPI 更新
+
 ### Compatibility / Database / Migration / Breaking Changes
 
 - **Compatibility**：向下兼容 v0.4.0，无 Breaking Changes（Customer 子模型保留兼容，不返工）
-- **Database**：新增 17 模型 + 8 枚举（迁移 0009/0010，仅新增不改既有）
-- **Migration**：0009_customer_foundation / 0010_supplier_foundation
-- **Breaking Changes**：无
+- **Database**：新增 33 模型 + 12 枚举（迁移 0009-0013，仅新增不改既有表/列）
+- **Migration**：0009_customer_foundation / 0010_supplier_foundation / 0011_item_foundation / 0012_price_foundation / 0013_project_foundation
+- **Breaking Changes**：无，全部为新增表、字段、索引、权限及 API
 
 ### Known Risks（后续计划）
 
-- Customer 子模型统一迁移到 Partner 级共享（ADR-0011，Sprint 5）
-- BusinessPartner.type 兼容字段保留，长期以 BusinessPartnerRole 为准（Sprint 5 评估）
-- 运行级 Railway 验证待执行；File 仅元数据建模（对象存储后续接入）
+- Domain Event 目前仅注册，事件总线尚未真正发布（Sprint 4 业务事件驱动前落地）
+- File Center 仍只管理元数据，对象存储尚未接入
+- Notification 外部渠道（EMAIL/TELEGRAM/WEBHOOK）尚未接入
+- Railway 运行级完整回归仍需执行
+- BusinessPartner Consolidation（Customer 子模型迁移到 Partner 级共享）仍按 ADR-0011 延后处理（Sprint 5）
+
+### Upgrade Guide
+
+```bash
+git pull origin main
+pnpm install && pnpm db:generate
+pnpm db:migrate
+pnpm db:seed
+```
 
 ## v0.4.0-alpha — Sprint 3B: Platform Capabilities（2026-08-05）
 

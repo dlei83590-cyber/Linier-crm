@@ -2,7 +2,7 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
-## [v0.5.0-alpha] - 2026-08-06（Sprint 3C：3C-1~3C-4 已发布，3C-5 Project Foundation 进行中）
+## [v0.5.0-alpha] - 2026-08-07（Sprint 3C：Business Foundation 完整发布，Sprint 3 全部完成）
 
 ### 新增（Sprint 3C：Business Foundation）
 
@@ -44,6 +44,17 @@
 - **文档**：ADR-0012、ADR-0013（Price 设计）、DOMAIN_MODEL v1.8、EVENTS v1.1（ItemCreated 等 5 事件）、Sprint3C3_QA.md、test-cases/Item_API.md、OpenAPI 93 paths/251 schemas
 - **Price 前置**：PRICE_STRATEGY.md + MASTER_DATA_DEPENDENCY.md（CTO #2138）
 
+#### 3C-5 Project Foundation（PR #11，已合并）
+
+- **项目领域增强（+1 模型 → 总计 99 模型 / 48 枚举）**：ProjectTag 复用全局 Tag；Project +priority（高/中/低）+ progressPercent（汇总进度）；ProjectProduct +priceSnapshotId（引用 QuotationPriceSnapshot，SetNull）；ProjectOpportunity +convertedAt/convertedBy（唯一转换入口回写）
+- **Opportunity → Project 唯一转换入口**：POST /api/project-opportunities/:id/convert 事务（**真实行锁 SELECT ... FOR UPDATE** + DocumentSequence.nextNo **原子 increment** + P2002 兜底 409，并发安全，CTO 架构审核通过）
+- **阶段流转集中校验 + 结项规则**：projects transition 集中校验（PATCH 不可改 stage）；结项默认强制阻断 + 双权限（project:close + project:approve）强制结项
+- **迁移**：0013_project_foundation（仅新增/加列，不重建既有 14 个 Project 模型）
+- **RBAC**：+12 子模块动作级权限（project-stakeholder/member/milestone/task/budget/expense/product/progress/acceptance/closure/tag/attachment）
+- **API**：16 路由 / 34 文件（opportunities 主档 + convert；projects 主档 + transition + close；14 个子资源）
+- **Domain Events（EVENTS.md 注册）**：ProjectOpportunityConverted / ProjectCreated / ProjectStageChanged / ProjectMemberAssigned / ProjectMilestoneCompleted / ProjectRiskRaised / ProjectRiskClosed / ProjectAccepted / ProjectClosed / ProjectForceClosed
+- **文档**：ADR-0014（Accepted）、Sprint3C5_QA.md、test-cases/Project_API.md、OpenAPI 更新
+
 #### 3C-4 Price Foundation（PR #10，已合并）
 
 - **价格领域完整建模（+11 模型 / +9 枚举 → 总计 98 模型 / 49 枚举）**：PricePolicy / PriceRule / PriceListVersion / PartnerPrice / PromotionRule / TaxProfile / TaxRate / TaxProfileRule / ExchangeRate / QuotationPriceSnapshot / PriceAudit
@@ -62,11 +73,13 @@
 - **Seed（幂等）**：6 策略（STANDARD/VIP/PROJECT/SUPPLIER/PURCHASE/PROMOTION_PRICE）+ 3 规则（Quantity≥100/VIP/华东）+ 3 税档（CN 13%/MY SST/SG GST）+ 6 汇率（PBOC/ECB/Manual）+ Demo Promotion
 - **文档**：ADR-0013（Implemented）、OpenAPI 10 资源 + Resolve Price Sequence、Sprint3C4_QA.md（8 关键场景）、test-cases/Price_API.md、ERD 更新
 
-### 已知限制（后续计划，非本版本交付）
+### 已知限制（Known Risks，后续计划）
 
-- 3C-1 Customer 子模型（CustomerContact/Address/Tag/Credit）暂未迁移到 Partner 级共享（ADR-0011，Sprint 5）
-- BusinessPartner.type 兼容字段保留，长期以 BusinessPartnerRole 为准（Sprint 5 评估）
-- 运行级 Railway 验证待执行；File 仅元数据建模（对象存储后续接入）
+- Domain Event 目前仅注册，事件总线尚未真正发布（Sprint 4 业务事件驱动前落地）
+- File Center 仍只管理元数据，对象存储尚未接入
+- Notification 外部渠道（EMAIL/TELEGRAM/WEBHOOK）尚未接入
+- Railway 运行级完整回归仍需执行
+- BusinessPartner Consolidation（Customer 子模型迁移到 Partner 级共享）仍按 ADR-0011 延后处理（Sprint 5）
 
 ## [v0.4.0-alpha] - 2026-08-05
 
