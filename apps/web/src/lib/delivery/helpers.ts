@@ -57,18 +57,55 @@ export async function createDeliveryRevision(
   });
 }
 
+/** 创建 DeliverySnapshot（固化节点生成；revisionNo 取当前最新修订号；Decimal 一律 toString 落 JSON，禁止 toNumber） */
+export async function createDeliverySnapshot(
+  tx: Prisma.TransactionClient,
+  deliveryId: string,
+  snapshotType: "READY" | "DISPATCHED" | "DELIVERED" | "CANCELLED",
+  revisionNo: number,
+  snapshotData: unknown,
+  actorId?: string | null,
+) {
+  return tx.deliverySnapshot.create({
+    data: {
+      deliveryId,
+      snapshotType,
+      revisionNo,
+      snapshotData: snapshotData === undefined ? Prisma.JsonNull : (snapshotData as Prisma.InputJsonValue),
+      generatedById: actorId ?? null,
+      createdById: actorId ?? null,
+      updatedById: actorId ?? null,
+    },
+  });
+}
+
+/** 取 Delivery 当前最新修订号（快照对应；无修订时回退 1） */
+export async function latestDeliveryRevisionNo(
+  tx: Prisma.TransactionClient,
+  deliveryId: string,
+): Promise<number> {
+  const last = await tx.deliveryRevision.findFirst({
+    where: { deliveryId, deletedAt: null },
+    orderBy: { revisionNo: "desc" },
+    select: { revisionNo: true },
+  });
+  return last?.revisionNo ?? 1;
+}
+
 /**
  * 计算某 SalesOrderLine 的可交付量（事务内动态计算，防超交；CTO Review ②拍板不新增 allocatedQty 列）
  * 前提：调用方已在同一事务内对源 SalesOrderLine 执行 FOR UPDATE 真实行锁。
  * confirmedDeliveredQty = 已 DELIVERED/COMPLETED 的有效 DeliveryLine.quantity 合计
  * openDeliveryQty       = 其他 DRAFT/READY/DISPATCHED DeliveryLine.quantity 合计
  * availableQty          = orderedQty - confirmedDeliveredQty - openDeliveryQty
- * PATCH 自身行时必须传 excludeDeliveryLineId，避免把旧 quantity 重复计入 openDeliveryQty。
+ * PATCH 自身行时必须传 excludeDeliveryLineId，避免把旧 quantity 重复计入 openDeliveryQty；
+ * ready 重新校验时可传 excludeDeliveryId（排除整个 Delivery 自身的占用，避免把自己算进 open）。
  */
 export async function computeDeliveryAllocation(
   tx: Prisma.TransactionClient,
   sourceSalesOrderLineId: string,
   excludeDeliveryLineId?: string,
+  excludeDeliveryId?: string,
 ): Promise<{ orderedQty: Prisma.Decimal; confirmedDeliveredQty: Prisma.Decimal; openDeliveryQty: Prisma.Decimal; availableQty: Prisma.Decimal } | null> {
   const soLine = await tx.salesOrderLine.findFirst({
     where: { id: sourceSalesOrderLineId, deletedAt: null },
@@ -89,6 +126,7 @@ export async function computeDeliveryAllocation(
       sourceSalesOrderLineId,
       deletedAt: null,
       ...(excludeDeliveryLineId ? { id: { not: excludeDeliveryLineId } } : {}),
+      ...(excludeDeliveryId ? { deliveryId: { not: excludeDeliveryId } } : {}),
       delivery: { status: { in: [...OPEN_DELIVERY_STATUSES] }, deletedAt: null },
     },
     _sum: { quantity: true },
