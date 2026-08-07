@@ -311,6 +311,7 @@ model UnitOfMeasure {
   fromConversions UomConversion[] @relation("UomConversionFrom")
   toConversions   UomConversion[] @relation("UomConversionTo")
   quotationLines  QuotationLine[]
+  salesOrderLines SalesOrderLine[]
   createdAt     DateTime @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 
@@ -386,6 +387,7 @@ model Item {
   revisions      ItemRevision[]
   tags           ItemTag[]
   quotationLines QuotationLine[]
+  salesOrderLines SalesOrderLine[]
   createdAt     DateTime        @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime        @updatedAt @db.Timestamptz(3)
 
@@ -863,6 +865,7 @@ model QuotationPriceSnapshot {
   updatedAt            DateTime  @updatedAt @db.Timestamptz(3)
   projectProducts      ProjectProduct[]
   quotationLines       QuotationLine[]
+  salesOrderLines       SalesOrderLine[]
 
   @@index([quotationId])
   @@index([itemId])
@@ -1094,6 +1097,7 @@ model Project {
   closure            ProjectClosure?
   tags               ProjectTag[]
   quotations         Quotation[]
+  salesOrders         SalesOrder[]
   isActive           Boolean             @default(true)
   createdById        String?
   updatedById        String?
@@ -1579,6 +1583,7 @@ model WorkflowInstance {
   timeouts     ApprovalTimeout[]
   reminders    ApprovalReminder[]
   quotations   Quotation[]
+  salesOrders  SalesOrder[]
   isActive     Boolean         @default(true)
   createdById  String?
   updatedById  String?
@@ -2423,6 +2428,7 @@ model Customer {
   tags         CustomerTag[]
   credit       CustomerCredit?
   quotations   Quotation[]
+  salesOrders  SalesOrder[]
   isActive     Boolean         @default(true)
   createdById  String?
   updatedById  String?
@@ -3197,6 +3203,7 @@ model Quotation {
   lines        QuotationLine[]
   revisions    QuotationRevision[]
   snapshots    QuotationSnapshot[]
+  salesOrder   SalesOrder?
 
   @@index([code])
   @@index([customerId])
@@ -3235,6 +3242,8 @@ model QuotationLine {
   deletedAt   DateTime?
   createdAt   DateTime @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  salesOrderLines SalesOrderLine[]
 
   @@unique([quotationId, lineNo])
   @@index([quotationId])
@@ -3346,5 +3355,171 @@ model ApprovalPolicyRule {
 
   @@index([policyId])
   @@index([workflowDefinitionId])
+  @@index([deletedAt])
+}
+
+/// 销售订单状态（CTO Sprint 4B：主状态不含 Invoice/Payment——Delivery/Invoice/Payment 各自生命周期，SO 只保存必要投影）
+enum SalesOrderStatus {
+  DRAFT                // 草稿（Quotation convert 创建后初始态）
+  CONFIRMED            // 已确认（DRAFT → CONFIRMED）
+  PARTIALLY_DELIVERED  // 部分交付（Delivery 聚合投影，Sprint 4C）
+  DELIVERED            // 已交付（Delivery 聚合投影，Sprint 4C）
+  COMPLETED            // 已完成（交付+回款完成，Sprint 4C/4D）
+  CANCELLED            // 已取消（DRAFT/CONFIRMED 可取消）
+}
+
+/// 快照类型（仅固化节点：CREATED/CONFIRMED/CANCELLED；DELIVERED/COMPLETED 待 4C 补充）
+enum SalesOrderSnapshotType {
+  CREATED              // Quotation convert 生成订单时固化（初始商业快照）
+  CONFIRMED            // confirm 时固化
+  CANCELLED            // cancel 时固化
+}
+
+/// 修订状态（与 QuotationRevisionStatus 同构）
+enum SalesOrderRevisionStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  SUPERSEDED
+}
+
+/// 销售订单头（唯一入口：Quotation convert；审批投影复用 Workflow；不建 SalesOrderApproval/Price/Attachment）
+model SalesOrder {
+  id           String   @id @default(cuid())
+  code         String   @unique // 单据编号（DocumentSequence docType=SALES_ORDER，如 SO-2026-0001）
+  quotationId  String   @unique // 来源报价单（必填；1:1；并发安全：真实锁定源 Quotation）
+  quotation    Quotation @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+  customerId   String
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  projectId    String?  // 关联项目（可空）
+  project      Project? @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  status       SalesOrderStatus @default(DRAFT)
+  orderDate    DateTime @default(now()) @db.Timestamptz(3) // 下单日期
+  requestedDeliveryDate DateTime? @db.Timestamptz(3) // 期望交期
+  currency     String   @default("CNY")
+  paymentTerm  String?  // 付款条款（NET30/TT/LC...，继承 Quotation）
+  incoterm     String?  // 贸易术语（EXW/FOB/CIF...，继承 Quotation）
+  exchangeRateSnapshot Decimal? @db.Decimal(18, 8) // 汇率快照（仅 Header 存一次，继承 Quotation）
+  taxProfileId String?  // 税率档案（继承 Quotation）
+  subtotal     Decimal  @default(0) @db.Decimal(18, 4) // 未税合计（继承 Quotation）
+  taxAmount    Decimal  @default(0) @db.Decimal(18, 4) // 税额
+  totalAmount  Decimal  @default(0) @db.Decimal(18, 4) // 含税合计（客户接受后的商业价格依据）
+  remark       String?
+  // 审批投影（Workflow 为唯一事实源，仅查询投影）
+  workflowInstanceId String?
+  workflowInstance WorkflowInstance? @relation(fields: [workflowInstanceId], references: [id], onDelete: SetNull)
+  approvedAt    DateTime? @db.Timestamptz(3) // 最终批准时间快捷投影
+  // 交付投影（Sprint 4C Delivery 聚合回写）
+  deliveredAt   DateTime? @db.Timestamptz(3) // 全部交付完成时间投影
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  lines        SalesOrderLine[]
+  revisions    SalesOrderRevision[]
+  snapshots    SalesOrderSnapshot[]
+
+  @@index([code])
+  @@index([customerId])
+  @@index([status])
+  @@index([projectId])
+  @@index([workflowInstanceId])
+  @@index([deletedAt])
+}
+
+/// 销售订单行（继承 QuotationLine 商业价格，不重新定价；unitPrice 为快照冗余展示，禁止前端 unitPrice = 123）
+model SalesOrderLine {
+  id           String   @id @default(cuid())
+  salesOrderId String
+  salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  sourceQuotationLineId String? // 来源报价行（溯源；QuotationLine 软删后 SetNull）
+  sourceQuotationLine QuotationLine? @relation(fields: [sourceQuotationLineId], references: [id], onDelete: SetNull)
+  lineNo       Int      @default(10) // 行号（10/20/30/40 步进，插 25 不重排）
+  itemId       String? // 物料（可空，允许非物料行）
+  item         Item?    @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  priceSnapshotId String? // 必须引用价格快照（ADR-0015：继承 QuotationLine.priceSnapshotId）
+  priceSnapshot QuotationPriceSnapshot? @relation(fields: [priceSnapshotId], references: [id], onDelete: SetNull)
+  description  String   // 描述（快照）
+  quantity     Decimal  @db.Decimal(18, 4)
+  uomId        String?
+  uom          UnitOfMeasure? @relation(fields: [uomId], references: [id], onDelete: SetNull)
+  unitPrice    Decimal  @db.Decimal(18, 4) // 快照结果冗余（继承 QuotationLine.unitPrice）
+  lineAmount   Decimal  @db.Decimal(18, 4) // 行未税金额
+  taxAmount    Decimal  @db.Decimal(18, 4) // 行税额
+  totalAmount  Decimal  @db.Decimal(18, 4) // 行含税金额
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([salesOrderId, lineNo])
+  @@index([salesOrderId])
+  @@index([sourceQuotationLineId])
+  @@index([itemId])
+  @@index([priceSnapshotId])
+  @@index([deletedAt])
+}
+
+/// 销售订单修订（系统生成，不开放自由编辑；商业条件变更自动递增 revisionNo）
+model SalesOrderRevision {
+  id           String   @id @default(cuid())
+  salesOrderId String
+  salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  revisionNo   Int      // 版本号（1,2,3...）
+  revisionStatus SalesOrderRevisionStatus @default(DRAFT)
+  changeReason String   // 变更原因
+  snapshotData Json?    // 变更前快照（Header + Lines 集合）
+  createdById  String?
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([salesOrderId, revisionNo])
+  @@index([salesOrderId])
+  @@index([deletedAt])
+}
+
+/// 销售订单快照（仅固化节点生成，只读；金额统一 Decimal 字符串保存，禁止 toNumber()）
+model SalesOrderSnapshot {
+  id           String   @id @default(cuid())
+  salesOrderId String
+  salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  snapshotType SalesOrderSnapshotType
+  revisionNo   Int      // 快照对应的修订号
+  snapshotData Json?    // 完整快照（Header + Lines + 价格来源 priceSnapshotId）
+  generatedById String?
+  generatedAt  DateTime @default(now()) @db.Timestamptz(3)
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([salesOrderId, snapshotType])
+  @@index([salesOrderId])
   @@index([deletedAt])
 }
