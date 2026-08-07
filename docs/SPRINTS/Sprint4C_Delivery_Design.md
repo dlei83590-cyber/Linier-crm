@@ -35,31 +35,36 @@ DeliveryLine
 sourceSalesOrderLineId（溯源 → SalesOrderLine）
 ```
 
-**部分交付按行累计（CTO 锁定）：**
+**部分交付按行累计（CTO Review 94/100 修正：区分"预留交付量"与"已实际交付量"）：**
 - `orderedQty`：SalesOrderLine.quantity（订单行原始订购量，不变）
-- `deliveredQty`：SalesOrderLine 上的**聚合投影**（所有非取消 DeliveryLine 累计实际交付量，由 Delivery 聚合回写）
-- `remainingQty`：`orderedQty - deliveredQty`（投影派生，防超交校验依据）
-- **DeliveryLine.quantity 记录本次实际交付量**；SalesOrderLine 不成为交付事实表（其 deliveredQty/remainingQty 仅为只读投影，禁止手工 PATCH）
+- `deliveredQty`：SalesOrderLine 上的**已实际交付量投影**（仅 status = DELIVERED/COMPLETED 的 DeliveryLine 累计，由 confirm-delivery 聚合回写；DRAFT/READY/DISPATCHED **不计入**）
+- `remainingQty`：`orderedQty - deliveredQty`（投影派生，始终表达真正尚未实际交付的数量）
+- **预留/占用（动态计算，不新增列）**：创建/编辑 DeliveryLine 时事务内计算
+  - `confirmedDeliveredQty` = SUM(status ∈ {DELIVERED, COMPLETED} 的 DeliveryLine.quantity)
+  - `openDeliveryQty` = SUM(status ∈ {DRAFT, READY, DISPATCHED} 的其他 DeliveryLine.quantity)
+  - `availableQty` = orderedQty - confirmedDeliveredQty - openDeliveryQty（防超交校验依据）
+- **规则（CTO 锁定）**：DRAFT/READY/DISPATCHED 只**占用**可交付数量；只有 `confirm-delivery` 才增加 `SalesOrderLine.deliveredQty`；防止两个未完成 Delivery 同时分配超过订单数量 → 用 `availableQty` 校验（超出 → 409 DELIVERY_QUANTITY_EXCEEDED）
+- **DeliveryLine.quantity 记录本次实际交付量**；SalesOrderLine 不成为交付事实表（deliveredQty/remainingQty 仅为只读投影，禁止手工 PATCH）
 
 ---
 
-## 2. Prisma Schema 草案（+3 枚举 / +4 模型）
+## 2. Prisma Schema 草案（+4 枚举 / +4 模型 + SalesOrderLine 2 投影列）
 
 ```prisma
 /// 交付状态（Delivery 自身生命周期；不含 Invoice/Payment——发票/收款由 4D 模块承载）
 enum DeliveryStatus {
   DRAFT              // 草稿（创建后初始态，可编辑行）
-  READY              // 就绪（行已锁定、可发运；READY 后行只读，修改走 Revision）
-  DISPATCHED         // 已发运（物流在途）
-  DELIVERED          // 已交付（确认交付/签收；写入 deliveredAt）
-  COMPLETED          // 已完成（交付闭环；4C 仅预留，事实源后续补充）
-  CANCELLED          // 已取消（DRAFT/READY 可取消；DISPATched+ 禁止）
+  READY              // 就绪（行彻底冻结、可发运；READY 后行只读，不支持修改/重新 ready）
+  DISPATCHED         // 已发运（已出库/运输中）
+  DELIVERED          // 已交付（客户确认收货或存在可靠交付确认——业务确认动作，非物流自动更新）
+  COMPLETED          // 已完成（交付业务闭环；4C 仅保留枚举，不提供 /complete action）
+  CANCELLED          // 已取消（DRAFT/READY 可取消；DISPATCHED+ 禁止）
 }
 
 /// 交付快照类型（仅固化节点）
 enum DeliverySnapshotType {
   CREATED            // 创建时固化（初始交付快照）
-  READY              // ready 时固化（行锁定后）
+  READY              // ready 时固化（行冻结后）
   DISPATCHED         // dispatch 时固化（发运证据）
   DELIVERED          // confirm-delivery 时固化（交付证据）
   CANCELLED          // cancel 时固化
@@ -73,11 +78,18 @@ enum DeliveryRevisionStatus {
   SUPERSEDED
 }
 
+/// POD（Proof of Delivery）签收状态（CTO Review ④拍板：File Center 存文件 + 最小投影字段，不建 DeliveryPOD 表）
+enum DeliveryPodStatus {
+  PENDING            // 待签收
+  RECEIVED           // 已签收（podReceivedAt/podConfirmedById 回填）
+  WAIVED             // 豁免（业务不需要 POD 时可置此状态后允许 confirm-delivery）
+}
+
 /// 交付单头（交付事实源）
 model Delivery {
   id           String   @id @default(cuid())
   code         String   @unique // 单据编号（DocumentSequence docType=DELIVERY_ORDER，前缀 DO，位数 6）
-  salesOrderId String   // 来源销售订单（必填；Direct Delivery 为 CTO Pending ①，默认不允许）
+  salesOrderId String   // 来源销售订单（必填 NOT NULL；CTO Review ①拍板：Direct Delivery 禁止）
   salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Restrict)
   customerId   String   // 收货客户（继承 SalesOrder.customerId）
   customer     Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
@@ -86,9 +98,11 @@ model Delivery {
   expectedArrivalDate DateTime? @db.Timestamptz(3) // 预计到达（DISPATCHED 后）
   carrier      String?  // 承运方（物流公司/车次/单号，可空）
   trackingNo   String?  // 运单号（可空）
+  // POD 最小投影（CTO Review ④拍板；原始文件走 FileAttachment businessType="delivery" attachmentType="POD"）
+  podStatus    DeliveryPodStatus @default(PENDING)
+  podReceivedAt DateTime? @db.Timestamptz(3) // 签收时间（RECEIVED 时回填）
+  podConfirmedById String? // 签收确认人（RECEIVED 时回填）
   remark       String?  // 备注
-  // 交付聚合投影（Delivery 为事实源，回写 SalesOrder）
-  // （不在此表重复存行级投影；行级 deliveredQty/remainingQty 回写 SalesOrderLine）
   // 统一审计字段
   isActive    Boolean  @default(true)
   createdById String?
@@ -127,7 +141,7 @@ model DeliveryLine {
   uom          UnitOfMeasure? @relation(fields: [uomId], references: [id], onDelete: SetNull)
   // 只读投影（由 SalesOrderLine 回写值快照展示，非事实源；禁止手工填写）
   orderedQty   Decimal  @db.Decimal(18, 4) // 订单行订购量快照（校验用）
-  deliveredQty Decimal  @db.Decimal(18, 4) // 交付前已累计交付量快照（校验用）
+  deliveredQty Decimal  @db.Decimal(18, 4) // 已实际交付量快照（仅 DELIVERED/COMPLETED 累计；校验用）
   // 统一审计字段
   isActive    Boolean  @default(true)
   createdById String?
@@ -199,9 +213,17 @@ model DeliverySnapshot {
 
 /// SalesOrder / SalesOrderLine 追加交付投影（Migration 0016 设计，仅新增列，不改既有）
 /// SalesOrder 追加：无（deliveredAt 已在 0015 预留；PARTIALLY_DELIVERED/DELIVERED 状态枚举已存在）
-/// SalesOrderLine 追加：
-///   deliveredQty  Decimal @default(0) @db.Decimal(18, 4) // 已累计交付量（Delivery 聚合回写，只读投影）
-///   remainingQty Decimal @default(0) @db.Decimal(18, 4) // 剩余可交付量 = quantity - deliveredQty（派生投影）
+/// SalesOrderLine 追加 2 投影列（CTO Review 94/100：不新增第三列，不增加 allocatedQty 列）：
+///   deliveredQty  Decimal @default(0) @db.Decimal(18, 4)
+///     // 已实际交付量（仅 confirm-delivery 聚合回写；DRAFT/READY/DISPATCHED 不计入）
+///   remainingQty Decimal @db.Decimal(18, 4)
+///     // 剩余可交付量 = quantity - deliveredQty（表达真正尚未实际交付的数量）
+///     // 初始化：0016 数据迁移将 remainingQty 置为 quantity（DB default 无法引用 quantity，
+///     // 故 deliveredQty default 0，remainingQty 由迁移初始化）；之后全部由 Delivery 聚合逻辑维护
+/// 预留/占用（动态计算，不落列）：创建/编辑 DeliveryLine 时事务内计算
+///   confirmedDeliveredQty = SUM(status ∈ {DELIVERED, COMPLETED} 的 DeliveryLine.quantity)
+///   openDeliveryQty = SUM(status ∈ {DRAFT, READY, DISPATCHED} 的其他 DeliveryLine.quantity)
+///   availableQty = quantity - confirmedDeliveredQty - openDeliveryQty（防超交校验，超限 → 409 DELIVERY_QUANTITY_EXCEEDED）
 ```
 
 ---
@@ -229,6 +251,9 @@ erDiagram
         datetime expectedArrivalDate
         string carrier
         string trackingNo
+        DeliveryPodStatus podStatus
+        datetime podReceivedAt
+        string podConfirmedById
         string remark
         int version
         datetime deletedAt
@@ -289,20 +314,25 @@ erDiagram
 ## 4. 状态机（Sprint 4C）
 
 ```
-DRAFT ──ready──> READY ──dispatch──> DISPATCHED ──confirm-delivery──> DELIVERED ──> COMPLETED
+DRAFT ──ready──> READY ──dispatch──> DISPATCHED ──confirm-delivery──> DELIVERED
   │                │
   └──cancel──> CANCELLED  └──cancel──> CANCELLED
 ```
+
+> **COMPLETED 本阶段不实现（CTO Review 拍板）**：枚举保留给后续（Delivery + POD + Invoice/其他闭环条件 → COMPLETED）；Sprint 4C 不提供 `/complete` action，API 到 `confirm-delivery → DELIVERED` 结束。
 
 **状态变更规则（Sprint 4C 落地范围）**
 
 | 动作 | 前置状态 | 目标状态 | 说明 |
 | --- | --- | --- | --- |
-| `ready` | DRAFT | READY | 行锁定（READY 后行只读，修改走 Revision + 重新 ready） |
-| `dispatch` | READY | DISPATCHED | 发运（可写 carrier/trackingNo/expectedArrivalDate） |
-| `confirm-delivery` | DISPATCHED | DELIVERED | 确认交付/签收（写入 deliveredAt；触发 SO 聚合回写） |
+| `ready` | DRAFT | READY | 行**彻底冻结**（READY 后行只读；不支持修改/重新 ready；发现错误 → cancel → 新建 Delivery，不引入 amendment 流程） |
+| `dispatch` | READY | DISPATCHED | 发运（已出库/运输中；可写 carrier/trackingNo/expectedArrivalDate） |
+| `confirm-delivery` | DISPATCHED | DELIVERED | **业务确认动作**（客户已收货或存在可靠交付确认，非物流自动更新）；写入 deliveredAt；触发 SO 聚合回写 |
 | `cancel` | DRAFT / READY | CANCELLED | 取消；DISPATCHED+ 禁止取消（需走后续变更流程） |
-| `complete` | DELIVERED | COMPLETED | 预留（4C 仅状态，事实源后续补充；不实现触发） |
+
+**POD 与 confirm-delivery（CTO Review ④拍板）**
+- `confirm-delivery` 要求 POD 状态：`podStatus ∈ {RECEIVED, WAIVED}`（PENDING 时禁止确认，409）；
+- POD 原始文件走 FileAttachment（businessType="delivery"，attachmentType="POD"）；Delivery 仅存最小投影（podStatus/podReceivedAt/podConfirmedById）。
 
 **SalesOrder 聚合投影回写（CTO 锁定：Delivery 为事实源，禁止手工 PATCH）**
 
@@ -316,7 +346,7 @@ DRAFT ──ready──> READY ──dispatch──> DISPATCHED ──confirm-de
 
 ---
 
-## 5. 事务规则（并发安全核心，CTO 锁定）
+## 5. 事务规则（并发安全核心，CTO 锁定 + CTO Review 94/100 修正）
 
 ### 5.1 创建/编辑 DeliveryLine（DRAFT 阶段）
 
@@ -325,36 +355,41 @@ DRAFT ──ready──> READY ──dispatch──> DISPATCHED ──confirm-de
 ② 读 SalesOrder（校验 status ∈ {CONFIRMED, PARTIALLY_DELIVERED}；锁定行）
 ③ 读 SalesOrderLine（FOR UPDATE 真实行锁）
    - SELECT ... FOR UPDATE（并发防超交核心：两单同交同一行时串行化）
-④ 计算 deliveredQty = SUM(该行所有非 CANCELLED DeliveryLine.quantity)（原子累计，事务内）
-⑤ 校验 remainingQty = orderedQty - deliveredQty >= 本次 quantity（防超交；超交见 CTO Pending ②）
+④ 事务内动态计算（CTO Review：不新增 allocatedQty 列，动态算）：
+   confirmedDeliveredQty = SUM(status ∈ {DELIVERED, COMPLETED} 的 DeliveryLine.quantity)
+   openDeliveryQty = SUM(status ∈ {DRAFT, READY, DISPATCHED} 的其他 DeliveryLine.quantity)
+   availableQty = orderedQty - confirmedDeliveredQty - openDeliveryQty
+⑤ 校验 new allocated quantity <= availableQty（防超交；超限 → 409 DELIVERY_QUANTITY_EXCEEDED）
+   - 注意：DRAFT/READY/DISPATCHED 只“占用”可交付数量，不计入 deliveredQty
 ⑥ 写 DeliveryLine（本次实际交付量）
-⑦ 回写 SalesOrderLine.deliveredQty / remainingQty（聚合投影，事务内）
-⑧ 创建 DeliveryRevision + AuditLog
-⑨ Domain Event（DeliveryCreated / DeliveryUpdated）
+⑦ 创建 DeliveryRevision + AuditLog
+⑧ Domain Event（DeliveryCreated / DeliveryUpdated）
 ```
 
-### 5.2 confirm-delivery（DISPATCHED → DELIVERED）
+### 5.2 confirm-delivery（DISPATCHED → DELIVERED）—— 唯一增加 deliveredQty 的时机
 
 ```
-① 读 Delivery（校验 status=DISPATCHED）
+① 读 Delivery（校验 status=DISPATCHED；校验 podStatus ∈ {RECEIVED, WAIVED}，否则 409）
 ② 锁定 SalesOrder（FOR UPDATE，防并发聚合回写竞争）
 ③ 对每个 DeliveryLine：
-   - 重新校验 deliveredQty（事务内原子累计）防超交
+   - 重新校验 availableQty（事务内原子累计）防超交（409 DELIVERY_QUANTITY_EXCEEDED）
 ④ Delivery.status = DELIVERED + deliveredAt = now
 ⑤ 生成 DeliverySnapshot(DELIVERED)
-⑥ 聚合回写 SalesOrder：
+⑥ 聚合回写 SalesOrderLine（CTO Review：仅此时增加）：
+   deliveredQty += 本单行 quantity；remainingQty = quantity - deliveredQty
+⑦ 聚合回写 SalesOrder：
    - 全部行交付完成 → status=DELIVERED + deliveredAt=now → 事件 SalesOrderDelivered
    - 部分完成 → status=PARTIALLY_DELIVERED → 事件 SalesOrderPartiallyDelivered
-⑦ AuditLog + Domain Event（DeliveryConfirmed + SalesOrderPartiallyDelivered/SalesOrderDelivered）
+⑧ AuditLog + Domain Event（DeliveryConfirmed + SalesOrderPartiallyDelivered/SalesOrderDelivered）
 ```
 
 ### 5.3 并发场景（必须覆盖）
 
 | 场景 | 风险 | 防护 |
 | --- | --- | --- |
-| 两张 Delivery 同时交同一 SO Line | 都读到相同 remainingQty → 超交 | SalesOrderLine `FOR UPDATE` 真实行锁：第二个事务阻塞到第一个提交，重读 deliveredQty 后再校验 |
+| 两张 Delivery 同时交同一 SO Line | 都读到相同 availableQty → 超交 | SalesOrderLine `FOR UPDATE` 真实行锁：第二个事务阻塞到第一个提交，重读后再校验 |
 | confirm-delivery 与另一张 Delivery 编辑并发 | 聚合回写覆盖/丢失 | 事务内先锁 SalesOrder（FOR UPDATE），再锁各 SalesOrderLine |
-| ready 后行修改 vs dispatch | 行锁定失效 | READY 后行 PATCH 拒绝（409），修改走 Revision 流程 |
+| ready 后行修改 vs dispatch | 行锁定失效 | READY 后行 PATCH 拒绝（409）；不支持重新 ready（CTO Review：发现错误 → cancel → 新建） |
 
 > 实现时以 `prisma.$transaction` + `SELECT ... FOR UPDATE`（Prisma 交互事务 + 原生锁查询，对齐 4B convert 行锁模式）实现，禁止"读-算-写"分离的乐观更新（避免超交）。
 
@@ -388,15 +423,17 @@ DRAFT ──ready──> READY ──dispatch──> DISPATCHED ──confirm-de
 
 ## 8. Migration 0016 规划（本阶段不创建）
 
-- **迁移名**：`0016_delivery_foundation`（设计审批通过后实现）
-- **范围**：仅新增（+3 枚举 / +4 表 + SalesOrderLine 追加 2 投影列），不修改既有表结构/索引
-  - 枚举：`DeliveryStatus` / `DeliverySnapshotType` / `DeliveryRevisionStatus`
+- **迁移名**：`0016_delivery_foundation`（CTO Review 通过后实现）
+- **范围**：仅新增（+4 枚举 / +4 表 + SalesOrderLine 追加 2 投影列），不修改既有表结构/索引
+  - 枚举：`DeliveryStatus` / `DeliverySnapshotType` / `DeliveryRevisionStatus` / `DeliveryPodStatus`（CTO Review ④拍板新增）
   - 表：`Delivery` / `DeliveryLine` / `DeliveryRevision` / `DeliverySnapshot`
-  - SalesOrderLine 追加：`deliveredQty Decimal @default(0)` / `remainingQty Decimal @default(0)`（投影，只读）
+  - SalesOrderLine 追加 2 投影列（CTO Review：不新增 allocatedQty 第三列）：
+    - `deliveredQty Decimal @default(0)`（已实际交付量；仅 confirm-delivery 聚合回写）
+    - `remainingQty Decimal`（= quantity - deliveredQty；**初始化由 0016 数据迁移置为 quantity**——DB default 无法引用 quantity，故 remainingQty 不用 default(0)，迁移脚本逐行回填）
 - **FK 依赖**（均已交付）：SalesOrder/SalesOrderLine（4B）、Customer（3C-1）、Item/UnitOfMeasure（3C-3）
 - **索引**：`Delivery.code` 唯一、`DeliveryLine @@unique([deliveryId, lineNo])`、`DeliverySnapshot @@unique([deliveryId, snapshotType])`、`DeliveryRevision @@unique([deliveryId, revisionNo])`
-- **回滚**：DROP 4 表 + 3 枚举 + 移除 2 投影列（纯增量）
-- **本阶段不创建 Migration**（设计审批通过后实现）
+- **回滚**：DROP 4 表 + 4 枚举 + 移除 2 投影列（纯增量）
+- **本阶段不创建 Migration**（CTO Review 后进入 Schema 实现阶段时创建）
 
 ---
 
@@ -421,40 +458,40 @@ DRAFT ──ready──> READY ──dispatch──> DISPATCHED ──confirm-de
 | 方法 | 路径 | 权限 | 说明 |
 | --- | --- | --- | --- |
 | GET | /api/deliveries | delivery:view | 分页 + 过滤（code/salesOrderId/customerId/status/dateFrom/dateTo） |
-| POST | /api/sales-orders/:salesOrderId/deliveries | delivery:create | **唯一创建入口**（经 SO 创建，复制可选行；Direct Delivery 为 Pending ①） |
-| GET | /api/deliveries/:id | delivery:view | 详情（含 lines/revisions/snapshots + salesOrder + customer 摘要） |
+| POST | /api/sales-orders/:salesOrderId/deliveries | delivery:create | **唯一创建入口**（CTO Review ①拍板：salesOrderId NOT NULL；Direct Delivery 禁止，不开放 POST /api/deliveries） |
+| GET | /api/deliveries/:id | delivery:view | 详情（含 lines/revisions/snapshots + salesOrder + customer + POD 投影摘要） |
 | PATCH | /api/deliveries/:id | delivery:edit | 更新头（仅 DRAFT；乐观锁 version） |
 | GET | /api/deliveries/:id/lines | delivery-line:view | 行列表 |
-| PATCH | /api/deliveries/:id/lines/:lineId | delivery-line:edit | 行更新（仅 DRAFT；数量变更重校验 remainingQty 防超交） |
-| POST | /api/deliveries/:id/ready | delivery:ready | DRAFT → READY（行锁定 + READY 快照） |
+| PATCH | /api/deliveries/:id/lines/:lineId | delivery-line:edit | 行更新（仅 DRAFT；数量变更重校验 availableQty 防超交，超限 → 409 DELIVERY_QUANTITY_EXCEEDED） |
+| POST | /api/deliveries/:id/ready | delivery:ready | DRAFT → READY（行**彻底冻结** + READY 快照；不支持修改/重新 ready） |
 | POST | /api/deliveries/:id/dispatch | delivery:dispatch | READY → DISPATCHED（发运 + DISPATCHED 快照） |
-| POST | /api/deliveries/:id/confirm-delivery | delivery:confirm-delivery | DISPATCHED → DELIVERED（聚合回写 SO 投影 + DELIVERED 快照） |
+| POST | /api/deliveries/:id/confirm-delivery | delivery:confirm-delivery | DISPATCHED → DELIVERED（**业务确认收货**；要求 podStatus ∈ {RECEIVED, WAIVED}；聚合回写 SO 投影 + DELIVERED 快照） |
 | POST | /api/deliveries/:id/cancel | delivery:cancel | DRAFT/READY → CANCELLED（CANCELLED 快照） |
-| ~~POST~~ | ~~/api/deliveries~~ | — | **不开放**（Direct Delivery 待 Pending ①，默认不允许） |
+| ~~POST~~ | ~~/api/deliveries~~ | — | **不开放**（CTO Review ①拍板：Direct Delivery 禁止） |
 
 **审批动作**：复用 `POST /api/workflows/instances/:id/actions`（如需超交审批，本阶段不实现）。
 **价格**：不涉及（Delivery 无价格；金额参考走 SalesOrder/QuotationPriceSnapshot）。
 
 ---
 
-## 11. CTO Pending Decisions（待拍板，未拍板前不实现）
+## 11. CTO Pending Decisions（已全部拍板，CTO Review 94/100）
 
-| # | 问题 | 影响面 | 默认草案 |
+| # | 问题 | 影响面 | **拍板结论（CTO Review 2026-08-07）** |
 | --- | --- | --- | --- |
-| ① | 是否允许无 SalesOrder 的 **Direct Delivery**？ | 是否开放 `POST /api/deliveries`、salesOrderId 是否可空 | 不允许；salesOrderId 必填（唯一入口经 SO 创建） |
-| ② | 是否允许**超交（over-delivery）**？若允许阈值多少？ | confirm-delivery 校验逻辑、remainingQty 语义、超交审批 | 不允许超交（quantity <= remainingQty 硬校验）；如需允许，建议阈值 +5% 且需审批（待确认） |
-| ③ | **DELIVERED 是物流送达还是客户签收**？ | confirm-delivery 语义、deliveredAt 定义、POD 关联 | 物流送达（DISPATCHED → 送达即 DELIVERED）；客户签收场景走 POD（待确认） |
-| ④ | 是否需要 **POD（Proof of Delivery）字段直接建模**，还是完全走 File Center？ | Delivery 是否加 POD 字段（podReceivedAt/podStatus）、附件引用 | 完全走 File Center（businessType="delivery"）；如需签收确认再加投影字段（待确认） |
+| ① | 是否允许无 SalesOrder 的 **Direct Delivery**？ | 是否开放 `POST /api/deliveries`、salesOrderId 是否可空 | **不允许**；salesOrderId NOT NULL；`POST /api/sales-orders/{id}/deliveries` 唯一入口；不开放 `POST /api/deliveries`（ERP 销售链 Quotation→SO→Delivery→Invoice 明确，Direct Delivery 绕开订单数量/客户/价格/开票来源） |
+| ② | 是否允许**超交（over-delivery）**？ | confirm-delivery 校验逻辑、remainingQty 语义 | **Sprint 4C 不允许任何超交**：硬规则 `new allocated quantity <= availableQty`；超出 → 409 `DELIVERY_QUANTITY_EXCEEDED`；不做固定 +5%，不加超交审批；后续需要时建 `DeliveryTolerancePolicy` 或 Item/SO Line 级 `overDeliveryTolerancePct`（按商品差异定，不全系统固定） |
+| ③ | **DELIVERED 是物流送达还是客户签收**？ | confirm-delivery 语义、deliveredAt 定义、POD 关联 | **DELIVERED = 客户确认收货 / 可证明已实物交付**（不是物流送达）：DISPATCHED = 已出库/已发运/运输中；DELIVERED = 客户已收货或存在可靠交付确认；COMPLETED = 交付业务闭环；`confirm-delivery` 是**业务确认动作**，非物流状态自动更新（后续 Invoice/AR 依赖交付事实） |
+| ④ | **POD 字段直接建模**还是完全走 File Center？ | Delivery 是否加 POD 投影、附件引用 | **File Center 存文件 + Delivery 保存最小 POD 投影字段**（不建 DeliveryPOD 表）：Delivery 加 `podStatus（PENDING/RECEIVED/WAIVED）/ podReceivedAt / podConfirmedById`；POD 原始文件走 FileAttachment（businessType="delivery"，attachmentType="POD"）；`podStatus=WAIVED` 时允许 confirm-delivery |
 
 ---
 
 ## 12. 开发顺序（固定，不可跳步）
 
 ```
-4C Design Review（本文件 + ADR-0018 + EVENTS v1.5）→ Schema → Migration 0016 → Seed → RBAC
-→ Delivery CRUD/Lines → ready/dispatch/confirm-delivery/cancel → SO 聚合回写
-→ OpenAPI → QA → CI → Review
-（本阶段禁止开发 Invoice/Payment；CTO Pending 4 项未拍板前不进入相关实现）
+4C Design Review（本文件 + ADR-0018 + EVENTS v1.5，CTO 94/100 已通过）→ Schema → Migration 0016 → Seed → RBAC
+→ Delivery CRUD/Lines（availableQty 动态校验防超交）→ ready/dispatch/confirm-delivery/cancel（confirm 才回写 deliveredQty）
+→ SO 聚合回写 → OpenAPI → QA → CI → Review
+（本阶段禁止开发 Invoice/Payment 与 /complete；POD 仅最小投影 + File Center）
 ```
 
 ---
@@ -463,4 +500,5 @@ DRAFT ──ready──> READY ──dispatch──> DISPATCHED ──confirm-de
 
 | 日期 | 版本 | 说明 |
 | --- | --- | --- |
+| 2026-08-07 | v0.2 | CTO Review 94/100（APPROVED WITH CHANGES）9 项必改：① 区分预留量/已交付量（deliveredQty 仅 DELIVERED/COMPLETED 累计，DRAFT/READY/DISPATCHED 动态占用 availableQty 防超交，不新增列）② remainingQty 由 0016 迁移初始化为 quantity ③ 4 项 Pending 全部拍板（Direct Delivery 禁止 / 超交禁止 409 DELIVERY_QUANTITY_EXCEEDED / DELIVERED=客户确认收货 / POD=File Center+最小投影字段）④ READY 行彻底冻结（不支持重新 ready，发现错误 cancel→新建）⑤ COMPLETED 仅枚举不实现 action ⑥ +4 枚举（新增 DeliveryPodStatus）| 
 | 2026-08-07 | v0.1 | 初稿：Delivery 4 模型/3 枚举、ERD、状态机、交付聚合回写、事务规则（FOR UPDATE 防超交）、并发场景、API 规划、8 个 Domain Events、4 项 CTO Pending Decisions |
