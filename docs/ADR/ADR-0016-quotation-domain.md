@@ -1,6 +1,6 @@
 # ADR-0016：Quotation Domain（报价领域模型边界与审批/过期/事件决策）
 
-- 状态：**Accepted**（CTO 拍板，2026-08-07；Sprint 4A Schema 设计阶段）
+- 状态：**Accepted + Design Approved**（CTO 审核 95/100，2026-08-07；含 5 项增量调整，进入实现阶段）
 - 日期：2026-08-07
 - 关联：ADR-0015（Quotation must consume Pricing Engine）、Sprint4A_Quote_Review.md、Sprint4A_Quote_Design.md、EVENTS.md v1.2、Sprint4_Quote_Domain/ERD/API/Workflow、ROADMAP.md
 - 背景：Sprint 3 全部完成（v0.5.0-alpha，PR #7-#11）。Sprint 4A 进入 Schema 设计。CTO 对复审阶段遗留的 3 项决策（审批表 / EXPIRED 机制 / EVENTS 注册）正式拍板，本 ADR 锁定模型边界，保证 Sales 模块（4A Quote / 4B SO / 4C Delivery / 4D Invoice）与 Sprint 3 平台能力（Workflow、Pricing、File Center、BusinessPartner）完全一致。
@@ -71,6 +71,22 @@
 - A. Quotation 不存 `discountAmount`（可由 subtotal × discountRate 计算，避免双维护）。
 - B. 税率不存裸 `taxRate`，保存 `taxProfileId + taxSnapshot`（行级可覆盖，税率调整可追溯）。
 - C. 汇率快照只存 Header（`exchangeRateSnapshot` 一次），行不重复保存。
+
+### 7. CTO 审核补充（2026-08-07，Design Approved 95/100，5 项增量）
+
+1. **Quotation + 转换投影**：增加 `convertedAt` / `convertedById` / `salesOrderId`（Sprint 4B Quotation→Sales Order 后回写，避免反复反查 SO；属于投影非重复业务）。
+2. **QuotationLine sortOrder → lineNo**：行号 10/20/30/40 步进，插入 25 不整体重排，不依赖 sortOrder。
+3. **ApprovalPolicyRule + priority**：多规则按 priority DESC 匹配，避免命中冲突。
+4. **QuotationRevision + revisionStatus**：DRAFT / SUBMITTED / APPROVED / SUPERSEDED，避免全部为 Created 不可查。
+5. **QuotationSnapshot node → snapshotType**：SUBMITTED / APPROVED / SENT / ACCEPTED / CONVERTED，不靠 remark。
+
+### 8. 模型/字段冻结清单（正式锁定）
+
+**批准保留：** Quotation / QuotationLine / QuotationRevision / QuotationSnapshot / ApprovalPolicy / ApprovalPolicyRule。
+**禁止新增（以后不得重新提出，除非新增 ADR）：** QuotationApproval / QuotationVersion / QuoteAttachment / QuotePrice。
+**API 锁定：** `POST /api/quotations/{id}/submit|accept|cancel|convert` 全部 Action API，不 PATCH status。
+**Migration 0014 约束：** 仅 CREATE / ALTER / INDEX / FK，不得 DROP。
+**Pricing 红线（重申）：** `QuotationLine.unitPrice` 必须来自 `PricingEngine.resolvePrice() → QuotationPriceSnapshot → QuotationLine`，禁止前端 `unitPrice = 123`。
 
 ## 影响
 

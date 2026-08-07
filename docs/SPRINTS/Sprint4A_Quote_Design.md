@@ -1,10 +1,10 @@
 # Sprint 4A：Quotation Foundation Design（报价领域 Schema 设计）
 
-- 状态：**Design**（CTO 3 项决策已拍板，2026-08-07；仅设计，不写 API 实现）
+- 状态：**APPROVED（CTO 审核 95/100，2026-08-07）**；进入实现阶段前补 5 项增量调整（converted* 投影 / lineNo / Rule.priority / revisionStatus / snapshotType）
 - 日期：2026-08-07
 - 分支：feature/sprint4-sales
 - 关联：Sprint4A_Quote_Review.md（架构决议）、ADR-0015（Quotation must consume Pricing Engine）、ADR-0016（Quotation Domain）、EVENTS.md v1.2（Quotation 事件 11 个已注册）、Sprint4_Quote_Domain/ERD/API/Workflow（四份预备设计）
-- 依据：CTO 决策 ① 不建 QuotationApproval（Workflow 为唯一审批事实源）② EXPIRED 惰性判定（不增调度器）③ 事件先注册后开发（已注册）
+- 依据：CTO 决策 ① 不建 QuotationApproval（Workflow 为唯一审批事实源）② EXPIRED 惰性判定（不增调度器）③ 事件先注册后开发（已注册）；CTO 审核补充 5 项：convertedAt/convertedById/salesOrderId 投影、QuotationLine.lineNo、ApprovalPolicyRule.priority、QuotationRevision.revisionStatus、QuotationSnapshot.snapshotType
 
 > **本文件为 Sprint 4A Schema 设计交付物，后续开发一律以此为准。**
 > **边界锁定：** 保留 6 模型（Quotation / QuotationLine / QuotationRevision / QuotationSnapshot / ApprovalPolicy / ApprovalPolicyRule）；
@@ -29,7 +29,7 @@
 
 ---
 
-## 2. Prisma Schema 草案（+2 枚举 / +6 模型）
+## 2. Prisma Schema 草案（+3 枚举 / +6 模型）
 
 ```prisma
 /// 报价状态（EXPIRED 为惰性判定，不依赖后台调度器写入）
@@ -45,13 +45,21 @@ enum QuotationStatus {
   EXPIRED      // 已过期（有效期为惰性判定，不主动落库）
 }
 
-/// 快照固化节点（Revision 是修改历史，Snapshot 是关键状态证据，职责不重叠）
-enum QuotationSnapshotNode {
+/// 快照类型（CTO 审核补充⑤：SUBMITTED/APPROVED/SENT/ACCEPTED/CONVERTED，不靠 remark；Revision 是修改历史，Snapshot 是关键状态证据，职责不重叠）
+enum QuotationSnapshotType {
   SUBMITTED
   APPROVED
   SENT
   ACCEPTED
   CONVERTED
+}
+
+/// 修订状态（CTO 审核补充④：区分生命周期，避免全部为 Created 不可查）
+enum QuotationRevisionStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  SUPERSEDED
 }
 
 /// 报价单头
@@ -77,6 +85,10 @@ model Quotation {
   workflowInstanceId String? // 关联 WorkflowInstance（审批实例）
   // approvalStatus / approvedById 复用下方统一审计字段（ApprovalStatus 枚举：PENDING/APPROVED/REJECTED）
   approvedAt    DateTime? @db.Timestamptz(3) // 最终批准时间快捷投影
+  // 转换投影（CTO 审核补充①：Sprint 4B Quotation→Sales Order 后回写，避免反复反查 SO）
+  convertedAt   DateTime? @db.Timestamptz(3) // 转 Sales Order 时间投影
+  convertedById String? // 转换操作人投影
+  salesOrderId  String? // 生成的 Sales Order ID 投影（Sprint 4B 落地后回写）
   // 统一审计字段（approvalStatus / approvedById 同时承担审批状态/审批人投影）
   isActive    Boolean  @default(true)
   createdById String?
@@ -117,7 +129,7 @@ model QuotationLine {
   lineAmount   Decimal  @db.Decimal(18, 4) // 行未税金额
   taxAmount    Decimal  @db.Decimal(18, 4) // 行税额
   totalAmount  Decimal  @db.Decimal(18, 4) // 行含税金额
-  sortOrder    Int      @default(0)
+  lineNo       Int      @default(10) // CTO 审核补充②：行号（10/20/30/40 步进，插 25 不重排，不依赖 sortOrder）
   // 统一审计字段
   isActive    Boolean  @default(true)
   createdById String?
@@ -141,6 +153,7 @@ model QuotationRevision {
   quotationId  String
   quotation    Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
   revisionNo   Int      // 版本号（1,2,3...）
+  revisionStatus QuotationRevisionStatus @default(DRAFT) // CTO 审核补充④：DRAFT/SUBMITTED/APPROVED/SUPERSEDED
   changeReason String   // 变更原因
   snapshotData Json?    // 变更前快照（Header + Lines 集合）
   createdById  String?
@@ -163,7 +176,7 @@ model QuotationSnapshot {
   id           String   @id @default(cuid())
   quotationId  String
   quotation    Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-  node         QuotationSnapshotNode // SUBMITTED/APPROVED/SENT/ACCEPTED/CONVERTED
+  snapshotType QuotationSnapshotType // CTO 审核补充⑤：SUBMITTED/APPROVED/SENT/ACCEPTED/CONVERTED（不靠 remark）
   snapshotData Json?   // 完整快照（Header + Lines + 价格来源 PricePolicy 命中项）
   generatedById String?
   generatedAt  DateTime @default(now()) @db.Timestamptz(3)
@@ -177,7 +190,7 @@ model QuotationSnapshot {
   createdAt   DateTime @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @db.Timestamptz(3)
 
-  @@unique([quotationId, node])
+  @@unique([quotationId, snapshotType])
   @@index([quotationId])
   @@index([deletedAt])
 }
@@ -218,6 +231,7 @@ model ApprovalPolicyRule {
   grossMarginThreshold  Decimal? @db.Decimal(5, 2) // 毛利率阈值 %
   customerCreditLevel   String? // 客户信用等级
   projectType           String? // 项目类型
+  priority              Int      @default(100) // CTO 审核补充③：规则优先级（priority DESC，避免命中冲突）
   workflowDefinitionId  String
   workflowDefinition    WorkflowDefinition @relation(fields: [workflowDefinitionId], references: [id], onDelete: Restrict)
   sort                  Int      @default(0)
@@ -277,6 +291,9 @@ erDiagram
         ApprovalStatus approvalStatus
         string approvedById
         datetime approvedAt
+        datetime convertedAt
+        string convertedById
+        string salesOrderId
     }
 
     QuotationLine {
@@ -291,13 +308,14 @@ erDiagram
         Decimal lineAmount
         Decimal taxAmount
         Decimal totalAmount
-        int sortOrder
+        int lineNo
     }
 
     QuotationRevision {
         string id PK
         string quotationId FK
         int revisionNo
+        QuotationRevisionStatus revisionStatus
         string changeReason
         Json snapshotData
     }
@@ -305,7 +323,7 @@ erDiagram
     QuotationSnapshot {
         string id PK
         string quotationId FK
-        QuotationSnapshotNode node
+        QuotationSnapshotType snapshotType
         Json snapshotData
     }
 
@@ -325,8 +343,8 @@ erDiagram
         Decimal grossMarginThreshold
         string customerCreditLevel
         string projectType
+        int priority
         string workflowDefinitionId FK
-        int sort
     }
 ```
 
@@ -380,13 +398,13 @@ DRAFT ──submit──> SUBMITTED ──审批全部通过──> APPROVED ─
 ## 5. Migration 规划
 
 - **迁移名**：`0014_quotation_foundation`
-- **范围**：仅新增（+2 枚举 / +6 表），不修改任何既有表/列/索引
-  - 枚举：`QuotationStatus` / `QuotationSnapshotNode`
+- **范围**：仅新增（+3 枚举 / +6 表），不修改任何既有表/列/索引
+  - 枚举：`QuotationStatus` / `QuotationSnapshotType` / `QuotationRevisionStatus`
   - 表：`Quotation` / `QuotationLine` / `QuotationRevision` / `QuotationSnapshot` / `ApprovalPolicy` / `ApprovalPolicyRule`
 - **FK 依赖**（必须已存在，均已交付）：
   - Customer（3C-1）、ProjectOpportunity（2C/3C-5）、Item / UnitOfMeasure（3C-3）、QuotationPriceSnapshot（3C-4）、WorkflowInstance / WorkflowDefinition（3A）
-- **索引**：见 Schema 草案 @@index；`Quotation.code` 唯一、`QuotationSnapshot @@unique([quotationId, node])`、`QuotationRevision @@unique([quotationId, revisionNo])`
-- **回滚**：DROP 6 表 + 2 枚举（纯增量，无数据迁移）
+- **索引**：见 Schema 草案 @@index；`Quotation.code` 唯一、`QuotationSnapshot @@unique([quotationId, snapshotType])`、`QuotationRevision @@unique([quotationId, revisionNo])`
+- **回滚**：DROP 6 表 + 3 枚举（纯增量，无数据迁移）
 
 ---
 
@@ -448,4 +466,5 @@ DRAFT ──submit──> SUBMITTED ──审批全部通过──> APPROVED ─
 
 | 日期 | 说明 |
 | --- | --- |
+| 2026-08-07 | **CTO 审核 APPROVED（95/100）**，补充 5 项增量调整：Quotation +convertedAt/convertedById/salesOrderId（转换投影）、QuotationLine sortOrder→lineNo（10/20/30 步进）、ApprovalPolicyRule +priority（priority DESC）、QuotationRevision +revisionStatus（DRAFT/SUBMITTED/APPROVED/SUPERSEDED）、QuotationSnapshot node→snapshotType；进入实现阶段 |
 | 2026-08-07 | 初始设计：CTO 3 项决策落地（不建 QuotationApproval / EXPIRED 惰性判定 / EVENTS 先注册），模型边界锁定 6 模型，EVENTS.md 升至 v1.2 |
