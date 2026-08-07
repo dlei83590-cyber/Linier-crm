@@ -310,6 +310,7 @@ model UnitOfMeasure {
   salesItems    Item[]          @relation("ItemSalesUom")
   fromConversions UomConversion[] @relation("UomConversionFrom")
   toConversions   UomConversion[] @relation("UomConversionTo")
+  quotationLines  QuotationLine[]
   createdAt     DateTime @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 
@@ -384,6 +385,7 @@ model Item {
   supplierItems  SupplierItem[]
   revisions      ItemRevision[]
   tags           ItemTag[]
+  quotationLines QuotationLine[]
   createdAt     DateTime        @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime        @updatedAt @db.Timestamptz(3)
 
@@ -860,6 +862,7 @@ model QuotationPriceSnapshot {
   createdAt            DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt            DateTime  @updatedAt @db.Timestamptz(3)
   projectProducts      ProjectProduct[]
+  quotationLines       QuotationLine[]
 
   @@index([quotationId])
   @@index([itemId])
@@ -1028,6 +1031,7 @@ model ProjectOpportunity {
   project            Project?
   convertedAt        DateTime? // CTO #3C5：机会转项目时间（唯一入口 convert 回写）
   convertedBy        String? // CTO #3C5：机会转项目操作人
+  quotations         Quotation[]
   isActive           Boolean          @default(true)
   createdById        String?
   updatedById        String?
@@ -1089,6 +1093,7 @@ model Project {
   acceptances        ProjectAcceptance[]
   closure            ProjectClosure?
   tags               ProjectTag[]
+  quotations         Quotation[]
   isActive           Boolean             @default(true)
   createdById        String?
   updatedById        String?
@@ -1486,6 +1491,7 @@ model WorkflowDefinition {
   description String?
   steps       WorkflowStep[]
   instances   WorkflowInstance[]
+  approvalPolicyRules ApprovalPolicyRule[]
   isActive    Boolean        @default(true)
   createdById String?
   updatedById String?
@@ -1572,6 +1578,7 @@ model WorkflowInstance {
   escalations  ApprovalEscalation[]
   timeouts     ApprovalTimeout[]
   reminders    ApprovalReminder[]
+  quotations   Quotation[]
   isActive     Boolean         @default(true)
   createdById  String?
   updatedById  String?
@@ -2415,6 +2422,7 @@ model Customer {
   addresses    CustomerAddress[]
   tags         CustomerTag[]
   credit       CustomerCredit?
+  quotations   Quotation[]
   isActive     Boolean         @default(true)
   createdById  String?
   updatedById  String?
@@ -3105,5 +3113,238 @@ model ProjectTag {
   @@unique([projectId, tagId])
   @@index([projectId])
   @@index([tagId])
+  @@index([deletedAt])
+}
+
+// ============================================================================
+// Sprint 4A - Quotation Foundation（报价领域）
+// CTO: DESIGN APPROVED 95/100（2026-08-07）；Workflow 为审批唯一事实源；
+// PricingEngine.resolvePrice() → QuotationPriceSnapshot → QuotationLine（ADR-0015）
+// ============================================================================
+
+/// 报价状态（EXPIRED 为惰性判定，不依赖后台调度器写入）
+enum QuotationStatus {
+  DRAFT        // 草稿
+  SUBMITTED    // 已提交（触发 QuotationSubmitted）
+  APPROVED     // 已批准
+  SENT         // 已发送客户
+  ACCEPTED     // 客户接受
+  REJECTED     // 已驳回（可编辑后重新提交）
+  CANCELLED    // 已取消
+  CONVERTED    // 已转销售订单
+  EXPIRED      // 已过期（惰性判定，不主动落库）
+}
+
+/// 修订状态（CTO 审核补充④：区分生命周期，避免全部为 Created 不可查）
+enum QuotationRevisionStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  SUPERSEDED
+}
+
+/// 快照类型（CTO 审核补充⑤：关键状态证据固化节点，不靠 remark）
+enum QuotationSnapshotType {
+  SUBMITTED
+  APPROVED
+  SENT
+  ACCEPTED
+  CONVERTED
+}
+
+/// 报价单头
+model Quotation {
+  id           String   @id @default(cuid())
+  code         String   @unique // 单据编号（DocumentSequence docType=QUOTATION，如 QT-2026-0001）
+  customerId   String
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  opportunityId String? // 关联项目机会（可空）
+  opportunity  ProjectOpportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  projectId    String? // 关联项目（可空）
+  project      Project? @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  status       QuotationStatus @default(DRAFT)
+  quoteDate    DateTime @default(now()) @db.Timestamptz(3)
+  validFrom    DateTime? @db.Timestamptz(3) // 有效期起（CTO 关键约束）
+  validUntil   DateTime? @db.Timestamptz(3) // 有效期至（EXPIRED 惰性判定依据）
+  currency     String   @default("CNY")
+  exchangeRateSnapshot Decimal? @db.Decimal(18, 8) // 汇率快照（仅 Header 存一次，行不存）
+  taxProfileId String?  // 税率档案（不存裸 taxRate，CTO 决策 B）
+  taxSnapshot  Decimal? @db.Decimal(5, 2) // 税率快照（行级可覆盖）
+  subtotal     Decimal  @default(0) @db.Decimal(18, 4) // 未税合计
+  discountRate Decimal  @default(0) @db.Decimal(5, 2) // 折扣率 %（discountAmount 计算得到，不双维护）
+  taxAmount    Decimal  @default(0) @db.Decimal(18, 4) // 税额
+  totalAmount  Decimal  @default(0) @db.Decimal(18, 4) // 含税合计
+  remark       String?
+  // 审批投影（CTO 决策①：Workflow 为唯一事实源，仅查询投影，不建 QuotationApproval 表）
+  workflowInstanceId String?
+  workflowInstance WorkflowInstance? @relation(fields: [workflowInstanceId], references: [id], onDelete: SetNull)
+  approvedAt    DateTime? @db.Timestamptz(3) // 最终批准时间快捷投影
+  // 转换投影（CTO 审核补充①：Sprint 4B Quotation→Sales Order 后回写，避免反复反查 SO）
+  convertedAt   DateTime? @db.Timestamptz(3) // 转 Sales Order 时间投影
+  convertedById String? // 转换操作人投影
+  salesOrderId  String? // 生成的 Sales Order ID 投影（Sprint 4B 建表后补 FK，先普通可空字段）
+  // 统一审计字段（approvalStatus / approvedById 同时承担审批状态/审批人投影）
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  lines        QuotationLine[]
+  revisions    QuotationRevision[]
+  snapshots    QuotationSnapshot[]
+
+  @@index([code])
+  @@index([customerId])
+  @@index([status])
+  @@index([opportunityId])
+  @@index([projectId])
+  @@index([workflowInstanceId])
+  @@index([deletedAt])
+}
+
+/// 报价行（unitPrice 为快照结果冗余，禁止前端绕过 Pricing Engine 自由填写）
+model QuotationLine {
+  id           String   @id @default(cuid())
+  quotationId  String
+  quotation    Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  lineNo       Int      @default(10) // CTO 审核补充②：行号（10/20/30/40 步进，插 25 不重排；不依赖 sortOrder）
+  itemId       String? // 物料（可空，允许非物料行）
+  item         Item?    @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  priceSnapshotId String? // 必须引用价格快照（ADR-0015，与 ProjectProduct.priceSnapshotId 同构）
+  priceSnapshot QuotationPriceSnapshot? @relation(fields: [priceSnapshotId], references: [id], onDelete: SetNull)
+  description  String   // 描述（快照）
+  quantity     Decimal  @db.Decimal(18, 4)
+  uomId        String?
+  uom          UnitOfMeasure? @relation(fields: [uomId], references: [id], onDelete: SetNull)
+  unitPrice    Decimal  @db.Decimal(18, 4) // 快照结果冗余（禁止前端 unitPrice = 123）
+  lineAmount   Decimal  @db.Decimal(18, 4) // 行未税金额
+  taxAmount    Decimal  @db.Decimal(18, 4) // 行税额
+  totalAmount  Decimal  @db.Decimal(18, 4) // 行含税金额
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([quotationId, lineNo])
+  @@index([quotationId])
+  @@index([itemId])
+  @@index([priceSnapshotId])
+  @@index([deletedAt])
+}
+
+/// 报价修订（统一版本载体，删除 QuotationVersion）
+model QuotationRevision {
+  id           String   @id @default(cuid())
+  quotationId  String
+  quotation    Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  revisionNo   Int      // 版本号（1,2,3...）
+  revisionStatus QuotationRevisionStatus @default(DRAFT) // CTO 审核补充④
+  changeReason String   // 变更原因
+  snapshotData Json?    // 变更前快照（Header + Lines 集合）
+  createdById  String?
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([quotationId, revisionNo])
+  @@index([quotationId])
+  @@index([deletedAt])
+}
+
+/// 报价关键状态快照（仅在固化节点生成，不可变证据）
+model QuotationSnapshot {
+  id           String   @id @default(cuid())
+  quotationId  String
+  quotation    Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  snapshotType QuotationSnapshotType // CTO 审核补充⑤
+  revisionNo   Int      // 快照对应的修订号
+  snapshotData Json?    // 完整快照（Header + Lines + 价格来源 PricePolicy 命中项）
+  generatedById String?
+  generatedAt  DateTime @default(now()) @db.Timestamptz(3)
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([quotationId, snapshotType])
+  @@index([quotationId])
+  @@index([deletedAt])
+}
+
+/// 审批策略（只负责选择 Workflow，不负责执行审批）
+model ApprovalPolicy {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  module      String   @default("QUOTATION") // 后续 SO/PO/Invoice 复用
+  priority    Int      @default(100) // 数值越小优先级越高
+  enabled     Boolean  @default(true)
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  rules       ApprovalPolicyRule[]
+
+  @@index([module])
+  @@index([enabled])
+  @@index([deletedAt])
+}
+
+/// 审批策略规则（命中即选择对应 WorkflowDefinition）
+model ApprovalPolicyRule {
+  id                    String   @id @default(cuid())
+  policyId              String
+  policy                ApprovalPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  minAmount             Decimal? @db.Decimal(18, 4) // 金额下限（含）
+  maxAmount             Decimal? @db.Decimal(18, 4) // 金额上限（不含）
+  grossMarginThreshold  Decimal? @db.Decimal(5, 2) // 毛利率阈值 %
+  customerCreditLevel   String? // 客户信用等级
+  projectType           String? // 项目类型
+  priority              Int      @default(100) // CTO 审核补充③：规则优先级（priority DESC，避免命中冲突）
+  workflowDefinitionId  String
+  workflowDefinition    WorkflowDefinition @relation(fields: [workflowDefinitionId], references: [id], onDelete: Restrict)
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([policyId])
+  @@index([workflowDefinitionId])
   @@index([deletedAt])
 }
