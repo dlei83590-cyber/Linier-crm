@@ -100,6 +100,11 @@ const SEED_ACTION_MODULES = [
   "delivery-line",
   "delivery-revision",
   "delivery-snapshot",
+  // Sprint 4D：Invoice Foundation 模块（动作映射：create→invoice:create；issue→invoice:approve；cancel draft→invoice:close；line 系统生成仅 view/edit 语义；revision/snapshot 只读）
+  "invoice",
+  "invoice-line",
+  "invoice-revision",
+  "invoice-snapshot",
   // Sprint 3A：平台底座模块
   "workflow-definition",
   "workflow-step",
