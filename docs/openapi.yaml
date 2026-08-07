@@ -7038,6 +7038,521 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
+  # ==========================================================================
+  # Sprint 4A Quotation Foundation（Quotation CRUD + lines/revisions/snapshots + Action API）
+  # ==========================================================================
+  /api/quotations:
+    get:
+      tags: [Quotations]
+      summary: List quotations (paginated, filterable by code/customerId/status/dateFrom/dateTo)
+      operationId: listQuotations
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: code
+          in: query
+          schema: { type: string, description: 报价单号模糊查询（insensitive） }
+        - name: customerId
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, description: QuotationStatus 存储态 }
+        - name: dateFrom
+          in: query
+          schema: { type: string, format: date, description: quoteDate >= dateFrom }
+        - name: dateTo
+          in: query
+          schema: { type: string, format: date, description: quoteDate <= dateTo }
+      responses:
+        "200":
+          description: Paginated list（软删除已过滤；每项含 effectiveStatus/isExpired 惰性过期投影）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotationListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Quotations]
+      summary: Create quotation draft (Header + Lines in one tx; pricing via Pricing Engine)
+      description: |
+        价格红线（ADR-0015）：行价必须来自 PricingEngine.resolvePrice() → QuotationPriceSnapshot → priceSnapshotId，
+        禁止前端直接决定 unitPrice。创建流程：① 事务取号+建 header+占位 lines（价格 0）→ ② 事务外定价 → ③ 回写价格+重算+Revision+事件。
+      operationId: createQuotation
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuotationCreate"
+      responses:
+        "201":
+          description: Created（status=DRAFT，含 effectiveStatus 投影）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/quotations/{id}:
+    get:
+      tags: [Quotations]
+      summary: Get quotation detail (lines/revisions/snapshots/customer + lazy expiry projection)
+      operationId: getQuotation
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK（含 effectiveStatus/isExpired）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotationResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Quotations]
+      summary: Update quotation header (only DRAFT/REJECTED; optimistic lock version)
+      description: |
+        商业内容变更（validFrom/validUntil/taxProfileId/remark）→ 系统自动生成 Revision（revisionNo+1）并发布 QuotationUpdated。
+        不直接修改 status；行价必须走 lines 接口（本接口无 unitPrice 字段）。
+      operationId: updateQuotation
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuotationUpdate"
+      responses:
+        "200":
+          description: OK（version+1，含 effectiveStatus 投影）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Quotations]
+      summary: Soft-delete quotation (only DRAFT; cascade soft-delete lines/revisions/snapshots)
+      operationId: deleteQuotation
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotationDeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/quotations/{id}/lines:
+    get:
+      tags: [Quotation Lines]
+      summary: List quotation lines (include item + priceSnapshot)
+      operationId: listQuotationLines
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotationLineListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Quotation Lines]
+      summary: Add quotation line (only DRAFT/REJECTED; price via Pricing Engine)
+      description: |
+        价格红线（ADR-0015）：行价必须来自 PricingEngine.resolvePrice() → QuotationPriceSnapshot → priceSnapshotId。
+        创建后自动重算头合计并生成 Revision；发布 QuotationUpdated。
+      operationId: createQuotationLine
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuotationLineCreate"
+      responses:
+        "201":
+          description: Created（含 priceSnapshotId/unitPrice 定价回写结果）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotationLineResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/quotations/{id}/lines/{lineId}:
+    patch:
+      tags: [Quotation Lines]
+      summary: Update quotation line (only DRAFT/REJECTED; optimistic lock; quantity change re-prices)
+      description: |
+        禁止直接修改 unitPrice（schema 不含该字段，ADR-0015）。数量变更 → 重新走 PricingEngine 生成新价格快照。
+        修改后重算头合计并生成 Revision；发布 QuotationUpdated。
+      operationId: updateQuotationLine
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: lineId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuotationLineUpdate"
+      responses:
+        "200":
+          description: OK（version+1）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotationLineResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Quotation Lines]
+      summary: Soft-delete quotation line (recalc header totals + Revision)
+      operationId: deleteQuotationLine
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: lineId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotationLineDeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/quotations/{id}/revisions:
+    get:
+      tags: [Quotation Revisions]
+      summary: List quotation revisions (revisionNo desc)
+      operationId: listQuotationRevisions
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotationRevisionListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Quotation Revisions]
+      summary: Generate system revision (only DRAFT/REJECTED; body only accepts changeReason)
+      description: Revision 只能系统生成，不开放自由编辑（CTO 决策）；快照由系统从当前状态生成。
+      operationId: createQuotationRevision
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuotationRevisionCreate"
+      responses:
+        "201":
+          description: Created（revisionNo 自动递增）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotationRevisionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/quotations/{id}/revisions/{revisionId}:
+    get:
+      tags: [Quotation Revisions]
+      summary: Get quotation revision detail (read-only; system-generated)
+      operationId: getQuotationRevision
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: revisionId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotationRevisionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/quotations/{id}/snapshots:
+    get:
+      tags: [Quotation Snapshots]
+      summary: List quotation snapshots (generatedAt desc; read-only)
+      operationId: listQuotationSnapshots
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotationSnapshotListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/quotations/{id}/snapshots/{snapshotId}:
+    get:
+      tags: [Quotation Snapshots]
+      summary: Get quotation snapshot detail (read-only; POST/PATCH/DELETE 禁止)
+      operationId: getQuotationSnapshot
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: snapshotId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotationSnapshotResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/quotations/{id}/submit:
+    post:
+      tags: [Quotation Actions]
+      summary: Submit quotation for approval (DRAFT only; creates WorkflowInstance)
+      description: |
+        Action API（不 PATCH status）：匹配 ApprovalPolicy（module=QUOTATION，按 totalAmount 命中 rule，priority DESC）
+        → 创建 WorkflowInstance（status=RUNNING + SUBMIT action/history + 首步审批人）→ 回写 workflowInstanceId + status=SUBMITTED
+        → 生成 QuotationSnapshot(SUBMITTED) → 发布 QuotationSubmitted。
+      operationId: submitQuotation
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK（status=SUBMITTED，含 workflowInstanceId）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotationActionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/quotations/{id}/accept:
+    post:
+      tags: [Quotation Actions]
+      summary: Accept quotation (only APPROVED/SENT; EXPIRED forbidden)
+      description: |
+        Action API：effectiveStatus=EXPIRED → 409；仅 APPROVED/SENT 可接受。
+        成功：status=ACCEPTED + QuotationSnapshot(ACCEPTED) + 发布 QuotationAccepted。
+      operationId: acceptQuotation
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK（status=ACCEPTED）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotationActionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/quotations/{id}/cancel:
+    post:
+      tags: [Quotation Actions]
+      summary: Cancel quotation (DRAFT/SUBMITTED/APPROVED/SENT; ACCEPTED/CONVERTED forbidden)
+      description: |
+        Action API：允许 DRAFT/SENT 及未接受未转换的中间态；禁止 ACCEPTED/CONVERTED。
+        成功：status=CANCELLED + 发布 QuotationCancelled。
+      operationId: cancelQuotation
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuotationCancelRequest"
+      responses:
+        "200":
+          description: OK（status=CANCELLED）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotationActionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/quotations/{id}/convert:
+    post:
+      tags: [Quotation Actions]
+      summary: Convert quotation to Sales Order (reserved; Sprint 4B implements)
+      description: |
+        Sprint 4A 预留接口：仅 status=ACCEPTED 且未转换（convertedAt/salesOrderId 为空）可调用。
+        当前返回 501（Quotation → Sales Order 在 Sprint 4B Sales Order Foundation 落地）。
+      operationId: convertQuotation
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "501":
+          description: Not Implemented（Sprint 4B 预留）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -10742,3 +11257,328 @@ components:
             stage: { type: string, example: CLOSED }
             closureId: { type: string }
             force: { type: boolean, default: false }
+    # --------------------------------------------------------------------------
+    # Quotation Foundation（Sprint 4A，ADR-0015/ADR-0016）
+    # --------------------------------------------------------------------------
+    QuotationStatus:
+      type: string
+      enum: [DRAFT, SUBMITTED, APPROVED, REJECTED, SENT, ACCEPTED, CONVERTED, CANCELLED]
+
+    QuotationEffectiveStatus:
+      type: string
+      description: 惰性过期投影（ADR-0016 决策②）：storedStatus ∈ {SENT, APPROVED} 且 validUntil < now → EXPIRED
+      enum: [DRAFT, SUBMITTED, APPROVED, REJECTED, SENT, ACCEPTED, CONVERTED, CANCELLED, EXPIRED]
+
+    QuotationSnapshotType:
+      type: string
+      enum: [SUBMITTED, APPROVED, SENT, ACCEPTED, CONVERTED]
+
+    QuotationRevisionStatus:
+      type: string
+      enum: [DRAFT, SUBMITTED, APPROVED, SUPERSEDED]
+
+    Quotation:
+      type: object
+      required: [id, code, customerId, status, currency, version]
+      properties:
+        id: { type: string }
+        code: { type: string, description: 单据编号（DocumentSequence，前缀 QT，位数 6） }
+        customerId: { type: string }
+        opportunityId: { type: [string, "null"] }
+        projectId: { type: [string, "null"] }
+        status: { $ref: "#/components/schemas/QuotationStatus" }
+        quoteDate: { type: [string, "null"], format: date-time }
+        validFrom: { type: [string, "null"], format: date-time }
+        validUntil: { type: [string, "null"], format: date-time }
+        currency: { type: string, example: CNY }
+        taxProfileId: { type: [string, "null"] }
+        remark: { type: [string, "null"] }
+        subtotal: { type: number }
+        taxAmount: { type: number }
+        totalAmount: { type: number }
+        workflowInstanceId: { type: [string, "null"], description: 审批实例投影（Workflow 为唯一审批事实源，ADR-0016） }
+        approvalStatus: { type: [string, "null"] }
+        approvedAt: { type: [string, "null"], format: date-time }
+        approvedById: { type: [string, "null"] }
+        convertedAt: { type: [string, "null"], format: date-time }
+        convertedById: { type: [string, "null"] }
+        salesOrderId: { type: [string, "null"] }
+        version: { type: integer, description: 乐观锁版本 }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+
+    QuotationLineCreateItem:
+      type: object
+      required: [itemId, quantity]
+      properties:
+        itemId: { type: string }
+        description: { type: string, maxLength: 500 }
+        quantity: { type: number, exclusiveMinimum: 0 }
+        uomId: { type: string }
+        lineNo: { type: integer, description: 行号 10/20/30 步进，插入不整体重排（CTO 决策） }
+
+    QuotationCreate:
+      type: object
+      required: [customerId, lines]
+      properties:
+        customerId: { type: string }
+        opportunityId: { type: [string, "null"] }
+        projectId: { type: [string, "null"] }
+        currency: { type: string, default: CNY }
+        validFrom: { type: [string, "null"], format: date-time }
+        validUntil: { type: [string, "null"], format: date-time }
+        taxProfileId: { type: [string, "null"] }
+        remark: { type: [string, "null"], maxLength: 1000 }
+        lines:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/QuotationLineCreateItem" }
+        # 价格红线（ADR-0015）：无 unitPrice 字段；行价由 Pricing Engine 决定
+
+    QuotationUpdate:
+      type: object
+      required: [version]
+      properties:
+        validFrom: { type: [string, "null"], format: date-time }
+        validUntil: { type: [string, "null"], format: date-time }
+        taxProfileId: { type: [string, "null"] }
+        remark: { type: [string, "null"], maxLength: 1000 }
+        changeReason: { type: string, maxLength: 500 }
+        version: { type: integer, description: 乐观锁版本（冲突返回 409 VERSION_CONFLICT） }
+
+    QuotationLine:
+      type: object
+      required: [id, quotationId, itemId, quantity, version]
+      properties:
+        id: { type: string }
+        quotationId: { type: string }
+        lineNo: { type: integer }
+        itemId: { type: string }
+        description: { type: string }
+        quantity: { type: number }
+        uomId: { type: [string, "null"] }
+        priceSnapshotId: { type: [string, "null"], description: 价格快照 FK（QuotationPriceSnapshot，ADR-0015 SetNull） }
+        unitPrice: { type: number, description: 快照冗余展示，禁止前端直接填写 }
+        lineAmount: { type: number }
+        taxAmount: { type: number }
+        totalAmount: { type: number }
+        version: { type: integer }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+
+    QuotationLineCreate:
+      type: object
+      required: [itemId, quantity]
+      properties:
+        itemId: { type: string }
+        description: { type: string, maxLength: 500 }
+        quantity: { type: number, exclusiveMinimum: 0 }
+        uomId: { type: string }
+        lineNo: { type: integer }
+
+    QuotationLineUpdate:
+      type: object
+      required: [version]
+      properties:
+        description: { type: string, maxLength: 500 }
+        quantity: { type: number, exclusiveMinimum: 0, description: 数量变更 → 重新走 Pricing Engine 生成新快照 }
+        uomId: { type: [string, "null"] }
+        lineNo: { type: integer }
+        changeReason: { type: string, maxLength: 500 }
+        version: { type: integer }
+        # 无 unitPrice 字段：禁止直接改价（ADR-0015）
+
+    QuotationRevisionCreate:
+      type: object
+      required: [changeReason]
+      properties:
+        changeReason: { type: string, minLength: 1, maxLength: 500 }
+
+    QuotationRevision:
+      type: object
+      required: [id, quotationId, revisionNo, changeReason]
+      properties:
+        id: { type: string }
+        quotationId: { type: string }
+        revisionNo: { type: integer, description: 系统自动递增（唯一版本载体，ADR-0016） }
+        revisionStatus: { $ref: "#/components/schemas/QuotationRevisionStatus" }
+        changeReason: { type: string }
+        snapshotData: { type: object, description: 系统生成的当前状态快照 }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+
+    QuotationSnapshot:
+      type: object
+      required: [id, quotationId, snapshotType, revisionNo]
+      properties:
+        id: { type: string }
+        quotationId: { type: string }
+        snapshotType: { $ref: "#/components/schemas/QuotationSnapshotType" }
+        revisionNo: { type: integer }
+        snapshotData: { type: object, description: 关键状态证据（仅固化节点生成，只读） }
+        generatedById: { type: [string, "null"] }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+
+    QuotationCancelRequest:
+      type: object
+      properties:
+        reason: { type: string }
+
+    QuotationResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            id: { type: string }
+            code: { type: string }
+            customerId: { type: string }
+            customer: { type: object, nullable: true, description: "GET 详情含 {id,code,name}" }
+            opportunityId: { type: [string, "null"] }
+            projectId: { type: [string, "null"] }
+            status: { $ref: "#/components/schemas/QuotationStatus" }
+            effectiveStatus: { $ref: "#/components/schemas/QuotationEffectiveStatus" }
+            isExpired: { type: boolean }
+            quoteDate: { type: [string, "null"], format: date-time }
+            validFrom: { type: [string, "null"], format: date-time }
+            validUntil: { type: [string, "null"], format: date-time }
+            currency: { type: string }
+            taxProfileId: { type: [string, "null"] }
+            remark: { type: [string, "null"] }
+            subtotal: { type: number }
+            taxAmount: { type: number }
+            totalAmount: { type: number }
+            workflowInstanceId: { type: [string, "null"] }
+            approvalStatus: { type: [string, "null"] }
+            approvedAt: { type: [string, "null"], format: date-time }
+            approvedById: { type: [string, "null"] }
+            convertedAt: { type: [string, "null"], format: date-time }
+            convertedById: { type: [string, "null"] }
+            salesOrderId: { type: [string, "null"] }
+            version: { type: integer }
+            lines: { type: array, items: { $ref: "#/components/schemas/QuotationLine" }, description: GET 详情含 }
+            revisions: { type: array, items: { $ref: "#/components/schemas/QuotationRevision" }, description: GET 详情含 }
+            snapshots: { type: array, items: { $ref: "#/components/schemas/QuotationSnapshot" }, description: GET 详情含 }
+
+    QuotationListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              code: { type: string }
+              customerId: { type: string }
+              customer: { type: object, nullable: true }
+              status: { $ref: "#/components/schemas/QuotationStatus" }
+              effectiveStatus: { $ref: "#/components/schemas/QuotationEffectiveStatus" }
+              isExpired: { type: boolean }
+              quoteDate: { type: [string, "null"], format: date-time }
+              validUntil: { type: [string, "null"], format: date-time }
+              currency: { type: string }
+              totalAmount: { type: number }
+              version: { type: integer }
+              _count: { type: object, properties: { lines: { type: integer } } }
+        pagination:
+          type: object
+          properties:
+            page: { type: integer }
+            pageSize: { type: integer }
+            total: { type: integer }
+
+    QuotationLineResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/QuotationLine" }
+
+    QuotationLineListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/QuotationLine" }
+
+    QuotationLineDeleteResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            id: { type: string }
+            deleted: { type: boolean, example: true }
+
+    QuotationRevisionResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/QuotationRevision" }
+
+    QuotationRevisionListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/QuotationRevision" }
+
+    QuotationSnapshotResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/QuotationSnapshot" }
+
+    QuotationSnapshotListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/QuotationSnapshot" }
+
+    QuotationActionResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            id: { type: string }
+            status: { $ref: "#/components/schemas/QuotationStatus" }
+            workflowInstanceId: { type: [string, "null"], description: submit 成功返回审批实例 id }
+
+    QuotationDeleteResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            id: { type: string }
+            deleted: { type: boolean, example: true }

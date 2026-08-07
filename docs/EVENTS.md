@@ -66,19 +66,19 @@
 
 > 统一载荷：所有 Quotation 事件 payload 至少包含 `eventId / eventType / occurredAt / actorId / quotationId / quotationCode / revisionNo / customerId / projectId / workflowInstanceId / currency / totalAmount`（eventId/eventType/occurredAt 由 Event Envelope 提供）。
 
-| eventType | 触发时机 | 载荷示例 |
-| --- | --- | --- |
-| `QuotationCreated` | 报价单创建（DRAFT） | `{ quotationId, quotationCode, revisionNo, customerId, projectId, workflowInstanceId, currency, totalAmount, createdBy }` |
-| `QuotationUpdated` | 草稿/驳回态修改（商业内容变更） | `{ quotationId, quotationCode, revisionNo, customerId, projectId, workflowInstanceId, currency, totalAmount, changedBy }` |
-| `QuotationRevisionCreated` | 影响商业内容的修改生成 Revision | `{ quotationId, quotationCode, revisionNo, changeReason, customerId, projectId, currency, totalAmount, createdBy }` |
-| `QuotationSubmitted` | 报价单提交审批（SUBMITTED） | `{ quotationId, quotationCode, revisionNo, customerId, projectId, workflowInstanceId, currency, totalAmount, submittedBy }` |
-| `QuotationApproved` | Workflow 最终批准时产生（终态 COMPLETED） | `{ quotationId, quotationCode, revisionNo, customerId, projectId, workflowInstanceId, currency, totalAmount, approverId }` |
-| `QuotationRejected` | Workflow 最终驳回时产生（终态 REJECTED） | `{ quotationId, quotationCode, revisionNo, customerId, projectId, workflowInstanceId, currency, totalAmount, approverId, comment }` |
-| `QuotationSent` | 报价已发送客户（SENT） | `{ quotationId, quotationCode, revisionNo, customerId, projectId, workflowInstanceId, currency, totalAmount, sentBy }` |
-| `QuotationExpired` | 读取或业务操作发现过期时记录（不要求定时发布） | `{ quotationId, quotationCode, revisionNo, customerId, currency, totalAmount, validUntil, expiredAt }` |
-| `QuotationAccepted` | 客户接受报价（ACCEPTED） | `{ quotationId, quotationCode, revisionNo, customerId, projectId, workflowInstanceId, currency, totalAmount, acceptedBy }` |
-| `QuotationConverted` | 报价转 Sales Order（CONVERTED） | `{ quotationId, quotationCode, revisionNo, customerId, projectId, workflowInstanceId, currency, totalAmount, salesOrderId, convertedBy }` |
-| `QuotationCancelled` | 报价取消（CANCELLED） | `{ quotationId, quotationCode, revisionNo, customerId, projectId, workflowInstanceId, currency, totalAmount, cancelledBy, reason }` |
+| eventType | 触发时机 | 载荷示例 | 实现状态（Sprint 4A） |
+| --- | --- | --- | --- |
+| `QuotationCreated` | 报价单创建（DRAFT） | `{ quotationId, quotationCode, revisionNo, customerId, projectId, workflowInstanceId, currency, totalAmount, createdBy }` | ✅ 已发布 |
+| `QuotationUpdated` | 草稿/驳回态修改（商业内容变更） | `{ quotationId, quotationCode, revisionNo, customerId, projectId, workflowInstanceId, currency, totalAmount, changedBy }` | ✅ 已发布（头/行变更均触发） |
+| `QuotationRevisionCreated` | 影响商业内容的修改生成 Revision | `{ quotationId, quotationCode, revisionNo, changeReason, customerId, projectId, currency, totalAmount, createdBy }` | ⏳ 注册待实现（当前伴随 QuotationUpdated） |
+| `QuotationSubmitted` | 报价单提交审批（SUBMITTED） | `{ quotationId, quotationCode, revisionNo, customerId, projectId, workflowInstanceId, currency, totalAmount, submittedBy }` | ✅ 已发布 |
+| `QuotationApproved` | Workflow 最终批准时产生（终态 COMPLETED） | `{ quotationId, quotationCode, revisionNo, customerId, projectId, workflowInstanceId, currency, totalAmount, approverId }` | ✅ 已发布（workflow-sync 回写） |
+| `QuotationRejected` | Workflow 最终驳回时产生（终态 REJECTED） | `{ quotationId, quotationCode, revisionNo, customerId, projectId, workflowInstanceId, currency, totalAmount, approverId, comment }` | ✅ 已发布（workflow-sync 回写） |
+| `QuotationSent` | 报价已发送客户（SENT） | `{ quotationId, quotationCode, revisionNo, customerId, projectId, workflowInstanceId, currency, totalAmount, sentBy }` | ⏳ 注册待实现（SENT 无独立发送 API） |
+| `QuotationExpired` | 读取或业务操作发现过期时记录（不要求定时发布） | `{ quotationId, quotationCode, revisionNo, customerId, currency, totalAmount, validUntil, expiredAt }` | ⏳ 注册待实现（惰性判定，仅投影） |
+| `QuotationAccepted` | 客户接受报价（ACCEPTED） | `{ quotationId, quotationCode, revisionNo, customerId, projectId, workflowInstanceId, currency, totalAmount, acceptedBy }` | ✅ 已发布 |
+| `QuotationConverted` | 报价转 Sales Order（CONVERTED） | `{ quotationId, quotationCode, revisionNo, customerId, projectId, workflowInstanceId, currency, totalAmount, salesOrderId, convertedBy }` | ⏳ 注册待实现（Sprint 4B convert 落地） |
+| `QuotationCancelled` | 报价取消（CANCELLED） | `{ quotationId, quotationCode, revisionNo, customerId, projectId, workflowInstanceId, currency, totalAmount, cancelledBy, reason }` | ✅ 已发布 |
 
 ### 2.4 主数据
 
@@ -113,6 +113,7 @@
 
 | 日期 | 版本 | 说明 |
 | --- | --- | --- |
+| 2026-08-07 | v1.3 | Sprint 4A 实现状态标注：11 个 Quotation 事件中已发布 7 个（Created/Updated/Submitted/Approved/Rejected/Accepted/Cancelled），4 个注册待实现（RevisionCreated/Sent/Expired/Converted，见 2.3.1 表格）；事件总线落地前以 AuditLog 留痕 |
 | 2026-08-07 | v1.2 | Sprint 4A 注册完整 Quotation 事件 11 个（Created/Updated/RevisionCreated/Submitted/Approved/Rejected/Sent/Expired/Accepted/Converted/Cancelled，统一载荷，CTO 决策：先注册后开发） |
 | 2026-08-06 | v1.1 | 追加 Item Master 事件（ItemCreated/ItemUpdated/ItemObsoleted/ItemPriceChanged/ItemRevisionReleased，CTO #2075） |
 | 2026-08-05 | v1.0 | 初始注册（项目/工作流/业务单据/主数据事件） |

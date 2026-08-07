@@ -86,13 +86,17 @@ Project Expense / 日常 Expense ──> 审批流 ──> Voucher（凭证）
 | 验收 | PASSED / CONDITIONAL_PASS / FAILED / PENDING |
 | 价格类型 | PURCHASE / SALES / VIP / AGENT / ENGINEERING / STRATEGIC / REGIONAL / CUSTOMER / HISTORICAL |
 | 单据类型 | QUOTATION / SALES_ORDER / PURCHASE_ORDER / PROFORMA_INVOICE / COMMERCIAL_INVOICE / DELIVERY_ORDER / GOODS_RECEIPT_NOTE / GOODS_ISSUE / INVOICE / CREDIT_NOTE / DEBIT_NOTE / PAYMENT_VOUCHER / RECEIPT / EXPENSE / JOURNAL / CONTRACT / PROJECT |
+| 报价状态（Sprint 4A） | DRAFT → SUBMITTED → APPROVED → SENT → ACCEPTED → CONVERTED；REJECTED（可编辑重提）；CANCELLED（DRAFT/SUBMITTED/APPROVED/SENT 可取消）；EXPIRED（惰性投影：SENT/APPROVED 且 validUntil < now，不落库） |
+| 报价快照类型（Sprint 4A） | SUBMITTED / APPROVED / SENT / ACCEPTED / CONVERTED（仅固化节点生成，只读） |
+| 报价修订状态（Sprint 4A） | DRAFT / SUBMITTED / APPROVED / SUPERSEDED（Revision 系统生成，不开放自由编辑） |
 
 ## 6. 已落地 vs 规划中
 
 - ✅ 已落地（Sprint 2，PR #4）：Item / LinearGuideSpecification / BusinessPartner / PriceList / TechnicalStandard / UnitOfMeasure / CommercialTerm / DocumentSequence + 项目领域 14 模型
 - ✅ 已落地（Sprint 3A，PR #5）：Workflow Foundation 22 模型（Workflow 6 + Approval 7 + Notification 4 + Dictionary 2 + Settings 3），见第 7-10 节
 - 🔄 进行中（Sprint 3C）：Customer Foundation（第 16 节）✅ + Supplier/Item/Project/Price 后续子阶段
-- ⬜ 规划中（Sprint 4-7）：Quotation / Sales Order / Contract / Delivery / Invoice / Payment / Purchase / GRN / Warehouse / Stock / AR / AP / Voucher / Journal / GL
+- ✅ 已落地（Sprint 4A，PR #12 验收中）：Quotation Foundation（Quotation/QuotationLine/QuotationRevision/QuotationSnapshot + ApprovalPolicy 复用），见第 19 节
+- ⬜ 规划中（Sprint 4B-7）：Sales Order / Contract / Delivery / Invoice / Payment / Purchase / GRN / Warehouse / Stock / AR / AP / Voucher / Journal / GL
 
 > 详细字段标准见数据库 schema（`prisma/schema.prisma`）与 [architecture/domain-model.md](./architecture/domain-model.md)。
 
@@ -1045,7 +1049,137 @@ erDiagram
 - 权限：item（动作级）+ item-category/item-specification/item-uom/item-cost/item-supplier/item-revision/item-tag/item-attachment 模块，MANAGER 全量
 - seed：SEED_LINEAR_GUIDE_ITEMS 同步（itemType/lifecycle 新枚举）
 
-## 19. 变更记录
+## 19. Quotation Foundation（Sprint 4A，ADR-0015/0016）
+
+> 定位（CTO 审核锁定）：**Quotation 是 Sales 主链起点**（Quotation → Sales Order → Delivery → Invoice → Payment，ADR-0016 主链）。
+> 价格红线（ADR-0015）：行价必须来自 `PricingEngine.resolvePrice() → QuotationPriceSnapshot → QuotationLine.priceSnapshotId`，禁止前端直接决定 unitPrice。
+> 审批以 Workflow 为唯一事实源（ADR-0016 决策①）：不建 QuotationApproval 表，Quotation 仅保存投影（workflowInstanceId / approvalStatus / approvedAt / approvedById）。
+> EXPIRED 惰性判定（决策②）：不落库、不增调度器，仅投影 effectiveStatus。
+
+```mermaid
+erDiagram
+    Customer ||--o{ Quotation : issues
+    ProjectOpportunity ||--o{ Quotation : converts_to
+    Project ||--o{ Quotation : quotes
+    WorkflowInstance ||--o{ Quotation : approves
+    Quotation ||--o{ QuotationLine : contains
+    Item ||--o{ QuotationLine : references
+    QuotationPriceSnapshot ||--o{ QuotationLine : prices
+    UnitOfMeasure ||--o{ QuotationLine : measures
+    Quotation ||--o{ QuotationRevision : versions
+    Quotation ||--o{ QuotationSnapshot : snapshots
+
+    Quotation {
+        string id PK
+        string code UK
+        string customerId FK
+        string opportunityId FK
+        string projectId FK
+        QuotationStatus status
+        datetime quoteDate
+        datetime validFrom
+        datetime validUntil
+        string currency
+        Decimal exchangeRateSnapshot
+        string taxProfileId
+        Decimal taxSnapshot
+        Decimal subtotal
+        Decimal discountRate
+        Decimal taxAmount
+        Decimal totalAmount
+        string workflowInstanceId FK
+        datetime approvedAt
+        datetime convertedAt
+        string salesOrderId
+        ApprovalStatus approvalStatus
+        int version
+        datetime deletedAt
+    }
+
+    QuotationLine {
+        string id PK
+        string quotationId FK
+        int lineNo
+        string itemId FK
+        string priceSnapshotId FK
+        string description
+        Decimal quantity
+        string uomId FK
+        Decimal unitPrice
+        Decimal lineAmount
+        Decimal taxAmount
+        Decimal totalAmount
+        int version
+        datetime deletedAt
+    }
+
+    QuotationRevision {
+        string id PK
+        string quotationId FK
+        int revisionNo
+        QuotationRevisionStatus revisionStatus
+        string changeReason
+        Json snapshotData
+        datetime deletedAt
+    }
+
+    QuotationSnapshot {
+        string id PK
+        string quotationId FK
+        QuotationSnapshotType snapshotType
+        int revisionNo
+        Json snapshotData
+        string generatedById
+        datetime generatedAt
+        datetime deletedAt
+    }
+```
+
+### 关系与约束（真实 Schema）
+
+| 关系 | 基数 | onDelete | 说明 |
+| --- | --- | --- | --- |
+| Customer → Quotation | 1:N | Restrict | 有报价的客户不可物理删 |
+| ProjectOpportunity → Quotation | 1:N | SetNull | 机会删除不影响报价 |
+| Project → Quotation | 1:N | Restrict | 有报价的项目不可物理删 |
+| WorkflowInstance → Quotation | 1:N | SetNull | 审批实例删除不影响报价投影 |
+| Quotation → QuotationLine | 1:N | Cascade | 行随单据软删 |
+| Item → QuotationLine | 1:N | Restrict | 物料可空（允许非物料行） |
+| QuotationPriceSnapshot → QuotationLine | 1:N | SetNull | 价格快照（ADR-0015，与 ProjectProduct 同构） |
+| Quotation → QuotationRevision | 1:N | Cascade | 修订历史随单据 |
+| Quotation → QuotationSnapshot | 1:N | Cascade | 快照随单据 |
+
+- `Quotation.code` 唯一；`QuotationLine @@unique([quotationId, lineNo])`（行号 10/20/30 步进，插 25 不重排）；`QuotationRevision @@unique([quotationId, revisionNo])`；`QuotationSnapshot @@unique([quotationId, snapshotType])`
+- 统一审计字段：isActive / createdById / updatedById / approvedById / approvalStatus / version / deletedAt / createdAt / updatedAt（全模型同构）
+- 索引：code / customerId / status / opportunityId / projectId / workflowInstanceId / deletedAt；行：quotationId / itemId / priceSnapshotId / deletedAt
+
+### 状态机与业务规则（Sprint 4A）
+
+- **状态流转**：DRAFT → SUBMITTED → APPROVED → SENT → ACCEPTED → CONVERTED；REJECTED（可编辑后重新提交）；CANCELLED（DRAFT/SUBMITTED/APPROVED/SENT 可取消，ACCEPTED/CONVERTED 禁止）；EXPIRED（惰性投影：SENT/APPROVED 且 validUntil < now，不落库）
+- **Action API 锁定**：submit / accept / cancel / convert 全部独立端点，不 PATCH status（ADR-0016 §8）
+- **Revision 系统生成**：每次影响商业内容的修改（头字段/行增删改）自动创建 revisionNo+1，不开放自由编辑
+- **Snapshot 固化节点**：SUBMITTED / APPROVED / SENT / ACCEPTED / CONVERTED 仅系统生成，只读
+- **乐观锁**：头/行 PATCH 必带 version，冲突返回 409 VERSION_CONFLICT
+- **软删除**：DELETE 置 deletedAt + isActive=false，级联软删 lines/revisions/snapshots；列表/详情过滤 deletedAt=null
+- **审计**：全部写操作写 AuditLog；领域事件（EVENTS.md v1.2 注册 11 个，已发布 7 个）当前以 AuditLog 留痕（事件总线未落地）
+
+### 交付（Sprint 4A）
+
+- 迁移 `0014_quotation_foundation`：+4 模型（Quotation/QuotationLine/QuotationRevision/QuotationSnapshot，QuotationPriceSnapshot 为 3C-4 既有）+ 3 枚举（QuotationStatus/QuotationSnapshotType/QuotationRevisionStatus）；仅 CREATE/ALTER/INDEX/FK，无 DROP
+- API：12 路由文件 / 18 端点（主档 CRUD + lines + revisions + snapshots + submit/accept/cancel/convert）
+- 权限：13 权限码（quotation* / quotation-line* / quotation-revision* / quotation-snapshot*）
+- 集成：submit → ApprovalPolicy 匹配 → WorkflowInstance（复用 Sprint 3A Workflow Engine）；审批终态回写 syncQuotationApproval（COMPLETED → APPROVED，REJECTED → REJECTED）
+- 预留：convert 返回 501（Sprint 4B Sales Order Foundation 落地）；SENT 状态为下游预留，4A 无独立发送 API
+
+## 20. 变更记录
+
+### v1.9（2026-08-07，Sprint 4A Quotation Foundation，ADR-0015/0016）
+
+- 新增章节：19. Quotation Foundation（Quotation/QuotationLine/QuotationRevision/QuotationSnapshot + ApprovalPolicy 复用）
+- 模型：+4（Quotation 域，不含 3C-4 既有 QuotationPriceSnapshot）；枚举：+3（QuotationStatus/QuotationSnapshotType/QuotationRevisionStatus）
+- 状态机表格新增：报价状态（含 EXPIRED 惰性投影）/快照类型/修订状态
+- 第 6 节已落地列表：Quotation Foundation 从规划中移入已落地（Sprint 4A，PR #12 验收中）
+- 预留声明：convert（Sprint 4B）与 SENT 发送动作（后续阶段）未在 4A 实现
 
 ### v1.8（2026-08-06，Sprint 3C-3 Item Master Foundation，ADR-0012）
 

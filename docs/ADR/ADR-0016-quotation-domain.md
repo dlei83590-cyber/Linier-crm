@@ -1,6 +1,7 @@
 # ADR-0016：Quotation Domain（报价领域模型边界与审批/过期/事件决策）
 
-- 状态：**Accepted + Design Approved**（CTO 审核 95/100，2026-08-07；含 5 项增量调整，进入实现阶段）
+- 状态：**Accepted + Design Approved + Implemented**（CTO 审核 95/100，2026-08-07；Sprint 4A Phase 3 已落地）
+- 实现确认（2026-08-07）：不建 QuotationApproval 表（submit 创建 WorkflowInstance，审批终态由 syncQuotationApproval 回写投影）；EXPIRED 惰性判定（effectiveStatusOf 投影，不落库）；11 个事件注册（已发布 7 个，事件总线落地前以 AuditLog 留痕）；Action API 锁定（submit/accept/cancel/convert 独立端点，不 PATCH status）。
 - 日期：2026-08-07
 - 关联：ADR-0015（Quotation must consume Pricing Engine）、Sprint4A_Quote_Review.md、Sprint4A_Quote_Design.md、EVENTS.md v1.2、Sprint4_Quote_Domain/ERD/API/Workflow、ROADMAP.md
 - 背景：Sprint 3 全部完成（v0.5.0-alpha，PR #7-#11）。Sprint 4A 进入 Schema 设计。CTO 对复审阶段遗留的 3 项决策（审批表 / EXPIRED 机制 / EVENTS 注册）正式拍板，本 ADR 锁定模型边界，保证 Sales 模块（4A Quote / 4B SO / 4C Delivery / 4D Invoice）与 Sprint 3 平台能力（Workflow、Pricing、File Center、BusinessPartner）完全一致。

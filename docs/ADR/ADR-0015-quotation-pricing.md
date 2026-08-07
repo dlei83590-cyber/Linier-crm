@@ -1,6 +1,7 @@
 # ADR-0015：Quotation must consume Pricing Engine（报价必须走定价引擎）
 
-- 状态：**Accepted**（CTO 批准，2026-08-07；Sprint 4A Quote Foundation 架构决议）
+- 状态：**Accepted + Implemented**（CTO 批准，2026-08-07；Sprint 4A Phase 3 已落地：QuotationLine.priceSnapshotId + QuotationPricingService 全链路）
+- 实现确认（2026-08-07）：报价创建/新增行/数量变更全部经 `PricingEngine.resolvePrice() → QuotationPriceSnapshot → QuotationLine.priceSnapshotId` 回写；`quotationCreateSchema`/`quotationLineCreateSchema`/`quotationUpdateSchema`/`quotationLineUpdateSchema` 均无 unitPrice 字段（前端无法直接改价）；定价失败返回 400 QUOTATION_PRICE_FAILED 并清理占位数据。
 - 日期：2026-08-07
 - 关联：ADR-0013（Price Foundation）、ADR-0014（Project Foundation，priceSnapshotId 同构）、Sprint4A_Quote_Review.md、Sprint4_Quote_Domain.md、ROADMAP.md、EVENTS.md
 - 背景：Sprint 3C-4 已交付 `PricingEngineService.resolvePrice()` 唯一入口 + `QuotationPriceSnapshot` 完整定价链（Base→Policy→Discount→Promotion→Tax→ExchangeRate→Final），3C-5 ProjectProduct 已落地 `priceSnapshotId`（FK QuotationPriceSnapshot，SetNull）。Sprint 4 报价设计初稿存在行级手工传价（unitPrice/discountRate）的回归风险，违反 CTO #2225/#2249「价格来源可追溯」红线。本 ADR 锁定：**所有业务单据的价格必须消费 Pricing Engine，禁止任何模块自行计算价格。**
