@@ -87,10 +87,11 @@
 
 | eventType | 触发时机 | 载荷示例 | 实现状态 |
 | --- | --- | --- | --- |
-| `SalesOrderCreated` | Quotation convert 成功（DRAFT） | `{ salesOrderId, salesOrderCode, quotationId, quotationCode, customerId, projectId, currency, totalAmount, createdBy }` | ⏳ 注册待实现（Sprint 4B convert 落地） |
-| `SalesOrderUpdated` | 订单头/行商业条件变更（Revision） | `{ salesOrderId, salesOrderCode, revisionNo, changeReason, changedBy }` | ⏳ 注册待实现 |
-| `SalesOrderConfirmed` | 确认订单（DRAFT → CONFIRMED） | `{ salesOrderId, salesOrderCode, customerId, totalAmount, confirmedBy }` | ⏳ 注册待实现 |
-| `SalesOrderCancelled` | 取消订单（DRAFT/CONFIRMED → CANCELLED） | `{ salesOrderId, salesOrderCode, cancelledBy, reason }` | ⏳ 注册待实现 |
+| `SalesOrderCreated` | Quotation convert 成功（DRAFT） | `{ salesOrderId, salesOrderCode, quotationId, quotationCode, customerId, projectId, currency, totalAmount, createdBy }` | ✅ 已发布（Sprint 4B convert 落地） |
+| `SalesOrderUpdated` | 订单头/行商业条件变更（Revision） | `{ salesOrderId, salesOrderCode, revisionNo, changeReason, changedBy }` | ✅ 已发布（头/行 PATCH） |
+| `SalesOrderConfirmed` | 确认订单（DRAFT → CONFIRMED） | `{ salesOrderId, salesOrderCode, customerId, totalAmount, confirmedBy }` | ✅ 已发布（confirm） |
+| `SalesOrderCancelled` | 取消订单（DRAFT/CONFIRMED → CANCELLED） | `{ salesOrderId, salesOrderCode, cancelledBy, reason }` | ✅ 已发布（cancel） |
+| `SalesOrderApprovalStarted` | Workflow 条件触发创建审批实例（Sprint 4B 新增留痕） | `{ salesOrderId, salesOrderCode, workflowInstanceId, currency, totalAmount }` | ✅ 已发布（workflow-sync，AuditLog 留痕；未注册独立领域事件） |
 | `SalesOrderDeliveryStarted` | 首次交付触发（Sprint 4C 联动） | `{ salesOrderId, salesOrderCode, deliveryId, startedBy }` | ⏳ 注册待实现（4C） |
 | `SalesOrderDelivered` | 全部交付完成（Sprint 4C 联动） | `{ salesOrderId, salesOrderCode, deliveryId, deliveredAt }` | ⏳ 注册待实现（4C） |
 | `SalesOrderCompleted` | 交付+回款完成终态（Sprint 4C/4D） | `{ salesOrderId, salesOrderCode, completedAt }` | ⏳ 注册待实现（4C/4D） |
