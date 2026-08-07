@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import type { QuotationLine } from "@prisma/client";
 
 /** Sprint 4A - Quotation 领域辅助（编号生成 / 合计重算 / Revision 创建 / 惰性过期判定） */

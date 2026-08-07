@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
       taxProfileId: data.taxProfileId ?? undefined,
       lines: lineIds.map((l) => ({ lineId: l.lineId, itemId: l.itemId, quantity: l.quantity, uom: l.uomId ?? undefined })),
     });
-  } catch (e) {
+  } catch {
     // 定价失败：清理已创建的占位数据，返回价格错误（不暴露 Prisma 原始错误）
     await prisma.quotation
       .update({ where: { id: quotationId }, data: { deletedAt: new Date() } })
