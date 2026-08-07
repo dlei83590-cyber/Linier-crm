@@ -1,7 +1,7 @@
 # EVENTS 领域事件注册表（Domain Events）
 
-- 版本：v1.7
-- 日期：2026-08-07
+- 版本：v1.8
+- 日期：2026-08-08
 - 维护者：CIO（JINZA）｜审核：CTO
 - 关联：[API_GUIDELINES.md](./API_GUIDELINES.md) ｜ [ARCHITECTURE_BASELINE.md](./ARCHITECTURE_BASELINE.md)
 
@@ -123,9 +123,9 @@
 
 | eventType | 触发时机 | 载荷示例 | 实现状态 |
 | --- | --- | --- | --- |
-| `InvoiceCreated` | 创建发票（DRAFT，经 POST /api/deliveries/{id}/invoice） | `{ invoiceId, invoiceCode, deliveryId, deliveryCode, customerId, invoiceTotal, createdBy }` | ⏳ 注册待实现（Sprint 4D） |
-| `InvoiceIssued` | issue（DRAFT → ISSUED） | `{ invoiceId, invoiceCode, issuedAt, issuedBy }` | ⏳ 注册待实现（Sprint 4D） |
-| `InvoiceCancelled` | cancel（DRAFT → CANCELLED） | `{ invoiceId, invoiceCode, cancelledBy, reason }` | ⏳ 注册待实现（Sprint 4D） |
+| `InvoiceCreated` | 创建发票（DRAFT，经 POST /api/deliveries/{id}/invoice） | `{ invoiceId, invoiceCode, deliveryId, deliveryCode, customerId, invoiceTotal, createdBy }` | ✅ 已实现（Sprint 4D） |
+| `InvoiceIssued` | issue（DRAFT → ISSUED，原子取号 INV-2026-000123） | `{ invoiceId, invoiceCode, issuedAt, issuedBy }` | ✅ 已实现（Sprint 4D） |
+| `InvoiceCancelled` | cancel（DRAFT → CANCELLED，释放开票投影） | `{ invoiceId, invoiceCode, cancelledBy, reason }` | ✅ 已实现（Sprint 4D） |
 | `InvoicePartiallyPaid` | 4E Receipt 回写（ISSUED → PARTIALLY_PAID） | `{ invoiceId, invoiceCode, paidAmount, balanceAmount, receiptId, updatedAt }` | ⏳ 注册待实现（Sprint 4E） |
 | `InvoicePaid` | 4E 收清（→ PAID） | `{ invoiceId, invoiceCode, paidAmount, balanceAmount, receiptId, paidAt }` | ⏳ 注册待实现（Sprint 4E） |
 

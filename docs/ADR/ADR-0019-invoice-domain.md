@@ -1,6 +1,6 @@
 # ADR-0019：Invoice Domain（发票领域模型边界与财务事实源决策）
 
-- 状态：**Approved with Changes（CTO Review 2026-08-07，96/100）**——4 项 Pending 全部拍板（① 允许 Partial Billing ② 允许 Consolidated Invoice ③ 禁止编辑 Line ④ 仅 DRAFT 可取消）+ 2 项必改（① Invoice 编号延后生成 ② InvoiceSnapshot 完整税务/汇率快照）已全部纳入设计；**无需再次设计评审**，直接进入 Schema → Migration 0017 实现阶段
+- 状态：**Accepted + Implemented（2026-08-08，Sprint 4D 完成）**——CTO Review（2026-08-07，96/100）4 项 Pending 全部拍板 + 2 项必改已落地；Schema（0017）、Migration、Seed、RBAC、API（创建/Partial/Consolidated Billing/Issue/Cancel + 查询 + Workflow 集成）全部实现并通过 CI（PR #15）；等待 CTO Final Review 合并
 - 日期：2026-08-07
 - 关联：ADR-0015（Pricing Engine 唯一入口）、ADR-0016（Quotation Domain）、ADR-0017（Sales Order Domain）、ADR-0018（Delivery Domain）、Sprint4D_Invoice_Design.md、EVENTS.md（v1.7 注册）、Sprint4C_Delivery_Design.md（已实现，PR #14）
 - 背景：Sprint 4C Delivery Foundation 已合并（PR #14，d1d8106）。Sprint 4D 进入 Invoice 设计。CTO 启动令：**Invoice 是整个 ERP 财务链的起点**（后续 AR、Receipt、Credit Note、Debit Note、GL 都依赖它），比 4A~4C 更需要一次性设计正确。**Invoice 是财务事实，不是物流事实**；本阶段仅设计（3 文件），不写代码；Payment 属 Sprint 4E。
