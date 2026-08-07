@@ -1,8 +1,9 @@
 # Sprint 4D：Invoice Foundation Design（发票领域 Schema 设计）
 
-> 定位（CTO 启动令 2026-08-07）：**Invoice 是销售财务链的起点**（Quotation → SalesOrder → Delivery → Invoice → AR → Receipt）。
+> 定位（CTO 启动令 2026-08-07 + **CTO Review 96/100 APPROVED WITH CHANGES**）：**Invoice 是销售财务链的起点**（Quotation → SalesOrder → Delivery → Invoice → AR → Receipt）。
 > **Invoice 是财务事实，不是物流事实**。本阶段仅设计（3 文件），不写代码：`Sprint4D_Invoice_Design.md` + `ADR-0019` + `EVENTS.md v1.7`。
 > 边界锁死原因：Invoice 是 ERP 财务链起点，后续 AR / Receipt / Credit Note / Debit Note / GL 都依赖它，比 4A~4C 更需要一次性设计正确。
+> **CTO Review 结论（2026-08-07，96/100 APPROVED WITH CHANGES）**：整体架构方向正确（财务事实源/物流事实源/Pricing 不入 Invoice/Workflow 统一/File Center 统一/禁 3 表全批准）；4 项 Pending **全部拍板**（见 §13）；**2 项必改**（① Invoice 编号延后生成——DRAFT 不占号、ISSUE 时取号；② InvoiceSnapshot 增加完整税务/汇率快照字段）。完成两项补充后**无需再次设计评审**，直接进入 Schema → Migration 0017 实现阶段。
 
 ---
 
@@ -77,10 +78,10 @@ enum InvoiceLineStatus {
   CANCELLED
 }
 
-/// 发票头（财务事实源；CTO 启动令锁定）
+/// 发票头（财务事实源；CTO 启动令锁定 + CTO Review 96/100 必改①：编号延后生成）
 model Invoice {
   id           String   @id @default(cuid())
-  code         String   @unique // 单据编号（DocumentSequence docType=INVOICE，前缀 INV，位数 6）
+  code         String?  @unique // 单据编号（CTO Review 必改①：**DRAFT 不占号，code=NULL**；仅 ISSUE 时从 DocumentSequence 取号 INV-2026-000123，避免大量 Draft 浪费编号）
   deliveryId   String   // 来源交付单（必填 NOT NULL；唯一入口 POST /api/deliveries/{id}/invoice；Direct Invoice 禁止）
   delivery     Delivery @relation(fields: [deliveryId], references: [id], onDelete: Restrict)
   salesOrderId String   // 冗余投影（经 Delivery 溯源 SalesOrder；便于 AR/对账）
@@ -90,6 +91,8 @@ model Invoice {
   invoiceDate  DateTime @default(now()) @db.Timestamptz(3) // 开票日期
   dueDate      DateTime? @db.Timestamptz(3) // 到期日（4E AR 使用）
   currency     String   @default("CNY")
+  taxProfileId String?  // 税率档案（继承 SalesOrder；Consolidated Invoice 合并校验需一致）
+  paymentTerm  String?  // 付款条款（4E AR 使用；Consolidated Invoice 合并校验需一致）
   // 金额（财务事实，直接复制自 DeliveryLine 快照；禁止重新计算）
   subtotal     Decimal  @default(0) @db.Decimal(18, 4) // 未税合计
   taxAmount    Decimal  @default(0) @db.Decimal(18, 4) // 税额
@@ -197,6 +200,12 @@ model InvoiceSnapshot {
   snapshotType InvoiceSnapshotType
   revisionNo   Int
   snapshotData Json?    // 完整快照（Header + Lines + sourceDeliveryLineId 集合；金额 Decimal 字符串，禁止 toNumber）
+  // CTO Review 必改②：税务/汇率快照（几年后汇率/税率/SST 注册状态都会变化，Snapshot 必须能 100% 还原）
+  taxProfileId String?   // 税率档案快照（继承 SalesOrder.taxProfileId）
+  taxRate      Decimal?  @db.Decimal(18, 4) // 税率快照
+  sstNo        String?   // SST 注册号快照（销售与服务税登记号）
+  currencyRate Decimal?  @db.Decimal(18, 8) // 汇率快照
+  exchangeRate Decimal?  @db.Decimal(18, 8) // 汇率快照（与 currencyRate 同值冗余，兼容不同字段命名）
   generatedById String?
   generatedAt  DateTime @default(now()) @db.Timestamptz(3)
   // 统一审计字段
@@ -356,7 +365,7 @@ DRAFT ──issue──▶ ISSUED ──(4E 收款)──▶ PARTIALLY_PAID ─�
     → DeliveryLine.sourceSalesOrderLineId
     → SalesOrderLine.priceSnapshotId / unitPrice / lineAmount / taxAmount / totalAmount
   ```
-  （若 CTO Review 后决定 DeliveryLine 增加价格投影列，可在 Migration 0017 中调整——本设计默认溯源取价，保持 Delivery 物流事实源纯净）
+  （CTO Review 拍板确认：**DeliveryLine 不增加价格列**——保持物流/财务/价格三域解耦；仅增加开票投影列 invoicedQty / remainingInvoiceQty（拍板① Partial Billing 防超开票），并入 Migration 0017）
 - 禁止：前端提交 unitPrice / 任何价格字段（schema 无价格输入点）；Invoice 阶段不重算税额/折扣
 
 ---
@@ -418,7 +427,7 @@ DRAFT ──issue──▶ ISSUED ──(4E 收款)──▶ PARTIALLY_PAID ─�
 - `0017_invoice_foundation`：+4 CREATE TYPE（InvoiceStatus / InvoiceSnapshotType / InvoiceRevisionStatus / InvoiceLineStatus）+ 4 CREATE TABLE（Invoice / InvoiceLine / InvoiceRevision / InvoiceSnapshot）+ 反向关系列（Customer.invoices / Delivery.invoices / Item.invoiceLines / UOM.invoiceLines）+ 索引 + FK
 - onDelete：Invoice→Delivery/Customer Restrict；Line→Invoice Cascade、→DeliveryLine SetNull、→Item Restrict、→PriceSnapshot SetNull；Revision/Snapshot→Invoice Cascade
 - 红线：仅 CREATE/ALTER/INDEX/FK，无 DROP/RENAME/TRUNCATE/改旧字段
-- 若 CTO Review 决定 DeliveryLine 增加价格投影列，则并入本迁移（ALTER TABLE DeliveryLine ADD COLUMN）
+- CTO Review 拍板补充：DeliveryLine 增加**开票投影列** `invoicedQty` / `remainingInvoiceQty`（ALTER TABLE DeliveryLine ADD COLUMN，初始化 invoicedQty=0 / remainingInvoiceQty=quantity；拍板① Partial Billing 防超开票）——**不增加价格列**（DeliveryLine 无价格已批准）
 
 ---
 
@@ -449,16 +458,16 @@ DRAFT ──issue──▶ ISSUED ──(4E 收款)──▶ PARTIALLY_PAID ─�
 
 ---
 
-## 13. CTO Pending Decisions（本轮重点，4 项待拍板）
+## 13. CTO Pending Decisions（已全部拍板，CTO Review 96/100 APPROVED WITH CHANGES）
 
-| # | 问题 | 默认建议 | 影响面 |
+| # | 问题 | **拍板结论（2026-08-07）** | 影响面 |
 | --- | --- | --- | --- |
-| ① | **一张 Delivery 是否允许拆成多张 Invoice？** | **允许（Partial Billing）**——分次开票场景（如按行/按批次开票） | 创建路由允许 deliveryId 相同多 Invoice；超开票校验按 DeliveryLine 累计 |
-| ② | **多张 Delivery 是否允许合并开一张 Invoice？** | **允许（Consolidated Invoice）**——多交付合并开票（如月度合并） | 创建路由支持多条 deliveryId 或经 SalesOrder 聚合；锁序按多 Delivery 排序 |
-| ③ | **Invoice 是否允许编辑 Line？** | **禁止**——金额来自 Delivery，行不可编辑/新增/删除（仅 DRAFT 可编辑头） | 不提供 lines PATCH；行在创建时确定 |
-| ④ | **Invoice Cancel 是否允许直接取消？** | **仅 DRAFT 可取消**——已 ISSUED 后续走 Credit Note，不允许直接取消 | cancel 状态限制（DRAFT only） |
+| ① | **一张 Delivery 是否允许拆成多张 Invoice？** | **允许（Partial Billing）**——分次开票场景（如按行/按批次开票） | 创建路由允许 deliveryId 相同多 Invoice；**DeliveryLine 需支持 invoicedQty / remainingInvoiceQty**（Migration 0017 增加投影列）；Invoice 创建时重新计算 remainingInvoiceQty，禁止超开票（409） |
+| ② | **多张 Delivery 是否允许合并开一张 Invoice？** | **允许（Consolidated Invoice）**——多交付合并开票（如月度合并） | Invoice Header 的 Customer / Currency / Tax Profile / Payment Term **必须一致**，否则 409 `INVOICE_SOURCE_NOT_COMPATIBLE`；锁序按多 Delivery id 排序 |
+| ③ | **Invoice 是否允许编辑 Line？** | **禁止**——金额来自 Delivery，行不可编辑/新增/删除（仅 DRAFT 可编辑头） | 只允许编辑 **Remark / Reference / Attachment**；不提供 lines PATCH；行在创建时确定 |
+| ④ | **Invoice Cancel 是否允许直接取消？** | **仅 DRAFT 可取消**——已 ISSUED 后续走 Credit Note，不允许直接取消 | cancel 状态限制（DRAFT only）；后续 Credit Note 承载 VOID 语义 |
 
-> 未拍板前不实现：本阶段仅设计。CTO Review 拍板后进入 Schema 实现。
+> **补充拍板（DeliveryLine 无价格问题）**：批准——Delivery 不保存价格（保持物流/财务/价格三域完全解耦）；Invoice 直接经四段溯源链（DeliveryLine → SalesOrderLine → QuotationPriceSnapshot）复制价格快照，不新增 DeliveryLine 价格列。
 
 ---
 

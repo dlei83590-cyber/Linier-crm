@@ -1,6 +1,6 @@
 # ADR-0019：Invoice Domain（发票领域模型边界与财务事实源决策）
 
-- 状态：**Draft（Sprint 4D 设计阶段，CTO 启动令 2026-08-07；4 项 Pending Decisions 待拍板；禁止写业务代码）**
+- 状态：**Approved with Changes（CTO Review 2026-08-07，96/100）**——4 项 Pending 全部拍板（① 允许 Partial Billing ② 允许 Consolidated Invoice ③ 禁止编辑 Line ④ 仅 DRAFT 可取消）+ 2 项必改（① Invoice 编号延后生成 ② InvoiceSnapshot 完整税务/汇率快照）已全部纳入设计；**无需再次设计评审**，直接进入 Schema → Migration 0017 实现阶段
 - 日期：2026-08-07
 - 关联：ADR-0015（Pricing Engine 唯一入口）、ADR-0016（Quotation Domain）、ADR-0017（Sales Order Domain）、ADR-0018（Delivery Domain）、Sprint4D_Invoice_Design.md、EVENTS.md（v1.7 注册）、Sprint4C_Delivery_Design.md（已实现，PR #14）
 - 背景：Sprint 4C Delivery Foundation 已合并（PR #14，d1d8106）。Sprint 4D 进入 Invoice 设计。CTO 启动令：**Invoice 是整个 ERP 财务链的起点**（后续 AR、Receipt、Credit Note、Debit Note、GL 都依赖它），比 4A~4C 更需要一次性设计正确。**Invoice 是财务事实，不是物流事实**；本阶段仅设计（3 文件），不写代码；Payment 属 Sprint 4E。
@@ -66,17 +66,23 @@
 | ❌ 禁止 | InvoiceAttachment | File Center |
 | ❌ 禁止 | InvoicePrice | 价格事实源在 QuotationPriceSnapshot（ADR-0015） |
 
-### 10. CTO Pending Decisions（4 项待拍板，本轮重点）
+### 10. CTO Pending Decisions（已全部拍板，CTO Review 2026-08-07，96/100）
 
-| # | 问题 | 默认建议 | 影响面 |
+| # | 问题 | **拍板结论** | 影响面 |
 | --- | --- | --- | --- |
-| ① | 一张 Delivery 是否允许拆成多张 Invoice？ | **允许（Partial Billing）** | 创建路由允许多 Invoice 引用同 Delivery；超开票校验按 DeliveryLine 累计 |
-| ② | 多张 Delivery 是否允许合并开一张 Invoice？ | **允许（Consolidated Invoice）** | 创建路由支持多 Delivery 聚合；锁序按多 Delivery 排序 |
-| ③ | Invoice 是否允许编辑 Line？ | **禁止**（金额来自 Delivery） | 不提供 lines PATCH；行在创建时确定 |
-| ④ | Invoice Cancel 是否允许直接取消？ | **仅 DRAFT 可取消**（ISSUED+ 走 Credit Note） | cancel 状态限制（DRAFT only） |
+| ① | 一张 Delivery 是否允许拆成多张 Invoice？ | **允许（Partial Billing）** | DeliveryLine 增加 `invoicedQty` / `remainingInvoiceQty` 投影列（Migration 0017）；创建时重新计算 remainingInvoiceQty，禁止超开票（409） |
+| ② | 多张 Delivery 是否允许合并开一张 Invoice？ | **允许（Consolidated Invoice）** | Header 的 Customer / Currency / Tax Profile / Payment Term **必须一致**，否则 409 `INVOICE_SOURCE_NOT_COMPATIBLE`；锁序按多 Delivery id 排序 |
+| ③ | Invoice 是否允许编辑 Line？ | **禁止**（金额来自 Delivery） | 价格/折扣/税率不可改；仅允许编辑 Remark / Reference / Attachment；不提供 lines PATCH |
+| ④ | Invoice Cancel 是否允许直接取消？ | **仅 DRAFT 可取消**（ISSUED+ 走 Credit Note） | cancel 状态限制（DRAFT only）；Credit Note 承载 VOID 语义 |
+
+### 11. CTO 必改项（已纳入设计，无需再次评审）
+
+- **必改① Invoice 编号延后生成**：DRAFT 时 `code=NULL` 不占号；仅 ISSUE 时从 DocumentSequence 取号（如 INV-2026-000123），避免大量 Draft 浪费编号。
+- **必改② InvoiceSnapshot 完整税务/汇率快照**：增加 taxProfileId / taxRate / sstNo / currencyRate / exchangeRate，保证多年后税率/汇率/SST 状态变化仍可 100% 还原。
+- **附带批准（DeliveryLine 无价格）**：保持物流/财务/价格三域解耦；Invoice 直接经四段溯源链（DeliveryLine → SalesOrderLine → QuotationPriceSnapshot）复制价格快照，不新增 DeliveryLine 价格列。
 
 ## 影响
 
-- Sprint 4D Schema（0017_invoice_foundation，CTO Review 拍板后实现阶段创建）：**+4 枚举 / +4 表**，仅新增不改既有（若 CTO 决定 DeliveryLine 增加价格投影列则并入）。
+- Sprint 4D Schema（0017_invoice_foundation，CTO Review 拍板后实现阶段创建）：**+4 枚举 / +4 表**，仅新增不改既有；并入 DeliveryLine 开票投影列（invoicedQty / remainingInvoiceQty，ALTER TABLE ADD COLUMN），不增加价格列。
 - 取价走四段溯源链（InvoiceLine → DeliveryLine → SalesOrderLine → priceSnapshotId），保持 Delivery 物流事实源纯净。
 - 后续 4E AR/Payment、Sprint 5 采购、Sprint 7 财务引用本 ADR 与 ADR-0015/0016/0017/0018，禁止重新设计开票/取价。
