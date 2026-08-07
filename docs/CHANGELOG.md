@@ -2,9 +2,9 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased] - Sprint 4A + 4B + 4C + 4D（Quotation / Sales Order / Delivery / Invoice Foundation，2026-08-08，PR #12/#13/#14 已合并 + PR #15 Ready for Final Review，未打 Tag）
+## [Unreleased] - Sprint 4A + 4B + 4C + 4D（Quotation / Sales Order / Delivery / Invoice Foundation，2026-08-08，PR #12/#13/#14/#15 已合并，未打 Tag）
 
-### 新增（Sprint 4D：Invoice Foundation，PR #15，Ready for Final Review）
+### 新增（Sprint 4D：Invoice Foundation，PR #15，已合并）
 
 - **Invoice 发票领域（财务事实源）**：Invoice / InvoiceLine / InvoiceRevision / InvoiceSnapshot（+4 模型 / +4 枚举，迁移 `0017_invoice_foundation`，仅新增不改既有）；DeliveryLine +2 开票投影列（invoicedQty / remainingInvoiceQty，remainingInvoiceQty 由迁移初始化为 quantity）；Invoice.code 可空（DRAFT 不占号）
 - **唯一创建入口（CTO 锁定①）**：无 Direct Invoice（不开放 `POST /api/invoices`）；`POST /api/deliveries/{id}/invoice`：按 id ASC 锁全部来源 Delivery（primary + deliveryIds[]）→ 校验全部 DELIVERED（仅已确认收货可开票）→ 按 id ASC 锁 DeliveryLine → 防超开票（qty>0 且 ≤ remainingInvoiceQty，否则 409 INVOICE_QUANTITY_EXCEEDED）→ 建头（DRAFT，code=NULL）+ 行 → 回写投影 → Revision + CREATED 快照（含税务/汇率）
@@ -18,7 +18,7 @@
 - **查询 API（CTO Phase 4 指令）**：GET 列表（分页 + code/customerId/status/approvalStatus/dateFrom/dateTo/dueDateFrom/dueDateTo/currency/salesOrderId/deliveryId 过滤）+ GET 详情一次带出（Invoice/Customer/Workflow/Delivery/SalesOrder 摘要/Lines/Latest Revision/Latest Snapshot）+ lines/revisions/snapshots 只读 + PATCH 头（仅 DRAFT + 乐观锁 + 严格 remark/dueDate/paymentTerm）
 - **API**：8 端点（创建 1 + 主档 3 + 行 1 + 历史 2 + 动作 2）；**RBAC**：4 模块×10 动作（invoice* / invoice-line* / invoice-revision* / invoice-snapshot*；create→invoice:create、issue→invoice:approve、cancel→invoice:close）
 - **事件**：EVENTS.md v1.8——InvoiceCreated/Issued/Cancelled ✅ 已实现；PartiallyPaid/Paid ⏳ 注册待实现（Sprint 4E）
-- **文档**：OpenAPI +8 端点/+19 schemas（156 paths/410 schemas）、docs/qa/Sprint4D_QA.md（T1-T18）、docs/test-cases/Invoice_API.md（137 用例，A-M 13 组）、DOMAIN_MODEL v1.11（第 22 章 Invoice Foundation）、ADR-0019（Accepted+Implemented）、docs/reviews/Sprint4D_CTO_Review_Cover.md（CTO Final Review 待验收）
+- **文档**：OpenAPI +8 端点/+19 schemas（156 paths/410 schemas）、docs/qa/Sprint4D_QA.md（T1-T18）、docs/test-cases/Invoice_API.md（137 用例，A-M 13 组）、DOMAIN_MODEL v1.11（第 22 章 Invoice Foundation）、ADR-0019（Accepted+Implemented）、docs/reviews/Sprint4D_CTO_Review_Cover.md（CTO Final Review：APPROVE & MERGE 98/100）
 
 ### 新增（Sprint 4C：Delivery Foundation，PR #14）
 

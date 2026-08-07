@@ -2,8 +2,8 @@
 
 **PR:** #15 – Invoice Foundation
 **Branch:** `feature/sprint4-sales`
-**Head:** `772d1e3`
-**Status:** Ready for CTO Final Review
+**Head:** `e27e682`（squash 合并 → main `cea4162`）
+**Status:** ✅ **APPROVED & MERGED（CTO Final Review 2026-08-08，98/100）**
 
 ## 1. Scope
 
