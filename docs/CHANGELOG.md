@@ -2,7 +2,20 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased] - Sprint 4A + 4B（Quotation & Sales Order Foundation，2026-08-07，PR #12/#13 已合并，未打 Tag）
+## [Unreleased] - Sprint 4A + 4B + 4C（Quotation / Sales Order / Delivery Foundation，2026-08-07，PR #12/#13/#14 已合并，未打 Tag）
+
+### 新增（Sprint 4C：Delivery Foundation，PR #14）
+
+- **Delivery 交付领域（交付事实源）**：Delivery / DeliveryLine / DeliveryRevision / DeliverySnapshot（+4 模型 / +4 枚举，迁移 `0016_delivery_foundation`，仅新增不改既有）；SalesOrderLine +2 投影列（deliveredQty / remainingQty，remainingQty 由迁移初始化为 quantity）；SalesOrder +deliveredAt
+- **唯一创建入口（CTO 锁定①）**：无 Direct Delivery（不开放 `POST /api/deliveries`，salesOrderId NOT NULL）；`POST /api/sales-orders/{id}/deliveries`：FOR UPDATE 锁 SO → 校验 status ∈ {CONFIRMED, PARTIALLY_DELIVERED} → 原子取号 DO-000001 → 建头（DRAFT）→ 显式传入 lines 才建行（分批发货，不默认复制全部）→ Revision + CREATED 快照
+- **防超交（CTO 锁定②）**：availableQty = orderedQty - confirmedDeliveredQty - openDeliveryQty 事务内动态计算（不新增 allocatedQty 列）；创建/编辑/READY/confirm 均重新校验；超出 → 409 DELIVERY_QUANTITY_EXCEEDED；PATCH 自身行排除当前行
+- **Lifecycle（CTO 锁定⑤⑧⑨）**：DRAFT→READY→DISPATCHED→DELIVERED + DRAFT/READY→CANCELLED；READY 后行彻底冻结（不支持重新 ready，错误→cancel→新建）；confirm-delivery 固定 12 步事务（锁 Delivery→锁 SalesOrder→按 id ASC 锁全部源行防死锁→复查行→重新聚合→DELIVERED+POD 投影→DELIVERED 快照→回写 SO Line→聚合 SO→事件）；COMPLETED 仅枚举不提供 /complete
+- **POD（CTO 锁定④）**：File Center 存文件 + Delivery 最小投影（podStatus PENDING/RECEIVED/WAIVED + podReceivedAt + podConfirmedById）；不建 DeliveryPOD 表；confirm-delivery POD 门禁（RECEIVED/WAIVED，否则 409）
+- **SalesOrder 聚合**：confirm-delivery 后每行回写 deliveredQty/remainingQty，全部行 remainingQty≤0 → SO=DELIVERED+deliveredAt=now，否则有 confirmed → PARTIALLY_DELIVERED（不因 READY/DISPATCHED 提前标记）
+- **API**：10 端点（主档 4 + lines 2 + ready/dispatch/confirm-delivery/cancel 4）
+- **RBAC**：4 模块×10 动作（delivery* / delivery-line* / delivery-revision* / delivery-snapshot*；ready/dispatch→edit、confirm-delivery→approve、cancel→close）
+- **事件**：EVENTS.md v1.6——Delivery 8 事件全部已发布（Created/Updated/Ready/Dispatched/Confirmed/Cancelled + SalesOrderPartiallyDelivered/SalesOrderDelivered）
+- **文档**：OpenAPI +10 端点/+20 schemas（148 paths/391 schemas）、docs/qa/Sprint4C_QA.md（T1-T15）、docs/test-cases/Delivery_API.md（111 用例）、DOMAIN_MODEL v1.10（第 20/21 章）、ADR-0018（Accepted+Implemented）、docs/reviews/Sprint4C_CTO_Review_Cover.md（CTO Final Review：APPROVE & MERGE）
 
 ### 新增（Sprint 4B：Sales Order Foundation，PR #13）
 

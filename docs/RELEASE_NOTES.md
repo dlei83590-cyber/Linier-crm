@@ -1,5 +1,23 @@
 # Release Notes
 
+## Sprint 4C — Delivery Foundation（2026-08-07，PR #14 已合并，未发布 Tag）
+
+> PR: #14（Sprint 4C Delivery Foundation，feature/sprint4-sales）
+> 状态：MERGED（squash d1d8106；未打 Tag；待 Sprint 4 Sales 完整闭环（4D Invoice + 4E AR/Payment）后统一发布下一个 Alpha）
+> CTO 结论：Sprint 4C Delivery Foundation **APPROVED & MERGE**（CTO Final Review Cover：docs/reviews/Sprint4C_CTO_Review_Cover.md，Checklist 12 项全部 ✅）
+
+### Sprint 4C Delivery Foundation（PR #14，已合并）
+
+- **交付领域模型（交付事实源）**：Delivery / DeliveryLine / DeliveryRevision / DeliverySnapshot（+4 模型 / +4 枚举，迁移 0016_delivery_foundation，仅新增不改既有）；SalesOrderLine +2 投影列（deliveredQty / remainingQty，remainingQty 由迁移初始化为 quantity）；SalesOrder +deliveredAt
+- **唯一创建入口（CTO 锁定①）**：无 Direct Delivery；`POST /api/sales-orders/{id}/deliveries`（FOR UPDATE 锁 SO → 校验 CONFIRMED/PARTIALLY_DELIVERED → 原子取号 DO → 显式 lines 建行，分批发货）；不开放 POST /api/deliveries
+- **防超交（CTO 锁定②）**：availableQty = orderedQty - confirmedDeliveredQty - openDeliveryQty 事务内动态计算（不新增 allocatedQty 列）；创建/编辑/READY/confirm 均重新校验；超出 → 409 DELIVERY_QUANTITY_EXCEEDED；PATCH 自身行排除当前行
+- **Lifecycle（CTO 锁定⑤⑧⑨）**：DRAFT→READY→DISPATCHED→DELIVERED + DRAFT/READY→CANCELLED；READY 后行彻底冻结（不支持重新 ready，错误→cancel→新建）；confirm-delivery 固定 12 步事务（锁 Delivery→锁 SalesOrder→按 id ASC 锁全部源行防死锁→复查行→重新聚合→DELIVERED+POD 投影→DELIVERED 快照→回写 SO Line→聚合 SO→事件）；COMPLETED 仅枚举不提供 /complete
+- **POD（CTO 锁定④）**：File Center 存文件 + Delivery 最小投影（podStatus PENDING/RECEIVED/WAIVED + podReceivedAt + podConfirmedById）；不建 DeliveryPOD 表；confirm-delivery POD 门禁（RECEIVED/WAIVED，否则 409）
+- **SalesOrder 聚合**：confirm-delivery 后每行回写 deliveredQty/remainingQty，全部行 remainingQty≤0 → SO=DELIVERED+deliveredAt=now，否则有 confirmed → PARTIALLY_DELIVERED（不因 READY/DISPATCHED 提前标记）
+- **API**：10 端点（主档 4 + lines 2 + ready/dispatch/confirm-delivery/cancel 4）；**RBAC**：4 模块×10 动作（ready/dispatch→edit、confirm→approve、cancel→close）；**事件**：EVENTS.md v1.6（Delivery 8 事件全部发布）
+- **文档**：OpenAPI +10 端点/+20 schemas（148 paths/391 schemas）、Sprint4C_QA.md（T1-T15）、Delivery_API.md（111 用例）、DOMAIN_MODEL v1.10（第 20/21 章，补全 Sales Order 章节）、ADR-0018（Accepted+Implemented）、Review Cover
+- **质量门禁**：Phase 1-4 全绿（#31174585598/#31175832377/#31179279069/#31182288149/#31184199449/#31186228815）；CI 修复 2 轮（NextRequest import / 动态段 slug 统一 [id]）
+
 ## Sprint 4B — Sales Order Foundation（2026-08-07，PR #13 已合并，未发布 Tag）
 
 > PR: #13（Sprint 4B Sales Order Foundation，feature/sprint4-sales）
