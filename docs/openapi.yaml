@@ -45,6 +45,10 @@ tags:
   - name: Sales Order Revisions
   - name: Sales Order Snapshots
   - name: Sales Order Actions
+  # Sprint 4C Delivery Foundation
+  - name: Deliveries
+  - name: Delivery Lines
+  - name: Delivery Actions
 
 paths:
   # ==========================================================================
@@ -7840,6 +7844,374 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
+  # ==========================================================================
+  # Sprint 4C Delivery Foundation（主资源 + Lines + Actions）
+  # ==========================================================================
+  /api/deliveries:
+    get:
+      tags: [Deliveries]
+      summary: List deliveries (paginated; code/salesOrderId/customerId/status/date filters)
+      description: |
+        本阶段不开放 POST /api/deliveries——Direct Delivery 未获 CTO 批准（锁定项①），
+        唯一创建入口为 POST /api/sales-orders/{id}/deliveries。
+      operationId: listDeliveries
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: page, in: query, required: false, schema: { type: integer, default: 1 } }
+        - { name: pageSize, in: query, required: false, schema: { type: integer, default: 20, maximum: 100 } }
+        - { name: code, in: query, required: false, schema: { type: string } }
+        - { name: salesOrderId, in: query, required: false, schema: { type: string } }
+        - { name: customerId, in: query, required: false, schema: { type: string } }
+        - { name: status, in: query, required: false, schema: { $ref: "#/components/schemas/DeliveryStatus" } }
+        - { name: dateFrom, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: dateTo, in: query, required: false, schema: { type: string, format: date-time } }
+      responses:
+        "200":
+          description: OK（分页列表）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeliveryListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/sales-orders/{id}/deliveries:
+    post:
+      tags: [Deliveries]
+      summary: Create delivery from sales order (only entry; Direct Delivery prohibited)
+      description: |
+        唯一创建入口（CTO 锁定项①：salesOrderId NOT NULL）。来源 SO 状态必须为
+        CONFIRMED 或 PARTIALLY_DELIVERED（否则 409 SALES_ORDER_NOT_DELIVERABLE）。
+        事务内：FOR UPDATE 锁 SO → 原子取号（DO-000001）→ 建头（DRAFT）→
+        按请求显式传入的 lines 逐行锁源 SalesOrderLine → 动态计算 availableQty 防超交
+        （超出 → 409 DELIVERY_QUANTITY_EXCEEDED）→ 写行 → Revision + CREATED 快照。
+      operationId: createDelivery
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string }, description: salesOrderId }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeliveryCreate"
+      responses:
+        "201":
+          description: Created（status=DRAFT）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeliveryResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（SO 状态不允许 / 超交 DELIVERY_QUANTITY_EXCEEDED）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/deliveries/{id}:
+    get:
+      tags: [Deliveries]
+      summary: Get delivery detail (lines/revisions/snapshots + customer/salesOrder summary)
+      operationId: getDelivery
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeliveryResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Deliveries]
+      summary: Update delivery header (only DRAFT; optimistic lock version)
+      description: |
+        仅 DRAFT 可编辑头（交付日期/预计到达/承运方/运单号/备注）；READY 后行彻底冻结
+        （CTO 锁定项⑧：不支持重新 ready，错误 → cancel → 新建）。变更自动生成 DeliveryRevision。
+      operationId: updateDelivery
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeliveryUpdate"
+      responses:
+        "200":
+          description: OK（version+1）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeliveryResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/deliveries/{id}/lines:
+    get:
+      tags: [Delivery Lines]
+      summary: List delivery lines (item/uom/sourceSalesOrderLine summary)
+      description: |
+        原则上不开放 POST——交付行仅在创建 Delivery 时从 SO Line 选择（CTO 指示：分批发货，
+        创建时明确传入指定行，不默认复制全部剩余行）。
+      operationId: listDeliveryLines
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeliveryLineListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/deliveries/{id}/lines/{lineId}:
+    patch:
+      tags: [Delivery Lines]
+      summary: Update delivery line (only DRAFT; allocation check, over-delivery prohibited)
+      description: |
+        仅 DRAFT 可编辑行。事务内锁定 source SalesOrderLine（FOR UPDATE）→ 动态计算
+        confirmedDeliveredQty / openDeliveryQty（排除当前行）/ availableQty →
+        校验 quantity <= availableQty（超出 → 409 DELIVERY_QUANTITY_EXCEEDED）→ 写行 → Revision。
+        sourceSalesOrderLineId 溯源永不清除；本阶段不增加 SalesOrderLine.deliveredQty/remainingQty。
+      operationId: updateDeliveryLine
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: lineId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeliveryLineUpdate"
+      responses:
+        "200":
+          description: OK（version+1）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeliveryLineResponse"
+        "400":
+          description: BadRequest（含 DELIVERY_SOURCE_LINE_INVALID）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  # ---- Delivery Actions（Phase 4） ----
+  /api/deliveries/{id}/ready:
+    post:
+      tags: [Delivery Actions]
+      summary: Ready delivery (DRAFT → READY; rows frozen after)
+      description: |
+        校验：至少 1 条有效行 / 每行 quantity>0 / 源行仍有效 / 重新执行 allocation 校验
+        （排除本单自身，防 DRAFT 期间被其他 Delivery 抢占）。成功：status=READY +
+        DeliverySnapshot(READY) + 发布 DeliveryReady。READY 后行彻底冻结。
+      operationId: readyDelivery
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeliveryActionRequest"
+      responses:
+        "200":
+          description: OK（status=READY）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeliveryActionResponse"
+        "400":
+          description: BadRequest（含 DELIVERY_SOURCE_LINE_INVALID）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（状态不允许 / 无有效行 / 超交 DELIVERY_QUANTITY_EXCEEDED）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/deliveries/{id}/dispatch:
+    post:
+      tags: [Delivery Actions]
+      summary: Dispatch delivery (READY → DISPATCHED; no deliveredQty change)
+      description: |
+        可同时更新 carrier / trackingNo / expectedArrivalDate。生成 DeliverySnapshot(DISPATCHED)；
+        **不增加 deliveredQty**（发运不等于客户收货，CTO Review ⑥）。发布 DeliveryDispatched。
+      operationId: dispatchDelivery
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeliveryDispatchRequest"
+      responses:
+        "200":
+          description: OK（status=DISPATCHED）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeliveryActionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/deliveries/{id}/confirm-delivery:
+    post:
+      tags: [Delivery Actions]
+      summary: Confirm delivery (DISPATCHED → DELIVERED; customer confirms receipt)
+      description: |
+        Phase 4 最关键事务（12 步固定顺序）：锁 Delivery → 锁 SalesOrder → 按 id ASC 锁全部源行
+        （防死锁）→ 复查行 quantity → 重新聚合防超交 → 更新 DELIVERED + POD 投影 →
+        DELIVERED 快照 → 回写全部 SalesOrderLine deliveredQty/remainingQty → 聚合 SalesOrder
+        （全部行 remainingQty<=0 → DELIVERED+deliveredAt=now；否则有 confirmed → PARTIALLY_DELIVERED）
+        → 发布 DeliveryConfirmed + SalesOrderPartiallyDelivered / SalesOrderDelivered。
+        POD 门禁：podStatus ∈ {RECEIVED, WAIVED}，否则 409（PENDING 拒绝）。
+        本阶段不实现 /complete（COMPLETED 仅枚举）。
+      operationId: confirmDelivery
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeliveryConfirmRequest"
+      responses:
+        "200":
+          description: OK（status=DELIVERED）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeliveryActionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（状态不允许 / POD 未确认 / 超交 DELIVERY_QUANTITY_EXCEEDED）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/deliveries/{id}/cancel:
+    post:
+      tags: [Delivery Actions]
+      summary: Cancel delivery (DRAFT/READY → CANCELLED; DISPATCHED+ prohibited)
+      description: |
+        仅 DRAFT/READY 可取消；DISPATCHED/DELIVERED/COMPLETED 禁止（已进入物流/交付环节）。
+        取消不回滚 deliveredQty（这些状态未进入实际交付累计），也不需要写 SalesOrderLine 投影——
+        CANCELLED 不在 open 占用集合，其他 Delivery 的 allocation 在下次事务动态计算时自动释放。
+        成功：status=CANCELLED + DeliverySnapshot(CANCELLED) + 发布 DeliveryCancelled。
+      operationId: cancelDelivery
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeliveryActionRequest"
+      responses:
+        "200":
+          description: OK（status=CANCELLED）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeliveryActionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -12052,3 +12424,229 @@ components:
           properties:
             id: { type: string }
             status: { $ref: "#/components/schemas/SalesOrderStatus" }
+
+    # ==========================================================================
+    # Sprint 4C Delivery Foundation（Enums + Models + Requests/Responses）
+    # ==========================================================================
+    DeliveryStatus:
+      type: string
+      enum: [DRAFT, READY, DISPATCHED, DELIVERED, COMPLETED, CANCELLED]
+
+    DeliverySnapshotType:
+      type: string
+      description: 快照类型（仅固化节点生成，只读）；COMPLETED 本阶段仅枚举不提供 /complete
+      enum: [CREATED, READY, DISPATCHED, DELIVERED, CANCELLED]
+
+    DeliveryRevisionStatus:
+      type: string
+      enum: [DRAFT, SUBMITTED, APPROVED, SUPERSEDED]
+
+    DeliveryPodStatus:
+      type: string
+      description: POD（Proof of Delivery）签收状态；原始文件走 File Center（businessType=delivery，attachmentType=POD）
+      enum: [PENDING, RECEIVED, WAIVED]
+
+    Delivery:
+      type: object
+      required: [id, code, salesOrderId, customerId, status, version]
+      properties:
+        id: { type: string }
+        code: { type: string, description: 单据编号（DocumentSequence docType=DELIVERY_ORDER，前缀 DO，位数 6） }
+        salesOrderId: { type: string, description: "来源销售订单（NOT NULL；Direct Delivery 禁止，唯一入口 POST /api/sales-orders/{id}/deliveries）" }
+        customerId: { type: string, description: 收货客户（继承 SalesOrder.customerId） }
+        status: { $ref: "#/components/schemas/DeliveryStatus" }
+        deliveryDate: { type: [string, "null"], format: date-time, description: 交付日期（计划/实际） }
+        expectedArrivalDate: { type: [string, "null"], format: date-time }
+        carrier: { type: [string, "null"], description: 承运方（物流公司/车次/单号） }
+        trackingNo: { type: [string, "null"] }
+        podStatus: { $ref: "#/components/schemas/DeliveryPodStatus" }
+        podReceivedAt: { type: [string, "null"], format: date-time, description: 签收时间（RECEIVED 时回填） }
+        podConfirmedById: { type: [string, "null"], description: 签收确认人（RECEIVED 时回填） }
+        remark: { type: [string, "null"] }
+        version: { type: integer, description: 乐观锁版本 }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+
+    DeliveryLine:
+      type: object
+      required: [id, deliveryId, description, quantity, orderedQty, deliveredQty, version]
+      properties:
+        id: { type: string }
+        deliveryId: { type: string }
+        sourceSalesOrderLineId: { type: [string, "null"], description: 溯源 → SalesOrderLine（SalesOrderLine 软删后 SetNull） }
+        lineNo: { type: integer, description: 行号（10/20/30/40 步进） }
+        itemId: { type: [string, "null"] }
+        description: { type: string, description: 描述（快照） }
+        quantity: { type: number, description: 本次实际交付量（正数；防超交由事务层动态校验） }
+        uomId: { type: [string, "null"] }
+        orderedQty: { type: number, description: 订单行订购量快照（只读投影，禁止手工填写） }
+        deliveredQty: { type: number, description: 已实际交付量快照（仅 DELIVERED/COMPLETED 累计；只读投影） }
+        version: { type: integer }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+
+    DeliveryRevision:
+      type: object
+      required: [id, deliveryId, revisionNo, changeReason]
+      properties:
+        id: { type: string }
+        deliveryId: { type: string }
+        revisionNo: { type: integer, description: 系统自动递增（唯一版本载体） }
+        revisionStatus: { $ref: "#/components/schemas/DeliveryRevisionStatus" }
+        changeReason: { type: string }
+        snapshotData: { type: object, description: 系统生成的当前状态快照（金额 Decimal 字符串，禁止 toNumber） }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+
+    DeliverySnapshot:
+      type: object
+      required: [id, deliveryId, snapshotType, revisionNo]
+      properties:
+        id: { type: string }
+        deliveryId: { type: string }
+        snapshotType: { $ref: "#/components/schemas/DeliverySnapshotType" }
+        revisionNo: { type: integer, description: 快照对应的修订号 }
+        snapshotData: { type: object, description: 完整快照（Header + Lines + sourceSalesOrderLineId 集合；Decimal 字符串，禁止 toNumber） }
+        generatedById: { type: [string, "null"] }
+        generatedAt: { type: [string, "null"], format: date-time }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+
+    DeliveryCreate:
+      type: object
+      properties:
+        deliveryDate: { type: [string, "null"], format: date-time, description: 计划交付日期（默认 now） }
+        expectedArrivalDate: { type: [string, "null"], format: date-time }
+        carrier: { type: [string, "null"], maxLength: 100 }
+        trackingNo: { type: [string, "null"], maxLength: 100 }
+        remark: { type: [string, "null"], maxLength: 1000 }
+        lines:
+          type: array
+          description: 显式指定交付行（从 SO Line 选择，不默认复制全部剩余行；适合分批发货）
+          items:
+            type: object
+            required: [sourceSalesOrderLineId, quantity]
+            properties:
+              sourceSalesOrderLineId: { type: string }
+              quantity: { type: number, exclusiveMinimum: 0 }
+        changeReason: { type: string, maxLength: 500 }
+
+    DeliveryUpdate:
+      type: object
+      required: [version]
+      properties:
+        deliveryDate: { type: [string, "null"], format: date-time }
+        expectedArrivalDate: { type: [string, "null"], format: date-time }
+        carrier: { type: [string, "null"], maxLength: 100 }
+        trackingNo: { type: [string, "null"], maxLength: 100 }
+        remark: { type: [string, "null"], maxLength: 1000 }
+        changeReason: { type: string, maxLength: 500 }
+        version: { type: integer, description: 乐观锁版本（冲突返回 409 VERSION_CONFLICT） }
+        # 不可改 salesOrderId/customerId/status（来源与状态由系统管理）
+
+    DeliveryLineUpdate:
+      type: object
+      required: [version]
+      properties:
+        quantity: { type: number, exclusiveMinimum: 0, description: 数量变更 → 动态校验 availableQty 防超交（409 DELIVERY_QUANTITY_EXCEEDED） }
+        description: { type: string, maxLength: 500 }
+        uomId: { type: [string, "null"] }
+        lineNo: { type: integer }
+        changeReason: { type: string, maxLength: 500 }
+        version: { type: integer }
+        # sourceSalesOrderLineId 溯源永不清除；deliveredQty/orderedQty 只读投影不可写
+
+    DeliveryActionRequest:
+      type: object
+      properties:
+        changeReason: { type: string, maxLength: 500 }
+
+    DeliveryDispatchRequest:
+      type: object
+      properties:
+        carrier: { type: [string, "null"], maxLength: 100 }
+        trackingNo: { type: [string, "null"], maxLength: 100 }
+        expectedArrivalDate: { type: [string, "null"], format: date-time }
+        changeReason: { type: string, maxLength: 500 }
+
+    DeliveryConfirmRequest:
+      type: object
+      properties:
+        podStatus: { type: string, enum: [RECEIVED, WAIVED], description: POD 门禁：RECEIVED 回填签收投影 / WAIVED 豁免；PENDING 拒绝（409） }
+        podReceivedAt: { type: [string, "null"], format: date-time }
+        changeReason: { type: string, maxLength: 500 }
+
+    DeliveryResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/Delivery" }
+
+    DeliveryListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Delivery" }
+
+    DeliveryLineResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/DeliveryLine" }
+
+    DeliveryLineListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/DeliveryLine" }
+
+    DeliveryActionResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            id: { type: string }
+            status: { $ref: "#/components/schemas/DeliveryStatus" }
+            podStatus: { $ref: "#/components/schemas/DeliveryPodStatus" }
+            salesOrder:
+              type: object
+              description: confirm-delivery 聚合回写后的 SO 状态投影
+              properties:
+                id: { type: string }
+                status: { $ref: "#/components/schemas/SalesOrderStatus" }
+                deliveredAt: { type: [string, "null"], format: date-time }
+
+    DeliveryErrorCodes:
+      type: string
+      description: |
+        Delivery 领域错误码（与实现 errors.ts 一致）：
+        - DELIVERY_NOT_FOUND（404）交付单不存在
+        - DELIVERY_LINE_NOT_FOUND（404）交付行不存在
+        - DELIVERY_INVALID_STATE（409）状态不允许（ready/dispatch/confirm/cancel 状态机校验；含 POD 未确认与重复确认场景）
+        - DELIVERY_QUANTITY_EXCEEDED（409）超交（请求数量 > availableQty）
+        - DELIVERY_SOURCE_LINE_INVALID（400）交付行来源销售订单行无效或已删除
+        - SALES_ORDER_NOT_DELIVERABLE（409）来源 SO 状态不允许创建交付（仅 CONFIRMED/PARTIALLY_DELIVERED）
+        - VERSION_CONFLICT（409）乐观锁版本冲突
+        语义映射（文档层面补充，实现统一以 DELIVERY_INVALID_STATE 表达）：
+        - DELIVERY_POD_REQUIRED → POD 门禁失败（podStatus ∉ {RECEIVED, WAIVED}），实现返回 409 DELIVERY_INVALID_STATE
+        - DELIVERY_ALREADY_CONFIRMED → 重复 confirm（非 DISPATCHED），实现返回 409 DELIVERY_INVALID_STATE
+        - DELIVERY_STATUS_INVALID → 状态机不允许的流转，实现返回 409 DELIVERY_INVALID_STATE
