@@ -7,6 +7,7 @@ import { requestLog } from "@/lib/api/logger";
 import { invoiceUpdateSchema } from "@/lib/api/schemas";
 import { createInvoiceRevision } from "@/lib/invoice/helpers";
 import { publishInvoiceEvent } from "@/lib/invoice/events";
+import { maybeTriggerInvoiceApproval } from "@/lib/invoice/workflow-sync";
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +55,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
  * CTO Phase 4 锁定：只允许非财务字段 remark / dueDate / paymentTerm（schema 无 reference 列，不新增）；
  * 禁止修改 quantity/unitPrice/taxRate/lineAmount/totalAmount/paidAmount/balanceAmount/code/status——
  * 这些必须继续由系统动作或 4E 维护。
- * 非财务编辑 → 系统生成 Revision + 发布 InvoiceUpdated；本阶段不触发 Workflow（Commit C 才接审批重审）。
+ * 非财务编辑 → 系统生成 Revision + 发布 InvoiceUpdated；
+ * 重审规则（CTO Phase 4 锁定）：paymentTerm / dueDate 变更 → 失效原审批并重新提交（maybeTriggerInvoiceApproval）；
+ * remark 修改不触发重审；命中 INVOICE 策略但定义缺失 → 409 INVOICE_WORKFLOW_FAILED（整体回滚）。
  */
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await authenticate(request);
@@ -77,21 +80,39 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
   }
 
-  const updated = await prisma.$transaction(async (tx) => {
-    const saved = await tx.invoice.update({
-      where: { id },
-      data: {
-        ...(fields.remark !== undefined ? { remark: fields.remark } : {}),
-        ...(fields.dueDate !== undefined ? { dueDate: fields.dueDate ? new Date(fields.dueDate) : null } : {}),
-        ...(fields.paymentTerm !== undefined ? { paymentTerm: fields.paymentTerm } : {}),
-        version: { increment: 1 },
-        updatedById: user!.id,
-      },
+  // 关键财务字段变更判定（CTO Phase 4 指令：paymentTerm/dueDate 变更 → 触发重新审批；remark 不触发）
+  const keyFinancialChanged =
+    (fields.paymentTerm !== undefined && fields.paymentTerm !== invoice.paymentTerm) ||
+    (fields.dueDate !== undefined &&
+      (fields.dueDate ? new Date(fields.dueDate).getTime() : null) !==
+        (invoice.dueDate ? invoice.dueDate.getTime() : null));
+
+  let updated: Awaited<ReturnType<typeof prisma.invoice.update>>;
+  try {
+    // 单事务：更新头 + Revision + 审批触发（财务修改与审批状态切换统一事务，命中策略失败整体回滚显式报错）
+    updated = await prisma.$transaction(async (tx) => {
+      const saved = await tx.invoice.update({
+        where: { id },
+        data: {
+          ...(fields.remark !== undefined ? { remark: fields.remark } : {}),
+          ...(fields.dueDate !== undefined ? { dueDate: fields.dueDate ? new Date(fields.dueDate) : null } : {}),
+          ...(fields.paymentTerm !== undefined ? { paymentTerm: fields.paymentTerm } : {}),
+          version: { increment: 1 },
+          updatedById: user!.id,
+        },
+      });
+      // 非财务编辑 → 系统生成 Revision（不允许自由编辑 Revision）
+      await createInvoiceRevision(tx, id, changeReason ?? "更新发票头", { invoice: saved }, user?.id);
+      // 财务条件变更 → 审批触发（同一事务，传 tx）：无实例创建 / RUNNING 保持 / 终态复用重新 SUBMIT
+      await maybeTriggerInvoiceApproval({ invoiceId: id, keyFinancialChanged, actorId: user!.id, meta, tx });
+      return saved;
     });
-    // 非财务编辑 → 系统生成 Revision（不允许自由编辑 Revision）
-    await createInvoiceRevision(tx, id, changeReason ?? "更新发票头", { invoice: saved }, user?.id);
-    return saved;
-  });
+  } catch (e) {
+    if (e instanceof Error && e.message === "WORKFLOW_DEFINITION_NOT_FOUND") {
+      return fail(ERROR_CODES.INVOICE_WORKFLOW_FAILED, "审批流程定义不存在或未发布（INVOICE_APPROVAL），发票变更已回滚", 409);
+    }
+    throw e;
+  }
 
   await publishInvoiceEvent({
     eventType: "InvoiceUpdated",

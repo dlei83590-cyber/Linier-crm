@@ -53,6 +53,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (invoice.status !== "DRAFT") {
       return { error: "INVALID_STATE" as const, status: invoice.status };
     }
+    // ── 2b. 审批门禁（CTO Phase 4 锁定）：命中 INVOICE 审批策略后必须先完成审批才能 Issue ──
+    //     workflowInstanceId != null 时，仅 approvalStatus=APPROVED 允许开票；
+    //     PENDING/REJECTED 全部禁止（REJECTED 需先修改后重审，PENDING 需等待审批完成）
+    if (invoice.workflowInstanceId && invoice.approvalStatus !== "APPROVED") {
+      return { error: "APPROVAL_GATE" as const, approvalStatus: invoice.approvalStatus };
+    }
     // ── 3. 至少 1 个有效 InvoiceLine ────────────────────────────────────────
     if (invoice.lines.length === 0) return { error: "NO_LINES" as const };
     // ── 4. invoiceTotal > 0 ─────────────────────────────────────────────────
@@ -142,6 +148,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return failConflict(ERROR_CODES.INVOICE_INVALID_STATE, "发票金额必须大于 0 才能开票");
       case "ALREADY_ISSUED":
         return failConflict(ERROR_CODES.INVOICE_INVALID_STATE, "发票已生成编号，禁止重复开票（不消耗第二个编号）");
+      case "APPROVAL_GATE":
+        return failConflict(
+          ERROR_CODES.INVOICE_INVALID_STATE,
+          `发票审批未完成（当前 approvalStatus=${result.approvalStatus}），仅 APPROVED 允许开票；请先完成审批或修改后重新提交`,
+        );
     }
   }
 
