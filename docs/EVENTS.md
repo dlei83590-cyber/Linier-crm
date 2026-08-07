@@ -1,6 +1,6 @@
 # EVENTS 领域事件注册表（Domain Events）
 
-- 版本：v1.6
+- 版本：v1.7
 - 日期：2026-08-07
 - 维护者：CIO（JINZA）｜审核：CTO
 - 关联：[API_GUIDELINES.md](./API_GUIDELINES.md) ｜ [ARCHITECTURE_BASELINE.md](./ARCHITECTURE_BASELINE.md)
@@ -116,6 +116,21 @@
 
 > 注：`SalesOrderDeliveryStarted` / `SalesOrderCompleted`（v1.4 注册）——前者由首次 confirm-delivery 联动发布，后者待 Sprint 4D（交付+回款完成）。
 
+#### 2.3.4 发票领域（Sprint 4D 注册，先注册后开发）
+
+> 统一载荷：所有 Invoice 事件 payload 至少包含 `eventId / eventType / occurredAt / actorId / invoiceId / invoiceCode / deliveryId / customerId`（eventId/eventType/occurredAt 由 Event Envelope 提供）。
+> 来源：Sprint4D_Invoice_Design.md / ADR-0019；Invoice 是财务事实源（Delivery 为物流事实源，Invoice 为财务事实源）；Invoice 唯一来源 Delivery（禁止 Quotation/SalesOrder 直接开票）；Invoice 永远不重新计算价格（直接复制价格快照，不调用 Pricing Engine）；Payment 属 Sprint 4E，PartiallyPaid/Paid 先注册后实现。
+
+| eventType | 触发时机 | 载荷示例 | 实现状态 |
+| --- | --- | --- | --- |
+| `InvoiceCreated` | 创建发票（DRAFT，经 POST /api/deliveries/{id}/invoice） | `{ invoiceId, invoiceCode, deliveryId, deliveryCode, customerId, invoiceTotal, createdBy }` | ⏳ 注册待实现（Sprint 4D） |
+| `InvoiceIssued` | issue（DRAFT → ISSUED） | `{ invoiceId, invoiceCode, issuedAt, issuedBy }` | ⏳ 注册待实现（Sprint 4D） |
+| `InvoiceCancelled` | cancel（DRAFT → CANCELLED） | `{ invoiceId, invoiceCode, cancelledBy, reason }` | ⏳ 注册待实现（Sprint 4D） |
+| `InvoicePartiallyPaid` | 4E Receipt 回写（ISSUED → PARTIALLY_PAID） | `{ invoiceId, invoiceCode, paidAmount, balanceAmount, receiptId, updatedAt }` | ⏳ 注册待实现（Sprint 4E） |
+| `InvoicePaid` | 4E 收清（→ PAID） | `{ invoiceId, invoiceCode, paidAmount, balanceAmount, receiptId, paidAt }` | ⏳ 注册待实现（Sprint 4E） |
+
+> 注：后两个（PartiallyPaid/Paid）虽 Sprint 4E 才实现，也**先注册**（CTO 启动令：先注册后开发）；Credit Note / Debit Note 事件待 4F/后续评估。
+
 ### 2.4 主数据
 
 | eventType | 触发时机 | 载荷示例 |
@@ -149,6 +164,7 @@
 
 | 日期 | 版本 | 说明 |
 | --- | --- | --- |
+| 2026-08-07 | v1.7 | Sprint 4D 注册 Invoice 事件 5 个（Created/Issued/Cancelled + PartiallyPaid/Paid，统一载荷，CTO 启动令：先注册后开发；见 2.3.4）；Invoice 为财务事实源（Delivery 物流事实源 → Invoice 财务事实源），唯一来源 Delivery，不重新定价（直接复制价格快照）；Payment 属 Sprint 4E，PartiallyPaid/Paid 先注册后实现 |
 | 2026-08-07 | v1.6 | Sprint 4C 实现状态标注：Delivery 8 事件（Created/Updated/Ready/Dispatched/Confirmed/Cancelled + SalesOrderPartiallyDelivered/SalesOrderDelivered）全部 ✅ 已发布（Phase 3 CRUD/Lines + Phase 4 lifecycle/aggregation）；2.3.2 SalesOrderDelivered 同步标注 |
 | 2026-08-07 | v1.5 | Sprint 4C 注册 Delivery 事件 8 个（Created/Updated/Ready/Dispatched/Confirmed/Cancelled + SalesOrderPartiallyDelivered/SalesOrderDelivered，统一载荷，CTO 决策：先注册后开发；见 2.3.3）；Delivery 为交付事实源，SalesOrder 聚合投影事件联动发布 |
 | 2026-08-07 | v1.4 | Sprint 4B 注册 SalesOrder 事件 7 个（Created/Updated/Confirmed/Cancelled/DeliveryStarted/Delivered/Completed，统一载荷，CTO 决策：先注册后开发；见 2.3.2）；SalesOrderCreated 占位升级为统一载荷 |
