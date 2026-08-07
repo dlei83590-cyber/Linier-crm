@@ -2,7 +2,23 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased] - Sprint 4A Quotation Foundation（2026-08-07，PR #12 已合并，未打 Tag）
+## [Unreleased] - Sprint 4A + 4B（Quotation & Sales Order Foundation，2026-08-07，PR #12/#13 已合并，未打 Tag）
+
+### 新增（Sprint 4B：Sales Order Foundation，PR #13）
+
+- **Sales Order 销售订单领域**：SalesOrder / SalesOrderLine / SalesOrderRevision / SalesOrderSnapshot（+4 模型 / +3 枚举，迁移 `0015_sales_order_foundation`，仅新增不改既有）
+- **唯一创建入口（CTO 锁定项①）**：无 Direct SO（不开放 `POST /api/sales-orders`，quotationId 必填）；`POST /api/quotations/{id}/convert` 正式实现（替代 4A 的 501）：FOR UPDATE 真实行锁 + DocumentSequence 原子 increment + 唯一约束冲突→409，复制 Line（继承价格 + priceSnapshotId + sourceQuotationLineId 溯源，不重新定价）+ CREATED 快照 + 回写 Quotation(CONVERTED) + 双事件
+- **价格红线（CTO 锁定项②）**：价格继承 Quotation 禁直接改（schema 无 unitPrice）；数量/UOM 商业条件变更重新走 PricingEngine（新建 `SalesOrderPricingService`，只调 resolvePrice()，快照不写 quotationLineId 防污染溯源）+ 新 Revision + Snapshot
+- **审批联动（CTO 锁定项③ + 最终复审）**：Confirm 不重复审批（Accepted Quotation 已够）；关键商业字段变更触发重新审批——无实例创建 / RUNNING 保持等待 / **终态复用同一 WorkflowInstance 重新 SUBMIT**（先失效上一轮全部 Approver 再建新 PENDING，清空 approvedAt/approvedById 投影残留）；Confirm 加审批门禁（有实例须 APPROVED 否则 409）
+- **状态机**：DRAFT→CONFIRMED→PARTIALLY_DELIVERED→DELIVERED→COMPLETED；DRAFT/CONFIRMED→CANCELLED；PARTIALLY_DELIVERED/DELIVERED 由 Delivery 聚合回写（Sprint 4C，仅投影）
+- **API**：8 路由文件 / 10 端点（列表/详情/头更新 + lines + revisions/snapshots + confirm/cancel）
+- **RBAC**：8 权限码（sales-order* / sales-order-line* / sales-order-revision* / sales-order-snapshot*，无 create）
+- **事件**：EVENTS.md v1.4——7 个 SalesOrder 事件注册，5 个已发布（Created/Updated/Confirmed/Cancelled/ApprovalStarted；总线落地前 AuditLog 留痕）
+- **文档**：OpenAPI convert 501→200 + 8 端点 + 16 schemas（139 paths/371 schemas）、docs/qa/Sprint4B_QA.md（T1-T15）、docs/test-cases/SalesOrder_API.md（A-H）、ADR-0017
+
+### 变更（Sprint 4B 质量门禁）
+
+- 2026-08-07：lint 修复（confirm 路由未使用 failServer 导入）→ CI #31158155759 全绿；CTO Final Review 3 阻断项修复（重定价走 SalesOrderPricingService / 终态实例复用重新 SUBMIT / Confirm 审批门禁 + 触发失败显式报错）→ `b68495a` CI #31160760480 全绿；最终复审阻断项修复（重新审批前失效旧 Approver + 清空 approvedAt/approvedById）→ `60a4290` CI #31161908240 全绿
 
 ### 新增（Sprint 4A：Quotation Foundation，PR #12）
 

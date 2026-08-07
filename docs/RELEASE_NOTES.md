@@ -1,5 +1,22 @@
 # Release Notes
 
+## Sprint 4B — Sales Order Foundation（2026-08-07，PR #13 已合并，未发布 Tag）
+
+> PR: #13（Sprint 4B Sales Order Foundation，feature/sprint4-sales）
+> 状态：MERGED（squash 3747eba；未打 Tag；待 Sprint 4 Sales 更完整后统一发布）
+> CTO 结论：Sprint 4B Sales Order Foundation **APPROVED**（Final Review 3 阻断项 + 最终复审 1 阻断项全部修复，CI 全绿）
+
+### Sprint 4B Sales Order Foundation（PR #13，已合并）
+
+- **销售订单领域**：SalesOrder / SalesOrderLine / SalesOrderRevision / SalesOrderSnapshot（+4 模型 / +3 枚举，迁移 0015_sales_order_foundation，仅新增不改既有）
+- **唯一创建入口（CTO 锁定①）**：无 Direct SO；`POST /api/quotations/{id}/convert` 正式实现（FOR UPDATE 行锁 + 原子取号 + P2002→409；复制 Line 继承价格 + sourceQuotationLineId 溯源，不重新定价）
+- **价格红线（CTO 锁定②）**：schema 无 unitPrice；数量/UOM 变更走 `SalesOrderPricingService`（只调 PricingEngine.resolvePrice()，快照不写 quotationLineId 防污染溯源）→ 新 Revision + Snapshot
+- **审批联动（CTO 锁定③ + 复审）**：Confirm 不重复审批；关键商业字段变更触发重新审批（无实例创建 / RUNNING 等待 / 终态复用同实例重新 SUBMIT：先失效旧 Approver 再建新 PENDING，清空 approvedAt/approvedById）；Confirm 审批门禁（有实例须 APPROVED 否则 409）
+- **状态机**：DRAFT→CONFIRMED→PARTIALLY_DELIVERED→DELIVERED→COMPLETED；DRAFT/CONFIRMED→CANCELLED；交付状态由 Delivery 聚合回写（Sprint 4C，仅投影）
+- **API**：8 路由文件 / 10 端点；**RBAC**：8 权限码（无 create）；**事件**：EVENTS.md v1.4（7 注册 / 5 发布）
+- **文档**：OpenAPI convert 501→200 + 8 端点 + 16 schemas（139 paths/371 schemas）、Sprint4B_QA.md（T1-T15）、SalesOrder_API.md（A-H）、ADR-0017
+- **质量门禁**：lint 修复 → CI #31158155759 全绿；CTO Final Review 3 阻断项修复 → `b68495a` CI #31160760480 全绿；最终复审阻断项修复（旧 Approver 失效 + 投影清空）→ `60a4290` CI #31161908240 全绿
+
 ## Sprint 4A — Quotation Foundation（2026-08-07，PR #12 已合并，未发布 Tag）
 
 > PR: #12（Sprint 4A Quotation Foundation，feature/sprint4-sales）
