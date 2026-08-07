@@ -211,3 +211,35 @@ export const quotationLineUpdateSchema = z
 export const quotationRevisionCreateSchema = z.object({
   changeReason: z.string().min(1).max(500),
 });
+
+// ============================================================================
+// 第五批：Sales Order（Sprint 4B）
+// ============================================================================
+
+/** 头更新：允许改交期/付款条件/贸易术语/备注；禁止直接改价（CTO 锁定项②：价格继承 Quotation，重定价走 PricingEngine） */
+export const salesOrderUpdateSchema = z
+  .object({
+    requestedDeliveryDate: z.string().datetime().nullable().optional(),
+    paymentTerm: z.string().max(50).nullable().optional(),
+    incoterm: z.string().max(50).nullable().optional(),
+    remark: z.string().max(1000).nullable().optional(),
+    changeReason: z.string().max(500).optional(),
+    version: z.number().int().positive(),
+  })
+  .refine((v) => Object.keys(v).length > 1, { message: "至少提供一个更新字段" });
+
+/** 行更新：允许改描述/数量/UOM/行号；禁止 unitPrice（价格字段不得前端直接写入） */
+export const salesOrderLineUpdateSchema = z
+  .object({
+    description: z.string().max(500).optional(),
+    quantity: z.coerce.number().positive().optional(),
+    uomId: z.string().min(1).nullable().optional(),
+    lineNo: z.number().int().positive().optional(),
+    changeReason: z.string().max(500).optional(),
+    version: z.number().int().positive(),
+  })
+  .refine((v) => Object.keys(v).length > 1, { message: "至少提供一个更新字段" });
+
+export const salesOrderRevisionCreateSchema = z.object({
+  changeReason: z.string().min(1).max(500),
+});
