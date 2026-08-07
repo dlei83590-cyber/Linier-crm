@@ -21,7 +21,7 @@ export async function publishQuotationEvent(params: {
   actorId?: string | null;
   entityId: string;
   payload: QuotationEventPayload;
-  meta?: Record<string, unknown>;
+  meta?: object;
 }) {
   await writeAuditLog({
     actorId: params.actorId ?? null,
