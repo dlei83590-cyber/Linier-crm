@@ -29,13 +29,14 @@ const DELIVERABLE_SO_STATUSES = ["CONFIRMED", "PARTIALLY_DELIVERED"] as const;
  *  → 生成 DeliveryRevision + DeliverySnapshot(CREATED)
  * 本阶段不增加 SalesOrderLine.deliveredQty / remainingQty（仅 confirm-delivery 回写，锁定项）。
  */
-export async function POST(request: NextRequest, { params }: { params: Promise<{ salesOrderId: string }> }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await authenticate(request);
   const denied = requirePermission(user, "delivery:create");
   if (denied) return denied;
   requestLog(request, user?.id, "delivery.create");
 
-  const { salesOrderId } = await params;
+  // 路由段必须与同层级 [id]/route.ts 保持一致（Next.js 动态段 slug 约束），语义上仍是 salesOrderId
+  const { id: salesOrderId } = await params;
   const parsed = deliveryCreateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
   const { lines, changeReason, ...fields } = parsed.data;
