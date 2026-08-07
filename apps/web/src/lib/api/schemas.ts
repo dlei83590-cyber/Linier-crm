@@ -333,3 +333,13 @@ export const invoiceCreateSchema = z.object({
   remark: z.string().max(1000).nullable().optional(),
   changeReason: z.string().max(500).optional(),
 });
+
+/** issue：DRAFT → ISSUED（DocumentSequence 原子取号；编号延后生成；并发 issue 第二个请求 409 不消耗编号） */
+export const invoiceIssueSchema = z.object({
+  changeReason: z.string().max(500).optional(),
+});
+
+/** cancel：仅 DRAFT → CANCELLED（释放 DeliveryLine 已占用的开票数量投影） */
+export const invoiceCancelSchema = z.object({
+  changeReason: z.string().max(500).optional(),
+});
