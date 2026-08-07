@@ -83,6 +83,13 @@ const SEED_ACTION_MODULES = [
   "project-closure",
   "project-tag",
   "project-attachment",
+  // Sprint 4A：Quotation Foundation 模块
+  "quotation",
+  "quotation-line",
+  "quotation-revision",
+  "quotation-snapshot",
+  "approval-policy",
+  "approval-policy-rule",
   // Sprint 3A：平台底座模块
   "workflow-definition",
   "workflow-step",
