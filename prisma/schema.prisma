@@ -313,6 +313,7 @@ model UnitOfMeasure {
   quotationLines  QuotationLine[]
   salesOrderLines SalesOrderLine[]
   deliveryLines   DeliveryLine[]
+  invoiceLines    InvoiceLine[]
   createdAt     DateTime @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 
@@ -390,6 +391,7 @@ model Item {
   quotationLines QuotationLine[]
   salesOrderLines SalesOrderLine[]
   deliveryLines   DeliveryLine[]
+  invoiceLines    InvoiceLine[]
   createdAt     DateTime        @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime        @updatedAt @db.Timestamptz(3)
 
@@ -868,6 +870,7 @@ model QuotationPriceSnapshot {
   projectProducts      ProjectProduct[]
   quotationLines       QuotationLine[]
   salesOrderLines       SalesOrderLine[]
+  invoiceLines          InvoiceLine[]
 
   @@index([quotationId])
   @@index([itemId])
@@ -1586,6 +1589,7 @@ model WorkflowInstance {
   reminders    ApprovalReminder[]
   quotations   Quotation[]
   salesOrders  SalesOrder[]
+  invoices     Invoice[]
   isActive     Boolean         @default(true)
   createdById  String?
   updatedById  String?
@@ -2432,6 +2436,7 @@ model Customer {
   quotations   Quotation[]
   salesOrders  SalesOrder[]
   deliveries   Delivery[]
+  invoices     Invoice[]
   isActive     Boolean         @default(true)
   createdById  String?
   updatedById  String?
@@ -3572,6 +3577,36 @@ enum DeliveryPodStatus {
   WAIVED             // 豁免（业务不需要 POD 时可置此状态后允许 confirm-delivery）
 }
 
+/// 发票状态（发票自身生命周期；Payment 由 4E 模块承载）
+enum InvoiceStatus {
+  DRAFT            // 草稿（创建后初始态，可编辑头）
+  ISSUED           // 已开票（对外正式开票；后续不可直接取消，走 Credit Note）
+  PARTIALLY_PAID   // 部分收款（4E 回写投影）
+  PAID             // 已收清（4E 回写投影）
+  CANCELLED        // 已取消（仅 DRAFT 可取消；不提供 VOID——VOID 语义后续交 Credit Note）
+}
+
+/// 发票快照类型（仅固化节点；PARTIALLY_PAID/PAID 待 4E 补充）
+enum InvoiceSnapshotType {
+  CREATED          // 创建时固化（初始发票快照）
+  ISSUED           // issue 时固化（对外开票证据）
+  CANCELLED        // cancel 时固化
+}
+
+/// 发票修订状态（与 Delivery/SalesOrder/Quotation 同构）
+enum InvoiceRevisionStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  SUPERSEDED
+}
+
+/// 发票行状态（预留；4D 仅枚举）
+enum InvoiceLineStatus {
+  ACTIVE
+  CANCELLED
+}
+
 /// 交付单头（交付事实源；CTO Review ①拍板：Direct Delivery 禁止，salesOrderId NOT NULL）
 model Delivery {
   id           String   @id @default(cuid())
@@ -3604,6 +3639,7 @@ model Delivery {
   lines        DeliveryLine[]
   revisions    DeliveryRevision[]
   snapshots    DeliverySnapshot[]
+  invoices     Invoice[]
 
   @@index([salesOrderId])
   @@index([customerId])
@@ -3625,9 +3661,13 @@ model DeliveryLine {
   quantity     Decimal  @db.Decimal(18, 4) // 本次实际交付量（正数；防超交由事务层校验）
   uomId        String?  // 交付单位（继承 SalesOrderLine.uomId）
   uom          UnitOfMeasure? @relation(fields: [uomId], references: [id], onDelete: SetNull)
+  invoiceLines InvoiceLine[]  // 开票行（InvoiceLine.sourceDeliveryLine 反向；发票行溯源）
   // 只读投影（由 SalesOrderLine 回写值快照展示，非事实源；禁止手工填写）
   orderedQty   Decimal  @db.Decimal(18, 4) // 订单行订购量快照（校验用）
   deliveredQty Decimal  @db.Decimal(18, 4) // 已实际交付量快照（仅 DELIVERED/COMPLETED 累计；校验用）
+  // 开票投影（CTO Review 拍板①：Partial Billing；Invoice 创建时重算 remainingInvoiceQty 禁止超开票）
+  invoicedQty  Decimal  @default(0) @db.Decimal(18, 4) // 已开票数量（仅 ISSUED+ Invoice 累计；防超开票基准）
+  remainingInvoiceQty Decimal @db.Decimal(18, 4) // 剩余可开票数量（= quantity - invoicedQty；0017 迁移初始化为 quantity）
   // 统一审计字段
   isActive    Boolean  @default(true)
   createdById String?
@@ -3694,5 +3734,152 @@ model DeliverySnapshot {
 
   @@unique([deliveryId, snapshotType])
   @@index([deliveryId])
+  @@index([deletedAt])
+}
+
+/// 发票头（财务事实源；CTO 启动令锁定 + CTO Review 96/100 必改①：编号延后生成）
+model Invoice {
+  id           String   @id @default(cuid())
+  code         String?  @unique // 单据编号（CTO Review 必改①：**DRAFT 不占号，code=NULL**；仅 ISSUE 时从 DocumentSequence 取号 INV-2026-000123，避免大量 Draft 浪费编号）
+  deliveryId   String   // 来源交付单（必填 NOT NULL；唯一入口 POST /api/deliveries/{id}/invoice；Direct Invoice 禁止）
+  delivery     Delivery @relation(fields: [deliveryId], references: [id], onDelete: Restrict)
+  salesOrderId String   // 冗余投影（经 Delivery 溯源 SalesOrder；便于 AR/对账）
+  customerId   String   // 开票客户（继承 Delivery.customerId）
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  status       InvoiceStatus @default(DRAFT)
+  invoiceDate  DateTime @default(now()) @db.Timestamptz(3) // 开票日期
+  dueDate      DateTime? @db.Timestamptz(3) // 到期日（4E AR 使用）
+  currency     String   @default("CNY")
+  taxProfileId String?  // 税率档案（继承 SalesOrder；Consolidated Invoice 合并校验需一致）
+  paymentTerm  String?  // 付款条款（4E AR 使用；Consolidated Invoice 合并校验需一致）
+  // 金额（财务事实，直接复制自 DeliveryLine 快照；禁止重新计算）
+  subtotal     Decimal  @default(0) @db.Decimal(18, 4) // 未税合计
+  taxAmount    Decimal  @default(0) @db.Decimal(18, 4) // 税额
+  invoiceTotal Decimal  @default(0) @db.Decimal(18, 4) // 含税合计
+  // 收款投影（仅 4E 回写；本阶段固定 0）
+  paidAmount   Decimal  @default(0) @db.Decimal(18, 4) // 已收款（Sprint 4E 更新）
+  balanceAmount Decimal @default(0) @db.Decimal(18, 4) // 应收余额 = invoiceTotal - paidAmount
+  remark       String?
+  // 审批投影（Workflow 为唯一事实源；不建 InvoiceApproval 表）
+  workflowInstanceId String?
+  workflowInstance WorkflowInstance? @relation(fields: [workflowInstanceId], references: [id], onDelete: SetNull)
+  approvalStatus ApprovalStatus @default(DRAFT)
+  approvedAt    DateTime? @db.Timestamptz(3)
+  approvedById  String?
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  lines     InvoiceLine[]
+  revisions InvoiceRevision[]
+  snapshots InvoiceSnapshot[]
+
+  @@index([deliveryId])
+  @@index([salesOrderId])
+  @@index([customerId])
+  @@index([status])
+  @@index([workflowInstanceId])
+  @@index([deletedAt])
+}
+
+/// 发票行（金额快照直接复制；sourceDeliveryLineId 必填溯源）
+model InvoiceLine {
+  id           String   @id @default(cuid())
+  invoiceId    String
+  invoice      Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  sourceDeliveryLineId String? // 溯源 → DeliveryLine（DeliveryLine 软删后 SetNull；必填语义，软删防御）
+  sourceDeliveryLine DeliveryLine? @relation(fields: [sourceDeliveryLineId], references: [id], onDelete: SetNull)
+  lineNo       Int      @default(10) // 行号（10/20/30/40 步进）
+  itemId       String?  // 物料（继承 DeliveryLine.itemId，可空）
+  item         Item?    @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  description  String   // 描述（快照，复制自 DeliveryLine.description）
+  quantity     Decimal  @db.Decimal(18, 4) // 开票数量（<= DeliveryLine.quantity 已交付量，防超开票）
+  uomId        String?  // 单位（继承 DeliveryLine.uomId）
+  uom          UnitOfMeasure? @relation(fields: [uomId], references: [id], onDelete: SetNull)
+  // 金额快照（CTO 红线：**直接复制** DeliveryLine 溯源 SalesOrderLine 的价格快照，禁止重新计算/调用 Pricing Engine）
+  priceSnapshotId String? // 直接复制 SalesOrderLine.priceSnapshotId（溯源链取价）
+  priceSnapshot QuotationPriceSnapshot? @relation(fields: [priceSnapshotId], references: [id], onDelete: SetNull)
+  unitPrice    Decimal  @db.Decimal(18, 4) // 单价快照（复制）
+  discountRate Decimal  @default(0) @db.Decimal(18, 4) // 折扣率快照（复制）
+  lineAmount   Decimal  @db.Decimal(18, 4) // 行未税金额（复制计算值，不重算）
+  taxAmount    Decimal  @db.Decimal(18, 4) // 行税额（复制）
+  totalAmount  Decimal  @db.Decimal(18, 4) // 行含税金额（复制）
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([invoiceId, lineNo])
+  @@index([invoiceId])
+  @@index([sourceDeliveryLineId])
+  @@index([itemId])
+  @@index([deletedAt])
+}
+
+/// 发票修订（系统生成，不开放自由编辑；发票内容变更自动递增 revisionNo）
+model InvoiceRevision {
+  id           String   @id @default(cuid())
+  invoiceId    String
+  invoice      Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  revisionNo   Int
+  revisionStatus InvoiceRevisionStatus @default(DRAFT)
+  changeReason String
+  snapshotData Json?
+  createdById  String?
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([invoiceId, revisionNo])
+  @@index([invoiceId])
+  @@index([deletedAt])
+}
+
+/// 发票快照（仅固化节点生成，只读）
+model InvoiceSnapshot {
+  id           String   @id @default(cuid())
+  invoiceId    String
+  invoice      Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  snapshotType InvoiceSnapshotType
+  revisionNo   Int
+  snapshotData Json?    // 完整快照（Header + Lines + sourceDeliveryLineId 集合；金额 Decimal 字符串，禁止 toNumber）
+  // CTO Review 必改②：税务/汇率快照（几年后汇率/税率/SST 注册状态都会变化，Snapshot 必须能 100% 还原）
+  taxProfileId String?   // 税率档案快照（继承 SalesOrder.taxProfileId）
+  taxRate      Decimal?  @db.Decimal(18, 4) // 税率快照
+  sstNo        String?   // SST 注册号快照（销售与服务税登记号）
+  currencyRate Decimal?  @db.Decimal(18, 8) // 汇率快照
+  exchangeRate Decimal?  @db.Decimal(18, 8) // 汇率快照（与 currencyRate 同值冗余，兼容不同字段命名）
+  generatedById String?
+  generatedAt  DateTime @default(now()) @db.Timestamptz(3)
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([invoiceId, snapshotType])
+  @@index([invoiceId])
   @@index([deletedAt])
 }
