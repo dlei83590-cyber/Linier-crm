@@ -6,6 +6,7 @@ import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { workflowActionSchema } from "@/lib/api/schemas";
 import { isValidAction, isStepComplete, resolveStepApprovers } from "@/lib/workflow/engine";
+import { syncQuotationApproval } from "@/lib/quotation/workflow-sync";
 
 export const dynamic = "force-dynamic";
 
@@ -301,6 +302,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     ipAddress: clientIp(request),
     meta: { actionType, afterStatus: result.afterStatus },
   });
+
+  // Sprint 4A：Quotation 审批终态回写（Workflow 为唯一事实源，Quotation 仅保存投影 + 发布事件）
+  if (
+    instance.businessType === "quotation" &&
+    (result.afterStatus === "COMPLETED" || result.afterStatus === "REJECTED")
+  ) {
+    await syncQuotationApproval({
+      quotationId: instance.businessId,
+      workflowStatus: result.afterStatus,
+      actorId: user!.id,
+    }).catch(() => undefined);
+  }
 
   return ok({ instanceId: id, ...result });
 }

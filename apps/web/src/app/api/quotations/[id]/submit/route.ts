@@ -66,7 +66,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   // ② 创建 WorkflowInstance（复用 Sprint 3A Workflow Engine：ACTIVE 定义 + 首步审批人解析）
-  let instance;
+  let instance: { id: string } | null = null;
   try {
     instance = await prisma.$transaction(async (tx) => {
     const definition = await tx.workflowDefinition.findFirst({
@@ -187,6 +187,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return failConflict(ERROR_CODES.WORKFLOW_INSTANCE_EXISTS, "该报价单已存在审批实例");
     }
     console.error("[quotation.submit] workflow failed:", e);
+    return failServer("创建审批实例失败");
+  }
+
+  if (!instance) {
     return failServer("创建审批实例失败");
   }
 
