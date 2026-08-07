@@ -1,6 +1,6 @@
 # EVENTS 领域事件注册表（Domain Events）
 
-- 版本：v1.8
+- 版本：v1.9
 - 日期：2026-08-08
 - 维护者：CIO（JINZA）｜审核：CTO
 - 关联：[API_GUIDELINES.md](./API_GUIDELINES.md) ｜ [ARCHITECTURE_BASELINE.md](./ARCHITECTURE_BASELINE.md)
@@ -131,6 +131,23 @@
 
 > 注：后两个（PartiallyPaid/Paid）虽 Sprint 4E 才实现，也**先注册**（CTO 启动令：先注册后开发）；Credit Note / Debit Note 事件待 4F/后续评估。
 
+#### 2.3.5 应收领域（Sprint 4E-1 注册，先注册后开发）
+
+> 统一载荷：所有 AR 事件 payload 至少包含 `eventId / eventType / occurredAt / actorId / accountsReceivableId / invoiceId / customerId / currency / balanceAmount`（eventId/eventType/occurredAt 由 Event Envelope 提供）。
+> 来源：Sprint4E1_AR_Design.md / ADR-0020；**Invoice = 单据事实源，AccountsReceivable = 余额事实源**（Invoice 上 paidAmount/balanceAmount 仅投影回写）；余额唯一口径 `balanceAmount = originalAmount + adjustedAmount - paidAmount - writeOffAmount`；前端禁止 PATCH 金额，变动由 4E-2 Receipt / 4E-3 CN/DN 动作或下游事实表驱动；OVERDUE 惰性判定（与 EXPIRED 同思路，不新增 Scheduler）。
+
+| eventType | 触发时机 | 载荷示例 | 实现状态 |
+| --- | --- | --- | --- |
+| `AccountsReceivableCreated` | Invoice ISSUED 后自动创建 AR | `{ accountsReceivableId, invoiceId, invoiceCode, customerId, currency, originalAmount, balanceAmount }` | ⏳ 注册待实现（Sprint 4E-1） |
+| `AccountsReceivableUpdated` | 头/状态变更（非金额动作类） | `{ accountsReceivableId, invoiceId, customerId, status, balanceAmount, updatedBy }` | ⏳ 注册待实现（Sprint 4E-1） |
+| `AccountsReceivablePartiallyPaid` | 4E-2 部分收款回写（OPEN → PARTIALLY_PAID） | `{ accountsReceivableId, invoiceId, paidAmount, balanceAmount, receiptId, updatedAt }` | ⏳ 注册待实现（Sprint 4E-2） |
+| `AccountsReceivablePaid` | 4E-2 收清（→ PAID） | `{ accountsReceivableId, invoiceId, paidAmount, balanceAmount, receiptId, paidAt }` | ⏳ 注册待实现（Sprint 4E-2） |
+| `AccountsReceivableOverdue` | 惰性判定 OVERDUE（OPEN/PARTIALLY_PAID + dueDate < now） | `{ accountsReceivableId, invoiceId, customerId, dueDate, balanceAmount, effectiveStatus }` | ⏳ 注册待实现（Sprint 4E-1 投影查询） |
+| `AccountsReceivableAdjusted` | 4E-3 CN/DN 聚合调整（adjustedAmount 变更） | `{ accountsReceivableId, invoiceId, adjustedAmount, balanceAmount, sourceNoteId, updatedAt }` | ⏳ 注册待实现（Sprint 4E-3） |
+| `AccountsReceivableWrittenOff` | 4E-2 write-off（writeOffAmount 回写） | `{ accountsReceivableId, invoiceId, writeOffAmount, balanceAmount, reason, updatedAt }` | ⏳ 注册待实现（Sprint 4E-2） |
+
+> 注：Created/Updated/Overdue 属 4E-1（查询/投影）；PartiallyPaid/Paid/WrittenOff 属 4E-2（Receipt）；Adjusted 属 4E-3（CN/DN）——全部先注册（CTO 启动令：先注册后开发），事件总线落地前以 AuditLog 留痕。
+
 ### 2.4 主数据
 
 | eventType | 触发时机 | 载荷示例 |
@@ -164,6 +181,7 @@
 
 | 日期 | 版本 | 说明 |
 | --- | --- | --- |
+| 2026-08-08 | v1.9 | Sprint 4E-1 注册 AR 事件 7 个（Created/Updated/PartiallyPaid/Paid/Overdue/Adjusted/WrittenOff，统一载荷含 accountsReceivableId；Invoice=单据事实源，AR=余额事实源；余额唯一口径 original+adjusted-paid-writeOff；Overdue 惰性判定；见 2.3.5）；InvoicePartiallyPaid/InvoicePaid 仍为 4E 待实现 |
 | 2026-08-07 | v1.7 | Sprint 4D 注册 Invoice 事件 5 个（Created/Issued/Cancelled + PartiallyPaid/Paid，统一载荷，CTO 启动令：先注册后开发；见 2.3.4）；Invoice 为财务事实源（Delivery 物流事实源 → Invoice 财务事实源），唯一来源 Delivery，不重新定价（直接复制价格快照）；Payment 属 Sprint 4E，PartiallyPaid/Paid 先注册后实现 |
 | 2026-08-07 | v1.6 | Sprint 4C 实现状态标注：Delivery 8 事件（Created/Updated/Ready/Dispatched/Confirmed/Cancelled + SalesOrderPartiallyDelivered/SalesOrderDelivered）全部 ✅ 已发布（Phase 3 CRUD/Lines + Phase 4 lifecycle/aggregation）；2.3.2 SalesOrderDelivered 同步标注 |
 | 2026-08-07 | v1.5 | Sprint 4C 注册 Delivery 事件 8 个（Created/Updated/Ready/Dispatched/Confirmed/Cancelled + SalesOrderPartiallyDelivered/SalesOrderDelivered，统一载荷，CTO 决策：先注册后开发；见 2.3.3）；Delivery 为交付事实源，SalesOrder 聚合投影事件联动发布 |
