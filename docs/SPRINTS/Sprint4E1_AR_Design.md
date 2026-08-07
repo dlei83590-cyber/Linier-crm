@@ -1,9 +1,10 @@
 # Sprint 4E-1：Accounts Receivable Design（应收领域 Schema 设计）
 
-> 定位（CTO 启动令 2026-08-08）：**Invoice = 单据事实源；AccountsReceivable = 余额事实源；Invoice 上的 paidAmount/balanceAmount 只做投影回写**。
+> 定位（CTO 启动令 2026-08-08 + **CTO Review 97/100 APPROVED WITH CHANGES**）：**Invoice = 单据事实源；AccountsReceivable = 余额事实源；Invoice 上的 paidAmount/balanceAmount 只做投影回写**。
 > **AR 是销售财务链第五环**（Quotation → SalesOrder → Delivery → Invoice → **AR** → Receipt → Credit Note）。
 > 本阶段仅设计（3 文件），不写代码：`Sprint4E1_AR_Design.md` + `ADR-0020` + `EVENTS.md v1.9`。
 > 边界锁死：**先不要创建 Migration 0018，也不要写 Payment/Receipt API**（4E-2/4E-3 后续阶段）。
+> **CTO Review 结论（2026-08-08，97/100 APPROVED WITH CHANGES）**：4 项 Pending **全部拍板**（① ISSUED 自动创建 AR ② OVERDUE 惰性投影 ③ WriteOff 独立实体 ④ CN/DN 先生成调整事实）；**4 项必改**（① agingBucket 不存库改 effectiveAgingBucket 动态计算 ② Snapshot 增加 snapshotSource 枚举 ③ Invoice 删除保护 ④ Workflow 边界锁定）+ 追加 `AccountsReceivableClosed` 事件（共 8 个）。完成 4 项必改后**无需第二轮设计评审**，直接进入 Schema → Migration 0018 实现阶段。
 
 ---
 
@@ -13,11 +14,11 @@
 | --- | --- | --- |
 | ✅ 新增 | AccountsReceivable | 应收余额事实源（1:1 Invoice；持有余额计算全部输入，Invoice 只保留投影） |
 | ✅ 新增 | AccountsReceivableRevision | 修改历史（唯一版本载体，余额相关变更时系统生成） |
-| ✅ 新增 | AccountsReceivableSnapshot | 关键状态证据（仅固化节点：CREATED / PARTIALLY_PAID / PAID / ADJUSTED / WRITTEN_OFF / CLOSED） |
+| ✅ 新增 | AccountsReceivableSnapshot | 关键状态证据（仅固化节点：CREATED / PARTIALLY_PAID / PAID / ADJUSTED / WRITTEN_OFF / CLOSED；**必改②：含 snapshotSource 来源枚举 ISSUE/PAYMENT/WRITE_OFF/ADJUSTMENT/MANUAL，Receipt/CN/DN/WriteOff 全部可复用**） |
 | ❌ 禁止 | Receipt / Payment | 属 4E-2（Receipt/Payment），本阶段只设计 AR 事实源 |
 | ❌ 禁止 | CreditNote / DebitNote | 属 4E-3（CN/DN），本阶段只设计 AR 事实源 |
-| ❌ 禁止 | WriteOff 独立表 | CTO 默认建议：write-off 后续走显式动作/实体（Pending Decision ③ 待拍板） |
-| ❌ 禁止 | Adjustment 独立表 | CTO 默认建议：CN/DN 先形成调整事实再聚合到 AR（Pending Decision ④ 待拍板） |
+| ❌ 禁止 | WriteOff 独立表 | CTO 拍板③：write-off 后续走独立 WriteOff 实体（4E-2 实现），不 PATCH AR |
+| ❌ 禁止 | Adjustment 独立表 | CTO 拍板④：CN/DN 先形成调整事实再聚合到 AR（4E-3 实现），不直接 UPDATE balance |
 
 **核心关系（CTO 锁定）：**
 ```
@@ -43,23 +44,32 @@ balanceAmount = originalAmount + adjustedAmount - paidAmount - writeOffAmount
 ## 2. Prisma Schema 草案（+2 枚举 / +3 模型；Migration 0018 规划，本阶段不创建）
 
 ```prisma
-/// 应收状态（余额生命周期；OVERDUE 惰性判定，非数据库真实状态——Pending Decision ② 待拍板）
+/// 应收状态（余额生命周期；OVERDUE 惰性判定，非数据库真实状态——CTO 拍板②：Projection）
 enum AccountsReceivableStatus {
   OPEN            // 未收款（余额 > 0 且未逾期）
   PARTIALLY_PAID  // 部分收款（0 < paidAmount < balance 且未逾期）
   PAID            // 已收清（balanceAmount = 0）
   OVERDUE         // 已逾期（惰性投影：OPEN/PARTIALLY_PAID + dueDate < now）
-  CLOSED          // 已关闭（全额核销 / 全部 write-off / 手动关闭）
+  CLOSED          // 已关闭（余额=0 且生命周期结束；与 OPEN/PAID 余额状态区分）
 }
 
 /// 应收快照类型（仅固化节点生成，只读）
 enum AccountsReceivableSnapshotType {
-  CREATED          // 创建时固化（ISSUED 后 AR 初始快照）
-  PARTIALLY_PAID   // 部分收款时固化（4E-2 回写）
-  PAID             // 收清时固化（4E-2 回写）
-  ADJUSTED         // 金额调整时固化（4E-3 CN/DN 聚合后）
-  WRITTEN_OFF      // 坏账核销时固化（Pending Decision ③ 后确定）
-  CLOSED           // 关闭时固化
+  CREATED          // 创建时固化（ISSUED 后 AR 初始快照，snapshotSource=ISSUE）
+  PARTIALLY_PAID   // 部分收款时固化（4E-2 回写，snapshotSource=PAYMENT）
+  PAID             // 收清时固化（4E-2 回写，snapshotSource=PAYMENT）
+  ADJUSTED         // 金额调整时固化（4E-3 CN/DN 聚合后，snapshotSource=ADJUSTMENT）
+  WRITTEN_OFF      // 坏账核销时固化（4E-2，snapshotSource=WRITE_OFF）
+  CLOSED           // 关闭时固化（snapshotSource=MANUAL/PAYMENT/WRITE_OFF）
+}
+
+/// 应收快照来源类型（必改②：CTO Review 97/100）——Receipt/CN/DN/WriteOff 全部可复用
+enum AccountsReceivableSnapshotSource {
+  ISSUE       // Invoice ISSUED 自动创建 AR 时
+  PAYMENT     // 4E-2 Receipt 核销回写时
+  WRITE_OFF   // 4E-2 WriteOff 回写时
+  ADJUSTMENT  // 4E-3 CN/DN 聚合调整时
+  MANUAL      // 手动关闭/人工调整时
 }
 
 /// 应收（余额事实源；1:1 Invoice）
@@ -182,7 +192,7 @@ erDiagram
         AccountsReceivableStatus status
         AccountsReceivableStatus effectiveStatus
         datetime dueDate
-        string agingBucket
+        # effectiveAgingBucket（必改①：不存库，读取时动态计算 0-30/31-60/61-90/90+，只依赖 today/dueDate/balance）
         datetime lastPaymentAt
         int version
         datetime deletedAt
@@ -201,6 +211,7 @@ erDiagram
         string id PK
         string accountsReceivableId FK
         AccountsReceivableSnapshotType snapshotType
+        AccountsReceivableSnapshotSource snapshotSource
         int revisionNo
         Json snapshotData
         string generatedById
@@ -225,7 +236,7 @@ erDiagram
 ## 4. 状态机（Sprint 4E-1）
 
 ```
-（Invoice ISSUED 后自动创建 AR——Pending Decision ①，默认：是）
+（Invoice ISSUED 后自动创建 AR——CTO 拍板①：批准，不延迟创建）
                     ┌──────────────┐
   Invoice ISSUED ──►│  OPEN        │
                     └──────┬───────┘
@@ -241,27 +252,28 @@ erDiagram
                     │ PAID         │
                     └──────────────┘
 
-  OPEN/PARTIALLY_PAID + dueDate < now ──惰性投影──▶ OVERDUE（Pending Decision ②）
+  OPEN/PARTIALLY_PAID + dueDate < now ──惰性投影──▶ OVERDUE（CTO 拍板②：Projection）
   CLOSED：全额核销 / 全部 write-off / 手动关闭（4E-2/4E-3 动作驱动）
 ```
 
 | 规则 | 说明 |
 | --- | --- |
-| 创建 | Invoice ISSUED 后自动创建 AR（Pending Decision ①，默认：是）；originalAmount = invoiceTotal；balanceAmount = originalAmount；status = OPEN |
+| 创建 | Invoice ISSUED 后自动创建 AR（CTO 拍板①：批准）；originalAmount = invoiceTotal；balanceAmount = originalAmount；status = OPEN |
 | OPEN → PARTIALLY_PAID | 4E-2 Receipt 部分核销回写（本阶段不实现，枚举保留） |
 | → PAID | 4E-2 收清回写（本阶段不实现，枚举保留） |
-| → OVERDUE | **惰性判定**：storedStatus ∈ {OPEN, PARTIALLY_PAID} 且 dueDate < now → effectiveStatus = OVERDUE（与 4A EXPIRED 同思路，不新增 Scheduler，Pending Decision ② 待拍板：数据库状态 or effectiveStatus 惰性投影） |
-| → CLOSED | 全额核销 / 全部 write-off / 手动关闭（4E-2/4E-3 动作驱动） |
-| 金额调整 | 4E-3 CN/DN 聚合到 adjustedAmount（不直接改余额，先形成调整事实——Pending Decision ④） |
-| Write-off | 4E-2 显式动作/实体（Pending Decision ③） |
+| → OVERDUE | **惰性判定**：storedStatus ∈ {OPEN, PARTIALLY_PAID} 且 dueDate < now → effectiveStatus = OVERDUE（CTO 拍板②：Projection，与 4A EXPIRED 同思路，不新增 Scheduler） |
+| → CLOSED | 余额=0 且生命周期结束 → 可 Closed（CTO Review 追加：CLOSED 与 OPEN/PAID 区分——OPEN/PAID 只是余额状态） |
+| 金额调整 | 4E-3 CN/DN 先形成调整事实再聚合到 adjustedAmount（CTO 拍板④，不直接 UPDATE balance） |
+| Write-off | 4E-2 独立 WriteOff 实体（CTO 拍板③，不 PATCH AR） |
 
 ---
 
 ## 5. 数据来源（CTO 锁定）
 
-- **AR 唯一来源 Invoice**：`POST /api/invoices/{id}/issue` 成功后自动创建（Pending Decision ①）；无独立创建入口
+- **AR 唯一来源 Invoice**：`POST /api/invoices/{id}/issue` 成功后自动创建（CTO 拍板①：批准，不延迟）；无独立创建入口
 - `originalAmount` = Invoice.invoiceTotal（复制，不重算）；`customerId/currency/dueDate` 继承 Invoice
 - 所有金额变动（paid/writeOff/adjust）**禁止前端直写**，必须由 4E-2 Receipt / 4E-3 CN/DN 动作或下游事实表驱动
+- **Invoice 删除保护（必改③）**：Invoice → AR exists → **禁止删除 Invoice**（物理删 onDelete: Restrict 保护）；Invoice Cancel（4D 的 DRAFT→CANCELLED）也**不删除 AR**（AR 尚未创建；若已创建则只能走 CLOSED，禁止物理删）——AR 是财务历史，必须保留
 
 ---
 
@@ -278,7 +290,7 @@ erDiagram
 
 ### 7.1 创建 AR（Invoice ISSUED 联动）
 
-- 与 issue 同一事务（Pending Decision ① 默认：是）：FOR UPDATE 锁 Invoice → 取号 → ISSUED → **创建 AR（originalAmount = invoiceTotal，balanceAmount = originalAmount，status = OPEN）** → ISSUED 快照 → AR CREATED 快照 + Revision → 双事件（InvoiceIssued + AccountsReceivableCreated）
+- 与 issue 同一事务（CTO 拍板①：批准）：FOR UPDATE 锁 Invoice → 取号 → ISSUED → **创建 AR（originalAmount = invoiceTotal，balanceAmount = originalAmount，status = OPEN）** → ISSUED 快照 → AR CREATED 快照（snapshotSource=ISSUE）+ Revision → 双事件（InvoiceIssued + AccountsReceivableCreated）
 - 若 AR 创建失败 → 整体回滚（Invoice 不落 ISSUED，避免"已开票无余额"状态）
 
 ### 7.2 并发场景（必须覆盖，4E-1 阶段仅规划）
@@ -288,10 +300,11 @@ erDiagram
 
 ---
 
-## 8. Workflow / Approval 设计（4E-1 阶段规划）
+## 8. Workflow / Approval 设计（必改④：CTO Review 97/100 边界锁定）
 
-- **Receipt 本身不审批**（建议）；金额较大的 CN/Write-off 可挂策略（4E-2/4E-3 再评估，Pending CTO）
-- AR 本身不建审批表；若后续需要审批，复用 ApprovalPolicy(module=ACCOUNTS_RECEIVABLE) → WorkflowInstance 投影（与 4A-4D 完全同构，不新建表）
+- **AR 本身不审批**（CTO 拍板）；不建审批表、不挂 ApprovalPolicy
+- **Receipt × ApprovalPolicy、WriteOff × ApprovalPolicy**——明确**属 Sprint 4E-2**，本阶段不设计、不讨论（ADR-0020 已记录，避免后续重复讨论）
+- 若未来需要审批（如大额 CN），复用 ApprovalPolicy(module=ACCOUNTS_RECEIVABLE) → WorkflowInstance 投影（与 4A-4D 完全同构，不新建表）——此条为 4E-3 评估项，非本轮范围
 
 ---
 
@@ -306,17 +319,19 @@ erDiagram
 | `AccountsReceivableOverdue` | 惰性判定 OVERDUE | ⏳ 注册待实现（4E-1 投影查询） |
 | `AccountsReceivableAdjusted` | 4E-3 CN/DN 聚合调整 | ⏳ 注册待实现（4E-3） |
 | `AccountsReceivableWrittenOff` | 4E-2 write-off | ⏳ 注册待实现（4E-2） |
+| `AccountsReceivableClosed` | 余额=0 且生命周期结束 → CLOSED（CTO Review 追加） | ⏳ 注册待实现（4E-1/4E-2） |
 
 > 全部先注册（CTO 启动令：先注册后开发）；事件总线落地前以 AuditLog 留痕（与 4A-4D 一致）。
+> **CTO Review 追加**：新增 `AccountsReceivableClosed`（余额=0 且生命周期结束可 Closed；否则 OPEN/PAID 只是余额状态）。
 
 ---
 
 ## 10. Migration 0018 规划（本阶段不创建）
 
-- **+2 枚举**：AccountsReceivableStatus / AccountsReceivableSnapshotType
+- **+3 枚举**：AccountsReceivableStatus / AccountsReceivableSnapshotType / **AccountsReceivableSnapshotSource（必改②）**
 - **+3 表**：AccountsReceivable / AccountsReceivableRevision / AccountsReceivableSnapshot
-- 纯增量：CREATE TYPE/TABLE + INDEX + FK + 唯一约束；**零 DROP/RENAME/TRUNCATE/改旧字段**
-- 不新增 Invoice 列（4D 已有 paidAmount/balanceAmount 投影；AR 独立持余额）
+- 纯增量：**只新增 TYPE/TABLE/FK/INDEX**；**禁止修改 Invoice**（CTO 拍板：Migration 0018 不动 Invoice 表——4D 已有 paidAmount/balanceAmount 投影，AR 独立持余额）
+- 零 DROP/RENAME/TRUNCATE/改旧字段
 
 ---
 
@@ -342,20 +357,29 @@ erDiagram
 
 ---
 
-## 13. CTO Pending Decisions（4 项待拍板）
+## 13. CTO Pending Decisions（已全部拍板 + 4 项必改，CTO Review 97/100 APPROVED WITH CHANGES）
 
-| # | 问题 | **默认建议（CTO 启动令）** | 影响面 |
+| # | 问题 | **拍板结论（2026-08-08）** | 影响面 |
 | --- | --- | --- | --- |
-| ① | **AR 是否在 Invoice ISSUED 时自动创建？** | **是**——issue 同事务自动创建 AR（originalAmount = invoiceTotal，status=OPEN）；无独立创建入口 | issue 路由事务扩展 + AR CREATED 快照/Revision + 双事件；创建失败整体回滚 |
-| ② | **OVERDUE 是数据库状态还是 effectiveStatus 惰性投影？** | **惰性投影**——storedStatus ∈ {OPEN, PARTIALLY_PAID} + dueDate < now → effectiveStatus = OVERDUE（与 4A EXPIRED 同思路，不新增 Scheduler） | Schema 是否保留 status/effectiveStatus 双字段；API 返回 status/effectiveStatus/isOverdue |
-| ③ | **write-off 是否允许直接作用 AR，还是必须通过独立 WriteOff 实体？** | **不直接 PATCH AR**——后续走显式动作/实体（4E-2 定义 WriteOff 动作或实体） | 4E-1 Schema 只留 writeOffAmount 字段；动作在 4E-2 实现 |
-| ④ | **Credit Note / Debit Note 是直接调整 AR，还是先生成 Adjustment 事实再影响 AR？** | **不直接改余额**——CN/DN 先形成调整事实（4E-3 实体），再聚合到 AR.adjustedAmount | 4E-1 只留 adjustedAmount 字段；CN/DN 实体在 4E-3 实现 |
+| ① | **AR 是否在 Invoice ISSUED 时自动创建？** | **批准——自动创建，不延迟**（issue 同事务创建 AR，originalAmount = invoiceTotal，status=OPEN） | issue 路由事务扩展 + AR CREATED 快照（snapshotSource=ISSUE）+ 双事件；创建失败整体回滚 |
+| ② | **OVERDUE 是数据库状态还是 effectiveStatus 惰性投影？** | **批准——Projection**（不落库、不新增 Scheduler；与 Quotation EXPIRED 一致） | Schema 保留 status/effectiveStatus 双字段；API 返回 status/effectiveStatus/isOverdue |
+| ③ | **write-off 直接作用 AR 还是独立 WriteOff 实体？** | **批准——独立 WriteOff 实体（4E-2）**，不 PATCH AR | 本阶段 Schema 只留 writeOffAmount 字段；WriteOff 实体 4E-2 实现 |
+| ④ | **CN/DN 直接调整 AR 还是先生成调整事实？** | **批准——先生成 Adjustment 事实（4E-3）再更新 AR**，不直接 UPDATE balance | 本阶段 Schema 只留 adjustedAmount 字段；Adjustment 实体 4E-3 实现 |
+
+### CTO 必改项（4 项，已全部纳入本设计）
+
+| # | 必改 | 落实位置 |
+| --- | --- | --- |
+| ① | **agingBucket 不存库**——改 effectiveAgingBucket 读取时动态计算（0-30/31-60/61-90/90+，只依赖 today/dueDate/balance，属 Projection，不每天更新数据库） | Schema 草案（删除 agingBucket 列）+ ERD + API 查询 |
+| ② | **Snapshot 增加 snapshotSource**——枚举 ISSUE/PAYMENT/WRITE_OFF/ADJUSTMENT/MANUAL，Receipt/CN/DN/WriteOff 全部可复用 | Schema 草案（+AccountsReceivableSnapshotSource）+ ERD + §9 |
+| ③ | **Invoice 删除保护**——Invoice → AR exists → 禁止删除 Invoice（物理删 Restrict 保护；Invoice Cancel 也不删 AR，只能 CLOSED） | §5 数据来源 + ADR-0020 |
+| ④ | **Workflow 边界**——AR 不审批；Receipt × ApprovalPolicy、WriteOff × ApprovalPolicy 明确属 4E-2，避免后续重复讨论 | §8 + ADR-0020 |
 
 ---
 
 ## 14. 开发顺序（固定，不可跳步）
 
-**Design（本文档）→ CTO Review（4 项 Pending 拍板）→ Schema → Migration 0018 → Seed → RBAC → API（查询/只读）→ Workflow（如需）→ OpenAPI → QA → Test Cases → ADR/ERD/EVENTS 同步 → CI → CTO Final Review → Merge**
+**Design（本文档）→ CTO Review（97/100，4 项 Pending 拍板 + 4 项必改已落实）→ Schema → Migration 0018 → Seed → RBAC → API（查询/只读）→ Workflow（AR 不审批；如需仅 4E-2/4E-3 评估）→ OpenAPI → QA → Test Cases → ADR/ERD/EVENTS 同步 → CI → CTO Final Review → Merge**
 
 > 4E-2（Receipt/Payment）与 4E-3（CN/DN）在 4E-1 合并后启动。
 
@@ -365,4 +389,5 @@ erDiagram
 
 | 日期 | 版本 | 说明 |
 | --- | --- | --- |
+| 2026-08-08 | v1.1 | CTO Review 97/100 APPROVED WITH CHANGES 落实：4 项 Pending 全部拍板（自动创建/OVERDUE Projection/独立 WriteOff 实体/先 Adjustment 事实）；4 项必改（① agingBucket 不存库改 effectiveAgingBucket 动态计算 ② Snapshot +snapshotSource 枚举（ISSUE/PAYMENT/WRITE_OFF/ADJUSTMENT/MANUAL）③ Invoice 删除保护 ④ Workflow 边界锁定）；追加 AccountsReceivableClosed 事件（共 8 个）；Migration 0018 改 +3 枚举、禁止修改 Invoice |
 | 2026-08-08 | v1.0 | Sprint 4E-1 Accounts Receivable 设计初稿（CTO 启动令锁定：AR = 余额事实源 + Invoice 1:1 + 三模型 + 余额唯一计算口径 + 7 事件先注册 + 4 项 Pending Decisions + 禁 Migration 0018 / 禁 Payment-API） |

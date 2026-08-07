@@ -145,8 +145,10 @@
 | `AccountsReceivableOverdue` | 惰性判定 OVERDUE（OPEN/PARTIALLY_PAID + dueDate < now） | `{ accountsReceivableId, invoiceId, customerId, dueDate, balanceAmount, effectiveStatus }` | ⏳ 注册待实现（Sprint 4E-1 投影查询） |
 | `AccountsReceivableAdjusted` | 4E-3 CN/DN 聚合调整（adjustedAmount 变更） | `{ accountsReceivableId, invoiceId, adjustedAmount, balanceAmount, sourceNoteId, updatedAt }` | ⏳ 注册待实现（Sprint 4E-3） |
 | `AccountsReceivableWrittenOff` | 4E-2 write-off（writeOffAmount 回写） | `{ accountsReceivableId, invoiceId, writeOffAmount, balanceAmount, reason, updatedAt }` | ⏳ 注册待实现（Sprint 4E-2） |
+| `AccountsReceivableClosed` | 余额=0 且生命周期结束 → CLOSED（CTO Review 追加） | `{ accountsReceivableId, invoiceId, customerId, balanceAmount, closedAt, closedBy, reason }` | ⏳ 注册待实现（Sprint 4E-1/4E-2） |
 
 > 注：Created/Updated/Overdue 属 4E-1（查询/投影）；PartiallyPaid/Paid/WrittenOff 属 4E-2（Receipt）；Adjusted 属 4E-3（CN/DN）——全部先注册（CTO 启动令：先注册后开发），事件总线落地前以 AuditLog 留痕。
+> **CTO Review 追加（97/100 APPROVED WITH CHANGES）**：新增 `AccountsReceivableClosed`（余额=0 且生命周期结束可 Closed；否则 OPEN/PAID 只是余额状态）；AR 事件共 8 个。
 
 ### 2.4 主数据
 
@@ -181,7 +183,7 @@
 
 | 日期 | 版本 | 说明 |
 | --- | --- | --- |
-| 2026-08-08 | v1.9 | Sprint 4E-1 注册 AR 事件 7 个（Created/Updated/PartiallyPaid/Paid/Overdue/Adjusted/WrittenOff，统一载荷含 accountsReceivableId；Invoice=单据事实源，AR=余额事实源；余额唯一口径 original+adjusted-paid-writeOff；Overdue 惰性判定；见 2.3.5）；InvoicePartiallyPaid/InvoicePaid 仍为 4E 待实现 |
+| 2026-08-08 | v1.9 | Sprint 4E-1 注册 AR 事件 8 个（Created/Updated/PartiallyPaid/Paid/Overdue/Adjusted/WrittenOff/**Closed**，统一载荷含 accountsReceivableId；Invoice=单据事实源，AR=余额事实源；余额唯一口径 original+adjusted-paid-writeOff；Overdue 惰性判定；Closed 为 CTO Review 97/100 追加；见 2.3.5）；InvoicePartiallyPaid/InvoicePaid 仍为 4E 待实现 |
 | 2026-08-07 | v1.7 | Sprint 4D 注册 Invoice 事件 5 个（Created/Issued/Cancelled + PartiallyPaid/Paid，统一载荷，CTO 启动令：先注册后开发；见 2.3.4）；Invoice 为财务事实源（Delivery 物流事实源 → Invoice 财务事实源），唯一来源 Delivery，不重新定价（直接复制价格快照）；Payment 属 Sprint 4E，PartiallyPaid/Paid 先注册后实现 |
 | 2026-08-07 | v1.6 | Sprint 4C 实现状态标注：Delivery 8 事件（Created/Updated/Ready/Dispatched/Confirmed/Cancelled + SalesOrderPartiallyDelivered/SalesOrderDelivered）全部 ✅ 已发布（Phase 3 CRUD/Lines + Phase 4 lifecycle/aggregation）；2.3.2 SalesOrderDelivered 同步标注 |
 | 2026-08-07 | v1.5 | Sprint 4C 注册 Delivery 事件 8 个（Created/Updated/Ready/Dispatched/Confirmed/Cancelled + SalesOrderPartiallyDelivered/SalesOrderDelivered，统一载荷，CTO 决策：先注册后开发；见 2.3.3）；Delivery 为交付事实源，SalesOrder 聚合投影事件联动发布 |
