@@ -7,6 +7,7 @@ import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { salesOrderLineUpdateSchema } from "@/lib/api/schemas";
 import { recalcSalesOrderTotals, createSalesOrderRevision } from "@/lib/sales-order/helpers";
+import { maybeTriggerSalesOrderApproval } from "@/lib/sales-order/workflow-sync";
 import { quotationPricingService, type QuotationPricingLineResult } from "@/lib/pricing/QuotationPricingService";
 import { publishSalesOrderEvent } from "@/lib/sales-order/events";
 
@@ -120,6 +121,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     },
     meta,
   });
+  // Sprint 4B Workflow 条件触发（CTO 锁定项③）：商业条件变更（repricing = quantity/uomId 变化）→ 触发新审批（有策略时）
+  await maybeTriggerSalesOrderApproval({
+    salesOrderId: id,
+    keyCommercialChanged: repricing,
+    actorId: user!.id,
+    meta,
+  });
+
   await writeAuditLog({
     actorId: user?.id,
     action: "sales-order-line.update",

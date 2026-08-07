@@ -6,6 +6,7 @@ import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { salesOrderUpdateSchema } from "@/lib/api/schemas";
 import { createSalesOrderRevision } from "@/lib/sales-order/helpers";
+import { maybeTriggerSalesOrderApproval } from "@/lib/sales-order/workflow-sync";
 import { publishSalesOrderEvent } from "@/lib/sales-order/events";
 
 export const dynamic = "force-dynamic";
@@ -83,6 +84,20 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     // 商业条件变更 → 系统生成 Revision（不允许自由编辑 Revision）
     await createSalesOrderRevision(tx, id, changeReason ?? "更新销售订单头", { salesOrder: saved }, user?.id);
     return saved;
+  });
+
+  // Sprint 4B Workflow 条件触发（CTO 锁定项③）：修改付款条件/交货条件等关键商业字段 → 触发新审批（有策略时）
+  const keyCommercialChanged =
+    (fields.paymentTerm !== undefined && fields.paymentTerm !== salesOrder.paymentTerm) ||
+    (fields.incoterm !== undefined && fields.incoterm !== salesOrder.incoterm) ||
+    (fields.requestedDeliveryDate !== undefined &&
+      (fields.requestedDeliveryDate ? new Date(fields.requestedDeliveryDate).getTime() : null) !==
+        (salesOrder.requestedDeliveryDate ? salesOrder.requestedDeliveryDate.getTime() : null));
+  await maybeTriggerSalesOrderApproval({
+    salesOrderId: id,
+    keyCommercialChanged,
+    actorId: user!.id,
+    meta,
   });
 
   await publishSalesOrderEvent({
