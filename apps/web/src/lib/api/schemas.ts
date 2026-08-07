@@ -316,3 +316,21 @@ export const deliveryConfirmSchema = z.object({
 export const deliveryCancelSchema = z.object({
   changeReason: z.string().max(500).optional(),
 });
+
+/** Invoice 创建：唯一入口 POST /api/deliveries/{id}/invoice（{id}=primaryDeliveryId；单 Delivery + Partial Billing）
+ * 注意：Consolidated（deliveryIds[]）扩展在后续 commit 加入。
+ */
+export const invoiceCreateSchema = z.object({
+  lines: z
+    .array(
+      z.object({
+        deliveryLineId: z.string().min(1),
+        quantity: z.coerce.number().positive(),
+      }),
+    )
+    .min(1),
+  invoiceDate: z.string().datetime().optional(),
+  dueDate: z.string().datetime().nullable().optional(),
+  remark: z.string().max(1000).nullable().optional(),
+  changeReason: z.string().max(500).optional(),
+});
