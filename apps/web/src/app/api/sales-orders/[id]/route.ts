@@ -1,7 +1,8 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import type { SalesOrder } from "@prisma/client";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
-import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
+import { ok, failValidation, failConflict, failNotFound, fail } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { salesOrderUpdateSchema } from "@/lib/api/schemas";
@@ -67,38 +68,50 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
   }
 
-  const updated = await prisma.$transaction(async (tx) => {
-    const saved = await tx.salesOrder.update({
-      where: { id },
-      data: {
-        ...(fields.requestedDeliveryDate !== undefined
-          ? { requestedDeliveryDate: fields.requestedDeliveryDate ? new Date(fields.requestedDeliveryDate) : null }
-          : {}),
-        ...(fields.paymentTerm !== undefined ? { paymentTerm: fields.paymentTerm } : {}),
-        ...(fields.incoterm !== undefined ? { incoterm: fields.incoterm } : {}),
-        ...(fields.remark !== undefined ? { remark: fields.remark } : {}),
-        version: { increment: 1 },
-        updatedById: user!.id,
-      },
-    });
-    // 商业条件变更 → 系统生成 Revision（不允许自由编辑 Revision）
-    await createSalesOrderRevision(tx, id, changeReason ?? "更新销售订单头", { salesOrder: saved }, user?.id);
-    return saved;
-  });
-
-  // Sprint 4B Workflow 条件触发（CTO 锁定项③）：修改付款条件/交货条件等关键商业字段 → 触发新审批（有策略时）
+  // 关键商业字段变更判定（CTO Final Review 阻断项②：付款条件/交货条件等变化 → 触发重新审批）
   const keyCommercialChanged =
     (fields.paymentTerm !== undefined && fields.paymentTerm !== salesOrder.paymentTerm) ||
     (fields.incoterm !== undefined && fields.incoterm !== salesOrder.incoterm) ||
     (fields.requestedDeliveryDate !== undefined &&
       (fields.requestedDeliveryDate ? new Date(fields.requestedDeliveryDate).getTime() : null) !==
         (salesOrder.requestedDeliveryDate ? salesOrder.requestedDeliveryDate.getTime() : null));
-  await maybeTriggerSalesOrderApproval({
-    salesOrderId: id,
-    keyCommercialChanged,
-    actorId: user!.id,
-    meta,
-  });
+
+  let updated: SalesOrder;
+  try {
+    // 单事务：更新头 + Revision + 审批触发（CTO Final Review 阻断项②/非阻断建议：
+    // 商业修改与审批状态切换统一事务，命中策略失败整体回滚显式报错，禁止"改成功但没进审批"）
+    updated = await prisma.$transaction(async (tx) => {
+      const saved = await tx.salesOrder.update({
+        where: { id },
+        data: {
+          ...(fields.requestedDeliveryDate !== undefined
+            ? { requestedDeliveryDate: fields.requestedDeliveryDate ? new Date(fields.requestedDeliveryDate) : null }
+            : {}),
+          ...(fields.paymentTerm !== undefined ? { paymentTerm: fields.paymentTerm } : {}),
+          ...(fields.incoterm !== undefined ? { incoterm: fields.incoterm } : {}),
+          ...(fields.remark !== undefined ? { remark: fields.remark } : {}),
+          version: { increment: 1 },
+          updatedById: user!.id,
+        },
+      });
+      // 商业条件变更 → 系统生成 Revision（不允许自由编辑 Revision）
+      await createSalesOrderRevision(tx, id, changeReason ?? "更新销售订单头", { salesOrder: saved }, user?.id);
+      // 审批触发（同一事务内，传 tx）：无实例创建 / RUNNING 保持 / 终态复用重新 SUBMIT；命中策略失败 → 抛错 → 整体回滚
+      await maybeTriggerSalesOrderApproval({
+        salesOrderId: id,
+        keyCommercialChanged,
+        actorId: user!.id,
+        meta,
+        tx,
+      });
+      return saved;
+    });
+  } catch (e) {
+    if (e instanceof Error && e.message === "WORKFLOW_DEFINITION_NOT_FOUND") {
+      return fail(ERROR_CODES.SALES_ORDER_WORKFLOW_FAILED, "审批流程定义不存在或未发布（SALES_ORDER_APPROVAL），订单变更已回滚", 409);
+    }
+    throw e;
+  }
 
   await publishSalesOrderEvent({
     eventType: "SalesOrderUpdated",

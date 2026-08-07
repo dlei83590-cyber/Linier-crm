@@ -11,8 +11,12 @@ export const dynamic = "force-dynamic";
 /**
  * POST /api/sales-orders/:id/confirm（确认订单，Action API，不 PATCH status 之外的其他字段）
  * CTO 锁定项③：SO Confirm **不重复审批**——Accepted Quotation 已完成商业审批，confirm 只做订单确认与状态流转
- * （DRAFT → CONFIRMED）；只有当 SO 修改了数量/价格/付款条件/交货条件等关键商业字段时，才触发新的审批流程（后续阶段）。
- * 成功：status=CONFIRMED + QuotationSnapshot(CONFIRMED) + 发布 SalesOrderConfirmed。
+ * （DRAFT → CONFIRMED）；只有当 SO 修改了数量/价格/付款条件/交货条件等关键商业字段时，才触发新的审批流程。
+ * CTO Final Review 阻断项③（审批门禁）：
+ *   - 从未触发 SO 审批（workflowInstanceId == null）→ 允许 Confirm（Accepted Quote 原始订单）；
+ *   - 已触发审批（workflowInstanceId != null）→ 必须 approvalStatus == APPROVED 才允许；
+ *     PENDING（审批中）/ REJECTED（被驳回）/ RUNNING（未完成）→ 409，禁止绕过审批。
+ * 成功：status=CONFIRMED + SalesOrderSnapshot(CONFIRMED) + 发布 SalesOrderConfirmed。
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await authenticate(request);
@@ -28,6 +32,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!salesOrder) return failNotFound(ERROR_CODES.SALES_ORDER_NOT_FOUND, "销售订单不存在");
   if (salesOrder.status !== "DRAFT") {
     return failConflict(ERROR_CODES.SALES_ORDER_INVALID_STATE, "仅 DRAFT 状态可确认订单");
+  }
+  // CTO Final Review 阻断项③：审批门禁——已触发 SO 审批的订单必须 APPROVED 才能 Confirm
+  if (salesOrder.workflowInstanceId && salesOrder.approvalStatus !== "APPROVED") {
+    return failConflict(
+      ERROR_CODES.SALES_ORDER_INVALID_STATE,
+      "订单存在未完成/未通过的审批（PENDING/REJECTED），审批通过后方可确认",
+    );
   }
 
   const actorId = user!.id;

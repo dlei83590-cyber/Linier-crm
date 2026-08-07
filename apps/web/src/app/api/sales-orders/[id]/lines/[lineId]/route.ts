@@ -8,7 +8,7 @@ import { requestLog } from "@/lib/api/logger";
 import { salesOrderLineUpdateSchema } from "@/lib/api/schemas";
 import { recalcSalesOrderTotals, createSalesOrderRevision } from "@/lib/sales-order/helpers";
 import { maybeTriggerSalesOrderApproval } from "@/lib/sales-order/workflow-sync";
-import { quotationPricingService, type QuotationPricingLineResult } from "@/lib/pricing/QuotationPricingService";
+import { salesOrderPricingService, type SalesOrderPricingLineResult } from "@/lib/pricing/SalesOrderPricingService";
 import { publishSalesOrderEvent } from "@/lib/sales-order/events";
 
 export const dynamic = "force-dynamic";
@@ -58,10 +58,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     (fields.uomId !== undefined && fields.uomId !== line.uomId);
 
   // ① 先定价（事务外；失败时数据库保持原状态，直接返回 400，不产生任何写入）
-  let pricingResult: QuotationPricingLineResult | null = null;
+  // CTO Final Review 阻断项①：重定价必须走 SalesOrderPricingService（只调 PricingEngine.resolvePrice()），
+  // 禁止复用 QuotationPricingService（否则会把 SalesOrderLine.id 误写成 quotationLineId 污染价格追溯）。
+  let pricingResult: SalesOrderPricingLineResult | null = null;
   if (repricing) {
     try {
-      const pricing = await quotationPricingService.priceLines({
+      const pricing = await salesOrderPricingService.priceLines({
         quotationId: salesOrder.quotationId,
         customerId: salesOrder.customerId,
         currency: salesOrder.currency,
@@ -75,35 +77,52 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
   }
 
-  // ② 单事务：更新行（业务字段 + 定价回写，sourceQuotationLineId 溯源永不清除）→ 重算 SO totals → Revision（原子）
-  const saved = await prisma.$transaction(async (tx) => {
-    await tx.salesOrderLine.update({
-      where: { id: lineId },
-      data: {
-        ...(fields.description !== undefined ? { description: fields.description } : {}),
-        ...(fields.uomId !== undefined ? { uomId: fields.uomId } : {}),
-        ...(fields.lineNo !== undefined ? { lineNo: fields.lineNo } : {}),
-        ...(quantity !== undefined ? { quantity: nextQuantity } : {}),
-        ...(pricingResult
-          ? {
-              priceSnapshotId: pricingResult.priceSnapshotId,
-              unitPrice: pricingResult.unitPrice,
-              lineAmount: pricingResult.lineAmount,
-              taxAmount: pricingResult.taxAmount,
-              totalAmount: pricingResult.totalAmount,
-            }
-          : {}),
-        version: { increment: 1 },
-        updatedById: user!.id,
-      },
+  // ② 单事务：更新行（业务字段 + 定价回写，sourceQuotationLineId 溯源永不清除）→ 重算 SO totals → Revision
+  //    → 审批触发（CTO Final Review 阻断项②/非阻断建议：商业修改与审批状态切换统一事务，命中策略失败整体回滚显式报错）
+  let saved: { salesOrder: { id: string; code: string; totalAmount: unknown } | null; line: unknown };
+  try {
+    saved = await prisma.$transaction(async (tx) => {
+      await tx.salesOrderLine.update({
+        where: { id: lineId },
+        data: {
+          ...(fields.description !== undefined ? { description: fields.description } : {}),
+          ...(fields.uomId !== undefined ? { uomId: fields.uomId } : {}),
+          ...(fields.lineNo !== undefined ? { lineNo: fields.lineNo } : {}),
+          ...(quantity !== undefined ? { quantity: nextQuantity } : {}),
+          ...(pricingResult
+            ? {
+                priceSnapshotId: pricingResult.priceSnapshotId,
+                unitPrice: pricingResult.unitPrice,
+                lineAmount: pricingResult.lineAmount,
+                taxAmount: pricingResult.taxAmount,
+                totalAmount: pricingResult.totalAmount,
+              }
+            : {}),
+          version: { increment: 1 },
+          updatedById: user!.id,
+        },
+      });
+      const lines = await tx.salesOrderLine.findMany({ where: { salesOrderId: id, deletedAt: null }, orderBy: { lineNo: "asc" } });
+      await recalcSalesOrderTotals(tx, id, lines);
+      const so = await tx.salesOrder.findFirst({ where: { id } });
+      if (so) await createSalesOrderRevision(tx, id, changeReason ?? "更新销售订单行", { salesOrder: so, lines }, user?.id);
+      // 审批触发（同一事务内，传 tx）：无实例创建 / RUNNING 保持 / 终态复用重新 SUBMIT；命中策略失败 → 抛错 → 整体回滚
+      await maybeTriggerSalesOrderApproval({
+        salesOrderId: id,
+        keyCommercialChanged: repricing,
+        actorId: user!.id,
+        meta,
+        tx,
+      });
+      const l = await tx.salesOrderLine.findFirst({ where: { id: lineId } });
+      return { salesOrder: so, line: l };
     });
-    const lines = await tx.salesOrderLine.findMany({ where: { salesOrderId: id, deletedAt: null }, orderBy: { lineNo: "asc" } });
-    await recalcSalesOrderTotals(tx, id, lines);
-    const so = await tx.salesOrder.findFirst({ where: { id } });
-    if (so) await createSalesOrderRevision(tx, id, changeReason ?? "更新销售订单行", { salesOrder: so, lines }, user?.id);
-    const l = await tx.salesOrderLine.findFirst({ where: { id: lineId } });
-    return { salesOrder: so, line: l };
-  });
+  } catch (e) {
+    if (e instanceof Error && e.message === "WORKFLOW_DEFINITION_NOT_FOUND") {
+      return fail(ERROR_CODES.SALES_ORDER_WORKFLOW_FAILED, "审批流程定义不存在或未发布（SALES_ORDER_APPROVAL），商业条件变更已回滚", 409);
+    }
+    throw e;
+  }
 
   await publishSalesOrderEvent({
     eventType: "SalesOrderUpdated",
@@ -121,13 +140,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     },
     meta,
   });
-  // Sprint 4B Workflow 条件触发（CTO 锁定项③）：商业条件变更（repricing = quantity/uomId 变化）→ 触发新审批（有策略时）
-  await maybeTriggerSalesOrderApproval({
-    salesOrderId: id,
-    keyCommercialChanged: repricing,
-    actorId: user!.id,
-    meta,
-  });
+  // Sprint 4B Workflow 条件触发已移入主事务（CTO Final Review 阻断项②：与商业修改统一事务，失败整体回滚）
 
   await writeAuditLog({
     actorId: user?.id,
