@@ -15,7 +15,7 @@
 | Sprint 1 | Infrastructure（基础设施） | ✅ Closed | Release v0.1.0-alpha |
 | Sprint 2 | Master Data（主数据） | ✅ Closed | Release v0.2.0-alpha（2A+2B+2C） |
 | Sprint 3 | ERP Foundation（ERP 底座） | ✅ Closed | 3A Workflow Foundation ✅（v0.3.0-alpha）+ 3B Platform Capabilities ✅（v0.4.0-alpha）+ 3C Business Foundation ✅（v0.5.0-alpha，3C-1~3C-5 全部完成） |
-| Sprint 4 | Sales（销售） | 🔄 | 4A Quotation Foundation ✅（PR #12 已合并）；4B Sales Order 设计中 |
+| Sprint 4 | Sales（销售） | 🔄 | 4A Quotation Foundation ✅（PR #12）；4B Sales Order Foundation ✅（PR #13）；4C Delivery 设计中 |
 | Sprint 5 | Purchase（采购） | ⬜ | PR/PO/GRN/Supplier Invoice/Payment |
 | Sprint 6 | Inventory（库存） | ⬜ | Warehouse/Stock/Batch/Movement/Count/Transfer |
 | Sprint 7 | Finance（财务） | ⬜ | AR/AP/Expense/Voucher/Journal/GL/Profit/Cash Flow |
@@ -145,14 +145,14 @@
 
 ---
 
-## 6. Sprint 4：Sales（销售）🔄（4A Quotation Foundation 已完成，4B 设计先行）
+## 6. Sprint 4：Sales（销售）🔄（4A Quotation ✅，4B Sales Order ✅，4C Delivery 设计先行）
 
 | 模块 | 说明 | 状态 |
 | --- | --- | --- |
 | Quotation | 报价单（引用价格表，含税/未税，审批流） | ✅ 4A 完成（PR #12，2026-08-07） |
 | Contract | 合同（关联订单/项目，金额/条款/附件） | ⬜ |
-| Sales Order | 销售订单（引用报价/项目/物料，单据编号走 DocumentSequence） | ⬜ 4B 启动 |
-| Delivery | 发货单（DO，关联订单，触发库存出库） | ⬜ |
+| Sales Order | 销售订单（引用报价/项目/物料，单据编号走 DocumentSequence） | ✅ 4B 完成（PR #13，2026-08-07） |
+| Delivery | 发货单（DO，关联订单，触发库存出库） | ⬜ 4C 设计先行 |
 | Invoice | 销售发票（CI，关联发货/订单，应收挂账） | ⬜ |
 | Payment | 收款（回款核销，更新应收余额） | ⬜ |
 
@@ -257,6 +257,7 @@
 
 | 日期 | 变更 | 说明 |
 | --- | --- | --- |
+| 2026-08-07 | 更新 v1.7 | Sprint 4B Sales Order Foundation 完成（PR #13 squash 合并 3747eba；CTO Final Review 3 阻断项 + 最终复审 1 阻断项修复后 APPROVED；CI 全绿）；Sprint 4 状态 🔄（4A ✅ 4B ✅）；Sales Order 模块 ✅，4C Delivery 设计先行；保留 feature/sprint4-sales 继续下一阶段；不打新大版本 Tag（待 Sprint 4 Sales 更完整后统一发布） |
 | 2026-08-07 | 更新 v1.6 | Sprint 4A Quotation Foundation 完成（PR #12 合并，8ee88a0；CTO Final Review 3 阻断项修复后 APPROVED；CI #78 全绿）；Sprint 4 状态 ⬜ → 🔄；Quotation 模块 ✅，4B Sales Order 设计先行；不打新大版本 Tag（待 Sprint 4 Sales 更完整后统一发布） |
 | 2026-08-05 | 创建 v1.0 | Sprint 3 拆 Phase A/B，Sprint 4-7 按销售/采购/库存/财务排序，新增 BI/OA/Mobile |
 | 2026-08-07 | 更新 v1.5 | Sprint 3C-5 Project Foundation 完成（PR #11 合并，v0.5.0-alpha 正式发布，Sprint 3 全部完成）；整体完成度约 62%-65%（平台底座 95%、主数据与业务底座 100%、核心业务流程约 20%）；Sprint 4 只做设计不写实现 |
