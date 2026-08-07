@@ -90,6 +90,11 @@ const SEED_ACTION_MODULES = [
   "quotation-snapshot",
   "approval-policy",
   "approval-policy-rule",
+  // Sprint 4B：Sales Order Foundation 模块
+  "sales-order",
+  "sales-order-line",
+  "sales-order-revision",
+  "sales-order-snapshot",
   // Sprint 3A：平台底座模块
   "workflow-definition",
   "workflow-step",
