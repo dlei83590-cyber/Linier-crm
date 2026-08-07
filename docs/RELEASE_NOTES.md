@@ -1,12 +1,12 @@
 # Release Notes
 
-## Sprint 4D — Invoice Foundation（2026-08-08，PR #15 Ready for Final Review，未发布 Tag）
+## Sprint 4D — Invoice Foundation（2026-08-08，PR #15 已合并，未发布 Tag）
 
 > PR: #15（Sprint 4D Invoice Foundation，feature/sprint4-sales）
-> 状态：READY FOR FINAL REVIEW（CTO Final Review 待验收；合并后再改 Completed；未打 Tag；待 Sprint 4 Sales 完整闭环（4D Invoice + 4E AR/Payment）后统一发布下一个 Alpha）
-> CTO 结论：待验收（CTO Final Review Cover：docs/reviews/Sprint4D_CTO_Review_Cover.md，Checklist 14 项）
+> 状态：MERGED（squash cea4162；未打 Tag；待 Sprint 4 Sales 完整闭环（4D Invoice + 4E AR/Payment）后统一发布下一个 Alpha）
+> CTO 结论：Sprint 4D Invoice Foundation **APPROVE & MERGE（98/100）**（CTO Final Review Cover：docs/reviews/Sprint4D_CTO_Review_Cover.md，Checklist 14 项全部 ✅；Domain Design 98 / Architecture 98 / Transaction 98 / Pricing 100 / Workflow 98 / Documentation 100）
 
-### Sprint 4D Invoice Foundation（PR #15，Ready for Final Review）
+### Sprint 4D Invoice Foundation（PR #15，已合并）
 
 - **发票领域模型（财务事实源）**：Invoice / InvoiceLine / InvoiceRevision / InvoiceSnapshot（+4 模型 / +4 枚举，迁移 0017_invoice_foundation，仅新增不改既有）；DeliveryLine +2 开票投影列（invoicedQty / remainingInvoiceQty，remainingInvoiceQty 由迁移初始化为 quantity）；Invoice.code 可空（DRAFT 不占号）
 - **唯一创建入口（CTO 锁定①）**：无 Direct Invoice（不开放 POST /api/invoices）；`POST /api/deliveries/{id}/invoice`（按 id ASC 锁全部来源 Delivery → 校验 DELIVERED → 按 id ASC 锁 DeliveryLine 防超开票 → 四段溯源链取价 → DRAFT 建头 + 行 → 回写投影 → Revision + CREATED 快照）

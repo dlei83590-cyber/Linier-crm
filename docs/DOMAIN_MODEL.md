@@ -98,7 +98,7 @@ Project Expense / 日常 Expense ──> 审批流 ──> Voucher（凭证）
 - ✅ 已落地（Sprint 4A，PR #12 验收中）：Quotation Foundation（Quotation/QuotationLine/QuotationRevision/QuotationSnapshot + ApprovalPolicy 复用），见第 19 节
 - ✅ 已落地（Sprint 4B，PR #13 已合并）：Sales Order Foundation，见第 20 节
 - ✅ 已落地（Sprint 4C，PR #14 已合并）：Delivery Foundation，见第 21 节
-- 🔄 验收中（Sprint 4D，PR #15 待合并）：Invoice Foundation（Invoice/InvoiceLine/InvoiceRevision/InvoiceSnapshot + DeliveryLine 开票投影），见第 22 节
+- ✅ 已落地（Sprint 4D，PR #15 已合并）：Invoice Foundation（Invoice/InvoiceLine/InvoiceRevision/InvoiceSnapshot + DeliveryLine 开票投影），见第 22 节
 - ⬜ 规划中（Sprint 4E-7）：Payment（4E）/ Purchase / GRN / Warehouse / Stock / AR / AP / Voucher / Journal / GL
 
 > 详细字段标准见数据库 schema（`prisma/schema.prisma`）与 [architecture/domain-model.md](./architecture/domain-model.md)。
@@ -1505,12 +1505,12 @@ erDiagram
 
 ## 23. 变更记录
 
-### v1.11（2026-08-08，Sprint 4D Invoice Foundation，ADR-0019）
+### v1.11（2026-08-08，Sprint 4D Invoice Foundation，ADR-0019，PR #15 已合并）
 
 - 新增章节：22. Invoice Foundation（Sprint 4D，Invoice 财务事实源 + 4 模型 + 四段溯源链取价 + Partial/Consolidated Billing + Issue 原子取号 + Workflow 集成）
 - 模型：+4（Invoice/InvoiceLine/InvoiceRevision/InvoiceSnapshot）；枚举：+4（InvoiceStatus/InvoiceSnapshotType/InvoiceRevisionStatus/InvoiceLineStatus）
 - DeliveryLine +2 投影列（invoicedQty/remainingInvoiceQty，remainingInvoiceQty 迁移初始化为 quantity）；Invoice.code 可空（DRAFT 不占号）；InvoiceSnapshot +5 税务/汇率快照字段
-- 第 6 节已落地列表：Invoice Foundation（4D，PR #15 待验收）移入验收中
+- 第 6 节已落地列表：Invoice Foundation（4D，PR #15 已合并）移入已落地
 
 ### v1.10（2026-08-07，Sprint 4B/4C Sales Order + Delivery Foundation，ADR-0017/0018）
 
