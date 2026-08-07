@@ -161,6 +161,14 @@ export async function maybeTriggerSalesOrderApproval(params: {
       where: { id: existing.id },
       data: { status: "RUNNING", currentStepNo: startStepNo, completedAt: null, updatedById: params.actorId },
     });
+    // CTO 最终复审（残余阻断项）：重新审批前必须失效上一轮全部 Approver（isActive=false + deletedAt=now），
+    // 否则旧 REJECTED/PENDING 记录仍被 isStepComplete 读取（SEQUENTIAL/PARALLEL 要求全部 APPROVED），
+    // 会导致新一轮审批永远无法完成。针对整个 instance 失效（上一轮可能经过多个 step），
+    // 现有 Workflow Action where deletedAt=null 自然只读取本轮审批人，无需修改 Workflow Engine。
+    await db.approver.updateMany({
+      where: { instanceId: existing.id, deletedAt: null },
+      data: { isActive: false, deletedAt: new Date(), updatedById: params.actorId },
+    });
     await db.workflowAction.create({
       data: {
         instanceId: existing.id,
@@ -200,10 +208,10 @@ export async function maybeTriggerSalesOrderApproval(params: {
         });
       }
     }
-    // 回写 SO 投影：approvalStatus=PENDING（workflowInstanceId 不变）
+    // 回写 SO 投影：approvalStatus=PENDING，同时清空上一轮残留的 approvedAt/approvedById（保持语义一致）
     await db.salesOrder.update({
       where: { id: salesOrder.id },
-      data: { approvalStatus: "PENDING", updatedById: params.actorId },
+      data: { approvalStatus: "PENDING", approvedAt: null, approvedById: null, updatedById: params.actorId },
     });
     await publishSalesOrderEvent({
       eventType: "SalesOrderApprovalStarted",
