@@ -49,6 +49,10 @@ tags:
   - name: Deliveries
   - name: Delivery Lines
   - name: Delivery Actions
+  # Sprint 4D Invoice Foundation
+  - name: Invoices
+  - name: Invoice Lines
+  - name: Invoice Actions
 
 paths:
   # ==========================================================================
@@ -8212,6 +8216,318 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
+  # ==========================================================================
+  # Sprint 4D Invoice Foundation（主资源 + 子资源 + Actions）
+  # ==========================================================================
+  /api/invoices:
+    get:
+      tags: [Invoices]
+      summary: List invoices (paginated; code/customerId/status/approvalStatus/date/dueDate/currency/salesOrderId/deliveryId filters)
+      description: |
+        列表查询（CTO Phase 4 指令：含 approvalStatus 过滤，审批列表使用）。
+        无 POST /api/invoices——Direct Invoice 禁止（CTO Review 96/100 锁定项①），
+        唯一创建入口为 POST /api/deliveries/{id}/invoice。
+      operationId: listInvoices
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: page, in: query, required: false, schema: { type: integer, default: 1 } }
+        - { name: pageSize, in: query, required: false, schema: { type: integer, default: 20, maximum: 100 } }
+        - { name: code, in: query, required: false, schema: { type: string } }
+        - { name: customerId, in: query, required: false, schema: { type: string } }
+        - { name: status, in: query, required: false, schema: { $ref: "#/components/schemas/InvoiceStatus" } }
+        - { name: approvalStatus, in: query, required: false, schema: { type: string, description: 审批状态过滤（APPROVED/PENDING/REJECTED/DRAFT） } }
+        - { name: dateFrom, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: dateTo, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: dueDateFrom, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: dueDateTo, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: currency, in: query, required: false, schema: { type: string } }
+        - { name: salesOrderId, in: query, required: false, schema: { type: string } }
+        - { name: deliveryId, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: OK（分页列表，含 customer/delivery 摘要 + lines 计数）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/deliveries/{id}/invoice:
+    post:
+      tags: [Invoices]
+      summary: Create invoice from delivery (only entry; Direct Invoice prohibited)
+      description: |
+        唯一创建入口（CTO Review 96/100 锁定项①：Invoice 唯一来源 Delivery）。
+        事务内：按 id ASC 锁全部来源 Delivery（primaryDeliveryId + deliveryIds[] 去重）→
+        校验全部 DELIVERED（仅已确认收货可开票）→ 校验 Customer/Currency/TaxProfile/PaymentTerm 一致
+        （Consolidated Invoice，否则 409 INVOICE_SOURCE_NOT_COMPATIBLE）→ 按 id ASC 锁 DeliveryLine →
+        防超开票（qty > 0 且 <= remainingInvoiceQty，否则 409 INVOICE_QUANTITY_EXCEEDED）→
+        四段溯源链取价（DeliveryLine→sourceSalesOrderLineId→SalesOrderLine→priceSnapshotId→QuotationPriceSnapshot，
+        金额永不重算、不调用 Pricing Engine）→ 建头（DRAFT，code=NULL 不占号）+ 行（金额快照复制）→
+        回写 DeliveryLine 开票投影（invoicedQty += qty；remainingInvoiceQty -= qty）→ Revision + CREATED 快照
+        （含税务/汇率快照 taxProfileId/taxRate/sstNo/currencyRate/exchangeRate）→ AuditLog + InvoiceCreated。
+      operationId: createInvoice
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string }, description: primaryDeliveryId }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceCreate"
+      responses:
+        "201":
+          description: Created（status=DRAFT，code=null）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（来源 Delivery 非 DELIVERED / Consolidated 财务属性不一致 / 超开票）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/invoices/{id}:
+    get:
+      tags: [Invoices]
+      summary: Get invoice detail (customer/delivery/salesOrder summary + workflow + lines + latest revision/snapshot)
+      description: |
+        CTO Phase 4 指令：一次带出 Invoice、Customer、Workflow、Delivery Summary、SalesOrder Summary、
+        Lines（含 item + priceSnapshot）、Latest Revision、Latest Snapshot，避免前端 5~6 个额外请求。
+      operationId: getInvoice
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Invoices]
+      summary: Update invoice header (only DRAFT; optimistic lock version)
+      description: |
+        仅 DRAFT 可编辑；只允许非财务字段 remark / dueDate / paymentTerm（schema 无 reference 列，不新增）。
+        禁止修改 quantity/unitPrice/taxRate/lineAmount/totalAmount/paidAmount/balanceAmount/code/status——
+        这些必须继续由系统动作或 4E 维护。变更自动生成 InvoiceRevision + 发布 InvoiceUpdated。
+        重审规则（CTO Phase 4 指令）：paymentTerm / dueDate 变更 → 失效原审批并重新提交
+        （maybeTriggerInvoiceApproval）；remark 修改不触发重审；命中 INVOICE 策略但定义缺失 →
+        409 INVOICE_WORKFLOW_FAILED（整体回滚）。
+      operationId: updateInvoice
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceUpdate"
+      responses:
+        "200":
+          description: OK（version+1）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（非 DRAFT / version 过期 / 重审策略缺失 INVOICE_WORKFLOW_FAILED）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/invoices/{id}/lines:
+    get:
+      tags: [Invoice Lines]
+      summary: List invoice lines (read-only; lines are system-generated, no POST/PATCH)
+      description: |
+        行只读（CTO Review 96/100 锁定项③：InvoiceLine 系统生成只读，禁止自由编辑）。
+        含 item + priceSnapshot 摘要。
+      operationId: listInvoiceLines
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceLineListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/invoices/{id}/revisions:
+    get:
+      tags: [Invoices]
+      summary: List invoice revisions (read-only, desc)
+      operationId: listInvoiceRevisions
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceRevisionListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/invoices/{id}/snapshots:
+    get:
+      tags: [Invoices]
+      summary: List invoice snapshots (read-only, desc; CREATED/ISSUED/CANCELLED)
+      operationId: listInvoiceSnapshots
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceSnapshotListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/invoices/{id}/issue:
+    post:
+      tags: [Invoice Actions]
+      summary: Issue invoice (DRAFT → ISSUED; atomic DocumentSequence number allocation)
+      description: |
+        CTO Review 必改①：DRAFT 不占号（code=NULL），仅 ISSUE 时 DocumentSequence 原子取号（INV-2026-000123）。
+        事务内：FOR UPDATE 锁 Invoice → 校验 DRAFT + 至少 1 个有效行 + invoiceTotal>0 + code=NULL →
+        审批门禁（CTO Phase 4 指令：workflowInstanceId != null 时仅 approvalStatus=APPROVED 允许开票，否则 409）→
+        nextInvoiceCode 原子取号 → ISSUED + ISSUED 快照（issuedAt/issuedById 记 snapshotData）→ InvoiceIssued。
+        并发 issue 第二个请求稳定 409（FOR UPDATE 锁 + status 校验），不消耗第二个编号。
+      operationId: issueInvoice
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceActionRequest"
+      responses:
+        "200":
+          description: OK（status=ISSUED + code=INV-...）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceActionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（非 DRAFT / 无行 / 金额为 0 / 已 ISSUED / 审批未通过 APPROVAL_GATE）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/invoices/{id}/cancel:
+    post:
+      tags: [Invoice Actions]
+      summary: Cancel invoice (only DRAFT → CANCELLED; ISSUED+ goes Credit Note in later sprint)
+      description: |
+        仅 DRAFT 可取消（CTO Review 96/100 锁定项④：ISSUED+ 走 Credit Note，不提供 VOID）。
+        事务内：FOR UPDATE 锁 Invoice → 校验 DRAFT → 按 id ASC 锁 DeliveryLine 回滚开票投影
+        （invoicedQty -= qty；remainingInvoiceQty += qty，不释放则 DeliveryLine 永久显示已开票）→
+        CANCELLED + CANCELLED 快照 → InvoiceCancelled。
+      operationId: cancelInvoice
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceActionRequest"
+      responses:
+        "200":
+          description: OK（status=CANCELLED）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceActionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（非 DRAFT）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -12650,3 +12966,230 @@ components:
         - DELIVERY_POD_REQUIRED → POD 门禁失败（podStatus ∉ {RECEIVED, WAIVED}），实现返回 409 DELIVERY_INVALID_STATE
         - DELIVERY_ALREADY_CONFIRMED → 重复 confirm（非 DISPATCHED），实现返回 409 DELIVERY_INVALID_STATE
         - DELIVERY_STATUS_INVALID → 状态机不允许的流转，实现返回 409 DELIVERY_INVALID_STATE
+
+    # ==========================================================================
+    # Sprint 4D Invoice Foundation（Enums + Models + Requests/Responses）
+    # ==========================================================================
+    InvoiceStatus:
+      type: string
+      enum: [DRAFT, ISSUED, PARTIALLY_PAID, PAID, CANCELLED]
+      description: DRAFT 草稿（可编辑头）/ ISSUED 已开票（取号后不可直接取消，走 Credit Note）/ PARTIALLY_PAID+PAID 4E 回写投影 / CANCELLED 已取消（仅 DRAFT 可取消）
+
+    InvoiceSnapshotType:
+      type: string
+      description: 快照类型（仅固化节点生成，只读）；无 APPROVED（审批终态只回写投影）
+      enum: [CREATED, ISSUED, CANCELLED]
+
+    InvoiceRevisionStatus:
+      type: string
+      enum: [DRAFT, SUBMITTED, APPROVED, SUPERSEDED]
+
+    InvoiceLineStatus:
+      type: string
+      enum: [ACTIVE, CANCELLED]
+
+    Invoice:
+      type: object
+      required: [id, deliveryId, salesOrderId, customerId, status, invoiceDate, currency, version]
+      properties:
+        id: { type: string }
+        code: { type: [string, "null"], description: 单据编号（CTO Review 必改①：DRAFT 不占号 code=NULL，仅 ISSUE 时 DocumentSequence 取号 INV-2026-000123） }
+        deliveryId: { type: string, description: "来源交付单（NOT NULL；唯一入口 POST /api/deliveries/{id}/invoice；Direct Invoice 禁止）" }
+        salesOrderId: { type: string, description: 冗余投影（经 Delivery 溯源 SalesOrder；便于 AR/对账） }
+        customerId: { type: string, description: 开票客户（继承 Delivery.customerId） }
+        status: { $ref: "#/components/schemas/InvoiceStatus" }
+        invoiceDate: { type: string, format: date-time, description: 开票日期 }
+        dueDate: { type: [string, "null"], format: date-time, description: 到期日（4E AR 使用；PATCH 可编辑，变更触发重审） }
+        currency: { type: string, description: 币种（继承 SalesOrder；Consolidated 合并校验需一致） }
+        taxProfileId: { type: [string, "null"], description: 税率档案（继承 SalesOrder；Consolidated 合并校验需一致） }
+        paymentTerm: { type: [string, "null"], description: 付款条款（4E AR 使用；PATCH 可编辑，变更触发重审；Consolidated 合并校验需一致） }
+        subtotal: { type: number, description: 未税合计（财务事实，直接复制自 DeliveryLine 快照；禁止重新计算） }
+        taxAmount: { type: number, description: 税额 }
+        invoiceTotal: { type: number, description: 含税合计 }
+        paidAmount: { type: number, description: 已收款（Sprint 4E 回写；本阶段固定 0） }
+        balanceAmount: { type: number, description: 应收余额 = invoiceTotal - paidAmount }
+        remark: { type: [string, "null"] }
+        workflowInstanceId: { type: [string, "null"], description: 审批实例（Workflow 为唯一事实源；不建 InvoiceApproval 表） }
+        approvalStatus: { type: string, description: 审批投影（DRAFT/PENDING/APPROVED/REJECTED） }
+        approvedAt: { type: [string, "null"], format: date-time }
+        approvedById: { type: [string, "null"] }
+        version: { type: integer, description: 乐观锁版本 }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+
+    InvoiceLine:
+      type: object
+      required: [id, invoiceId, description, quantity, unitPrice, lineAmount, version]
+      properties:
+        id: { type: string }
+        invoiceId: { type: string }
+        sourceDeliveryLineId: { type: [string, "null"], description: 溯源 → DeliveryLine（DeliveryLine 软删后 SetNull） }
+        lineNo: { type: integer, description: 行号（10/20/30/40 步进） }
+        itemId: { type: [string, "null"] }
+        description: { type: string, description: 描述（快照，复制自 DeliveryLine.description） }
+        quantity: { type: number, description: 开票数量（<= DeliveryLine.quantity 已交付量，防超开票） }
+        uomId: { type: [string, "null"] }
+        priceSnapshotId: { type: [string, "null"], description: 直接复制 SalesOrderLine.priceSnapshotId（四段溯源链取价） }
+        unitPrice: { type: number, description: 单价快照（复制，不重算） }
+        discountRate: { type: number, description: 折扣率快照（复制） }
+        lineAmount: { type: number, description: 行未税金额（复制计算值） }
+        taxAmount: { type: number, description: 行税额（复制） }
+        totalAmount: { type: number, description: 行含税金额（复制） }
+        version: { type: integer }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+
+    InvoiceRevision:
+      type: object
+      required: [id, invoiceId, revisionNo, changeReason]
+      properties:
+        id: { type: string }
+        invoiceId: { type: string }
+        revisionNo: { type: integer, description: 系统自动递增（唯一版本载体） }
+        revisionStatus: { $ref: "#/components/schemas/InvoiceRevisionStatus" }
+        changeReason: { type: string }
+        snapshotData: { type: object, description: 系统生成的当前状态快照（金额 Decimal 字符串，禁止 toNumber） }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+
+    InvoiceSnapshot:
+      type: object
+      required: [id, invoiceId, snapshotType, revisionNo]
+      properties:
+        id: { type: string }
+        invoiceId: { type: string }
+        snapshotType: { $ref: "#/components/schemas/InvoiceSnapshotType" }
+        revisionNo: { type: integer, description: 快照对应的修订号 }
+        snapshotData: { type: object, description: 完整快照（Header + Lines + sourceDeliveryLineId 集合；Decimal 字符串，禁止 toNumber）；ISSUED 快照含 issuedAt/issuedById（schema 无 issuedAt/issuedById 列，记 snapshotData） }
+        taxProfileId: { type: [string, "null"], description: CTO Review 必改②：税率档案快照 }
+        taxRate: { type: [number, "null"], description: 税率快照 }
+        sstNo: { type: [string, "null"], description: SST 注册号快照（销售与服务税登记号） }
+        currencyRate: { type: [number, "null"], description: 汇率快照 }
+        exchangeRate: { type: [number, "null"], description: 汇率快照（与 currencyRate 同值冗余） }
+        generatedById: { type: [string, "null"] }
+        generatedAt: { type: [string, "null"], format: date-time }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+
+    InvoiceCreate:
+      type: object
+      required: [lines]
+      properties:
+        deliveryIds: { type: array, items: { type: string }, description: Consolidated Invoice 附加 Delivery 来源（与 primaryDeliveryId 的 Customer/Currency/TaxProfile/PaymentTerm 必须一致，否则 409 INVOICE_SOURCE_NOT_COMPATIBLE） }
+        lines:
+          type: array
+          minItems: 1
+          description: Partial Billing：开票行（deliveryLineId + quantity；quantity > 0 且 <= remainingInvoiceQty，否则 409 INVOICE_QUANTITY_EXCEEDED）
+          items:
+            type: object
+            required: [deliveryLineId, quantity]
+            properties:
+              deliveryLineId: { type: string }
+              quantity: { type: number, exclusiveMinimum: 0 }
+        invoiceDate: { type: string, format: date-time, description: 开票日期（默认 now） }
+        dueDate: { type: [string, "null"], format: date-time }
+        remark: { type: [string, "null"], maxLength: 1000 }
+        changeReason: { type: string, maxLength: 500 }
+
+    InvoiceUpdate:
+      type: object
+      required: [version]
+      description: 仅 DRAFT 可编辑；只允许非财务字段 remark/dueDate/paymentTerm（schema 无 reference 列）；金额/数量/code/status 禁止 PATCH
+      properties:
+        remark: { type: [string, "null"], maxLength: 1000 }
+        dueDate: { type: [string, "null"], format: date-time }
+        paymentTerm: { type: [string, "null"], maxLength: 50 }
+        changeReason: { type: string, maxLength: 500 }
+        version: { type: integer, minimum: 1 }
+
+    InvoiceActionRequest:
+      type: object
+      properties:
+        changeReason: { type: string, maxLength: 500 }
+
+    InvoiceResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/Invoice" }
+
+    InvoiceListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Invoice" }
+
+    InvoiceLineResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/InvoiceLine" }
+
+    InvoiceLineListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/InvoiceLine" }
+
+    InvoiceRevisionListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/InvoiceRevision" }
+
+    InvoiceSnapshotListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/InvoiceSnapshot" }
+
+    InvoiceActionResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            invoice:
+              type: object
+              properties:
+                id: { type: string }
+                status: { $ref: "#/components/schemas/InvoiceStatus" }
+            code: { type: [string, "null"], description: issue 成功时返回取号后的编号（INV-2026-000123） }
+            issuedAt: { type: [string, "null"], format: date-time, description: issue 成功时返回（记 ISSUED 快照 snapshotData） }
+
+    InvoiceErrorCodes:
+      type: string
+      description: |
+        Invoice 领域错误码（与实现 errors.ts 一致）：
+        - INVOICE_NOT_FOUND（404）发票不存在
+        - INVOICE_INVALID_STATE（409）状态不允许（仅 DELIVERED 可开票 / 仅 DRAFT 可编辑/取消 / 审批门禁未通过等）
+        - INVOICE_LINE_NOT_FOUND（404）开票行（DeliveryLine）不存在
+        - INVOICE_QUANTITY_EXCEEDED（409）超开票（请求数量 > remainingInvoiceQty）
+        - INVOICE_SOURCE_NOT_COMPATIBLE（409）Consolidated Invoice 来源财务属性不一致（Customer/Currency/TaxProfile/PaymentTerm）
+        - INVOICE_WORKFLOW_FAILED（409）审批流程定义不存在或未发布（INVOICE_APPROVAL），发票变更已回滚
+        - DELIVERY_SOURCE_LINE_INVALID（400）交付行来源销售订单行无效或已删除
+        - VERSION_CONFLICT（409）乐观锁版本冲突
