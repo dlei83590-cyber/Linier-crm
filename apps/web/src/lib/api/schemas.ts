@@ -161,3 +161,53 @@ export const notificationTemplateCreateSchema = z.object({
 export const notificationTemplateUpdateSchema = notificationTemplateCreateSchema.partial().extend({
   version: z.number().int().positive(),
 });
+
+// ============================================================================
+// 第四批：Quotation（Sprint 4A Phase 3）
+// ============================================================================
+
+export const quotationLineCreateSchema = z.object({
+  itemId: z.string().min(1),
+  description: z.string().max(500).optional(),
+  quantity: z.coerce.number().positive(),
+  uomId: z.string().min(1).optional(),
+  lineNo: z.number().int().positive().optional(),
+});
+
+export const quotationCreateSchema = z.object({
+  customerId: z.string().min(1),
+  opportunityId: z.string().min(1).nullable().optional(),
+  projectId: z.string().min(1).nullable().optional(),
+  currency: z.string().max(10).default("CNY"),
+  validFrom: z.string().datetime().nullable().optional(),
+  validUntil: z.string().datetime().nullable().optional(),
+  taxProfileId: z.string().min(1).nullable().optional(),
+  remark: z.string().max(1000).nullable().optional(),
+  lines: z.array(quotationLineCreateSchema).min(1, "至少需要一行"),
+});
+
+export const quotationUpdateSchema = z
+  .object({
+    validFrom: z.string().datetime().nullable().optional(),
+    validUntil: z.string().datetime().nullable().optional(),
+    taxProfileId: z.string().min(1).nullable().optional(),
+    remark: z.string().max(1000).nullable().optional(),
+    changeReason: z.string().max(500).optional(),
+    version: z.number().int().positive(),
+  })
+  .refine((v) => Object.keys(v).length > 1, { message: "至少提供一个更新字段" });
+
+export const quotationLineUpdateSchema = z
+  .object({
+    description: z.string().max(500).optional(),
+    quantity: z.coerce.number().positive().optional(),
+    uomId: z.string().min(1).nullable().optional(),
+    lineNo: z.number().int().positive().optional(),
+    changeReason: z.string().max(500).optional(),
+    version: z.number().int().positive(),
+  })
+  .refine((v) => Object.keys(v).length > 1, { message: "至少提供一个更新字段" });
+
+export const quotationRevisionCreateSchema = z.object({
+  changeReason: z.string().min(1).max(500),
+});
