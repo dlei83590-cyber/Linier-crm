@@ -2,6 +2,22 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Sprint 4A Quotation Foundation（2026-08-07，PR #12 已合并，未打 Tag）
+
+### 新增（Sprint 4A：Quotation Foundation，PR #12）
+
+- **Quotation 报价领域**：Quotation / QuotationLine / QuotationRevision / QuotationSnapshot（+4 模型 / +3 枚举，迁移 `0014_quotation_foundation`，仅新增不改既有）
+- **定价红线（ADR-0015）**：行价必须来自 `PricingEngine.resolvePrice() → QuotationPriceSnapshot → priceSnapshotId`，schema 无 unitPrice 字段，禁止前端直接改价；quantity/uomId 变更均触发重新定价
+- **审批集成（ADR-0016）**：Workflow 为唯一审批事实源（不建 QuotationApproval）；submit 创建 WorkflowInstance，审批终态事务化回写投影 + 生成 APPROVED 快照
+- **API**：12 路由文件 / 18 端点（主档 CRUD + lines/revisions/snapshots + submit/accept/cancel/convert，convert 为 Sprint 4B 预留 501）
+- **RBAC**：13 权限码（quotation* / quotation-line* / quotation-revision* / quotation-snapshot*）
+- **事件**：EVENTS.md v1.3——11 个 Quotation 事件注册，7 个已发布（总线落地前以 AuditLog 留痕）
+- **文档**：OpenAPI +12 路径/+26 schemas、docs/qa/Sprint4A_QA.md、docs/test-cases/Quotation_API.md、DOMAIN_MODEL v1.9（第 19 节）、ADR-0015/0016 状态确认 Implemented
+
+### 变更（Sprint 4A 质量门禁）
+
+- 2026-08-07：lint 修复（`import type` 163 处）→ CI #76 全绿；RequestMeta 类型修复；CTO Final Review 3 阻断项修复（QuotationLine PATCH 原子化 / Workflow 投影事务化 + APPROVED 快照 / Snapshot 金额 Decimal.toString()）→ `03efceb` CI #78 全绿
+
 ## [v0.5.0-alpha] - 2026-08-07（Sprint 3C：Business Foundation 完整发布，Sprint 3 全部完成）
 
 ### 新增（Sprint 3C：Business Foundation）
@@ -138,10 +154,6 @@
 
 - 前端：移除 products/suppliers/materials 占位页，新增 10 个主数据/项目占位页
 - 默认税率改为环境变量 `DEFAULT_TAX_RATE`（默认 13，不写死）
-
-## [Unreleased]
-
-（Sprint 3 ERP Foundation 开发中）
 
 ## [v0.1.0-alpha] - 2026-08-04
 
