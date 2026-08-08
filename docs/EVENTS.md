@@ -1,6 +1,6 @@
 # EVENTS 领域事件注册表（Domain Events）
 
-- 版本：v1.13
+- 版本：v1.14
 - 日期：2026-08-08
 - 维护者：CIO（JINZA）｜审核：CTO
 - 关联：[API_GUIDELINES.md](./API_GUIDELINES.md) ｜ [ARCHITECTURE_BASELINE.md](./ARCHITECTURE_BASELINE.md)
@@ -184,6 +184,25 @@
 
 > 注：**Apply 成功时同时发布 `InvoiceAdjustmentApplied` + `AccountsReceivableAdjusted`**（后者 v1.9 已注册，复用不重复定义——CTO 98/100 拍板）；`InvoicePartiallyPaid/Paid`（4D 注册）与 4E-2 已实现事件不重复注册。
 
+#### 2.3.8 采购领域（Sprint 5A 注册，先注册后开发）
+
+> 来源：Sprint5A_PurchaseRequisition_PO_Design.md / ADR-0023；**PR = 需求事实源（内部申请，非供应商交互单据）**；**PO = 采购承诺事实源（对供应商正式承诺）**；**PO 行金额 = 快照复制，服务端 Σ 计算，禁客户端直传头金额**；**PO 不修改 PR 数量/金额事实**（转单是复制投影不是改写）；**PO 是 GR 的唯一来源**（5B，无 Direct GR，防超收=PO Line 数量 ceiling）；**PO 金额事实不被 GR 修改**（GR 只回写数量投影 receivedQty）；**审批复用 Workflow 不建 Approval 表**（module=PURCHASE_REQUISITION / PURCHASE_ORDER；审批≠生效，PO 正式下单语义=APPROVED）；Supplier 主数据已存在（3C-1）复用不新建；DocumentSequence 创建即取号（PO docType 已有 / PR docType 需新增）；GR/Supplier Invoice 事件属 5B/5C 不注册；PurchaseOrderPartiallyReceived/Received 投影事件 5B 注册。
+
+| eventType | 触发时机 | 载荷示例 | 实现状态 |
+| --- | --- | --- | --- |
+| `PurchaseRequisitionCreated` | 创建 PR（DRAFT；PR-2026-xxxx 创建即取号） | `{ requisitionId, requisitionCode, requesterId, departmentId, currency, totalAmount, createdBy }` | ⏳ 注册待实现（Sprint 5A） |
+| `PurchaseRequisitionSubmitted` | 提交审批（命中策略触发 Workflow） | `{ requisitionId, workflowInstanceId, submittedBy, submittedAt }` | ⏳ 注册待实现（Sprint 5A） |
+| `PurchaseRequisitionApproved` | 审批通过（Workflow 回调，投影回写） | `{ requisitionId, workflowInstanceId, approvedBy, approvedAt }` | ⏳ 注册待实现（Sprint 5A） |
+| `PurchaseRequisitionRejected` | 审批驳回（→ DRAFT 重提） | `{ requisitionId, workflowInstanceId, rejectedBy, rejectedAt, reason }` | ⏳ 注册待实现（Sprint 5A） |
+| `PurchaseRequisitionConverted` | PR → PO 转单（PR status=CONVERTED） | `{ requisitionId, purchaseOrderId, purchaseOrderCode, convertedBy, convertedAt }` | ⏳ 注册待实现（Sprint 5A） |
+| `PurchaseOrderCreated` | 创建 PO（DRAFT；PO-2026-xxxx 创建即取号） | `{ purchaseOrderId, purchaseOrderCode, supplierId, requisitionId, currency, totalAmount, createdBy }` | ⏳ 注册待实现（Sprint 5A） |
+| `PurchaseOrderSubmitted` | 提交审批 | `{ purchaseOrderId, workflowInstanceId, submittedBy, submittedAt }` | ⏳ 注册待实现（Sprint 5A） |
+| `PurchaseOrderApproved` | 审批通过（= 正式下单语义） | `{ purchaseOrderId, workflowInstanceId, approvedBy, approvedAt }` | ⏳ 注册待实现（Sprint 5A） |
+| `PurchaseOrderRejected` | 审批驳回（→ DRAFT 重提） | `{ purchaseOrderId, workflowInstanceId, rejectedBy, rejectedAt, reason }` | ⏳ 注册待实现（Sprint 5A） |
+| `PurchaseOrderCancelled` | 取消（DRAFT/SUBMITTED 可取消；APPROVED 后取消边界待确认） | `{ purchaseOrderId, cancelledBy, cancelledAt, reason }` | ⏳ 注册待实现（Sprint 5A） |
+
+> 注：PR/PO 事件统一载荷对齐 4E 先例（含单据 id/code/来源/金额/操作人）；`PurchaseOrderPartiallyReceived/Received`（5B GR 聚合投影）与 `GoodsReceived` / `SupplierInvoiceCreated`（5C）本阶段不注册——Sprint 5B/5C 注册。
+
 ### 2.4 主数据
 
 | eventType | 触发时机 | 载荷示例 |
@@ -217,6 +236,7 @@
 
 | 日期 | 版本 | 说明 |
 | --- | --- | --- |
+| 2026-08-08 | v1.14 | Sprint 5A 注册采购领域事件 10 个（PurchaseRequisitionCreated/Submitted/Approved/Rejected/Converted + PurchaseOrderCreated/Submitted/Approved/Rejected/Cancelled，统一载荷含 requisitionId/purchaseOrderId/supplierId/currency/totalAmount；**PR = 需求事实源、PO = 采购承诺事实源**；PO 行金额快照复制服务端 Σ 计算；PO 不修改 PR 事实；PO 是 GR 唯一来源（5B）；审批复用 Workflow 不建 Approval 表；见 2.3.8，ADR-0023）；GR/Supplier Invoice 事件 5B/5C 注册 |
 | 2026-08-08 | v1.13 | Sprint 4E-3 发票调整领域事件全部实现（CreditDebitNoteCreated/Submitted/ApprovalStarted/Approved/Rejected + InvoiceAdjustmentApplied 共 6 个 ✅；**Apply 时同时发布 InvoiceAdjustmentApplied + AccountsReceivableAdjusted**（后者 v1.9 已注册复用，不重复定义）；统一载荷含 noteId/noteCode/noteType/sourceInvoiceId/customerId/currency/adjustmentTotal；实现提交链：create `3d0e75b` / submit `70f4daf` / apply `b49629c` / workflow actions `21098ce`（businessType=credit-debit-note 终态回写）/ 负 AR 门禁（Receipt Allocation `RECEIPT_AR_NEGATIVE_BALANCE`、WriteOff Apply `WRITE_OFF_AR_NEGATIVE_BALANCE`）；PR #18 Ready for CTO Final Review |
 | 2026-08-08 | v1.12 | Sprint 4E-3 注册发票调整领域事件 5 个（CreditDebitNoteCreated/Submitted/Approved/Rejected + InvoiceAdjustmentApplied，统一载荷含 noteId/noteCode/noteType/sourceInvoiceId/invoiceId/accountsReceivableId/adjustmentType/amount/adjustedAmount；**CN/DN = Invoice Adjustment 事实源**；不修改原 Invoice 金额事实；不承担 Receipt/Allocation Reversal；AR.adjustedAmount 聚合结果禁 PATCH（唯一入口 InvoiceAdjustment Apply）；CN 负向/DN 正向调整 AR；全部调整可溯源 sourceInvoiceId/sourceInvoiceLineId；已有付款允许 CN 不回滚 Receipt；负余额（可退/可抵）第一版负 AR 投影、CustomerCredit 延后；见 2.3.7，ADR-0022）；AccountsReceivableAdjusted（v1.9 已注册）4E-3 实现时联动发布 |
 | 2026-08-08 | v1.11 | Sprint 4E-2 收款/核销/写销事件全部实现（ReceiptCreated/ReceiptAllocated/ReceiptFullyAllocated/ReceiptAllocationReversed/ReceiptVoided + WriteOffCreated/WriteOffSubmitted/WriteOffApproved/WriteOffRejected/WriteOffApplied 共 10 个 ✅，ReceiptUpdated 无 PATCH 端点保留注册；统一载荷含 receiptId/writeOffId/customerId/currency/amount/accountsReceivableIds 基境字段）；实现提交链：Receipt Create `d076e3a` / Allocation `c075dde`+`0440cd8` / Reversal-Void `68d697c`+`2353c8f` / WriteOff 三件套 `35bde4e`+`3b44ed0` / Create-Submit `4a89268`+`68fbe53` / Apply `224624d` / Workflow actions `aabedf2`（businessType=write-off 终态回写）；AR PartiallyPaid/Paid/WrittenOff/Closed 与 Invoice 投影事件联动发布（AuditLog 留痕，事件总线落地前）；PR #17 Ready for Final Review |
