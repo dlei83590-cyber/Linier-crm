@@ -457,6 +457,7 @@ const SEED_DOCUMENT_SEQUENCES = [
   { code: "GI", name: "出库单", docType: "GOODS_ISSUE", prefix: "GI", nextNo: 1, padLength: 6 },
   // Sprint 4D：Invoice Foundation 单据序列（CTO Review 必改①：DRAFT 不占号，仅 ISSUE 时取号 INV-2026-000123；幂等 upsert）
   { code: "INV", name: "发票", docType: "INVOICE", prefix: "INV", nextNo: 1, padLength: 6 },
+  // Sprint 4E-3：Credit Note / Debit Note 单据序列（复用 4D 已建序列——docType=CREDIT_NOTE/DEBIT_NOTE 与 CN-/DN-2026-xxxx 前缀均已存在，**不重复新增**；CTO 拍板：CN/DN 为两个正式单据类型，编号/审计/法务税务展示区分）
   { code: "CN", name: "贷项通知单", docType: "CREDIT_NOTE", prefix: "CN", nextNo: 1, padLength: 6 },
   { code: "DN", name: "借项通知单", docType: "DEBIT_NOTE", prefix: "DN", nextNo: 1, padLength: 6 },
   { code: "PV", name: "付款凭证", docType: "PAYMENT_VOUCHER", prefix: "PV", nextNo: 1, padLength: 6 },
@@ -546,6 +547,8 @@ const SEED_WORKFLOW_DEFINITIONS = [
 ];
 
 /** Sprint 4A：报价审批策略（Quotation Foundation；ApprovalPolicy 只负责选择 Workflow，不执行审批） */
+// Sprint 4E-3：CN/DN 采用条件审批（ApprovalPolicy module=CREDIT_DEBIT_NOTE，复用现有策略机制，不建 Approval 表）；
+// 按 4E-2 WriteOff 先例**不自动建默认审批策略**（策略由用户按需配置；无策略时 SUBMITTED 后可直接 Apply）
 const SEED_APPROVAL_POLICIES: Array<{
   code: string;
   name: string;
