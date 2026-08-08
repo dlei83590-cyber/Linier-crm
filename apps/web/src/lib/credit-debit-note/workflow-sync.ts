@@ -14,9 +14,72 @@ import { publishCreditDebitNoteEvent } from "@/lib/credit-debit-note/events";
  *   - **审批金额匹配**：ApprovalPolicy rule 按 `note.adjustmentTotal`（= Σ CreditDebitNoteLine.totalAmount）
  *     匹配金额区间，**不引用 AR.balanceAmount**（balance 是目标余额，不是本次调整金额）；
  *   - 单实例架构：WorkflowInstance @@unique([businessType, businessId]) 保持不变（businessType="credit-debit-note"）。
- *   - **Phase 3 边界**：本文件仅提供条件触发（maybeTriggerCreditDebitNoteApproval）供 Submit 调用；
- *     审批终态回写（sync）与 workflow actions 路由接入在 Workflow 阶段实现，本阶段不接入。
+ *   - **Workflow 阶段（CTO Apply 专项复核 100/100 后解锁）**：本文件新增审批终态回写
+ *     syncCreditDebitNoteApproval（供 workflows/instances/[id]/actions 调用，businessType === "credit-debit-note"）；
+ *     与 Apply 红线一致：审批终态只回写投影（approvalStatus/approvedAt/approvedById），**绝不碰 AR**。
  */
+
+/**
+ * 审批终态回写（调用方：workflows/instances/[id]/actions，businessType === "credit-debit-note"）
+ * COMPLETED → approvalStatus=APPROVED + approvedAt + approvedById；REJECTED → approvalStatus=REJECTED。
+ * **红线（CTO 98/100 锁死）**：审批通过 ≠ Applied——本函数只回写 CreditDebitNote 审批投影，
+ * **绝不修改 AR.adjustedAmount/balanceAmount**（财务影响只能由显式 Apply 事务完成，InvoiceAdjustment 唯一入口）。
+ * DB 事实更新不 catch（失败必须冒泡）；仅事件发布降级（.catch）。
+ */
+export async function syncCreditDebitNoteApproval(params: {
+  noteId: string;
+  workflowStatus: string; // COMPLETED | REJECTED
+  actorId: string;
+}) {
+  const note = await prisma.creditDebitNote.findFirst({
+    where: { id: params.noteId, deletedAt: null },
+  });
+  if (!note) return;
+
+  const basePayload = {
+    noteId: note.id,
+    noteCode: note.code,
+    noteType: note.noteType,
+    sourceInvoiceId: note.sourceInvoiceId,
+    customerId: note.customerId,
+    currency: note.currency,
+    adjustmentTotal: note.adjustmentTotal,
+    reason: note.reason,
+  };
+
+  if (params.workflowStatus === "COMPLETED") {
+    // DB 事实更新：不 catch（审批投影失败必须冒泡，不允许静默）
+    await prisma.creditDebitNote.update({
+      where: { id: note.id },
+      data: {
+        approvalStatus: "APPROVED",
+        approvedAt: new Date(),
+        approvedById: params.actorId,
+        updatedById: params.actorId,
+      },
+    });
+    await publishCreditDebitNoteEvent({
+      eventType: "CreditDebitNoteApproved",
+      actorId: params.actorId,
+      entityId: note.id,
+      payload: { ...basePayload, workflowInstanceId: note.workflowInstanceId, approverId: params.actorId },
+    }).catch(() => undefined);
+    return;
+  }
+
+  if (params.workflowStatus === "REJECTED") {
+    await prisma.creditDebitNote.update({
+      where: { id: note.id },
+      data: { approvalStatus: "REJECTED", updatedById: params.actorId },
+    });
+    await publishCreditDebitNoteEvent({
+      eventType: "CreditDebitNoteRejected",
+      actorId: params.actorId,
+      entityId: note.id,
+      payload: { ...basePayload, workflowInstanceId: note.workflowInstanceId, approverId: params.actorId },
+    }).catch(() => undefined);
+  }
+}
 
 /**
  * 条件触发：CreditDebitNote Submit 时按 CREDIT_DEBIT_NOTE 审批策略创建/复用 Workflow 实例。
