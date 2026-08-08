@@ -354,3 +354,21 @@ export const invoiceUpdateSchema = z
     version: z.number().int().positive(),
   })
   .refine((v) => Object.keys(v).length > 1, { message: "至少提供一个更新字段" });
+
+// ============================================================================
+// Receipt / Payment Allocation（Sprint 4E-2）
+// ============================================================================
+
+/** Receipt 创建：只记录实际收到的钱（拍板①：创建与核销分离，不自动核销；unallocatedAmount = amount）
+ * 拍板④：DocumentSequence 创建即取号（RCT-2026-xxxx）
+ * 硬规则：customerId/currency 由调用方提供；核销时校验与目标 AR 一致（409 RECEIPT_CUSTOMER_MISMATCH / RECEIPT_CURRENCY_MISMATCH）
+ */
+export const receiptCreateSchema = z.object({
+  customerId: z.string().min(1),
+  currency: z.string().min(3).max(3).default("CNY"),
+  amount: z.coerce.number().positive(),
+  receiptDate: z.string().datetime().optional(),
+  paymentMethod: z.enum(["BANK_TRANSFER", "CHEQUE", "CASH", "CARD", "OTHER"]),
+  referenceNo: z.string().max(100).nullable().optional(),
+  changeReason: z.string().max(500).optional(),
+});
