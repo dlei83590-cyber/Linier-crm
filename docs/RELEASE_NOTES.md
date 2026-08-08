@@ -1,12 +1,12 @@
 # Release Notes
 
-## Sprint 4E-1 — Accounts Receivable Foundation（2026-08-08，PR #16 Ready for Final Review，未发布 Tag）
+## Sprint 4E-1 — Accounts Receivable Foundation（2026-08-08，PR #16 已合并，未发布 Tag）
 
 > PR: #16（Sprint 4E-1 Accounts Receivable Foundation，feature/sprint4-sales）
-> 状态：READY FOR FINAL REVIEW（CTO Review 97/100 APPROVED WITH CHANGES 已落实；CTO Final Review 待验收；合并后再改 Completed；未打 Tag；待 Sprint 4 Sales 完整闭环（4E-1 AR + 4E-2 Receipt + 4E-3 CN/DN）后统一发布下一个 Alpha）
-> CTO 结论：待验收（CTO Final Review Cover：docs/reviews/Sprint4E1_CTO_Review_Cover.md，Checklist 12 项）
+> 状态：MERGED（squash f58fd87；未打 Tag；待 Sprint 4 Sales 完整闭环（4E-2 Receipt + 4E-3 CN/DN）后统一发布下一个 Alpha）
+> CTO 结论：Sprint 4E-1 Accounts Receivable Foundation **APPROVE & MERGE（98/100）**（CTO Final Review Cover：docs/reviews/Sprint4E1_CTO_Review_Cover.md，Checklist 12 项全部 ✅；Blocking Issues 0；核心架构复核全 PASS）
 
-### Sprint 4E-1 Accounts Receivable Foundation（PR #16，Ready for Final Review）
+### Sprint 4E-1 Accounts Receivable Foundation（PR #16，已合并）
 
 - **应收领域模型（余额事实源）**：AccountsReceivable / AccountsReceivableRevision / AccountsReceivableSnapshot（+3 模型 / +3 枚举，迁移 0018_accounts_receivable_foundation，仅新增不改既有；**禁止修改 Invoice 表**——CTO 拍板）；Invoice 1:1 AR（invoiceId @unique）；**Invoice = 单据事实源，AR = 余额事实源**（Invoice 上 paidAmount/balanceAmount 仅投影回写）
 - **余额唯一口径（CTO 锁定）**：balanceAmount = originalAmount + adjustedAmount - paidAmount - writeOffAmount；服务端唯一计算（computeBalance 单入口），前端禁止 PATCH 金额，由 4E-2 Receipt/4E-3 CN-DN 动作或下游事实表驱动
