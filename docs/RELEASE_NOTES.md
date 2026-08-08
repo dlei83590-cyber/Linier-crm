@@ -1,10 +1,10 @@
 # Release Notes
 
-## Sprint 4E-2 — Receipt & Payment Allocation Foundation（2026-08-08，PR #17 Ready for Final Review，未发布 Tag）
+## Sprint 4E-2 — Receipt & Payment Allocation Foundation（2026-08-08，PR #17 已合并，未发布 Tag）
 
 > PR: #17（Sprint 4E-2 Receipt & Payment Allocation Foundation，feature/sprint4-sales）
-> 状态：**Ready for Final Review**（PR #17 Open 待 CTO Final Review；未打 Tag；待 Sprint 4 Sales 完整闭环（4E-2 合并 + 4E-3 CN/DN）后统一发布下一个 Alpha）
-> CTO 结论：待 CTO Final Review（Checklist 16 项见 docs/reviews/Sprint4E2_CTO_Review_Cover.md；CI 全绿：Quality Gates/Build/Secret Scanning）
+> 状态：MERGED（squash b84b036；未打 Tag；待 Sprint 4 Sales 完整闭环（4E-2 + 4E-3 CN/DN）后统一发布下一个 Alpha）
+> CTO 结论：Sprint 4E-2 Receipt & Payment Allocation Foundation **APPROVE & MERGE（Blocking: 0）**（CTO Final Review Cover：docs/reviews/Sprint4E2_CTO_Review_Cover.md，Checklist 16 项全部 ✅；3 项财务一致性阻断项修复后复核全部 PASS；CI 全绿：Quality Gates/Build/Secret Scanning）
 
 ### Sprint 4E-2 Receipt & Payment Allocation Foundation（PR #17）
 
