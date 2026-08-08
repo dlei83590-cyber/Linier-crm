@@ -438,3 +438,37 @@ export const writeOffSubmitSchema = z.object({
 export const writeOffApplySchema = z.object({
   changeReason: z.string().max(500).optional(),
 });
+
+// ============ Sprint 4E-3：Credit Note / Debit Note ============
+
+/** CreditDebitNote 创建：单票制（sourceInvoiceId 必填唯一）；只接受已 ISSUED 的 Invoice；
+ * Customer/Currency 从原 Invoice 继承（禁止客户端传）；行只传 sourceInvoiceLineId + quantity（>0）；
+ * 金额/税率/价格只复制原 InvoiceLine 快照，不调用 Pricing Engine；编号创建即取现有 CN/DN DocumentSequence。
+ * **不创建 InvoiceAdjustment、不改 AR、不改 Invoice.balanceAmount**（事实由 Apply 事务生成）
+ */
+export const creditDebitNoteCreateSchema = z.object({
+  noteType: z.enum(["CREDIT", "DEBIT"]), // CREDIT 负向调整 / DEBIT 正向调整（符号口径在 Apply 落 InvoiceAdjustment）
+  sourceInvoiceId: z.string().min(1),
+  reason: z.string().min(1).max(500),
+  lines: z
+    .array(
+      z.object({
+        sourceInvoiceLineId: z.string().min(1),
+        quantity: z.coerce.number().positive(), // 调整数量 > 0（部分行数量调整——CTO 拍板④）
+      }),
+    )
+    .min(1),
+  changeReason: z.string().max(500).optional(),
+});
+
+/** CreditDebitNote 提交审批：DRAFT → SUBMITTED（命中 CREDIT_DEBIT_NOTE 策略则 maybeTriggerCreditDebitNoteApproval 建/复用 Workflow；无策略可直接进入可 Apply 状态） */
+export const creditDebitNoteSubmitSchema = z.object({
+  changeReason: z.string().max(500).optional(),
+});
+
+/** CreditDebitNote Apply：**唯一回写 AR.adjustedAmount 的动作**（CTO：APPROVED ≠ APPLIED，审批通过 ≠ 自动改余额）
+ * 重复 Apply → 409 CN_DN_ALREADY_APPLIED（幂等/稳定 409）
+ */
+export const creditDebitNoteApplySchema = z.object({
+  changeReason: z.string().max(500).optional(),
+});

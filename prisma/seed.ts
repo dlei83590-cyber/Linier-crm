@@ -116,6 +116,8 @@ const SEED_ACTION_MODULES = [
   "receipt-snapshot",
   "write-off",
   "write-off-allocation",
+  // Sprint 4E-3：Credit Note / Debit Note 模块（动作映射：create→credit-debit-note:create（创建即取号）；submit→credit-debit-note:edit；apply→credit-debit-note:approve（APPROVED≠APPLIED，不新造 apply 动作）；cancel DRAFT→credit-debit-note:close；approve→credit-debit-note:approve；line 仅 view/edit、adjustment 系统事实层仅 view——见 SEED_RESTRICTED_ACTION_PERMISSIONS）
+  "credit-debit-note",
   // Sprint 3A：平台底座模块
   "workflow-definition",
   "workflow-step",
@@ -145,6 +147,14 @@ const SEED_ACTIONS = ["view", "create", "edit", "delete", "approve", "audit", "e
 const SEED_ACTION_PERMISSIONS: Array<{ name: string; code: string; module: string }> = SEED_ACTION_MODULES.flatMap((module) =>
   SEED_ACTIONS.map((action) => ({ name: `${action} ${module}`, code: `${module}:${action}`, module })),
 );
+
+// Sprint 4E-3：受限动作权限（CreditDebitNoteLine 仅 view/edit——行由单据驱动，客户端不直接改行；
+// InvoiceAdjustment 系统事实层仅 view——客户端不允许直接创建（事实由 Apply 事务生成），不开放 create/edit）
+const SEED_RESTRICTED_ACTION_PERMISSIONS: Array<{ name: string; code: string; module: string }> = [
+  { name: "view credit-debit-note-line", code: "credit-debit-note-line:view", module: "credit-debit-note-line" },
+  { name: "edit credit-debit-note-line", code: "credit-debit-note-line:edit", module: "credit-debit-note-line" },
+  { name: "view invoice-adjustment", code: "invoice-adjustment:view", module: "invoice-adjustment" },
+];
 
 const SEED_UNITS = [
   { code: "KG", name: "千克", symbol: "kg" },
@@ -457,6 +467,7 @@ const SEED_DOCUMENT_SEQUENCES = [
   { code: "GI", name: "出库单", docType: "GOODS_ISSUE", prefix: "GI", nextNo: 1, padLength: 6 },
   // Sprint 4D：Invoice Foundation 单据序列（CTO Review 必改①：DRAFT 不占号，仅 ISSUE 时取号 INV-2026-000123；幂等 upsert）
   { code: "INV", name: "发票", docType: "INVOICE", prefix: "INV", nextNo: 1, padLength: 6 },
+  // Sprint 4E-3：Credit Note / Debit Note 单据序列（复用 4D 已建序列——docType=CREDIT_NOTE/DEBIT_NOTE 与 CN-/DN-2026-xxxx 前缀均已存在，**不重复新增**；CTO 拍板：CN/DN 为两个正式单据类型，编号/审计/法务税务展示区分）
   { code: "CN", name: "贷项通知单", docType: "CREDIT_NOTE", prefix: "CN", nextNo: 1, padLength: 6 },
   { code: "DN", name: "借项通知单", docType: "DEBIT_NOTE", prefix: "DN", nextNo: 1, padLength: 6 },
   { code: "PV", name: "付款凭证", docType: "PAYMENT_VOUCHER", prefix: "PV", nextNo: 1, padLength: 6 },
@@ -546,6 +557,8 @@ const SEED_WORKFLOW_DEFINITIONS = [
 ];
 
 /** Sprint 4A：报价审批策略（Quotation Foundation；ApprovalPolicy 只负责选择 Workflow，不执行审批） */
+// Sprint 4E-3：CN/DN 采用条件审批（ApprovalPolicy module=CREDIT_DEBIT_NOTE，复用现有策略机制，不建 Approval 表）；
+// 按 4E-2 WriteOff 先例**不自动建默认审批策略**（策略由用户按需配置；无策略时 SUBMITTED 后可直接 Apply）
 const SEED_APPROVAL_POLICIES: Array<{
   code: string;
   name: string;
@@ -704,8 +717,8 @@ async function main() {
     roleMap.set(role.code, saved.id);
   }
 
-  // Permissions (read/write + 动作级)
-  for (const permission of [...SEED_PERMISSIONS, ...SEED_ACTION_PERMISSIONS]) {
+  // Permissions (read/write + 动作级 + 4E-3 受限动作)
+  for (const permission of [...SEED_PERMISSIONS, ...SEED_ACTION_PERMISSIONS, ...SEED_RESTRICTED_ACTION_PERMISSIONS]) {
     await prisma.permission.upsert({
       where: { code: permission.code },
       update: {},

@@ -315,6 +315,7 @@ model UnitOfMeasure {
   salesOrderLines SalesOrderLine[]
   deliveryLines   DeliveryLine[]
   invoiceLines    InvoiceLine[]
+  creditDebitNoteLines CreditDebitNoteLine[] // 4E-3：调整单明细（CreditDebitNoteLine.uom 方向）
   createdAt     DateTime @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 
@@ -393,6 +394,7 @@ model Item {
   salesOrderLines SalesOrderLine[]
   deliveryLines   DeliveryLine[]
   invoiceLines    InvoiceLine[]
+  creditDebitNoteLines CreditDebitNoteLine[] // 4E-3：调整单明细（CreditDebitNoteLine.item 方向）
   createdAt     DateTime        @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime        @updatedAt @db.Timestamptz(3)
 
@@ -1592,6 +1594,7 @@ model WorkflowInstance {
   salesOrders  SalesOrder[]
   invoices     Invoice[]
   writeOffs    WriteOff[] // 4E-2：写销审批（Workflow 唯一审批事实源）
+  creditDebitNotes CreditDebitNote[] // 4E-3：CN/DN 审批（Workflow 唯一审批事实源）
   isActive     Boolean         @default(true)
   createdById  String?
   updatedById  String?
@@ -2441,6 +2444,8 @@ model Customer {
   invoices     Invoice[]
   accountsReceivables AccountsReceivable[] // 应收余额（4E-1；余额事实源，Customer 对账用）
   receipts     Receipt[] // 收款（4E-2；收款事实源）
+  creditDebitNotes CreditDebitNote[] // 4E-3：发票调整单（CN/DN；CreditDebitNote.customerId 方向）
+  invoiceAdjustments InvoiceAdjustment[] // 4E-3：调整事实（InvoiceAdjustment.customerId 方向）
   isActive     Boolean         @default(true)
   createdById  String?
   updatedById  String?
@@ -3783,6 +3788,8 @@ model Invoice {
   revisions InvoiceRevision[]
   snapshots InvoiceSnapshot[]
   accountsReceivable AccountsReceivable? // 余额事实源（4E-1；1:1，Invoice 为单据事实源，AR 持真实余额）
+  creditDebitNotes CreditDebitNote[] // 4E-3：发票调整单（CN/DN；单票制 sourceInvoiceId）
+  adjustments InvoiceAdjustment[] // 4E-3：调整事实（InvoiceAdjustment.invoiceId 方向）
 
   @@index([deliveryId])
   @@index([salesOrderId])
@@ -3799,6 +3806,8 @@ model InvoiceLine {
   invoice      Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   sourceDeliveryLineId String? // 溯源 → DeliveryLine（DeliveryLine 软删后 SetNull；必填语义，软删防御）
   sourceDeliveryLine DeliveryLine? @relation(fields: [sourceDeliveryLineId], references: [id], onDelete: SetNull)
+  creditDebitNoteLines CreditDebitNoteLine[] // 4E-3：调整单明细（CreditDebitNoteLine.sourceInvoiceLineId 方向）
+  adjustments InvoiceAdjustment[] // 4E-3：调整事实（InvoiceAdjustment.invoiceLineId 方向）
   lineNo       Int      @default(10) // 行号（10/20/30/40 步进）
   itemId       String?  // 物料（继承 DeliveryLine.itemId，可空）
   item         Item?    @relation(fields: [itemId], references: [id], onDelete: Restrict)
@@ -3956,6 +3965,7 @@ model AccountsReceivable {
   snapshots AccountsReceivableSnapshot[]
   receiptAllocations ReceiptAllocation[] // 4E-2：核销事实（M:N Receipt ↔ AR）
   writeOffAllocations WriteOffAllocation[] // 4E-2：写销明细（WriteOff → AR）
+  invoiceAdjustments InvoiceAdjustment[] // 4E-3：调整事实（InvoiceAdjustment.accountsReceivableId 方向）
 
   @@index([customerId])
   @@index([status])
@@ -4224,6 +4234,164 @@ model WriteOffAllocation {
 
   @@unique([writeOffId, accountsReceivableId])
   @@index([writeOffId])
+  @@index([accountsReceivableId])
+  @@index([deletedAt])
+}
+
+// ============================================================
+// Sprint 4E-3：Credit Note / Debit Note（发票调整与应收调整领域）
+// CTO Design Review 98/100 APPROVED WITH CHANGES（2026-08-08）：
+// ① 单票制（sourceInvoiceId 必填且唯一；跨票 Consolidated Adjustment 延后）
+// ② 负 AR 方案 A：允许 balanceAmount < 0（=Customer Credit/可退可抵）；**不新增数据库状态**
+//    （AccountsReceivableStatus 不加 CREDIT；读取投影 isCreditBalance/creditAmount/effectiveBalanceType）
+// ③ 条件审批：复用 ApprovalPolicy(module=CREDIT_DEBIT_NOTE)，不建 Approval 表
+// ④ 部分行调整支持，但必须累计防超调（remainingAdjustableQty = original - cumulativeAppliedCreditQty）
+// ⑤ 第一版禁止 DN 超原 Invoice 金额（行级 ceiling = 原行金额；未来 ADDITIONAL_CHARGE 单独 ADR）
+// 符号口径（CTO 拍板）：CN → adjustmentAmount < 0；DN → adjustmentAmount > 0（signed Decimal，全系统唯一）
+// 事实链：Invoice → CreditDebitNote → CreditDebitNoteLine → InvoiceAdjustment → AR.adjustedAmount → AR.balanceAmount
+// 边界：不修改原 Invoice 金额事实（invoiceTotal/行快照/InvoiceSnapshot 不动）；不承担 Receipt/Allocation Reversal；
+//       AR.adjustedAmount 聚合结果禁 PATCH（唯一入口 InvoiceAdjustment Apply）；APPROVED ≠ APPLIED
+// 编号：DocumentSequence 创建即取号（CN-/DN-2026-xxxx；docType=CREDIT_NOTE/DEBIT_NOTE 已有）
+// onDelete：CreditDebitNote→Invoice/Customer Restrict；CreditDebitNoteLine→Note Cascade、→InvoiceLine Restrict；
+//           InvoiceAdjustment→Note/Line/Invoice/AR Restrict、→InvoiceLine SetNull（可空整票调整）
+// ============================================================
+
+/// 发票调整单类型（CTO 98/100 拍板：全系统唯一符号口径——CREDIT 负向、DEBIT 正向）
+enum CreditDebitNoteType {
+  CREDIT // 贷项通知单（负向调整 AR：adjustmentAmount < 0）
+  DEBIT  // 借项通知单（正向调整 AR：adjustmentAmount > 0）
+}
+
+/// 发票调整单状态（单据生命周期；审批状态走 approvalStatus 投影复用 ApprovalStatus——不膨胀）
+enum CreditDebitNoteStatus {
+  DRAFT     // 草稿（可编辑行）
+  SUBMITTED // 已提交（命中策略 → Workflow 审批 PENDING；未命中 → 可直接进入可 Apply 状态）
+  APPLIED   // 已生效（唯一回写 AR.adjustedAmount 的入口；APPROVED ≠ APPLIED）
+  CANCELLED // 已取消（未生效前可取消）
+}
+
+/// 发票调整单头（CN/DN；4E-3 发票调整域；不修改原 Invoice 金额事实）
+model CreditDebitNote {
+  id           String   @id @default(cuid())
+  code         String   @unique // 调整单编号（CN-/DN-2026-xxxx，DocumentSequence 创建即取号）
+  noteType     CreditDebitNoteType // CREDIT 负向 / DEBIT 正向
+  sourceInvoiceId String // 单票制（CTO 拍板①：必填且唯一；跨票 Consolidated 延后）
+  sourceInvoice Invoice @relation(fields: [sourceInvoiceId], references: [id], onDelete: Restrict)
+  customerId   String   // 客户（继承 sourceInvoice.customerId）
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  currency     String   @default("CNY") // 币种（继承 sourceInvoice.currency）
+  reason       String   // 调整原因（折让/退货/价差/更正/其他）
+  adjustmentTotal Decimal @db.Decimal(18, 4) // 调整总额（= Σ lines；服务端计算，禁止直传头金额）
+  status       CreditDebitNoteStatus @default(DRAFT)
+  // 条件审批（CTO 拍板③：复用 ApprovalPolicy module=CREDIT_DEBIT_NOTE，不建 Approval 表）
+  approvalPolicyId String?
+  // 审批投影（Workflow 唯一审批事实源；复用 ApprovalStatus——不膨胀）
+  workflowInstanceId String?
+  workflowInstance WorkflowInstance? @relation(fields: [workflowInstanceId], references: [id], onDelete: SetNull)
+  approvalStatus ApprovalStatus @default(DRAFT)
+  approvedAt    DateTime? @db.Timestamptz(3)
+  approvedById  String?
+  appliedAt     DateTime? @db.Timestamptz(3) // APPLIED 才回写 AR（审批完成前禁止提前修改）
+  appliedById   String?
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  lines      CreditDebitNoteLine[]
+  adjustments InvoiceAdjustment[]
+
+  @@index([noteType])
+  @@index([sourceInvoiceId])
+  @@index([customerId])
+  @@index([status])
+  @@index([workflowInstanceId])
+  @@index([deletedAt])
+}
+
+/// 发票调整单明细（逐行溯源 sourceInvoiceLineId；金额快照直接复制 InvoiceLine——不重算、不调用 Pricing Engine）
+model CreditDebitNoteLine {
+  id           String   @id @default(cuid())
+  creditDebitNoteId String
+  creditDebitNote CreditDebitNote @relation(fields: [creditDebitNoteId], references: [id], onDelete: Cascade)
+  sourceInvoiceLineId String // 溯源发票行（必填可追溯——CTO 锁死）
+  sourceInvoiceLine InvoiceLine @relation(fields: [sourceInvoiceLineId], references: [id], onDelete: Restrict)
+  lineNo       Int      @default(10) // 行号（10/20/30/40 步进）
+  itemId       String?  // 物料（继承 InvoiceLine.itemId，可空）
+  item         Item?    @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  description  String   // 描述（快照复制）
+  quantity     Decimal  @db.Decimal(18, 4) // 调整数量（>0；部分行数量调整——CTO 拍板④，累计防超调）
+  uomId        String?  // 单位（继承 InvoiceLine.uomId）
+  uom          UnitOfMeasure? @relation(fields: [uomId], references: [id], onDelete: SetNull)
+  // 金额快照（直接复制 InvoiceLine 快照，不重算）
+  unitPrice    Decimal  @db.Decimal(18, 4) // 单价快照（复制）
+  discountRate Decimal  @default(0) @db.Decimal(18, 4) // 折扣率快照（复制）
+  lineAmount   Decimal  @db.Decimal(18, 4) // 行未税金额（复制计算值）
+  taxAmount    Decimal  @db.Decimal(18, 4) // 行税额（复制）
+  totalAmount  Decimal  @db.Decimal(18, 4) // 行含税金额（复制）
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  adjustments InvoiceAdjustment[]
+
+  @@unique([creditDebitNoteId, lineNo])
+  @@index([creditDebitNoteId])
+  @@index([sourceInvoiceLineId])
+  @@index([itemId])
+  @@index([deletedAt])
+}
+
+/// 发票调整事实中间层（4E-3 最核心事实层——真正影响 AR.adjustedAmount 的唯一入口）
+/// 类比：ReceiptAllocation（收款↔AR 中间层）/ WriteOffAllocation（写销↔AR 明细）
+/// CTO 98/100：adjustmentAmount 必须采用有符号 Decimal（CN<0、DN>0）；全系统唯一符号口径
+/// 双溯源：sourceNoteId/sourceNoteLineId（单据侧）+ invoiceId/invoiceLineId（发票侧）+ accountsReceivableId（AR 侧）
+model InvoiceAdjustment {
+  id           String   @id @default(cuid())
+  sourceNoteId String
+  sourceNote   CreditDebitNote @relation(fields: [sourceNoteId], references: [id], onDelete: Restrict)
+  sourceNoteLineId String
+  sourceNoteLine CreditDebitNoteLine @relation(fields: [sourceNoteLineId], references: [id], onDelete: Restrict)
+  invoiceId    String
+  invoice      Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  invoiceLineId String? // 可空：整票调整（invoiceLineId 为空）
+  invoiceLine  InvoiceLine? @relation(fields: [invoiceLineId], references: [id], onDelete: SetNull)
+  accountsReceivableId String
+  accountsReceivable AccountsReceivable @relation(fields: [accountsReceivableId], references: [id], onDelete: Restrict)
+  customerId   String // 冗余（Apply 事务校验与 AR 一致）
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  currency     String   @default("CNY")
+  adjustmentType CreditDebitNoteType // CREDIT 负向 / DEBIT 正向
+  quantity     Decimal  @db.Decimal(18, 4) // 调整数量（累计防超调用）
+  adjustmentAmount Decimal @db.Decimal(18, 4) // **有符号调整金额：CN<0 / DN>0（CTO 98/100，全系统唯一符号口径）**
+  appliedAt    DateTime? @db.Timestamptz(3) // Apply 回写时间（null = 未生效）
+  appliedById  String?
+  // reversal 预留（CTO：4E-3 首版不实现 reversal，字段预留）
+  reversedAt   DateTime? @db.Timestamptz(3)
+  reversedById String?
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([sourceNoteId, invoiceId, invoiceLineId]) // 防重复调整行（同一调整单对同一发票/行只一条事实）
+  @@index([sourceNoteId])
+  @@index([sourceNoteLineId])
+  @@index([invoiceId])
+  @@index([invoiceLineId])
   @@index([accountsReceivableId])
   @@index([deletedAt])
 }

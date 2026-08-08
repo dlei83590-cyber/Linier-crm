@@ -1,5 +1,21 @@
 # Release Notes
 
+## Sprint 4E-3 — Credit Note / Debit Note Foundation（2026-08-08，PR #18 待合并，未发布 Tag）
+
+> PR: #18（Sprint 4E-3 Credit Note / Debit Note Foundation，feature/sprint4-sales）
+> 状态：**Ready for CTO Final Review**（PR #18 待验收合并；合并后改 MERGED 并打 Tag）
+> CTO 结论：Design Review **98/100 APPROVED WITH CHANGES**（5 个 Pending 全部拍板）+ **Apply 专项复核 100/100 APPROVED（0 Blocking，5/5 核心项通过）**
+> 关联：docs/reviews/Sprint4E3_CTO_Review_Cover.md（16 项 Checklist 待 Final Review）；CI 全绿：Quality Gates/Build/Secret Scanning
+
+### Sprint 4E-3 Credit Note / Debit Note Foundation（PR #18）
+
+- **发票调整领域模型**：CreditDebitNote / CreditDebitNoteLine / InvoiceAdjustment（+3 模型 / +2 枚举，迁移 0020_credit_debit_note_foundation，纯增量不改既有）；**CN/DN = Invoice Adjustment 事实源**；**InvoiceAdjustment = 事实中间层（唯一修改 AR.adjustedAmount 入口，客户端禁直接创建，只读）**
+- **API（4 端点）**：POST/GET /api/credit-debit-notes（创建 DRAFT+lines / 列表）+ POST /{id}/submit（DRAFT→SUBMITTED + 条件审批触发）+ POST /{id}/apply（**唯一回写 AR.adjustedAmount 入口**）
+- **财务边界（CTO 锁死）**：CN/DN 不修改原 Invoice 金额事实；APPROVED ≠ APPLIED；只有 Apply 创建 InvoiceAdjustment 并修改 AR.adjustedAmount；CN 负 adjustment / DN 正 adjustment（全系统唯一符号口径）；负 AR = Customer Credit projection（不新增 CREDIT 状态，禁止 Receipt Allocation / WriteOff）
+- **累计防超调（CTO 98/100 最重要补充）**：CREDIT remainingAdjustableQty = 原行数量 - Σ已 APPLIED 未 reversed CREDIT quantity；DEBIT 累计金额 ≤ 原行金额 ceiling；金额按同类型聚合，CN/DN 不互相污染；锁内重算防并发穿透
+- **Workflow 接入**：businessType="credit-debit-note" 终态回写（syncCreditDebitNoteApproval）；**绝不碰 AR**
+- **文档**：OpenAPI（174 paths/466 schemas）+ QA（T1-T21）+ Test Cases（166 用例）+ ADR-0022（Accepted + Implemented）+ EVENTS v1.13 + DOMAIN_MODEL v1.15
+
 ## Sprint 4E-2 — Receipt & Payment Allocation Foundation（2026-08-08，PR #17 已合并，未发布 Tag）
 
 > PR: #17（Sprint 4E-2 Receipt & Payment Allocation Foundation，feature/sprint4-sales）

@@ -2,7 +2,18 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased] - Sprint 4A + 4B + 4C + 4D + 4E-1 + 4E-2（Quotation / Sales Order / Delivery / Invoice / Accounts Receivable / Receipt & Payment Allocation Foundation，2026-08-08，PR #12/#13/#14/#15/#16/#17 已合并，未打 Tag）
+## [Unreleased] - Sprint 4A + 4B + 4C + 4D + 4E-1 + 4E-2 + 4E-3（Quotation / Sales Order / Delivery / Invoice / Accounts Receivable / Receipt & Payment Allocation / Credit Note & Debit Note Foundation，2026-08-08，PR #12-#18；4E-3 待合并，未打 Tag）
+
+### 新增（Sprint 4E-3：Credit Note / Debit Note Foundation，PR #18，Ready for CTO Final Review）
+
+- **发票调整领域（调整事实源）**：CreditDebitNote / CreditDebitNoteLine / InvoiceAdjustment（+3 模型 / +2 枚举，迁移 `0020_credit_debit_note_foundation`，纯增量不改既有；DocumentType 复用 CREDIT_NOTE/DEBIT_NOTE——4D 已建，不重复新增）；**CN/DN = Invoice Adjustment 事实源**；**InvoiceAdjustment = 事实中间层（唯一修改 AR.adjustedAmount 的入口，客户端禁直接创建/编辑，只读）**
+- **单票制 + 继承（CTO 拍板①）**：sourceInvoiceId 必填唯一；只接受已 ISSUED 的 Invoice（409 CN_DN_SOURCE_INVOICE_INVALID）；Customer/Currency 从原 Invoice 继承；行只传 sourceInvoiceLineId+quantity（>0），**金额/税率/价格只复制原 InvoiceLine 快照，不调用 Pricing Engine**；编号创建即取号 CN-/DN-2026-xxxx
+- **Create 不做事实落账**：不创建 InvoiceAdjustment、不改 AR、不改 Invoice.balanceAmount（事实由 Apply 事务生成）
+- **APPROVED ≠ APPLIED（CTO 锁死）**：条件审批复用 ApprovalPolicy(module=CREDIT_DEBIT_NOTE)（不建 Approval 表）；submit 同事务 maybeTriggerCreditDebitNoteApproval（命中策略→PENDING 须 APPROVED 后才能 Apply / 未命中→可直接 Apply；**Workflow 配置异常事务回滚 409 CN_DN_WORKFLOW_FAILED**）；**Apply 是唯一修改 AR.adjustedAmount / balanceAmount 的入口**；重复 Apply 稳定 409 CN_DN_ALREADY_APPLIED（幂等）
+- **Apply 事务红线（CTO 98/100 + Apply 专项复核 100/100）**：Lock Note → 状态门禁 → Lock Invoice → Lock InvoiceLines（id ASC FOR UPDATE）→ Lock AR → 校验 customerId/currency（409 CN_DN_SOURCE_NOT_COMPATIBLE）→ **累计防超调锁内重算**（CREDIT：remainingAdjustableQty = 原行数量 - Σ已 APPLIED 未 reversed CREDIT quantity → 409 CN_DN_QUANTITY_EXCEEDED；金额：同类型聚合 abs + 本次 ≤ 原行金额 ceiling → 409 CN_DN_AMOUNT_EXCEEDED，DN 第一版禁超原行金额）→ Create InvoiceAdjustment facts（**signed：CN<0 / DN>0**；部分行按数量比例折算快照金额）→ AR.adjustedAmount += Σ signed → AR.balanceAmount = computeBalance 单入口 → AR status = computeArStatus（**负 AR 不加 CREDIT 状态**）→ **Invoice.balanceAmount = AR newBalance（Invoice 金额事实不动）** → AR Revision + Snapshot(ADJUSTMENT/ADJUSTED) → Note=APPLIED → 事件 InvoiceAdjustmentApplied + AccountsReceivableAdjusted（事务外，失败降级不阻断）
+- **负 AR 门禁（CTO 锁死）**：balanceAmount < 0（= Customer Credit，只做读取投影）→ Receipt Allocation 409 RECEIPT_AR_NEGATIVE_BALANCE、WriteOff Apply 409 WRITE_OFF_AR_NEGATIVE_BALANCE（两个既有入口同步加）；DN 可把负余额向 0 拉回；不参与 Aging
+- **Workflow 接入**：businessType="credit-debit-note" actions 路由终态回写（COMPLETED→syncCreditDebitNoteApproval(APPROVED) / REJECTED→REJECTED）；**绝不碰 AR**
+- **文档**：OpenAPI +4 端点/+13 schemas（174 paths/466 schemas）；QA Sprint4E3_QA.md（T1-T21）；Test Cases CreditDebitNote_API.md（166 用例 A-O 15 组）；ADR-0022 → Accepted + Implemented；EVENTS v1.13；DOMAIN_MODEL v1.15
 
 ### 新增（Sprint 4E-2：Receipt & Payment Allocation Foundation，PR #17，已合并）
 

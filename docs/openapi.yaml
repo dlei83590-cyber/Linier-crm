@@ -63,6 +63,7 @@ tags:
   - name: Receipt Revisions
   - name: Receipt Snapshots
   - name: Write Offs
+  - name: Credit Debit Notes
 
 paths:
   # ==========================================================================
@@ -9106,6 +9107,188 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # ==========================================================================
+  # Sprint 4E-3 Credit Note / Debit Note（发票调整与应收调整领域；ADR-0022 + CTO 98/100）
+  # 财务边界（锁死）：
+  #   ① CN/DN **不修改原 Invoice 金额事实**（invoiceTotal/行快照/InvoiceSnapshot 一律不动）
+  #   ② **APPROVED ≠ APPLIED**（审批只回写投影；Apply 才产生财务事实）
+  #   ③ **只有 Apply 创建 InvoiceAdjustment 并修改 AR.adjustedAmount**（唯一入口；客户端禁直接创建事实）
+  #   ④ **CN 为负 adjustment（<0）、DN 为正 adjustment（>0）**——全系统唯一符号口径
+  #   ⑤ **负 AR = Customer Credit projection**（不新增 CREDIT 数据库状态；禁止继续 Receipt Allocation / WriteOff）
+  # ==========================================================================
+  /api/credit-debit-notes:
+    post:
+      tags: [Credit Debit Notes]
+      summary: Create Credit Debit Note (DRAFT + lines; single-invoice; snapshot copy, no Pricing Engine)
+      description: |
+        CreditDebitNote 创建（单票制）：
+        - `sourceInvoiceId` 必填且**单票制**（跨票 Consolidated 延后）；只接受已 **ISSUED** 的 Invoice
+          （否则 409 `CN_DN_SOURCE_INVOICE_INVALID`）
+        - Customer/Currency **从原 Invoice 继承**（禁止客户端传）；全部 `sourceInvoiceLineId` 必须属于该 Invoice
+          （否则 409 `CN_DN_SOURCE_LINE_INVALID`）
+        - 数量必须 > 0；**金额/税率/价格只复制原 InvoiceLine 快照，不调用 Pricing Engine**；
+          编号创建即取现有 CN/DN DocumentSequence（CN-/DN-2026-xxxx）；adjustmentTotal = Σ lines 服务端计算
+        - **Create 不做事实落账**：不创建 InvoiceAdjustment、不改 AR、不改 Invoice.balanceAmount
+          （事实由 Apply 事务生成——边界③）
+        - 累计防超调预检查（软校验，最终强校验在 Apply）：CREDIT 按行聚合已 APPLIED 未撤销 Credit 数量，
+          remaining = 原行数量 - 累计，本次超 remaining → 409 `CN_DN_QUANTITY_EXCEEDED`
+      operationId: createCreditDebitNote
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreditDebitNoteCreateRequest"
+      responses:
+        "201":
+          description: Created（DRAFT + lines；creditDebitNote）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreditDebitNoteResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Conflict（源 Invoice 非 ISSUED / 明细行不属于该 Invoice / 数量超剩余可调整数量）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      tags: [Credit Debit Notes]
+      summary: List credit debit notes (paginated; status/noteType/customerId filters)
+      description: |
+        列表查询（分页 + status/noteType/customerId 过滤 + createdAt desc；只读，无 PATCH）。
+        一次带出：sourceInvoice 摘要（id/code/invoiceTotal/balanceAmount）+ lines（lineNo asc）。
+        只读语义：CreditDebitNote 为独立事实，金额/状态由 submit/apply 事务驱动。
+      operationId: listCreditDebitNotes
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, default: 20 } }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: noteType, in: query, schema: { type: string } }
+        - { name: customerId, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: OK（分页列表）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreditDebitNoteListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/credit-debit-notes/{id}/submit:
+    post:
+      tags: [Credit Debit Notes]
+      summary: Submit Credit Debit Note (DRAFT → SUBMITTED; conditional workflow trigger)
+      description: |
+        Submit（DRAFT → SUBMITTED；否则 409 `CN_DN_INVALID_STATE`）：
+        - 同事务调用 maybeTriggerCreditDebitNoteApproval（module=CREDIT_DEBIT_NOTE 按 note.adjustmentTotal 匹配金额区间）：
+          - **命中策略** → 创建/复用 Workflow 实例 + approvalStatus=PENDING → **必须 APPROVED 后才能 Apply**（边界②）
+          - **未命中策略** → 保持 SUBMITTED（可直接进入可 Apply 状态）
+        - **Workflow 配置异常必须让事务回滚，不能静默**（命中策略后 WorkflowDefinition 缺失 → 409 `CN_DN_WORKFLOW_FAILED`）
+        - **红线：Submit 绝不修改 AR.adjustedAmount**（边界③；也不创建 InvoiceAdjustment、不改 Invoice.balanceAmount）
+      operationId: submitCreditDebitNote
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreditDebitNoteSubmitRequest"
+      responses:
+        "200":
+          description: OK（SUBMITTED + approvalStatus + workflowTriggered）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreditDebitNoteSubmitResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（非 DRAFT 状态 / 工作流配置异常）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/credit-debit-notes/{id}/apply:
+    post:
+      tags: [Credit Debit Notes]
+      summary: Apply Credit Debit Note (the ONLY entry that writes AR.adjustedAmount; APPROVED ≠ APPLIED)
+      description: |
+        CreditDebitNote Apply——**唯一修改 AR.adjustedAmount / balanceAmount 的动作**（CTO 98/100 锁死；边界②③）。
+        事务（严格锁序，任何一步失败整体回滚）：Lock Note（FOR UPDATE）→ 状态门禁
+        （APPLIED → 409 `CN_DN_ALREADY_APPLIED` 幂等；非 SUBMITTED → 409 `CN_DN_INVALID_STATE`；
+        命中审批未 APPROVED → 409 `CN_DN_APPROVAL_REQUIRED`）→ Lock Invoice → Lock InvoiceLines（id ASC）→
+        Lock AR（id ASC）→ 校验 customerId/currency（409 `CN_DN_SOURCE_NOT_COMPATIBLE`）→
+        **累计防超调（锁内重算）**：
+        - **CREDIT**：`remainingAdjustableQty = originalInvoiceLine.quantity - cumulativeAppliedCreditQty`
+          （cumulativeAppliedCreditQty = Σ 已 APPLIED 且未 reversed 的同 InvoiceLine CREDIT quantity）；
+          `requestedQty ≤ remainingAdjustableQty`（否则 409 `CN_DN_QUANTITY_EXCEEDED`）
+        - **DEBIT**：`cumulativeAppliedDebitAmount + current ≤ original line ceiling`（ceiling = 原行金额；
+          第一版禁止 DN 超原票；否则 409 `CN_DN_AMOUNT_EXCEEDED`）
+        - 金额按**同类型聚合**（CREDIT 累计 ∥ DEBIT 累计），CN/DN 不互相污染 ceiling
+        → 创建 InvoiceAdjustment facts（**signed：CN<0 / DN>0**——边界④；部分行按数量比例折算快照金额，
+        不重算、不调 Pricing Engine）→ AR.adjustedAmount += Σ signed（服务端聚合）→
+        AR.balanceAmount = computeBalance（单入口）→ AR status = computeArStatus 统一口径
+        （**负 AR = Customer Credit projection，不新增 CREDIT 状态**——边界⑤）→
+        Invoice.balanceAmount = AR newBalance（**Invoice 金额事实不动**——边界①）→
+        AR Revision + Snapshot（ADJUSTMENT/ADJUSTED）→ Note = APPLIED + appliedAt/appliedById →
+        事件 InvoiceAdjustmentApplied + AccountsReceivableAdjusted（事务外；事件失败可降级，但 DB 事实更新不静默失败）。
+      operationId: applyCreditDebitNote
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreditDebitNoteApplyRequest"
+      responses:
+        "201":
+          description: Created（status=APPLIED + signedAdjustmentTotal + newBalance + newStatus + factCount）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreditDebitNoteApplyResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（重复 Apply / 状态不允许 / 未审批 / 数量或金额超限 / 源不匹配）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -14327,3 +14510,209 @@ components:
         - WRITE_OFF_APPROVAL_REQUIRED（409）命中审批策略但未 APPROVED，禁止 Apply
         - WRITE_OFF_SOURCE_NOT_COMPATIBLE（409）目标 AR 必须同 Customer / 同 Currency
         - WRITE_OFF_WORKFLOW_FAILED（409）审批流程定义不存在或未发布（WRITE_OFF_APPROVAL）
+
+    CreditDebitNoteType:
+      type: string
+      enum: [CREDIT, DEBIT]
+      description: 调整单类型（CTO 98/100：全系统唯一符号口径——CREDIT 负向调整 AR（adjustmentAmount<0）、DEBIT 正向调整 AR（adjustmentAmount>0））
+
+    CreditDebitNoteStatus:
+      type: string
+      enum: [DRAFT, SUBMITTED, APPLIED, CANCELLED]
+      description: 调整单生命周期（审批状态走 approvalStatus 投影复用 ApprovalStatus——不膨胀；REJECTED 不占 status）
+
+    CreditDebitNote:
+      type: object
+      required: [id, code, noteType, sourceInvoiceId, customerId, currency, reason, adjustmentTotal, status, approvalStatus, version]
+      properties:
+        id: { type: string }
+        code: { type: string, description: 调整单编号（CN-/DN-2026-xxxx，DocumentSequence 创建即取号） }
+        noteType: { $ref: "#/components/schemas/CreditDebitNoteType" }
+        sourceInvoiceId: { type: string, description: 源发票（单票制必填唯一；跨票 Consolidated 延后） }
+        customerId: { type: string, description: 客户（继承 sourceInvoice.customerId） }
+        currency: { type: string, description: 币种（继承 sourceInvoice.currency） }
+        reason: { type: string, description: 调整原因（折让/退货/价差/更正/其他） }
+        adjustmentTotal: { type: number, description: 调整总额（= Σ lines.totalAmount，服务端计算，禁止直传头金额） }
+        status: { $ref: "#/components/schemas/CreditDebitNoteStatus" }
+        approvalPolicyId: { type: [string, "null"], description: 条件审批（module=CREDIT_DEBIT_NOTE；可空） }
+        workflowInstanceId: { type: [string, "null"], description: 审批实例（Workflow 唯一审批事实源；不建 Approval 表） }
+        approvalStatus: { type: string, description: 审批投影（DRAFT/PENDING/APPROVED/REJECTED——CTO：APPROVED ≠ APPLIED） }
+        approvedAt: { type: [string, "null"], format: date-time }
+        approvedById: { type: [string, "null"] }
+        appliedAt: { type: [string, "null"], format: date-time, description: APPLIED 时才回写 AR（审批完成前禁止提前修改） }
+        appliedById: { type: [string, "null"] }
+        version: { type: integer }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+        sourceInvoice:
+          type: object
+          description: 列表/详情一次带出的源发票摘要
+          properties:
+            id: { type: string }
+            code: { type: [string, "null"] }
+            invoiceTotal: { type: number }
+            balanceAmount: { type: number }
+        lines:
+          type: array
+          items: { $ref: "#/components/schemas/CreditDebitNoteLine" }
+
+    CreditDebitNoteLine:
+      type: object
+      required: [id, creditDebitNoteId, sourceInvoiceLineId, lineNo, description, quantity, unitPrice, discountRate, lineAmount, taxAmount, totalAmount, version]
+      properties:
+        id: { type: string }
+        creditDebitNoteId: { type: string }
+        sourceInvoiceLineId: { type: string, description: 溯源发票行（必填可追溯——CTO 锁死） }
+        lineNo: { type: integer, description: 行号（10/20/30/40 步进） }
+        itemId: { type: [string, "null"], description: 物料（继承 InvoiceLine.itemId，可空） }
+        description: { type: string, description: 描述（快照复制） }
+        quantity: { type: number, description: 调整数量（>0；部分行数量调整——CTO 拍板④，累计防超调） }
+        uomId: { type: [string, "null"] }
+        unitPrice: { type: number, description: 单价快照（复制，不重算） }
+        discountRate: { type: number, description: 折扣率快照（复制） }
+        lineAmount: { type: number, description: 行未税金额（复制计算值） }
+        taxAmount: { type: number, description: 行税额（复制） }
+        totalAmount: { type: number, description: 行含税金额（复制） }
+        version: { type: integer }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+
+    InvoiceAdjustment:
+      type: object
+      description: |
+        发票调整事实中间层（**只读 schema，不开放直接 create/edit API**——事实只能由 Apply 事务生成）。
+        **4E-3 最核心事实层**：真正影响 AR.adjustedAmount 的唯一入口（客户端禁直接创建/修改）。
+        双溯源：sourceNoteId/sourceNoteLineId（单据侧）+ invoiceId/invoiceLineId（发票侧）+ accountsReceivableId（AR 侧）。
+      required: [id, sourceNoteId, sourceNoteLineId, invoiceId, accountsReceivableId, customerId, currency, adjustmentType, quantity, adjustmentAmount, version]
+      properties:
+        id: { type: string }
+        sourceNoteId: { type: string, description: 来源调整单 }
+        sourceNoteLineId: { type: string, description: 来源调整单明细行 }
+        invoiceId: { type: string }
+        invoiceLineId: { type: [string, "null"], description: 可空：整票调整（invoiceLineId 为空） }
+        accountsReceivableId: { type: string, description: 目标 AR（invoiceId 1:1 推导） }
+        customerId: { type: string, description: 冗余（Apply 事务校验与 AR 一致） }
+        currency: { type: string }
+        adjustmentType: { $ref: "#/components/schemas/CreditDebitNoteType" }
+        quantity: { type: number, description: 调整数量（累计防超调用） }
+        adjustmentAmount: { type: number, description: "**有符号调整金额：CN<0 / DN>0（CTO 98/100，全系统唯一符号口径）**" }
+        appliedAt: { type: [string, "null"], format: date-time, description: Apply 回写时间（null = 未生效） }
+        appliedById: { type: [string, "null"] }
+        reversedAt: { type: [string, "null"], format: date-time, description: reversal 预留（4E-3 首版不实现） }
+        reversedById: { type: [string, "null"] }
+        version: { type: integer }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+
+    CreditDebitNoteCreateRequest:
+      type: object
+      required: [noteType, sourceInvoiceId, reason, lines]
+      description: |
+        创建调整单（DRAFT + lines）。单票制：sourceInvoiceId 必填唯一；只接受已 ISSUED 的 Invoice
+        （409 CN_DN_SOURCE_INVOICE_INVALID）；Customer/Currency 从原 Invoice 继承（禁止客户端传）；
+        行只传 sourceInvoiceLineId + quantity（>0）；金额/税率/价格只复制原 InvoiceLine 快照（不调 Pricing Engine）。
+        **不创建 InvoiceAdjustment、不改 AR、不改 Invoice.balanceAmount**（事实由 Apply 事务生成）。
+      properties:
+        noteType: { $ref: "#/components/schemas/CreditDebitNoteType" }
+        sourceInvoiceId: { type: string, minLength: 1 }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+        lines:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [sourceInvoiceLineId, quantity]
+            properties:
+              sourceInvoiceLineId: { type: string, minLength: 1 }
+              quantity: { type: number, exclusiveMinimum: 0 }
+        changeReason: { type: string, maxLength: 500 }
+
+    CreditDebitNoteSubmitRequest:
+      type: object
+      description: 提交审批（DRAFT → SUBMITTED；命中 CREDIT_DEBIT_NOTE 策略 → Workflow 触发，须 APPROVED 后才能 Apply；无策略 → 可直接 Apply）
+      properties:
+        changeReason: { type: string, maxLength: 500 }
+
+    CreditDebitNoteApplyRequest:
+      type: object
+      description: |
+        Apply（唯一回写 AR.adjustedAmount/balanceAmount 的动作；重复 Apply → 409 CN_DN_ALREADY_APPLIED）。
+        **累计防超调（锁内重算）**：
+        - CREDIT：remainingAdjustableQty = originalInvoiceLine.quantity - cumulativeAppliedCreditQty，
+          requestedQty ≤ remainingAdjustableQty（否则 409 CN_DN_QUANTITY_EXCEEDED）
+        - DEBIT：cumulativeAppliedDebitAmount + current ≤ original line ceiling（ceiling = 原行金额；否则 409 CN_DN_AMOUNT_EXCEEDED）
+        - 金额按同类型聚合（CREDIT 累计 ∥ DEBIT 累计），CN/DN 不互相污染 ceiling
+      properties:
+        changeReason: { type: string, maxLength: 500 }
+
+    CreditDebitNoteResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            creditDebitNote: { $ref: "#/components/schemas/CreditDebitNote" }
+
+    CreditDebitNoteListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/CreditDebitNote" }
+
+    CreditDebitNoteSubmitResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            creditDebitNoteId: { type: string }
+            status: { type: string, description: "SUBMITTED" }
+            approvalStatus: { type: string, description: "PENDING（命中策略）/ DRAFT（未命中）" }
+            workflowTriggered: { type: boolean }
+            workflowInstanceId: { type: [string, "null"] }
+            workflowSkipped: { type: [string, "null"], description: "跳过原因：no-policy / no-rule-matched / instance-running / not-found" }
+
+    CreditDebitNoteApplyResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            creditDebitNoteId: { type: string }
+            status: { type: string, description: "APPLIED" }
+            appliedAt: { type: string, format: date-time }
+            arIds: { type: array, items: { type: string } }
+            signedAdjustmentTotal: { type: number, description: "Σ signed adjustmentAmount（CN 负 / DN 正）" }
+            newBalance: { type: number, description: "AR.balanceAmount 经 computeBalance 计算后的新余额（可负 = Customer Credit）" }
+            newStatus: { type: string }
+            factCount: { type: integer }
+
+    CreditDebitNoteErrorCodes:
+      type: string
+      description: |
+        CreditDebitNote 领域错误码（与实现 errors.ts 一致）：
+        - CN_DN_NOT_FOUND（404）调整单不存在
+        - CN_DN_SOURCE_INVOICE_INVALID（409）源 Invoice 无效（必须已 ISSUED）
+        - CN_DN_SOURCE_LINE_INVALID（409）明细行不属于该 Invoice
+        - CN_DN_SOURCE_NOT_COMPATIBLE（409）源 Invoice/AR 校验失败（customer/currency 不一致）
+        - CN_DN_INVALID_STATE（409）仅 DRAFT 可提交 / 仅 SUBMITTED 可 Apply
+        - CN_DN_ALREADY_APPLIED（409）重复 Apply（幂等稳定 409）
+        - CN_DN_APPROVAL_REQUIRED（409）命中审批策略但未 APPROVED，禁止 Apply（APPROVED ≠ APPLIED）
+        - CN_DN_QUANTITY_EXCEEDED（409）调整数量超出剩余可调整数量（累计防超调）
+        - CN_DN_AMOUNT_EXCEEDED（409）调整金额超出原行金额上限（行级 ceiling）
+        - CN_DN_WORKFLOW_FAILED（409）命中策略但工作流定义缺失/未激活（提交已回滚）

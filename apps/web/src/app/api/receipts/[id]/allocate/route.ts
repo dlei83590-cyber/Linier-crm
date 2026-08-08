@@ -114,6 +114,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     for (const arId of targetArIds) {
       const amount = arIdAmount.get(arId)!;
       const ar = arMap.get(arId)!;
+      // 负 AR 门禁（CTO 锁死：balance < 0 = Customer Credit，不得继续核销到该 AR）
+      if (ar.balanceAmount.isNegative()) {
+        return {
+          error: "NEGATIVE_BALANCE" as const,
+          arId,
+          balanceAmount: ar.balanceAmount.toString(),
+        };
+      }
       if (amount.greaterThan(ar.balanceAmount)) {
         return {
           error: "ALLOCATION_EXCEEDED" as const,
@@ -280,6 +288,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return failConflict(
           ERROR_CODES.RECEIPT_ALLOCATION_EXCEEDED,
           `核销金额超过应收余额（AR ${result.arId} 请求 ${result.requested}，balanceAmount ${result.balanceAmount}）——禁止超核销`,
+        );
+      case "NEGATIVE_BALANCE":
+        return failConflict(
+          ERROR_CODES.RECEIPT_AR_NEGATIVE_BALANCE,
+          `应收余额为负（AR ${result.arId} balanceAmount ${result.balanceAmount}，Customer Credit）——禁止继续核销到该 AR`,
         );
       default:
         return fail(ERROR_CODES.INTERNAL_ERROR, "核销失败：未知错误", 500);

@@ -1676,7 +1676,120 @@ erDiagram
 - **Decimal 全程**：金额 Decimal(18,4)；快照金额 toString 禁止 toNumber
 - **红线**：不开发 4E-3（CN/DN）；无 Payment/ReceiptApproval/WriteOffApproval 表；不 PATCH AR/Invoice/Receipt 金额；WriteOff 不增加 Invoice.paidAmount
 
-## 25. 变更记录
+## 25. Credit Note / Debit Note Foundation（Sprint 4E-3，ADR-0022）
+
+> 定位（CTO Design Review 98/100 APPROVED WITH CHANGES + Apply 专项复核 100/100 APPROVED + 全链路实现落地）：
+> **CN/DN = Invoice Adjustment 事实源**（补齐销售财务最后一段调整链：Invoice → CreditDebitNote → CreditDebitNoteLine → InvoiceAdjustment → AR.adjustedAmount → AR.balanceAmount）；
+> **InvoiceAdjustment = 事实中间层（4E-3 最核心事实层）**——真正影响 AR.adjustedAmount 的唯一入口（客户端禁直接创建/编辑，只读）；
+> 边界锁死：**CN/DN 不修改原 Invoice 金额事实**（invoiceTotal/subtotal/taxAmount/行快照/InvoiceSnapshot 一律不动，只允许 Invoice.balanceAmount 投影跟随 AR newBalance）；
+> **APPROVED ≠ APPLIED**（审批只回写投影，Apply 才产生财务事实）；**CN 为负 adjustment（<0）、DN 为正 adjustment（>0）**——全系统唯一符号口径；
+> **负 AR = Customer Credit projection**（不新增 AccountsReceivableStatus.CREDIT 数据库状态；禁止继续 Receipt Allocation / WriteOff——两个既有入口已加门禁）；
+> **累计防超调**（CTO 98/100 最重要补充）：CREDIT 按 sourceInvoiceLineId 聚合已 APPLIED 未 reversed 数量、DEBIT 聚合金额 ceiling，锁内重算防并发穿透；
+> 编号 DocumentSequence 创建即取号（CN-/DN-2026-xxxx，docType=CREDIT_NOTE/DEBIT_NOTE 4D 已建，不重复新增）；条件审批复用 ApprovalPolicy(module=CREDIT_DEBIT_NOTE)。
+
+```mermaid
+erDiagram
+    Invoice ||--o{ CreditDebitNote : adjusted_by
+    Invoice ||--o{ InvoiceAdjustment : facts
+    InvoiceLine ||--o{ CreditDebitNoteLine : source_of
+    InvoiceLine ||--o{ InvoiceAdjustment : facts
+    CreditDebitNote ||--o{ CreditDebitNoteLine : lines
+    CreditDebitNote ||--o{ InvoiceAdjustment : facts
+    CreditDebitNoteLine ||--o{ InvoiceAdjustment : facts
+    AccountsReceivable ||--o{ InvoiceAdjustment : adjusted_by
+
+    CreditDebitNote {
+        string id PK
+        string code UK
+        CreditDebitNoteType noteType
+        string sourceInvoiceId FK
+        string customerId FK
+        string currency
+        string reason
+        Decimal adjustmentTotal
+        CreditDebitNoteStatus status
+        string approvalPolicyId
+        string workflowInstanceId
+        ApprovalStatus approvalStatus
+        datetime approvedAt
+        datetime appliedAt
+        datetime deletedAt
+    }
+
+    CreditDebitNoteLine {
+        string id PK
+        string creditDebitNoteId FK
+        string sourceInvoiceLineId FK
+        int lineNo
+        string itemId FK
+        string description
+        Decimal quantity
+        string uomId FK
+        Decimal unitPrice
+        Decimal discountRate
+        Decimal lineAmount
+        Decimal taxAmount
+        Decimal totalAmount
+        datetime deletedAt
+    }
+
+    InvoiceAdjustment {
+        string id PK
+        string sourceNoteId FK
+        string sourceNoteLineId FK
+        string invoiceId FK
+        string invoiceLineId FK
+        string accountsReceivableId FK
+        string customerId FK
+        string currency
+        CreditDebitNoteType adjustmentType
+        Decimal quantity
+        Decimal adjustmentAmount
+        datetime appliedAt
+        datetime reversedAt
+        datetime deletedAt
+    }
+```
+
+### 关系与约束（真实 Schema，migration 0020）
+
+| 关系 | 基数 | onDelete | 说明 |
+| --- | --- | --- | --- |
+| Invoice → CreditDebitNote | 1:N | Restrict | 单票制（sourceInvoiceId 必填唯一；跨票 Consolidated 延后） |
+| Invoice → InvoiceAdjustment | 1:N | Restrict | 调整事实（发票侧溯源） |
+| InvoiceLine → CreditDebitNoteLine | 1:N | Restrict | 逐行溯源（sourceInvoiceLineId 必填） |
+| InvoiceLine → InvoiceAdjustment | 1:N | SetNull | 调整事实（可空=整票调整） |
+| CreditDebitNote → CreditDebitNoteLine | 1:N | Cascade | 调整单明细 |
+| CreditDebitNote → InvoiceAdjustment | 1:N | Restrict | 事实由 Note 生成 |
+| CreditDebitNoteLine → InvoiceAdjustment | 1:N | Restrict | 行级事实 |
+| AR → InvoiceAdjustment | 1:N | Restrict | 余额事实源侧溯源 |
+| Customer → CreditDebitNote / InvoiceAdjustment | 1:N | Restrict | 客户（继承自 Invoice） |
+| WorkflowInstance → CreditDebitNote | 1:N | SetNull | 条件审批（复用，不建 Approval 表） |
+
+- `CreditDebitNote.code @unique`（DocumentSequence 创建即取号 CN-/DN-2026-xxxx）；`CreditDebitNoteLine @@unique([creditDebitNoteId, lineNo])`
+- `InvoiceAdjustment @@unique([sourceNoteId, invoiceId, invoiceLineId])`（防重复调整行）；**adjustmentAmount signed：CN<0 / DN>0**
+- **无 CustomerCredit / Refund / AdjustmentAllocation / CreditNoteApproval 表**（负 AR 投影、Refund 延后；Workflow 唯一审批事实源）
+
+### 状态机与业务规则（Sprint 4E-3）
+
+- **CreditDebitNote 状态**：DRAFT（可编辑行）→ SUBMITTED（命中策略→Workflow 审批 PENDING；未命中→可直接进入可 Apply 状态）→ APPLIED（唯一回写 AR.adjustedAmount 的入口）；DRAFT → CANCELLED（未生效前可取消）；**REJECTED 走 approvalStatus 投影，不占 status**
+- **金额关系（CTO 锁定）**：`adjustmentTotal = Σ CreditDebitNoteLine.totalAmount`（服务端计算，禁止直传头金额）；`AR.balanceAmount = originalAmount + adjustedAmount - paidAmount - writeOffAmount`（computeBalance 单入口）
+- **符号口径（CTO 98/100 全系统唯一）**：CN → `adjustmentAmount < 0`；DN → `adjustmentAmount > 0`；`AR.adjustedAmount = Σ signed adjustmentAmount`（Apply 事务服务端聚合，禁 PATCH）
+- **Apply 事务红线（Final Review 检查点）**：Lock Note（FOR UPDATE）→ 状态门禁（APPLIED→409 CN_DN_ALREADY_APPLIED 幂等 / 非 SUBMITTED→409 CN_DN_INVALID_STATE / 未 APPROVED→409 CN_DN_APPROVAL_REQUIRED）→ Lock Invoice → Lock InvoiceLines（id ASC FOR UPDATE）→ Lock AR（FOR UPDATE）→ 校验 customerId/currency 与 AR 一致（409 CN_DN_SOURCE_NOT_COMPATIBLE）→ **累计防超调锁内重算**（CREDIT：remainingAdjustableQty = 原行数量 - Σ已 APPLIED 未 reversed CREDIT quantity，超限 409 CN_DN_QUANTITY_EXCEEDED；金额：累计同类型 abs + 本次 ≤ 原行金额 ceiling，超限 409 CN_DN_AMOUNT_EXCEEDED，DN 第一版禁超原行金额）→ Create InvoiceAdjustment facts（signed；部分行按数量比例折算快照金额，不重算、不调 Pricing Engine）→ AR.adjustedAmount += Σ signed → AR.balanceAmount = computeBalance → AR status = computeArStatus（**负 AR 不加 CREDIT 状态**）→ **Invoice.balanceAmount = AR newBalance（Invoice 金额事实不动）** → AR Revision + Snapshot(ADJUSTMENT/ADJUSTED) → Note = APPLIED + appliedAt/appliedById → 事件 InvoiceAdjustmentApplied + AccountsReceivableAdjusted（事务外，失败降级不阻断；DB 事实更新不因事件失败回滚）
+- **负 AR 门禁（CTO 锁死）**：`balanceAmount < 0`（= Customer Credit）→ Receipt Allocation 409 RECEIPT_AR_NEGATIVE_BALANCE、WriteOff Apply 409 WRITE_OFF_AR_NEGATIVE_BALANCE；DN 可把负余额向 0 拉回；不参与 Aging（projection 只对 balance>0 计算）
+- **Workflow 接入**：businessType="credit-debit-note" actions 路由终态回写（COMPLETED→syncCreditDebitNoteApproval(APPROVED) / REJECTED→REJECTED）；保持 **APPROVED ≠ APPLIED**
+- **Decimal 全程**：金额 Decimal(18,4)；快照金额 toString 禁止 toNumber
+- **红线**：不修改原 Invoice 金额事实；不承担 Receipt/Allocation Reversal；不 PATCH AR.adjustedAmount；无 CustomerCredit/Refund/AdjustmentAllocation 等范围越界
+
+## 26. 变更记录
+
+
+### v1.15（2026-08-08，Sprint 4E-3 Credit Note / Debit Note Foundation，ADR-0022，PR #18 Ready for CTO Final Review）
+
+- 新增章节：25. Credit Note / Debit Note Foundation（Sprint 4E-3，CN/DN = Invoice Adjustment 事实源 + InvoiceAdjustment 事实中间层 + 单票制 + signed adjustment + 负 AR 投影 + 累计防超调）
+- 模型：+3（CreditDebitNote / CreditDebitNoteLine / InvoiceAdjustment）；枚举：+2（CreditDebitNoteType / CreditDebitNoteStatus）；DocumentType 复用（CREDIT_NOTE/DEBIT_NOTE 4D 已建）
+- AR 反向关系 invoiceAdjustments；Invoice/InvoiceLine/Customer/WorkflowInstance +反向；Item/UnitOfMeasure +creditDebitNoteLines
+- 第 6 节已落地列表：Credit Note / Debit Note Foundation（4E-3，PR #18 待验收）移入验收中（Ready for Final Review）
 
 ### v1.14（2026-08-08，Sprint 4E-2 Receipt & Payment Allocation Foundation，ADR-0021，PR #17 已合并）
 
