@@ -57,6 +57,12 @@ tags:
   - name: Accounts Receivables
   - name: Accounts Receivable Revisions
   - name: Accounts Receivable Snapshots
+  # Sprint 4E-2 Receipt & Payment Allocation Foundation
+  - name: Receipts
+  - name: Receipt Allocations
+  - name: Receipt Revisions
+  - name: Receipt Snapshots
+  - name: Write Offs
 
 paths:
   # ==========================================================================
@@ -8667,6 +8673,439 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  # ==========================================================================
+  # Sprint 4E-2 Receipt & Payment Allocation（收款与核销领域）
+  # 边界锁死（CTO Design Review 97/100 + 实施锁定，Final Review 检查点）：
+  # ① Receipt 创建 ≠ Allocation——POST /api/receipts 只记录实际收到的钱（UNALLOCATED），核销走显式 allocate；
+  # ② Allocation 必须同 Customer / 同 Currency——否则 409 RECEIPT_CUSTOMER_MISMATCH / RECEIPT_CURRENCY_MISMATCH（第一版禁止跨币种核销）；
+  # ③ Reversal ≠ Credit Note——Allocation Reversal 解除核销关系并留痕（reversedAt/reversedBy/reverseReason，不删除原记录）；
+  #    CN 属 4E-3 发票调整域，不承担收款冲销（银行退票不是 CN）；
+  # ④ WriteOff Approval ≠ Apply——审批（Workflow）只回写投影，Apply 才是唯一修改 AR.writeOffAmount/balanceAmount 的入口；
+  # ⑤ WriteOff 只减 Invoice.balanceAmount 投影，绝不增加 Invoice.paidAmount（WriteOff ≠ Payment，防止报表把坏账误判为客户付款）。
+  # ==========================================================================
+  /api/receipts:
+    post:
+      tags: [Receipts]
+      summary: Create receipt (records money received only; NO allocation — creation is separated from allocation)
+      description: |
+        创建收款单（拍板①：创建与核销分离）。只记录实际收到的钱：status=UNALLOCATED、unallocatedAmount=amount、allocatedAmount=0；
+        **不自动核销**（核销走显式 POST /api/receipts/{id}/allocate，一次请求原子化）。
+        拍板④：code 由 DocumentSequence 创建即取号（RCT-2026-xxxx）——Receipt 是实际收款凭证，创建即成为财务事实。
+        硬规则：customerId/currency 由调用方提供；核销时校验与目标 AR 一致（409 RECEIPT_CUSTOMER_MISMATCH / RECEIPT_CURRENCY_MISMATCH）。
+        红线：金额/状态为受控投影（allocatedAmount/unallocatedAmount/status），禁止 PATCH。
+      operationId: createReceipt
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReceiptCreate"
+      responses:
+        "201":
+          description: Created（status=UNALLOCATED；含 code/amount/unallocatedAmount）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceiptResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    get:
+      tags: [Receipts]
+      summary: List receipts (paginated; customerId/status/currency filters)
+      description: |
+        收款单列表（分页 + customerId/status/currency 过滤 + createdAt desc）。只读——金额/状态为受控投影，无任何写操作。
+        每项含 customer 摘要（id/code/name）与 allocations 计数。
+      operationId: listReceipts
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: page, in: query, required: false, schema: { type: integer, default: 1 } }
+        - { name: pageSize, in: query, required: false, schema: { type: integer, default: 20, maximum: 100 } }
+        - { name: customerId, in: query, required: false, schema: { type: string } }
+        - { name: status, in: query, required: false, schema: { $ref: "#/components/schemas/ReceiptStatus" } }
+        - { name: currency, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: OK（分页列表）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceiptListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/receipts/{id}:
+    get:
+      tags: [Receipts]
+      summary: Get receipt detail (Receipt + Customer summary + allocations + latest revision/snapshot)
+      description: |
+        收款单详情：一次带出 Customer 摘要 + allocations（含 AR 摘要，按 allocatedAt desc，即 Allocation 查询入口）
+        + 最近 Revision/Snapshot。注意：无 PATCH——金额/状态为受控投影（拍板②），只能由 allocate/reversal/void 事务更新。
+      operationId: getReceipt
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceiptDetailResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/receipts/{id}/allocate:
+    post:
+      tags: [Receipts]
+      summary: Allocate receipt to accounts receivables (explicit atomic allocation; M:N)
+      description: |
+        显式核销（拍板①：创建与核销分离；一次请求**原子化**，任何一步失败整体回滚）。
+        事务红线（CTO 指定顺序，Final Review 按此检查）：
+        Lock Receipt（FOR UPDATE）→ Lock 全部目标 AR（按 id ASC，FOR UPDATE——防死锁锁序）→
+        Validate 同 Customer / 同 Currency（否则 409 RECEIPT_CUSTOMER_MISMATCH / RECEIPT_CURRENCY_MISMATCH）→
+        Validate Receipt unallocated 余额（Σ allocations ≤ unallocatedAmount，否则 409 RECEIPT_UNALLOCATED_EXCEEDED）→
+        Validate 每笔 ≤ AR.balanceAmount（锁内读，否则 409 RECEIPT_ALLOCATION_EXCEEDED——防超核销）→
+        Create ReceiptAllocation（同一 (receipt, AR) 只核销一次）→ 回写 AR paidAmount/balanceAmount（computeBalance 单入口）+ status 投影 →
+        回写 Invoice paidAmount/balanceAmount 投影 → 回写 Receipt allocatedAmount/unallocatedAmount/status 投影 →
+        AR Revision + Snapshot(snapshotSource=PAYMENT) → 事件（ReceiptAllocated / ReceiptFullyAllocated，事务外）。
+        支持 M:N：一个 Receipt → 多 AR；一个 AR → 多 Receipt（部分核销）。
+      operationId: allocateReceipt
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReceiptAllocateRequest"
+      responses:
+        "200":
+          description: OK（核销结果：totalAllocated/newUnallocated/receiptStatus/arIds）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceiptAllocateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（客户/币种不一致 RECEIPT_CUSTOMER_MISMATCH / RECEIPT_CURRENCY_MISMATCH；超未分配余额 RECEIPT_UNALLOCATED_EXCEEDED；超应收余额 RECEIPT_ALLOCATION_EXCEEDED；已作废 RECEIPT_VOID_FORBIDDEN）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/receipts/{id}/revisions:
+    get:
+      tags: [Receipt Revisions]
+      summary: List receipt revisions (read-only, desc)
+      description: 修订历史（revisionNo desc；只读——修订系统生成，禁止手工编辑）。
+      operationId: listReceiptRevisions
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceiptRevisionListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/receipts/{id}/snapshots:
+    get:
+      tags: [Receipt Snapshots]
+      summary: List receipt snapshots (read-only, desc; snapshotType CREATED/ALLOCATED/VOIDED/REVERSED)
+      description: 快照历史（generatedAt desc；只读——仅固化节点生成：CREATED / ALLOCATED / VOIDED / REVERSED）。
+      operationId: listReceiptSnapshots
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceiptSnapshotListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/receipts/{id}/void:
+    post:
+      tags: [Receipts]
+      summary: Void receipt (UNALLOCATED only; allocated receipts must reverse first)
+      description: |
+        作废收款单（拍板②：VOID 规则）。仅 **UNALLOCATED**（未核销）可 VOID；
+        **已有核销不得直接 VOID**（必须先 Allocation Reversal 解除全部核销）——否则 409 RECEIPT_VOID_FORBIDDEN。
+        边界：Void 只作废收款事实本身，**不实现 Credit Note 语义**（CN 属 4E-3 发票调整域，不承担收款冲销）。
+        事务：Lock Receipt（FOR UPDATE）→ 校验状态 → status=VOIDED + voidedAt/voidedById → Revision + Snapshot(VOIDED) → 事件（事务外）。
+      operationId: voidReceipt
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReceiptVoidRequest"
+      responses:
+        "201":
+          description: Created（status=VOIDED）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceiptResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（已作废 / 已有核销不可直接 VOID——RECEIPT_VOID_FORBIDDEN）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/receipt-allocations/{id}/reverse:
+    post:
+      tags: [Receipt Allocations]
+      summary: Reverse allocation (undo allocation; restores AR/Invoice/Receipt projections; NOT a Credit Note)
+      description: |
+        Allocation Reversal（CTO Design Review 新锁定边界）。解除原核销关系：
+        **不删除原 ReceiptAllocation**——写入 reversedAt/reversedBy/reverseReason 留痕（独立逆向事实）；
+        恢复 AR / Invoice / Receipt 三方投影（AR.paidAmount 回退、balanceAmount 重算、status 投影；Invoice 投影回退；
+        Receipt allocatedAmount/unallocatedAmount 恢复、status 投影 → UNALLOCATED/PARTIALLY_ALLOCATED）。
+        **Reversal ≠ Credit Note**：CN 属 4E-3 发票调整域（冲减开票金额），不承担收款冲销（如银行退票——原 Invoice 金额未变，变的是这笔钱实际没收到）。
+        事务顺序（对齐 Allocation 锁序）：Lock Receipt → Lock AR（FOR UPDATE）→ 校验 Allocation 存在且未冲销
+        → 回退三方投影 → AR Revision + Receipt Revision/Snapshot(REVERSED) → 事件 ReceiptAllocationReversed。
+        重复冲销 → 409 RECEIPT_ALLOCATION_REVERSED。
+      operationId: reverseReceiptAllocation
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReceiptAllocationReverseRequest"
+      responses:
+        "200":
+          description: OK（reversedAmount + 三方新状态）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceiptAllocationReverseResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（已冲销 RECEIPT_ALLOCATION_REVERSED）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/write-offs:
+    post:
+      tags: [Write Offs]
+      summary: Create write-off (DRAFT + allocations; same Customer/Currency enforced; does NOT modify AR)
+      description: |
+        创建 WriteOff（拍板③：WriteOff + WriteOffAllocation 独立事实，不做三件套；拍板④：DocumentSequence 创建即取号 WO-2026-xxxx）。
+        校验（CTO 指令）：① 全部目标 AR 存在；② **同 Customer / 同 Currency**（否则 409 WRITE_OFF_SOURCE_NOT_COMPATIBLE）；
+        ③ 每笔 amount > 0；④ amount = Σ allocations（服务端 computeWriteOffTotal，禁止直传头金额）。
+        **暂不修改 AR**——审批通过 ≠ 自动修改余额；只有显式 Apply 才回写（CTO 锁死：APPROVED ≠ APPLIED）。
+        事件：WriteOffCreated（事务外，失败降级不阻断）。
+      operationId: createWriteOff
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WriteOffCreate"
+      responses:
+        "201":
+          description: Created（status=DRAFT + allocations）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WriteOffResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（目标 AR 非同 Customer/Currency——WRITE_OFF_SOURCE_NOT_COMPATIBLE）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      tags: [Write Offs]
+      summary: List write-offs (paginated; status/customerId filters)
+      description: WriteOff 列表（分页 + status/customerId 过滤 + createdAt desc）。只读——WriteOff 为独立事实，金额/状态由 submit/apply 事务驱动，无 PATCH。
+      operationId: listWriteOffs
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: page, in: query, required: false, schema: { type: integer, default: 1 } }
+        - { name: pageSize, in: query, required: false, schema: { type: integer, default: 20, maximum: 100 } }
+        - { name: status, in: query, required: false, schema: { $ref: "#/components/schemas/WriteOffStatus" } }
+        - { name: customerId, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: OK（分页列表，含 allocations + AR 摘要）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WriteOffListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/write-offs/{id}/submit:
+    post:
+      tags: [Write Offs]
+      summary: Submit write-off (DRAFT → SUBMITTED; conditional workflow trigger)
+      description: |
+        DRAFT → SUBMITTED（CTO 指令）。同事务调用 maybeTriggerWriteOffApproval()（module=WRITE_OFF 策略按 writeOff.amount 匹配金额区间）：
+        - **命中策略** → 创建/复用 Workflow 实例，approvalStatus=PENDING → **必须等 APPROVED 后才能 Apply**（Apply 路由门禁 409 WRITE_OFF_APPROVAL_REQUIRED）；
+        - **未命中策略** → 保持 SUBMITTED（approvalStatus 仍 DRAFT）→ **可直接进入可 Apply 状态**。
+        **不修改 AR**（审批通过 ≠ 自动修改余额；只有显式 Apply 才回写——CTO 锁死）。
+        事件：WriteOffSubmitted + WriteOffApprovalStarted（命中策略时；失败降级不阻断）。
+      operationId: submitWriteOff
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WriteOffSubmitRequest"
+      responses:
+        "200":
+          description: OK（status=SUBMITTED + approvalStatus + workflowTriggered/instanceId/skipped）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WriteOffSubmitResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（仅 DRAFT 可提交——WRITE_OFF_INVALID_STATE）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/write-offs/{id}/apply:
+    post:
+      tags: [Write Offs]
+      summary: Apply write-off (the ONLY entry that writes AR.writeOffAmount/balanceAmount; APPROVED ≠ APPLIED)
+      description: |
+        WriteOff Apply——**唯一回写 AR.writeOffAmount/balanceAmount 的动作**（CTO 锁死：APPROVED ≠ APPLIED，审批通过 ≠ 自动修改余额）。
+        事务红线（Final Review 检查点）：锁 WriteOff（FOR UPDATE）→ 锁全部目标 AR（**id ASC FOR UPDATE**，防死锁）→
+        状态门禁（APPLIED → 409 WRITE_OFF_ALREADY_APPLIED 幂等；非 SUBMITTED → 409 WRITE_OFF_INVALID_STATE；
+        命中审批但未 APPROVED → 409 WRITE_OFF_APPROVAL_REQUIRED；无策略可直接 Apply）→
+        每笔 allocationAmount ≤ AR.balanceAmount（否则 409 WRITE_OFF_AMOUNT_EXCEEDED）→ 同事务：
+        AR.writeOffAmount += allocation / balanceAmount 重算（computeBalance 单入口）/ status 投影 →
+        **Invoice.balanceAmount 投影同步减少，但 Invoice.paidAmount 绝不因 write-off 增加（WriteOff ≠ Payment，防止报表把坏账误判为客户付款）** →
+        AR Revision + Snapshot(snapshotSource=WRITE_OFF) → WriteOff status=APPLIED + appliedAt/appliedById →
+        事件 WriteOffApplied + AccountsReceivableWrittenOff（事务外；事件失败可降级，但 DB 事实更新不静默失败）。
+      operationId: applyWriteOff
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WriteOffApplyRequest"
+      responses:
+        "201":
+          description: Created（status=APPLIED + appliedAt + arIds + totalApplied）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WriteOffApplyResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（重复 Apply WRITE_OFF_ALREADY_APPLIED / 状态不允许 WRITE_OFF_INVALID_STATE / 未审批 WRITE_OFF_APPROVAL_REQUIRED / 超余额 WRITE_OFF_AMOUNT_EXCEEDED）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -13476,3 +13915,415 @@ components:
         - VERSION_CONFLICT（409）乐观锁版本冲突（预留，4E-1 无 PATCH）
         注意：AR 由 Invoice ISSUED 自动创建（拍板①），无 POST/PATCH 创建与金额修改端点；
         金额只能由 4E-2 Receipt / WriteOff、4E-3 CN/DN 动作或下游事实表驱动（CTO 锁定）。
+
+    # ==========================================================================
+    # Sprint 4E-2 Receipt & Payment Allocation Foundation（Enums + Models + Requests + Responses）
+    # 边界锁死（CTO Design Review 97/100 + 实施锁定，Final Review 检查点）：
+    # ① Receipt 创建 ≠ Allocation；② Allocation 同 Customer / 同 Currency（409，禁跨币种）；
+    # ③ Reversal ≠ Credit Note（Allocation Reversal 解除核销留痕，不删除原记录；CN 属 4E-3）；
+    # ④ WriteOff Approval ≠ Apply（Apply 是唯一修改 AR.writeOffAmount/balanceAmount 的入口）；
+    # ⑤ WriteOff 只减 Invoice.balanceAmount 投影，绝不增加 Invoice.paidAmount（WriteOff ≠ Payment）。
+    # ==========================================================================
+    ReceiptStatus:
+      type: string
+      enum: [UNALLOCATED, PARTIALLY_ALLOCATED, FULLY_ALLOCATED, VOIDED]
+      description: 收款状态（受控投影——拍板②：只能由 allocation/reversal/void 事务更新，禁止 PATCH；前三个可由金额动态推导：unallocatedAmount>0 / =0）
+
+    PaymentMethod:
+      type: string
+      enum: [BANK_TRANSFER, CHEQUE, CASH, CARD, OTHER]
+      description: 收款方式
+
+    ReceiptSnapshotType:
+      type: string
+      enum: [CREATED, ALLOCATED, VOIDED, REVERSED]
+      description: 收款快照类型（仅固化节点生成，只读）
+
+    Receipt:
+      type: object
+      required: [id, code, customerId, currency, amount, allocatedAmount, unallocatedAmount, receiptDate, paymentMethod, status, version]
+      properties:
+        id: { type: string }
+        code: { type: string, description: 收款单编号（RCT-2026-xxxx，DocumentSequence 创建即取号——拍板④） }
+        customerId: { type: string, description: 收款客户（核销目标 AR.customerId 必须一致——硬规则） }
+        currency: { type: string, description: 币种（核销目标 AR.currency 必须一致——硬规则，第一版禁止跨币种核销） }
+        amount: { type: number, description: 实收金额（收款事实） }
+        allocatedAmount: { type: number, description: 受控投影 = Σ ReceiptAllocation.allocatedAmount（禁止 PATCH） }
+        unallocatedAmount: { type: number, description: 受控投影 = amount - allocatedAmount（拍板⑤：预收/暂未指定发票场景） }
+        receiptDate: { type: string, format: date-time }
+        paymentMethod: { $ref: "#/components/schemas/PaymentMethod" }
+        referenceNo: { type: [string, "null"], description: 银行流水号/备注 }
+        status: { $ref: "#/components/schemas/ReceiptStatus" }
+        voidedAt: { type: [string, "null"], format: date-time }
+        voidedById: { type: [string, "null"] }
+        version: { type: integer }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+
+    ReceiptAllocation:
+      type: object
+      required: [id, receiptId, accountsReceivableId, allocatedAmount, allocatedAt]
+      properties:
+        id: { type: string }
+        receiptId: { type: string }
+        accountsReceivableId: { type: string }
+        allocatedAmount: { type: number, description: 本次核销金额 }
+        allocatedAt: { type: string, format: date-time }
+        allocatedBy: { type: [string, "null"] }
+        reversedAt: { type: [string, "null"], format: date-time, description: Allocation Reversal 留痕（非空即已冲销；不删除原记录） }
+        reversedBy: { type: [string, "null"] }
+        reverseReason: { type: [string, "null"] }
+        version: { type: integer }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+
+    ReceiptRevision:
+      type: object
+      required: [id, receiptId, revisionNo, changeReason]
+      properties:
+        id: { type: string }
+        receiptId: { type: string }
+        revisionNo: { type: integer, description: 系统自动递增（唯一版本载体） }
+        changeReason: { type: string }
+        snapshotData: { type: object, description: 头信息快照（金额 Decimal 字符串，禁止 toNumber） }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+
+    ReceiptSnapshot:
+      type: object
+      required: [id, receiptId, snapshotType, revisionNo]
+      properties:
+        id: { type: string }
+        receiptId: { type: string }
+        snapshotType: { $ref: "#/components/schemas/ReceiptSnapshotType" }
+        revisionNo: { type: integer }
+        snapshotData: { type: object, description: 完整快照（Header + amount/allocatedAmount/unallocatedAmount/status；Decimal 字符串） }
+        generatedById: { type: [string, "null"] }
+        generatedAt: { type: [string, "null"], format: date-time }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+
+    ReceiptCreate:
+      type: object
+      required: [customerId, amount, paymentMethod]
+      description: 创建收款单（拍板①：只记录实际收到的钱，不核销；unallocatedAmount = amount）
+      properties:
+        customerId: { type: string, minLength: 1 }
+        currency: { type: string, minLength: 3, maxLength: 3, default: "CNY" }
+        amount: { type: number, exclusiveMinimum: 0 }
+        receiptDate: { type: string, format: date-time }
+        paymentMethod: { $ref: "#/components/schemas/PaymentMethod" }
+        referenceNo: { type: [string, "null"], maxLength: 100 }
+        changeReason: { type: string, maxLength: 500 }
+
+    ReceiptAllocateRequest:
+      type: object
+      required: [allocations]
+      description: 核销请求（一次请求原子化；M:N——一个 Receipt → 多 AR；同一 (receipt, AR) 只核销一次）
+      properties:
+        allocations:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [accountsReceivableId, amount]
+            properties:
+              accountsReceivableId: { type: string, minLength: 1 }
+              amount: { type: number, exclusiveMinimum: 0 }
+        changeReason: { type: string, maxLength: 500 }
+
+    ReceiptAllocationReverseRequest:
+      type: object
+      required: [reverseReason]
+      description: Allocation Reversal（解除核销关系并留痕——reversedAt/reversedBy/reverseReason 写入原记录，不删除）
+      properties:
+        reverseReason: { type: string, minLength: 1, maxLength: 500 }
+
+    ReceiptVoidRequest:
+      type: object
+      description: 作废收款单（仅 UNALLOCATED 可 VOID；已核销必须先 Reversal——409 RECEIPT_VOID_FORBIDDEN；不实现 CN 语义）
+      properties:
+        changeReason: { type: string, maxLength: 500 }
+
+    ReceiptResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/Receipt" }
+
+    ReceiptListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Receipt" }
+
+    ReceiptDetailResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          description: Receipt + Customer 摘要 + allocations（含 AR 摘要）+ 最近 Revision/Snapshot
+          properties:
+            id: { type: string }
+            code: { type: string }
+            customerId: { type: string }
+            currency: { type: string }
+            amount: { type: number }
+            allocatedAmount: { type: number }
+            unallocatedAmount: { type: number }
+            receiptDate: { type: string, format: date-time }
+            paymentMethod: { $ref: "#/components/schemas/PaymentMethod" }
+            referenceNo: { type: [string, "null"] }
+            status: { $ref: "#/components/schemas/ReceiptStatus" }
+            customer:
+              type: object
+              properties:
+                id: { type: string }
+                code: { type: string }
+                name: { type: string }
+            allocations:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string }
+                  accountsReceivableId: { type: string }
+                  allocatedAmount: { type: number }
+                  allocatedAt: { type: string, format: date-time }
+                  reversedAt: { type: [string, "null"], format: date-time }
+                  accountsReceivable:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      invoiceId: { type: string }
+                      balanceAmount: { type: number }
+                      status: { $ref: "#/components/schemas/AccountsReceivableStatus" }
+            revisions:
+              type: array
+              items: { $ref: "#/components/schemas/ReceiptRevision" }
+            snapshots:
+              type: array
+              items: { $ref: "#/components/schemas/ReceiptSnapshot" }
+
+    ReceiptRevisionListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/ReceiptRevision" }
+
+    ReceiptSnapshotListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/ReceiptSnapshot" }
+
+    ReceiptAllocateResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            receiptId: { type: string }
+            customerId: { type: string }
+            currency: { type: string }
+            amount: { type: number }
+            totalAllocated: { type: number, description: 本次核销总额 }
+            newUnallocated: { type: number, description: 核销后剩余未分配金额 }
+            receiptStatus: { $ref: "#/components/schemas/ReceiptStatus" }
+            arIds: { type: array, items: { type: string }, description: 目标 AR id 列表（id ASC） }
+
+    ReceiptAllocationReverseResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            allocationId: { type: string }
+            reversedAmount: { type: number }
+            receiptId: { type: string }
+            customerId: { type: string }
+            currency: { type: string }
+            amount: { type: number }
+            arId: { type: string }
+            newArStatus: { $ref: "#/components/schemas/AccountsReceivableStatus" }
+            newReceiptStatus: { $ref: "#/components/schemas/ReceiptStatus" }
+
+    WriteOffStatus:
+      type: string
+      enum: [DRAFT, SUBMITTED, APPROVED, REJECTED, APPLIED]
+      description: 写销状态（审批边界：WriteOff 按 ApprovalPolicy 条件审批；审批完成前禁止改 AR.writeOffAmount；APPLIED 才回写）
+
+    WriteOff:
+      type: object
+      required: [id, code, amount, reason, writeOffDate, status, approvalStatus, version]
+      properties:
+        id: { type: string }
+        code: { type: string, description: 写销单编号（WO-2026-xxxx，DocumentSequence 创建即取号——拍板④） }
+        amount: { type: number, description: 写销总额（= Σ WriteOffAllocation.amount，服务端计算，禁止直传头金额） }
+        reason: { type: string, description: 原因：坏账/折让/其他 }
+        writeOffDate: { type: string, format: date-time }
+        status: { $ref: "#/components/schemas/WriteOffStatus" }
+        approvalPolicyId: { type: [string, "null"], description: 条件审批（可空） }
+        workflowInstanceId: { type: [string, "null"], description: 审批实例（Workflow 唯一审批事实源；不建 WriteOffApproval 表） }
+        approvalStatus: { type: string, description: 审批投影（DRAFT/PENDING/APPROVED/REJECTED——CTO：APPROVED ≠ APPLIED） }
+        approvedAt: { type: [string, "null"], format: date-time }
+        approvedById: { type: [string, "null"] }
+        appliedAt: { type: [string, "null"], format: date-time, description: APPLIED 时才回写 AR（审批完成前禁止提前修改） }
+        appliedById: { type: [string, "null"] }
+        version: { type: integer }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+        allocations:
+          type: array
+          items: { $ref: "#/components/schemas/WriteOffAllocation" }
+
+    WriteOffAllocation:
+      type: object
+      required: [id, writeOffId, accountsReceivableId, amount]
+      properties:
+        id: { type: string }
+        writeOffId: { type: string }
+        accountsReceivableId: { type: string }
+        amount: { type: number }
+        version: { type: integer }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+        accountsReceivable:
+          type: object
+          description: 列表/详情一次带出的 AR 摘要
+          properties:
+            id: { type: string }
+            invoiceId: { type: string }
+            balanceAmount: { type: number }
+            customerId: { type: string }
+            currency: { type: string }
+
+    WriteOffCreate:
+      type: object
+      required: [allocations, reason]
+      description: 创建 WriteOff（DRAFT + WriteOffAllocation；同 Customer / 同 Currency——409 WRITE_OFF_SOURCE_NOT_COMPATIBLE；暂不修改 AR）
+      properties:
+        allocations:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [accountsReceivableId, amount]
+            properties:
+              accountsReceivableId: { type: string, minLength: 1 }
+              amount: { type: number, exclusiveMinimum: 0 }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+        writeOffDate: { type: string, format: date-time }
+        approvalPolicyId: { type: [string, "null"] }
+        changeReason: { type: string, maxLength: 500 }
+
+    WriteOffSubmitRequest:
+      type: object
+      description: 提交审批（DRAFT → SUBMITTED；命中 WRITE_OFF 策略 → Workflow 触发，须 APPROVED 后才能 Apply；无策略 → 可直接 Apply）
+      properties:
+        changeReason: { type: string, maxLength: 500 }
+
+    WriteOffApplyRequest:
+      type: object
+      description: Apply（唯一回写 AR.writeOffAmount/balanceAmount 的动作；重复 Apply → 409 WRITE_OFF_ALREADY_APPLIED）
+      properties:
+        changeReason: { type: string, maxLength: 500 }
+
+    WriteOffResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/WriteOff" }
+
+    WriteOffListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/WriteOff" }
+
+    WriteOffSubmitResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            writeOffId: { type: string }
+            status: { type: string, description: "SUBMITTED" }
+            approvalStatus: { type: string, description: "PENDING（命中策略）/ DRAFT（未命中）" }
+            workflowTriggered: { type: boolean }
+            workflowInstanceId: { type: [string, "null"] }
+            workflowSkipped: { type: [string, "null"], description: "跳过原因：no-policy / no-rule-matched / instance-running / not-found" }
+
+    WriteOffApplyResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            writeOffId: { type: string }
+            status: { type: string, description: "APPLIED" }
+            appliedAt: { type: string, format: date-time }
+            arIds: { type: array, items: { type: string } }
+            totalApplied: { type: number }
+
+    ReceiptErrorCodes:
+      type: string
+      description: |
+        Receipt / Allocation 领域错误码（与实现 errors.ts 一致）：
+        - RECEIPT_NOT_FOUND（404）收款单不存在
+        - RECEIPT_CUSTOMER_NOT_FOUND（404）收款客户不存在
+        - RECEIPT_CUSTOMER_MISMATCH（409）收款单与应收客户不一致——不允许跨客户核销
+        - RECEIPT_CURRENCY_MISMATCH（409）收款单与应收币种不一致——第一版禁止跨币种核销
+        - RECEIPT_UNALLOCATED_EXCEEDED（409）核销金额超过收款单未分配余额
+        - RECEIPT_ALLOCATION_EXCEEDED（409）核销金额超过应收余额——禁止超核销
+        - RECEIPT_VOID_FORBIDDEN（409）仅未核销可作废；已核销须先 Allocation Reversal
+        - RECEIPT_ALLOCATION_NOT_FOUND（404）核销记录不存在
+        - RECEIPT_ALLOCATION_REVERSED（409）该核销已冲销，不可重复冲销
+
+    WriteOffErrorCodes:
+      type: string
+      description: |
+        WriteOff 领域错误码（与实现 errors.ts 一致）：
+        - WRITE_OFF_NOT_FOUND（404）WriteOff 不存在
+        - WRITE_OFF_INVALID_STATE（409）仅 DRAFT 可提交 / 状态不允许 Apply
+        - WRITE_OFF_ALREADY_APPLIED（409）重复 Apply（幂等稳定 409）
+        - WRITE_OFF_AMOUNT_EXCEEDED（400/409）写销金额必须大于 0 / 超过应收余额
+        - WRITE_OFF_APPROVAL_REQUIRED（409）命中审批策略但未 APPROVED，禁止 Apply
+        - WRITE_OFF_SOURCE_NOT_COMPATIBLE（409）目标 AR 必须同 Customer / 同 Currency
+        - WRITE_OFF_WORKFLOW_FAILED（409）审批流程定义不存在或未发布（WRITE_OFF_APPROVAL）

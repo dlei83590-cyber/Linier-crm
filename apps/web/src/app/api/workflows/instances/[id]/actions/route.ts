@@ -9,6 +9,7 @@ import { isValidAction, isStepComplete, resolveStepApprovers } from "@/lib/workf
 import { syncQuotationApproval } from "@/lib/quotation/workflow-sync";
 import { syncSalesOrderApproval } from "@/lib/sales-order/workflow-sync";
 import { syncInvoiceApproval } from "@/lib/invoice/workflow-sync";
+import { syncWriteOffApproval } from "@/lib/write-off/workflow-sync";
 
 export const dynamic = "force-dynamic";
 
@@ -339,6 +340,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   ) {
     await syncInvoiceApproval({
       invoiceId: instance.businessId,
+      workflowStatus: result.afterStatus,
+      actorId: user!.id,
+    });
+  }
+
+  // Sprint 4E-2：WriteOff 审批终态回写（ADR-0021：Workflow 唯一审批事实源，WriteOff 仅保存审批投影；不建 WriteOffApproval）
+  // **红线（CTO 锁死）：APPROVED ≠ APPLIED**——审批终态只回写 WriteOff.approvalStatus（APPROVED/REJECTED + approvedAt/ById），
+  // 绝不修改 AR；财务影响只能由显式 POST /api/write-offs/{id}/apply 完成（Apply 是唯一入口，幂等 409）。
+  if (
+    instance.businessType === "write-off" &&
+    (result.afterStatus === "COMPLETED" || result.afterStatus === "REJECTED")
+  ) {
+    await syncWriteOffApproval({
+      writeOffId: instance.businessId,
       workflowStatus: result.afterStatus,
       actorId: user!.id,
     });

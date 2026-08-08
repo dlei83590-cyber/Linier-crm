@@ -1,6 +1,6 @@
 # EVENTS 领域事件注册表（Domain Events）
 
-- 版本：v1.9
+- 版本：v1.11
 - 日期：2026-08-08
 - 维护者：CIO（JINZA）｜审核：CTO
 - 关联：[API_GUIDELINES.md](./API_GUIDELINES.md) ｜ [ARCHITECTURE_BASELINE.md](./ARCHITECTURE_BASELINE.md)
@@ -150,6 +150,26 @@
 > 注：Created/Updated/Overdue 属 4E-1（查询/投影）；PartiallyPaid/Paid/WrittenOff 属 4E-2（Receipt）；Adjusted 属 4E-3（CN/DN）——全部先注册（CTO 启动令：先注册后开发），事件总线落地前以 AuditLog 留痕。
 > **CTO Review 追加（97/100 APPROVED WITH CHANGES）**：新增 `AccountsReceivableClosed`（余额=0 且生命周期结束可 Closed；否则 OPEN/PAID 只是余额状态）；AR 事件共 8 个。
 
+#### 2.3.6 收款/核销领域（Sprint 4E-2 注册，先注册后开发）
+
+> 来源：Sprint4E2_ReceiptAllocation_Design.md / ADR-0021；**Receipt = 收款事实源，AccountsReceivable = 余额事实源（唯一）**（Payment 不单独建表——CTO 拍板，避免两个重复入账事实）；**创建与核销分离**（拍板①：POST /api/receipts 只记录金额不核销，allocate 显式动作且一次请求原子化）；核销 M:N（Receipt ↔ AR，ReceiptAllocation 中间表）；核销锁 AR（ID ASC + FOR UPDATE）；`allocatedAmount ≤ AR.balanceAmount` 并发下成立（409）；**同 Customer + 同 Currency 才允许 Allocation**（409，第一版禁止跨币种核销）；**Allocation/Receipt Reversal 属 4E-2，CN 属 4E-3 发票调整域不承担收款冲销**（银行退票不是 CN）；**WriteOff 独立事实 + WriteOffAllocation**（不做三件套，Workflow 管审批、AuditLog 管审计；不 PATCH AR.writeOffAmount，APPLIED 才回写）；普通 Receipt 不审批，WriteOff 按 ApprovalPolicy 条件触发 Workflow（审批完成前禁止改 AR.writeOffAmount）；Receipt/WriteOff 编号 DocumentSequence 创建即取号（拍板④）。
+
+| eventType | 触发时机 | 载荷示例 | 实现状态 |
+| --- | --- | --- | --- |
+| `ReceiptCreated` | 创建收款单（只记录金额，不核销——拍板①） | `{ receiptId, receiptCode, customerId, currency, amount, receiptDate, paymentMethod }` | ✅ 已实现（4E-2，`d076e3a`） |
+| `ReceiptUpdated` | 收款单头信息变更（非金额动作类） | `{ receiptId, receiptCode, changedFields, updatedBy, updatedAt }` | ⏳ 注册待实现（无 PATCH 端点，金额/状态受控投影） |
+| `ReceiptAllocated` | 核销完成（AR.paidAmount 回写 + Invoice 投影回写） | `{ receiptId, receiptCode, accountsReceivableId, allocatedAmount, paidAmount, balanceAmount }` | ✅ 已实现（4E-2，`c075dde`+`0440cd8`） |
+| `ReceiptFullyAllocated` | 全部核销完成（unallocatedAmount = 0） | `{ receiptId, receiptCode, allocatedAmount, unallocatedAmount, fullyAllocatedAt }` | ✅ 已实现（4E-2，`c075dde`） |
+| `ReceiptAllocationReversed` | Allocation Reversal（解除核销，回退 AR/Invoice/Receipt 投影；CTO Design Review 新锁定边界） | `{ receiptAllocationId, receiptId, accountsReceivableId, reversedAmount, paidAmount, balanceAmount, reversedBy, reversedAt, reason }` | ✅ 已实现（4E-2，`68d697c`+`2353c8f`） |
+| `ReceiptVoided` | 作废（仅未核销可 VOID；已核销先 Reversal 再处理，CN 不承担收款冲销） | `{ receiptId, receiptCode, voidedBy, voidedAt, reason }` | ✅ 已实现（4E-2，`68d697c`） |
+| `WriteOffCreated` | 创建写销单（DRAFT） | `{ writeOffId, writeOffCode, accountsReceivableId, amount, reason, writeOffDate }` | ✅ 已实现（4E-2，`35bde4e`+`4a89268`） |
+| `WriteOffSubmitted` | 提交审批（有策略时触发 Workflow） | `{ writeOffId, workflowInstanceId, submittedBy, submittedAt }` | ✅ 已实现（4E-2，`4a89268`） |
+| `WriteOffApproved` | 审批通过（Workflow 回调） | `{ writeOffId, workflowInstanceId, approvedBy, approvedAt }` | ✅ 已实现（4E-2，`aabedf2` workflow actions） |
+| `WriteOffRejected` | 审批驳回（→ DRAFT 重提） | `{ writeOffId, workflowInstanceId, rejectedBy, rejectedAt, reason }` | ✅ 已实现（4E-2，`aabedf2` workflow actions） |
+| `WriteOffApplied` | APPLIED（AR.writeOffAmount 回写 + 投影回写；余额=0 且生命周期结束 → AR CLOSED） | `{ writeOffId, accountsReceivableId, writeOffAmount, balanceAmount, appliedBy, appliedAt }` | ✅ 已实现（4E-2，`224624d`） |
+
+> 注：`AccountsReceivablePartiallyPaid / Paid / WrittenOff / Closed`（v1.9 已注册）与 `InvoicePartiallyPaid / InvoicePaid`（4D 已注册）在 4E-2 实现时联动发布，不重复注册。
+
 ### 2.4 主数据
 
 | eventType | 触发时机 | 载荷示例 |
@@ -183,6 +203,7 @@
 
 | 日期 | 版本 | 说明 |
 | --- | --- | --- |
+| 2026-08-08 | v1.11 | Sprint 4E-2 收款/核销/写销事件全部实现（ReceiptCreated/ReceiptAllocated/ReceiptFullyAllocated/ReceiptAllocationReversed/ReceiptVoided + WriteOffCreated/WriteOffSubmitted/WriteOffApproved/WriteOffRejected/WriteOffApplied 共 10 个 ✅，ReceiptUpdated 无 PATCH 端点保留注册；统一载荷含 receiptId/writeOffId/customerId/currency/amount/accountsReceivableIds 基境字段）；实现提交链：Receipt Create `d076e3a` / Allocation `c075dde`+`0440cd8` / Reversal-Void `68d697c`+`2353c8f` / WriteOff 三件套 `35bde4e`+`3b44ed0` / Create-Submit `4a89268`+`68fbe53` / Apply `224624d` / Workflow actions `aabedf2`（businessType=write-off 终态回写）；AR PartiallyPaid/Paid/WrittenOff/Closed 与 Invoice 投影事件联动发布（AuditLog 留痕，事件总线落地前）；PR #17 Ready for Final Review |
 | 2026-08-08 | v1.9 | Sprint 4E-1 注册 AR 事件 8 个（Created/Updated/PartiallyPaid/Paid/Overdue/Adjusted/WrittenOff/**Closed**，统一载荷含 accountsReceivableId；Invoice=单据事实源，AR=余额事实源；余额唯一口径 original+adjusted-paid-writeOff；Overdue 惰性判定；Closed 为 CTO Review 97/100 追加；见 2.3.5）；InvoicePartiallyPaid/InvoicePaid 仍为 4E 待实现 |
 | 2026-08-07 | v1.7 | Sprint 4D 注册 Invoice 事件 5 个（Created/Issued/Cancelled + PartiallyPaid/Paid，统一载荷，CTO 启动令：先注册后开发；见 2.3.4）；Invoice 为财务事实源（Delivery 物流事实源 → Invoice 财务事实源），唯一来源 Delivery，不重新定价（直接复制价格快照）；Payment 属 Sprint 4E，PartiallyPaid/Paid 先注册后实现 |
 | 2026-08-07 | v1.6 | Sprint 4C 实现状态标注：Delivery 8 事件（Created/Updated/Ready/Dispatched/Confirmed/Cancelled + SalesOrderPartiallyDelivered/SalesOrderDelivered）全部 ✅ 已发布（Phase 3 CRUD/Lines + Phase 4 lifecycle/aggregation）；2.3.2 SalesOrderDelivered 同步标注 |

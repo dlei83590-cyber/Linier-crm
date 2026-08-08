@@ -354,3 +354,87 @@ export const invoiceUpdateSchema = z
     version: z.number().int().positive(),
   })
   .refine((v) => Object.keys(v).length > 1, { message: "至少提供一个更新字段" });
+
+// ============================================================================
+// Receipt / Payment Allocation（Sprint 4E-2）
+// ============================================================================
+
+/** Receipt 创建：只记录实际收到的钱（拍板①：创建与核销分离，不自动核销；unallocatedAmount = amount）
+ * 拍板④：DocumentSequence 创建即取号（RCT-2026-xxxx）
+ * 硬规则：customerId/currency 由调用方提供；核销时校验与目标 AR 一致（409 RECEIPT_CUSTOMER_MISMATCH / RECEIPT_CURRENCY_MISMATCH）
+ */
+export const receiptCreateSchema = z.object({
+  customerId: z.string().min(1),
+  currency: z.string().min(3).max(3).default("CNY"),
+  amount: z.coerce.number().positive(),
+  receiptDate: z.string().datetime().optional(),
+  paymentMethod: z.enum(["BANK_TRANSFER", "CHEQUE", "CASH", "CARD", "OTHER"]),
+  referenceNo: z.string().max(100).nullable().optional(),
+  changeReason: z.string().max(500).optional(),
+});
+
+/** Allocation 核销：一次请求原子化（拍板①：创建与核销分离，allocate 为显式动作）
+ * allocations[]：一个 Receipt → 多 AR（M:N）；同一 (receipt, AR) 只核销一次（unique 约束）
+ * 事务红线（CTO 指定）：Lock Receipt → Lock AR(id ASC FOR UPDATE) → 校验 Customer/Currency →
+ * 校验 Receipt unallocated → 校验 ≤ AR.balanceAmount → Create ReceiptAllocation → 回写 AR/Invoice/Receipt 投影 → Snapshot/Audit → Events
+ */
+export const receiptAllocateSchema = z.object({
+  allocations: z
+    .array(
+      z.object({
+        accountsReceivableId: z.string().min(1),
+        amount: z.coerce.number().positive(),
+      }),
+    )
+    .min(1),
+  changeReason: z.string().max(500).optional(),
+});
+
+/** Allocation Reversal：撤销原核销关系（CTO Design Review 新锁定边界；CN 不承担收款冲销）
+ * 留痕：reversedAt/reversedBy/reverseReason 写入原 ReceiptAllocation（**不删除**）；恢复 AR/Invoice/Receipt 三方投影
+ */
+export const receiptAllocationReverseSchema = z.object({
+  reverseReason: z.string().min(1).max(500),
+});
+
+/** Receipt Void：仅 UNALLOCATED 可 VOID（拍板②）；已有核销不得直接 VOID（须先 Reversal）
+ * 边界：Void 只作废收款事实，**不实现 Credit Note 语义**（CN 属 4E-3 发票调整域）
+ */
+export const receiptVoidSchema = z.object({
+  changeReason: z.string().max(500).optional(),
+});
+
+// ============================================================================
+// WriteOff（Sprint 4E-2；独立事实——拍板③：WriteOff + WriteOffAllocation，不做三件套）
+// ============================================================================
+
+/** WriteOff 创建：DRAFT + WriteOffAllocation 明细（拍板④：DocumentSequence 创建即取号 WO-2026-xxxx）
+ * 校验：同 Customer / 同 Currency（409 WRITE_OFF_SOURCE_NOT_COMPATIBLE）；每笔 amount > 0；
+ * amount = Σ allocations（服务端 computeWriteOffTotal，禁止直传头金额）；**暂不修改 AR**。
+ */
+export const writeOffCreateSchema = z.object({
+  allocations: z
+    .array(
+      z.object({
+        accountsReceivableId: z.string().min(1),
+        amount: z.coerce.number().positive(),
+      }),
+    )
+    .min(1),
+  reason: z.string().min(1).max(500),
+  writeOffDate: z.string().datetime().optional(),
+  approvalPolicyId: z.string().nullable().optional(),
+  changeReason: z.string().max(500).optional(),
+});
+
+/** WriteOff 提交审批：DRAFT → SUBMITTED（命中 WRITE_OFF 策略则 maybeTriggerWriteOffApproval 建/复用 Workflow；无策略可直接进入可 Apply 状态） */
+export const writeOffSubmitSchema = z.object({
+  changeReason: z.string().max(500).optional(),
+});
+
+/** WriteOff Apply：**唯一回写 AR.writeOffAmount 的动作**（CTO：审批通过 ≠ 自动修改余额）
+ * 重复 Apply → 409 WRITE_OFF_ALREADY_APPLIED（幂等/稳定 409）
+ */
+export const writeOffApplySchema = z.object({
+  changeReason: z.string().max(500).optional(),
+});

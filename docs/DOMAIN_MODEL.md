@@ -1,7 +1,7 @@
 # DOMAIN_MODEL 领域模型
 
-- 版本：v1.8
-- 日期：2026-08-06
+- 版本：v1.13
+- 日期：2026-08-08
 - 维护者：CIO（JINZA）｜审核：CTO
 - 关联：[PRODUCT_VISION.md](./PRODUCT_VISION.md) ｜ [ROADMAP.md](./ROADMAP.md) ｜ [ADR](./ADR/)
 
@@ -100,7 +100,8 @@ Project Expense / 日常 Expense ──> 审批流 ──> Voucher（凭证）
 - ✅ 已落地（Sprint 4C，PR #14 已合并）：Delivery Foundation，见第 21 节
 - ✅ 已落地（Sprint 4D，PR #15 已合并）：Invoice Foundation（Invoice/InvoiceLine/InvoiceRevision/InvoiceSnapshot + DeliveryLine 开票投影），见第 22 节
 - ✅ 已落地（Sprint 4E-1，PR #16 已合并）：Accounts Receivable Foundation（AccountsReceivable/AccountsReceivableRevision/AccountsReceivableSnapshot + 1:1 Invoice），见第 23 节
-- ⬜ 规划中（Sprint 4E-2~7）：Receipt/Payment（4E-2）/ Credit Note/Debit Note（4E-3）/ Purchase / GRN / Warehouse / Stock / AR 扩展 / AP / Voucher / Journal / GL
+- 🟡 Ready for Final Review（Sprint 4E-2，PR #17 待合并）：Receipt & Payment Allocation Foundation（Receipt/ReceiptAllocation/ReceiptRevision/ReceiptSnapshot + WriteOff/WriteOffAllocation，收款/核销/冲销/作废/写销全链路），见第 24 节
+- ⬜ 规划中（Sprint 4E-3~7）：Credit Note/Debit Note（4E-3）/ Purchase / GRN / Warehouse / Stock / AR 扩展 / AP / Voucher / Journal / GL
 
 > 详细字段标准见数据库 schema（`prisma/schema.prisma`）与 [architecture/domain-model.md](./architecture/domain-model.md)。
 
@@ -1582,7 +1583,107 @@ erDiagram
 - **Decimal 全程**：金额 Decimal(18,4)；投影计算 Number 仅用于展示不写库
 - **红线**：不开发 4E-2（Receipt/Payment）/ 4E-3（CN/DN）；无 WriteOff/Adjustment 独立表；不修改 Invoice 表；AR 不审批
 
-## 24. 变更记录
+## 24. Receipt & Payment Allocation Foundation（Sprint 4E-2，ADR-0021）
+
+> 定位（CTO Design Review 97/100 APPROVED WITH CHANGES + 实施三阶段全部落地）：**Receipt = 收款事实源**（Payment 不单独建表——CTO 拍板，避免两个重复入账事实）；
+> **AccountsReceivable = 余额事实源（唯一）**；Invoice 上 paidAmount/balanceAmount 保持投影回写；
+> 边界锁死：**Receipt 创建 ≠ Allocation**（拍板①：创建只记录收到的钱，核销走显式 allocate 且一次请求原子化）；
+> **Allocation 同 Customer / 同 Currency**（否则 409，第一版禁止跨币种核销）；**Reversal ≠ Credit Note**（Allocation Reversal 留痕不删除，CN 属 4E-3 发票调整域不承担收款冲销）；
+> **WriteOff Approval ≠ Apply**（审批只回写投影，Apply 才是唯一修改 AR.writeOffAmount/balanceAmount 的入口）；
+> **WriteOff 不增加 Invoice.paidAmount**（只减 balanceAmount 投影——WriteOff ≠ Payment，防止报表把坏账误判为客户付款）；
+> Receipt/WriteOff 编号 DocumentSequence 创建即取号（拍板④：RCT-/WO-2026-xxxx）；WriteOff 不做三件套（拍板③：审批历史 Workflow、审计 AuditLog）。
+
+```mermaid
+erDiagram
+    Receipt ||--o{ ReceiptAllocation : allocates
+    AccountsReceivable ||--o{ ReceiptAllocation : paid_by
+    Receipt ||--o{ ReceiptRevision : versions
+    Receipt ||--o{ ReceiptSnapshot : snapshots
+    WriteOff ||--o{ WriteOffAllocation : details
+    AccountsReceivable ||--o{ WriteOffAllocation : written_off
+
+    Receipt {
+        string id PK
+        string code UK
+        string customerId FK
+        string currency
+        Decimal amount
+        Decimal allocatedAmount
+        Decimal unallocatedAmount
+        datetime receiptDate
+        PaymentMethod paymentMethod
+        ReceiptStatus status
+        datetime voidedAt
+        datetime deletedAt
+    }
+
+    ReceiptAllocation {
+        string id PK
+        string receiptId FK
+        string accountsReceivableId FK
+        Decimal allocatedAmount
+        datetime allocatedAt
+        datetime reversedAt
+        string reverseReason
+        datetime deletedAt
+    }
+
+    WriteOff {
+        string id PK
+        string code UK
+        Decimal amount
+        string reason
+        WriteOffStatus status
+        string approvalPolicyId
+        string workflowInstanceId
+        datetime appliedAt
+        datetime deletedAt
+    }
+
+    WriteOffAllocation {
+        string id PK
+        string writeOffId FK
+        string accountsReceivableId FK
+        Decimal amount
+        datetime deletedAt
+    }
+```
+
+### 关系与约束（真实 Schema，migration 0019）
+
+| 关系 | 基数 | onDelete | 说明 |
+| --- | --- | --- | --- |
+| Customer → Receipt | 1:N | Restrict | 收款客户 |
+| Receipt → ReceiptAllocation | 1:N | Restrict | 核销事实（M:N：Receipt ↔ AR） |
+| AR → ReceiptAllocation | 1:N | Restrict | 一张 AR 可被多张 Receipt 部分核销 |
+| Receipt → ReceiptRevision / ReceiptSnapshot | 1:N | Cascade | 修订/快照随记录 |
+| WriteOff → WriteOffAllocation | 1:N | Cascade | 写销明细 |
+| AR → WriteOffAllocation | 1:N | Restrict | 坏账/折让核销 |
+
+- `ReceiptAllocation @@unique([writeOffId, accountsReceivableId])`；`ReceiptAllocation` 允许同一 (receipt, AR) 多行（Reversal 后可重新分配，每行是一次核销/冲销事件，Σ 校验防超核销）
+- `WriteOffAllocation @@unique([writeOffId, accountsReceivableId])`；`Receipt.code / WriteOff.code @unique`（DocumentSequence 创建即取号）
+- **无 Payment 表**（Receipt 唯一收款事实源）；**无 ReceiptApproval / WriteOffApproval 表**（Workflow 唯一审批事实源）
+
+### 状态机与业务规则（Sprint 4E-2）
+
+- **Receipt 状态（受控投影）**：UNALLOCATED（unallocatedAmount=amount）→ PARTIALLY_ALLOCATED → FULLY_ALLOCATED（unallocatedAmount=0）；UNALLOCATED → VOIDED（仅未核销可 VOID；已核销先 Reversal——409 RECEIPT_VOID_FORBIDDEN）
+- **金额关系（CTO 锁定）**：`Receipt.amount = allocatedAmount + unallocatedAmount`（受控投影，禁止 PATCH）
+- **Allocation 事务红线（CTO 指定顺序）**：Lock Receipt（FOR UPDATE）→ Lock 全部目标 AR（**id ASC FOR UPDATE**，防死锁锁序）→ 校验同 Customer/同 Currency（409）→ 校验 ≤ Receipt.unallocatedAmount（409 UNALLOCATED_EXCEEDED）→ 校验每笔 ≤ AR.balanceAmount（409 ALLOCATION_EXCEEDED——并发双核销不超余额）→ Create ReceiptAllocation → 回写 AR/Invoice/Receipt 三方投影（computeBalance 单入口）→ AR Revision + Snapshot(PAYMENT) → 事件
+- **Reversal 边界**：Allocation Reversal 解除核销并留痕（reversedAt/reversedBy/reverseReason 写入原记录，**不删除**）；恢复三方投影；重复冲销 409 RECEIPT_ALLOCATION_REVERSED；**Reversal ≠ Credit Note**（银行退票不是 CN，原 Invoice 金额未变）
+- **WriteOff 状态机**：DRAFT → SUBMITTED →（无策略）APPLIED /（有策略）APPROVED → APPLIED；REJECTED → DRAFT 重提；**APPLIED 才回写 AR**（approvalStatus 投影：DRAFT/PENDING/APPROVED/REJECTED）
+- **Apply 事务红线（Final Review 检查点）**：锁 WriteOff + 全部目标 AR（id ASC FOR UPDATE）→ 状态门禁（APPLIED→409 ALREADY_APPLIED 幂等 / 非 SUBMITTED→409 INVALID_STATE / 未 APPROVED→409 APPROVAL_REQUIRED）→ 每笔 ≤ AR.balanceAmount（409 AMOUNT_EXCEEDED）→ AR.writeOffAmount += / balanceAmount 重算 / Invoice.balanceAmount 投影↓（**paidAmount 绝不增加**）/ AR Revision + Snapshot(WRITE_OFF) / WriteOff=APPLIED+appliedAt → 事件 WriteOffApplied + AccountsReceivableWrittenOff
+- **Workflow 接入**：businessType="write-off" actions 路由终态回写（COMPLETED→syncWriteOffApproval(APPROVED) / REJECTED→REJECTED）；保持 **APPROVED ≠ APPLIED**
+- **Decimal 全程**：金额 Decimal(18,4)；快照金额 toString 禁止 toNumber
+- **红线**：不开发 4E-3（CN/DN）；无 Payment/ReceiptApproval/WriteOffApproval 表；不 PATCH AR/Invoice/Receipt 金额；WriteOff 不增加 Invoice.paidAmount
+
+## 25. 变更记录
+
+### v1.13（2026-08-08，Sprint 4E-2 Receipt & Payment Allocation Foundation，ADR-0021，PR #17 Ready for Final Review）
+
+- 新增章节：24. Receipt & Payment Allocation Foundation（Sprint 4E-2，Receipt 收款事实源 + ReceiptAllocation M:N 核销 + WriteOff/WriteOffAllocation 独立事实）
+- 模型：+6（Receipt/ReceiptAllocation/ReceiptRevision/ReceiptSnapshot + WriteOff/WriteOffAllocation）；枚举：+4（ReceiptStatus/PaymentMethod/ReceiptSnapshotType + WriteOffStatus）；DocumentType +WRITE_OFF
+- AR +2 反向关系（receiptAllocations/writeOffAllocations）；无 Payment 表；无审批表
+- 第 6 节已落地列表：Receipt & Payment Allocation Foundation（4E-2，PR #17 待验收）移入验收中（Ready for Final Review）
 
 ### v1.12（2026-08-08，Sprint 4E-1 Accounts Receivable Foundation，ADR-0020，PR #16 已合并）
 
