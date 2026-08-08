@@ -1,6 +1,52 @@
 # Release Notes
 
-## Sprint 4E-3 — Credit Note / Debit Note Foundation（2026-08-08，PR #18 已合并，未发布 Tag）
+## v0.6.0-alpha — Linier ERP Sales & Finance O2C Foundation（2026-08-08 发布）
+
+> **Release 标题：** Linier ERP v0.6.0-alpha — Sales & Finance O2C Foundation
+> **Release 摘要：** Sprint 4 establishes the complete Sales & Finance Order-to-Cash foundation, covering Quotation → Sales Order → Delivery → Invoice → Accounts Receivable → Receipt & Allocation → Write-Off → Credit/Debit Note, with unified workflow, audit, financial projections, concurrency controls, and traceable business facts.
+> **Release Gate：** Sprint 4 O2C Total Acceptance **PASS → RELEASE CANDIDATE**（9/9 节点 PASS、6/6 系统级不变量 PASS、Blocking Issues = 0）——证据：docs/reviews/Sprint4_O2C_Total_Acceptance.md
+> **Tag：** `v0.6.0-alpha`（annotated tag；Pre-release）
+> **版本治理：** 以 Git Tag 为发布事实源；package.json=0.1.0 不随本版修改（策略后续统一）
+
+### Sprint 4A – Quotation Foundation（PR #12）
+
+- Quotation = 报价事实源（Pricing Engine → QuotationPriceSnapshot 价格冻结）；审批唯一走 Workflow；QuotationSnapshot 版本留痕；报价转 SO（convert）
+
+### Sprint 4B – Sales Order Foundation（PR #13）
+
+- SalesOrder = 订单事实源（Quote→SO 溯源 quotationId）；Workflow 条件审批 + 状态事件；DocumentSequence 编号
+
+### Sprint 4C – Delivery Foundation（PR #14）
+
+- Delivery/DeliveryLine = 物流事实源（唯一入口经 SO，**无 Direct Delivery**）；防超交（availableQty 锁内校验）；READY 冻结 + POD 门禁；SO deliveredQty/remainingQty 聚合回写
+
+### Sprint 4D – Invoice Foundation（PR #15）
+
+- Invoice/InvoiceLine = 开票事实源（唯一入口经 Delivery，**无 Direct Invoice**）；防超开票（remainingInvoiceQty 锁内校验）；快照税务/汇率；Issue DocumentSequence 原子取号；条件审批（keyFinancialChanged）；DeliveryLine 开票投影
+
+### Sprint 4E-1 – Accounts Receivable Foundation（PR #16）
+
+- AccountsReceivable = 余额事实源（Invoice 1:1）；**balanceAmount = originalAmount + adjustedAmount - paidAmount - writeOffAmount**（computeBalance 单入口）；OVERDUE/Aging 惰性投影不落库；Snapshot snapshotSource 可追溯；AR 不审批
+
+### Sprint 4E-2 – Receipt & Payment Allocation Foundation（PR #17）
+
+- Receipt = 唯一收款事实源（**创建≠核销**，UNALLOCATED + unallocatedAmount）；M:N 核销锁 AR（id ASC FOR UPDATE）+ 防超核销；同客户同币种；Allocation Reversal（≠CN）；VOID 边界；WriteOff 独立事实（**APPROVED ≠ APPLIED**，Apply 唯一回写入口，**不增加 Invoice.paidAmount**）；Workflow 条件审批
+
+### Sprint 4E-3 – Credit Note / Debit Note Foundation（PR #18）
+
+- CN/DN = Invoice Adjustment 事实源 + InvoiceAdjustment 事实中间层（唯一修改 AR.adjustedAmount 入口，客户端禁直接创建）；单票制 + 快照复制不调 Pricing Engine；**CN<0 / DN>0** signed；APPROVED ≠ APPLIED；累计防超调锁内重算（CREDIT 数量 ceiling / DEBIT 金额 ceiling，同类型聚合）；负 AR = Customer Credit 投影（禁 Receipt Allocation / WriteOff）；Invoice.balanceAmount 跟随 AR newBalance；Workflow 条件审批（businessType=credit-debit-note）
+
+### Known Limitations（v0.6.0-alpha，不阻止 Alpha 发布）
+
+1. 事件总线尚未落地：领域事件以 AuditLog 留痕承载（事件总线落地后替换 publish 语义）
+2. package.json version = 0.1.0：版本治理以 Git Tag 为发布事实源，package version 策略后续统一
+3. CN/DN Apply 逐行 FOR UPDATE：大量行场景可优化批量锁（非阻断观察项）
+4. CN/DN Reversal 首版未实现（字段预留）；CustomerCredit 表/Refund 延后（负 AR 仅投影）
+5. 跨币种核销/开票未开放（第一版禁跨币种，同 Customer+Currency 硬规则）
+6. 整体成熟度 ≈92% 为估算口径
+
+---
+## Sprint 4E-3 — Credit Note / Debit Note Foundation（2026-08-08，PR #18 已合并，已纳入 v0.6.0-alpha）
 
 > PR: #18（Sprint 4E-3 Credit Note / Debit Note Foundation，feature/sprint4-sales）
 > 状态：**MERGED**（squash `675923c`；CTO Final Review **99/100 APPROVE & MERGE**，Blocking 0；未打 Tag，待 Sprint 4 Sales+Finance 总验收后统一发布 Alpha）
@@ -16,7 +62,7 @@
 - **Workflow 接入**：businessType="credit-debit-note" 终态回写（syncCreditDebitNoteApproval）；**绝不碰 AR**
 - **文档**：OpenAPI（174 paths/466 schemas）+ QA（T1-T21）+ Test Cases（166 用例）+ ADR-0022（Accepted + Implemented）+ EVENTS v1.13 + DOMAIN_MODEL v1.15
 
-## Sprint 4E-2 — Receipt & Payment Allocation Foundation（2026-08-08，PR #17 已合并，未发布 Tag）
+## Sprint 4E-2 — Receipt & Payment Allocation Foundation（2026-08-08，PR #17 已合并，已纳入 v0.6.0-alpha）
 
 > PR: #17（Sprint 4E-2 Receipt & Payment Allocation Foundation，feature/sprint4-sales）
 > 状态：MERGED（squash b84b036；未打 Tag；待 Sprint 4 Sales 完整闭环（4E-2 + 4E-3 CN/DN）后统一发布下一个 Alpha）
@@ -38,7 +84,7 @@
 - **文档**：OpenAPI +10 端点/+30 schemas（171 paths/453 schemas）、docs/qa/Sprint4E2_QA.md（T1-T18）、docs/test-cases/Receipt_WriteOff_API.md（140+ 用例，A-N 14 组）、DOMAIN_MODEL v1.13（第 24 章）、ADR-0021（Accepted + Implemented，Ready for Final Review）、Review Cover
 - **质量门禁**：分阶段提交链全部 CI 全绿（Receipt Create `d076e3a` / Allocation `c075dde`+`0440cd8` / Reversal-Void `68d697c`+`2353c8f` / WriteOff 三件套 `35bde4e`+`3b44ed0` / Create-Submit `4a89268`+`68fbe53` / Apply `224624d` / Workflow actions `aabedf2`）
 
-## Sprint 4E-1 — Accounts Receivable Foundation（2026-08-08，PR #16 已合并，未发布 Tag）
+## Sprint 4E-1 — Accounts Receivable Foundation（2026-08-08，PR #16 已合并，已纳入 v0.6.0-alpha）
 
 > PR: #16（Sprint 4E-1 Accounts Receivable Foundation，feature/sprint4-sales）
 > 状态：MERGED（squash f58fd87；未打 Tag；待 Sprint 4 Sales 完整闭环（4E-2 Receipt + 4E-3 CN/DN）后统一发布下一个 Alpha）
@@ -59,7 +105,7 @@
 - **文档**：OpenAPI +5 端点/+13 schemas（161 paths/423 schemas）、Sprint4E1_QA.md（T1-T15）、AccountsReceivable_API.md（76 用例）、DOMAIN_MODEL v1.12（第 23 章）、ADR-0020（Approved with Changes → Accepted + Implemented）、Review Cover
 - **质量门禁**：Phase 1-3 全绿（#31206666645/#31206929056/#31207456840）；OpenAPI/QA/TestCases 文档 commit 已推送（#31207456840 后）
 
-## Sprint 4D — Invoice Foundation（2026-08-08，PR #15 已合并，未发布 Tag）
+## Sprint 4D — Invoice Foundation（2026-08-08，PR #15 已合并，已纳入 v0.6.0-alpha）
 
 > PR: #15（Sprint 4D Invoice Foundation，feature/sprint4-sales）
 > 状态：MERGED（squash cea4162；未打 Tag；待 Sprint 4 Sales 完整闭环（4D Invoice + 4E AR/Payment）后统一发布下一个 Alpha）
