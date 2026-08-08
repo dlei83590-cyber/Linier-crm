@@ -2,8 +2,8 @@
 
 **PR:** #16 – Accounts Receivable Foundation
 **Branch:** `feature/sprint4-sales`
-**Head:** `0957eba`
-**Status:** Ready for CTO Final Review
+**Head:** `0dcaa35`
+**Status:** APPROVED & MERGED（PR #16，squash `f58fd87`，2026-08-08）
 
 ## 1. Scope
 
@@ -81,7 +81,7 @@ storedStatus ∈ {OPEN, PARTIALLY_PAID} 且 dueDate < now
 ## 3. Quality Gates
 
 - CI：Quality Gates ✅ / Build ✅ / Secret Scanning ✅
-- Head：`0957eba`（Phase 1-3 + OpenAPI + QA/TestCases 全绿：#31206666645 / #31206929056 / #31207456840）
+- Head：`0dcaa35`（全链路 CI 全绿：#31208182363）
 
 ## 4. Documentation
 
@@ -106,15 +106,19 @@ storedStatus ∈ {OPEN, PARTIALLY_PAID} 且 dueDate < now
 
 ## 6. Review Result
 
-**Recommendation: APPROVE & MERGE**
+**Recommendation: APPROVE & MERGE — 已执行（2026-08-08）**
 
-Sprint 4E-1 Accounts Receivable Foundation 已达到合并标准。
+CTO Final Review：**98/100 APPROVE & MERGE ✅（Blocking Issues：0）**
 
-Merge 后执行：
+- 核心架构复核 12 项全 PASS（Invoice=单据事实源/AR=余额事实源、1:1、余额唯一口径、禁 PATCH、OVERDUE 惰性、aging 动态、Snapshot 可追溯、Invoice 删除保护、AR 不审批、WriteOff/Receipt/CN/DN 无越界、Migration 0018 纯增量）
+- `snapshotSource = ISSUE/PAYMENT/WRITE_OFF/ADJUSTMENT/MANUAL` 保留，为 4E-2/4E-3 提供统一 AR 历史入口
+- 数据边界锁死：`Invoice.paidAmount/balanceAmount` = Projection；`AR.paidAmount/writeOffAmount/adjustedAmount/balanceAmount` = Source of Truth；4E-2 起不出现第二套余额事实
 
-1. Merge PR #16
-2. 更新 CHANGELOG（Ready for Final Review → Completed）
-3. 更新 RELEASE_NOTES
-4. 更新 ROADMAP
-5. 保留 `feature/sprint4-sales`
-6. 进入 **Sprint 4E-2 – Receipt/Payment（收款/核销/应收余额更新）**
+Merge 后执行（已完成）：
+
+1. ✅ Merge PR #16（squash `f58fd87`）
+2. ✅ 更新 CHANGELOG（Ready → Completed/已合并）
+3. ✅ 更新 RELEASE_NOTES（MERGED）
+4. ✅ 更新 ROADMAP（4E-1 ✅，v1.12，成熟度 ≈87%）
+5. ✅ 保留 `feature/sprint4-sales`
+6. ✅ 进入 **Sprint 4E-2 – Receipt & Payment Allocation Design**（2026-08-08 启动）

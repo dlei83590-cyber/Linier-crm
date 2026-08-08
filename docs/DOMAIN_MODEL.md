@@ -99,7 +99,7 @@ Project Expense / 日常 Expense ──> 审批流 ──> Voucher（凭证）
 - ✅ 已落地（Sprint 4B，PR #13 已合并）：Sales Order Foundation，见第 20 节
 - ✅ 已落地（Sprint 4C，PR #14 已合并）：Delivery Foundation，见第 21 节
 - ✅ 已落地（Sprint 4D，PR #15 已合并）：Invoice Foundation（Invoice/InvoiceLine/InvoiceRevision/InvoiceSnapshot + DeliveryLine 开票投影），见第 22 节
-- 🔄 验收中（Sprint 4E-1，PR #16 待合并）：Accounts Receivable Foundation（AccountsReceivable/AccountsReceivableRevision/AccountsReceivableSnapshot + 1:1 Invoice），见第 23 节
+- ✅ 已落地（Sprint 4E-1，PR #16 已合并）：Accounts Receivable Foundation（AccountsReceivable/AccountsReceivableRevision/AccountsReceivableSnapshot + 1:1 Invoice），见第 23 节
 - ⬜ 规划中（Sprint 4E-2~7）：Receipt/Payment（4E-2）/ Credit Note/Debit Note（4E-3）/ Purchase / GRN / Warehouse / Stock / AR 扩展 / AP / Voucher / Journal / GL
 
 > 详细字段标准见数据库 schema（`prisma/schema.prisma`）与 [architecture/domain-model.md](./architecture/domain-model.md)。
@@ -1584,7 +1584,7 @@ erDiagram
 
 ## 24. 变更记录
 
-### v1.12（2026-08-08，Sprint 4E-1 Accounts Receivable Foundation，ADR-0020，PR #16 待验收）
+### v1.12（2026-08-08，Sprint 4E-1 Accounts Receivable Foundation，ADR-0020，PR #16 已合并）
 
 - 新增章节：23. Accounts Receivable Foundation（Sprint 4E-1，AR 余额事实源 + 3 模型 + 1:1 Invoice + 余额唯一口径 + 惰性投影）
 - 模型：+3（AccountsReceivable/AccountsReceivableRevision/AccountsReceivableSnapshot）；枚举：+3（AccountsReceivableStatus/AccountsReceivableSnapshotType/AccountsReceivableSnapshotSource）
