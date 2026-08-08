@@ -1590,6 +1590,7 @@ model WorkflowInstance {
   quotations   Quotation[]
   salesOrders  SalesOrder[]
   invoices     Invoice[]
+  writeOffs    WriteOff[] // 4E-2：写销审批（Workflow 唯一审批事实源）
   isActive     Boolean         @default(true)
   createdById  String?
   updatedById  String?
@@ -2438,6 +2439,7 @@ model Customer {
   deliveries   Delivery[]
   invoices     Invoice[]
   accountsReceivables AccountsReceivable[] // 应收余额（4E-1；余额事实源，Customer 对账用）
+  receipts     Receipt[] // 收款（4E-2；收款事实源）
   isActive     Boolean         @default(true)
   createdById  String?
   updatedById  String?
@@ -3951,6 +3953,8 @@ model AccountsReceivable {
 
   revisions AccountsReceivableRevision[]
   snapshots AccountsReceivableSnapshot[]
+  receiptAllocations ReceiptAllocation[] // 4E-2：核销事实（M:N Receipt ↔ AR）
+  writeOffAllocations WriteOffAllocation[] // 4E-2：写销明细（WriteOff → AR）
 
   @@index([customerId])
   @@index([status])
@@ -4001,6 +4005,224 @@ model AccountsReceivableSnapshot {
   updatedAt   DateTime @updatedAt @db.Timestamptz(3)
 
   @@unique([accountsReceivableId, snapshotType])
+  @@index([accountsReceivableId])
+  @@index([deletedAt])
+}
+
+// ============================================================
+// Sprint 4E-2：Receipt & Payment Allocation（收款与核销领域）
+// CTO Design Review 2026-08-08 97/100 APPROVED WITH CHANGES 拍板：
+// ① 创建与核销分离（POST /api/receipts 只记录金额；allocate 显式动作且一次请求原子化）
+// ② VOID 仅未核销；已核销逆向走 Allocation/Receipt Reversal 留痕；CN 属 4E-3 发票调整域不承担收款冲销
+// ③ WriteOff = WriteOff + WriteOffAllocation（不做 Revision/Snapshot 三件套；审批历史 Workflow、审计 AuditLog）
+// ④ Receipt/WriteOff 编号 DocumentSequence 创建即取号（REC-/WO-2026-xxxx，与 Invoice DRAFT 不占号语义不同）
+// ⑤ unallocatedAmount 受控投影保留（预收/暂未指定发票场景）
+// 硬规则：同 Customer + 同 Currency 才允许 Allocation（409；第一版禁止跨币种核销）
+// 锁序（CTO 指定）：Lock Receipt → Lock AR rows(id ASC) → 校验客户/币种 → 校验 unallocated → 校验 ≤ AR.balanceAmount
+//   → Create ReceiptAllocation → 回写 AR → 回写 Invoice 投影 → 回写 Receipt 投影 → AR 状态投影 → Snapshot/Audit → Events
+// ============================================================
+
+/// 收款状态（受控投影——拍板②：只能由 allocation/reversal/void 事务更新，禁止 PATCH；前三个可由金额动态推导）
+enum ReceiptStatus {
+  UNALLOCATED          // 未核销（unallocatedAmount = amount）
+  PARTIALLY_ALLOCATED  // 部分核销（0 < allocatedAmount < amount）
+  FULLY_ALLOCATED      // 全部核销（unallocatedAmount = 0）
+  VOIDED               // 已作废（仅未核销可 VOID）
+}
+
+/// 收款方式
+enum PaymentMethod {
+  BANK_TRANSFER  // 银行转账
+  CHEQUE         // 支票
+  CASH           // 现金
+  CARD           // 刷卡
+  OTHER          // 其他
+}
+
+/// 收款快照类型（仅固化节点生成，只读）
+enum ReceiptSnapshotType {
+  CREATED  // 创建时固化
+  ALLOCATED // 核销节点固化（部分/全额核销均触发）
+  VOIDED   // 作废时固化
+  REVERSED // Allocation/Receipt Reversal 时固化
+}
+
+/// 收款（收款事实源；Payment 不单独建表——CTO 拍板：避免两个重复入账事实）
+/// 核心金额关系：amount = allocatedAmount + unallocatedAmount（后两者受控投影，禁止 PATCH）
+/// 拍板④：code DocumentSequence 创建即取号（Receipt 是实际收款凭证，创建即财务事实）
+model Receipt {
+  id           String   @id @default(cuid())
+  code         String   @unique // 收款单编号（REC-2026-xxxx，DocumentSequence 创建即取号）
+  customerId   String   // 收款客户（核销目标 AR.customerId 必须一致——硬规则）
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  currency     String   @default("CNY") // 币种（核销目标 AR.currency 必须一致——硬规则，第一版禁止跨币种核销）
+  amount       Decimal  @db.Decimal(18, 4) // 实收金额（收款事实）
+  allocatedAmount   Decimal @default(0) @db.Decimal(18, 4) // 受控投影 = Σ ReceiptAllocation.allocatedAmount（非反向核销）
+  unallocatedAmount Decimal @default(0) @db.Decimal(18, 4) // 受控投影 = amount - allocatedAmount（拍板⑤：预收/暂未指定发票）
+  receiptDate  DateTime @db.Timestamptz(3) // 收款日期
+  paymentMethod PaymentMethod // 收款方式
+  referenceNo  String?  // 银行流水号/备注
+  status       ReceiptStatus @default(UNALLOCATED) // 受控投影（事务更新，禁止 PATCH）
+  voidedAt     DateTime? @db.Timestamptz(3)
+  voidedById   String?
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  allocations ReceiptAllocation[]
+  revisions   ReceiptRevision[]
+  snapshots   ReceiptSnapshot[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([receiptDate])
+  @@index([deletedAt])
+}
+
+/// 核销事实（M:N：一个 Receipt → 多 AR；一个 AR → 多 Receipt——CTO 锁定）
+/// 允许同一 (receipt, AR) 多行：Reversal 后可重新分配（每行是一次核销/冲销事件，Σ 校验防超核销）
+/// Allocation Reversal 留痕：reversedAt/reversedBy 非空即已冲销（4E-2 边界，CN 不承担收款冲销）
+model ReceiptAllocation {
+  id           String   @id @default(cuid())
+  receiptId    String
+  receipt      Receipt  @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+  accountsReceivableId String
+  accountsReceivable AccountsReceivable @relation(fields: [accountsReceivableId], references: [id], onDelete: Restrict)
+  allocatedAmount Decimal @db.Decimal(18, 4) // 本次核销金额
+  allocatedAt   DateTime @default(now()) @db.Timestamptz(3)
+  allocatedBy   String?
+  // Allocation Reversal 留痕（CTO Design Review 新锁定边界）
+  reversedAt    DateTime? @db.Timestamptz(3)
+  reversedBy    String?
+  reverseReason String?
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([receiptId])
+  @@index([accountsReceivableId])
+  @@index([reversedAt])
+  @@index([deletedAt])
+}
+
+/// 收款修订（头信息变更留痕；系统生成，禁止手工编辑）
+model ReceiptRevision {
+  id           String   @id @default(cuid())
+  receiptId    String
+  receipt      Receipt  @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  revisionNo   Int
+  changeReason String
+  snapshotData Json?    // 头信息快照（金额 Decimal 字符串，禁止 toNumber）
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([receiptId, revisionNo])
+  @@index([receiptId])
+  @@index([deletedAt])
+}
+
+/// 收款快照（关键节点固化：CREATED/ALLOCATED/VOIDED/REVERSED；金额 Decimal 字符串）
+model ReceiptSnapshot {
+  id           String   @id @default(cuid())
+  receiptId    String
+  receipt      Receipt  @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  snapshotType ReceiptSnapshotType
+  revisionNo   Int
+  snapshotData Json?    // 完整快照（Header + amount/allocatedAmount/unallocatedAmount/status；Decimal 字符串）
+  generatedById String?
+  generatedAt  DateTime @default(now()) @db.Timestamptz(3)
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([receiptId])
+  @@index([deletedAt])
+}
+
+/// 写销状态（审批边界：WriteOff 按 ApprovalPolicy 条件审批；审批完成前禁止改 AR.writeOffAmount）
+enum WriteOffStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  APPLIED
+}
+
+/// 坏账/折让写销（独立事实实体——拍板③：不 PATCH AR.writeOffAmount，APPLIED 才回写）
+/// 不做 Revision/Snapshot 三件套（拍板③：审批历史由 Workflow、审计由 AuditLog，避免模型膨胀）
+/// 审批：approvalPolicyId 可空；有值 → 按 ApprovalPolicy 触发 Workflow（复用，不建 WriteOffApproval 表）
+model WriteOff {
+  id           String   @id @default(cuid())
+  code         String   @unique // 写销单编号（WO-2026-xxxx，DocumentSequence 创建即取号）
+  amount       Decimal  @db.Decimal(18, 4) // 写销总额（= Σ WriteOffAllocation.amount）
+  reason       String   // 原因：坏账/折让/其他
+  writeOffDate DateTime @db.Timestamptz(3)
+  status       WriteOffStatus @default(DRAFT)
+  approvalPolicyId String? // 条件审批（可空）
+  // 审批投影（Workflow 唯一审批事实源；不建 WriteOffApproval 表）
+  workflowInstanceId String?
+  workflowInstance WorkflowInstance? @relation(fields: [workflowInstanceId], references: [id], onDelete: SetNull)
+  approvalStatus ApprovalStatus @default(DRAFT)
+  approvedAt    DateTime? @db.Timestamptz(3)
+  approvedById  String?
+  appliedAt     DateTime? @db.Timestamptz(3) // APPLIED 时才回写 AR（审批完成前禁止提前修改）
+  appliedById   String?
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  allocations WriteOffAllocation[]
+
+  @@index([status])
+  @@index([workflowInstanceId])
+  @@index([deletedAt])
+}
+
+/// 写销明细（WriteOff → AR；APPLIED 时按明细回写 AR.writeOffAmount + balanceAmount）
+model WriteOffAllocation {
+  id           String   @id @default(cuid())
+  writeOffId   String
+  writeOff     WriteOff @relation(fields: [writeOffId], references: [id], onDelete: Cascade)
+  accountsReceivableId String
+  accountsReceivable AccountsReceivable @relation(fields: [accountsReceivableId], references: [id], onDelete: Restrict)
+  amount       Decimal  @db.Decimal(18, 4)
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([writeOffId, accountsReceivableId])
+  @@index([writeOffId])
   @@index([accountsReceivableId])
   @@index([deletedAt])
 }
