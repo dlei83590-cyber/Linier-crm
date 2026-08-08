@@ -2,8 +2,8 @@
 
 **PR:** #17 – Sprint 4E-2 Receipt & Payment Allocation Foundation
 **Branch:** `feature/sprint4-sales`
-**Head:** `aabedf2`（Ready for Final Review；PR #17 Open 未合并）
-**Status:** Ready for Final Review（2026-08-08；合并后改 Completed）
+**Head:** `74a5b3d`（合并前最终 HEAD；3 项财务一致性阻断项修复后 CTO 复核全部 PASS）
+**Status:** APPROVED & MERGED（PR #17 squash `b84b036`，2026-08-08）
 
 ## 1. Scope
 
@@ -137,7 +137,7 @@ Apply 事务：
 - QA：docs/qa/Sprint4E2_QA.md（T1-T18，覆盖 CTO 指令 17 场景 + Snapshot source）
 - Test Cases：docs/test-cases/Receipt_WriteOff_API.md（140+ 用例，A-N 14 组，重点 Concurrency / Reversal / Projection consistency / Workflow / Boundary）
 - DOMAIN_MODEL：v1.13（第 24 章 Receipt & Payment Allocation Foundation）
-- ADR-0021：**Accepted + Implemented（Ready for Final Review，PR #17 合并后改 Completed）**
+- ADR-0021：**Accepted + Implemented（Sprint 4E-2 完成，PR #17 已合并，squash `b84b036`）**
 - EVENTS：v1.11（4E-2 事件 10 个 ✅ 已实现 + AR WrittenOff 联动）
 - CHANGELOG / RELEASE_NOTES / ROADMAP：已同步（Ready for Final Review 口径；整体成熟度维持 ≈87%，PR #17 合并后统一上调）
 
@@ -164,9 +164,20 @@ Apply 事务：
 
 ## 6. Review Result
 
-**Recommendation: 待 CTO Final Review（2026-08-08）**
+**Recommendation: APPROVE & MERGE — 已执行（2026-08-08）**
 
+CTO Final Review：**APPROVE & MERGE ✅（Blocking Issues：0）**
+
+- 3 项财务一致性阻断项（① Invoice.balanceAmount 投影统一回写 AR newBalance ② AR 状态投影统一 computeArStatus ③ Reversal lastPaymentAt 重算）修复后 CTO 逐项复核**全部 PASS**（commit `74a5b3d`）
 - 财务边界 16 项 Checklist 全部 ✅（实现 + 文档 + 测试三重覆盖）
 - 锁序/防超核销/幂等/投影一致性均按 CTO Design Review 97/100 指定顺序实现
 - CI 全绿（Quality Gates / Build / Secret Scanning）
-- **Ready for Final Review**——PR #17 Open 待合并；合并后执行：更新 CHANGELOG/RELEASE_NOTES/ROADMAP 为 Completed、ADR-0021 改 Completed、整体成熟度统一上调（4E-2 ≈80-85%，整体 ≈87% 维持）、进入 4E-3（CN/DN）规划
+
+Merge 后执行（已完成）：
+
+1. ✅ Merge PR #17（squash `b84b036`，2026-08-08）
+2. ✅ 更新 CHANGELOG（Ready → Completed/已合并）
+3. ✅ 更新 RELEASE_NOTES（MERGED）
+4. ✅ 更新 ROADMAP（4E-2 ✅，v1.14，成熟度 ≈87% → ≈89%）
+5. ✅ 保留 `feature/sprint4-sales`
+6. ✅ 进入 **Sprint 4E-3 – Credit Note / Debit Note Design**（Invoice Adjustment → AR.adjustedAmount → CN/DN 销售财务调整链）

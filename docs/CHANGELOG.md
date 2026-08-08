@@ -2,9 +2,9 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased] - Sprint 4A + 4B + 4C + 4D + 4E-1 + 4E-2（Quotation / Sales Order / Delivery / Invoice / Accounts Receivable / Receipt & Payment Allocation Foundation，2026-08-08，PR #12/#13/#14/#15/#16 已合并 + PR #17 Ready for Final Review，未打 Tag）
+## [Unreleased] - Sprint 4A + 4B + 4C + 4D + 4E-1 + 4E-2（Quotation / Sales Order / Delivery / Invoice / Accounts Receivable / Receipt & Payment Allocation Foundation，2026-08-08，PR #12/#13/#14/#15/#16/#17 已合并，未打 Tag）
 
-### 新增（Sprint 4E-2：Receipt & Payment Allocation Foundation，PR #17，Ready for Final Review）
+### 新增（Sprint 4E-2：Receipt & Payment Allocation Foundation，PR #17，已合并）
 
 - **收款领域（收款事实源）**：Receipt / ReceiptAllocation / ReceiptRevision / ReceiptSnapshot + WriteOff / WriteOffAllocation（+6 模型 / +4 枚举，迁移 `0019_receipt_payment_foundation`，仅新增不改既有）；**Receipt = 唯一收款事实源（Payment 不单独建表——CTO 拍板，避免两个重复入账事实）**；Receipt.code / WriteOff.code DocumentSequence **创建即取号**（拍板④：RCT-/WO-2026-xxxx）
 - **创建与核销分离（拍板①）**：POST /api/receipts 只记录实际收到的钱（UNALLOCATED，unallocatedAmount=amount，**不核销**）；POST /api/receipts/{id}/allocate 显式核销且**一次请求原子化**（多 AR 批量同事务，任何一步失败整体回滚）

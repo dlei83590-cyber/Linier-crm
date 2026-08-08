@@ -1,6 +1,6 @@
 # DOMAIN_MODEL 领域模型
 
-- 版本：v1.13
+- 版本：v1.14
 - 日期：2026-08-08
 - 维护者：CIO（JINZA）｜审核：CTO
 - 关联：[PRODUCT_VISION.md](./PRODUCT_VISION.md) ｜ [ROADMAP.md](./ROADMAP.md) ｜ [ADR](./ADR/)
@@ -100,7 +100,7 @@ Project Expense / 日常 Expense ──> 审批流 ──> Voucher（凭证）
 - ✅ 已落地（Sprint 4C，PR #14 已合并）：Delivery Foundation，见第 21 节
 - ✅ 已落地（Sprint 4D，PR #15 已合并）：Invoice Foundation（Invoice/InvoiceLine/InvoiceRevision/InvoiceSnapshot + DeliveryLine 开票投影），见第 22 节
 - ✅ 已落地（Sprint 4E-1，PR #16 已合并）：Accounts Receivable Foundation（AccountsReceivable/AccountsReceivableRevision/AccountsReceivableSnapshot + 1:1 Invoice），见第 23 节
-- 🟡 Ready for Final Review（Sprint 4E-2，PR #17 待合并）：Receipt & Payment Allocation Foundation（Receipt/ReceiptAllocation/ReceiptRevision/ReceiptSnapshot + WriteOff/WriteOffAllocation，收款/核销/冲销/作废/写销全链路），见第 24 节
+- ✅ 已落地（Sprint 4E-2，PR #17 已合并）：Receipt & Payment Allocation Foundation（Receipt/ReceiptAllocation/ReceiptRevision/ReceiptSnapshot + WriteOff/WriteOffAllocation，收款/核销/冲销/作废/写销全链路），见第 24 节
 - ⬜ 规划中（Sprint 4E-3~7）：Credit Note/Debit Note（4E-3）/ Purchase / GRN / Warehouse / Stock / AR 扩展 / AP / Voucher / Journal / GL
 
 > 详细字段标准见数据库 schema（`prisma/schema.prisma`）与 [architecture/domain-model.md](./architecture/domain-model.md)。
@@ -1677,6 +1677,11 @@ erDiagram
 - **红线**：不开发 4E-3（CN/DN）；无 Payment/ReceiptApproval/WriteOffApproval 表；不 PATCH AR/Invoice/Receipt 金额；WriteOff 不增加 Invoice.paidAmount
 
 ## 25. 变更记录
+
+### v1.14（2026-08-08，Sprint 4E-2 Receipt & Payment Allocation Foundation，ADR-0021，PR #17 已合并）
+
+- Sprint 4E-2 完成并合并（PR #17 squash b84b036；CTO Final Review APPROVE & MERGE，Blocking 0；3 项财务一致性阻断项修复后复核全 PASS）
+- 第 6 节已落地列表：Receipt & Payment Allocation Foundation（4E-2，PR #17 已合并）移入已落地
 
 ### v1.13（2026-08-08，Sprint 4E-2 Receipt & Payment Allocation Foundation，ADR-0021，PR #17 Ready for Final Review）
 
