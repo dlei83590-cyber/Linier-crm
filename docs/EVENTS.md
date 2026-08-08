@@ -182,7 +182,7 @@
 | `CreditDebitNoteRejected` | 审批驳回（→ DRAFT 重提） | `{ noteId, workflowInstanceId, rejectedBy, rejectedAt, reason }` | ⏳ 注册待实现（Sprint 4E-3） |
 | `InvoiceAdjustmentApplied` | **Apply 完成（AR.adjustedAmount 聚合回写；APPROVED ≠ APPLIED）** | `{ adjustmentId, noteId, noteCode, invoiceId, invoiceLineId, accountsReceivableId, adjustmentType, amount, adjustedAmount, balanceAmount, appliedBy, appliedAt }` | ⏳ 注册待实现（Sprint 4E-3） |
 
-> 注：`AccountsReceivableAdjusted`（v1.9 已注册待实现）为 4E-3 核心联动事件（CN/DN Apply 后发布）；`InvoicePartiallyPaid/Paid`（4D 注册）与 4E-2 已实现事件不重复注册。
+> 注：**Apply 成功时同时发布 `InvoiceAdjustmentApplied` + `AccountsReceivableAdjusted`**（后者 v1.9 已注册，复用不重复定义——CTO 98/100 拍板）；`InvoicePartiallyPaid/Paid`（4D 注册）与 4E-2 已实现事件不重复注册。
 
 ### 2.4 主数据
 

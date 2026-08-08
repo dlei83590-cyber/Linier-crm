@@ -50,11 +50,13 @@ Invoice（单据事实源，金额快照不可变）
 - **红线：CN/DN 不承担收款冲销**——客户付款 RM10,000 银行退票，这不是 CN，原 Invoice 金额未变（ADR-0021 §5 锁死）。
 - **红线：已有付款时允许 CN**——但必须以当前 AR.balance 与 adjustedAmount 规则处理，**不回滚 Receipt / ReceiptAllocation**（收款是已发生事实）。
 
-### 2.2 AR.adjustedAmount 聚合规则（禁 PATCH）
+### 2.2 AR.adjustedAmount 聚合规则（禁 PATCH）+ 符号口径（CTO 98/100 拍板）
 
-- `AR.adjustedAmount` = Σ(该 AR 对应 Invoice 的全部已 Apply InvoiceAdjustment.amount)，**可正可负**（CN 负 / DN 正）。
+- **全系统唯一符号规则（CTO 拍板）**：`Credit Note → adjustmentAmount < 0`；`Debit Note → adjustmentAmount > 0`。请求可输入正数（业务口径），但**落入 InvoiceAdjustment 的财务事实必须规范成有符号金额**（signed adjustment），禁止在不同 API 中用“CN amount 正数但 Apply 时再减”的混合语义。
+- `AR.adjustedAmount` = Σ(该 AR 对应 Invoice 的全部已 Apply InvoiceAdjustment.adjustmentAmount)，**可正可负**（CN 负 / DN 正）。
 - 唯一写入口：InvoiceAdjustment Apply 事务（服务端聚合，禁止前端/接口直改）。
 - 余额唯一口径不变：`AR.balanceAmount = originalAmount + adjustedAmount - paidAmount - writeOffAmount`（computeBalance 单入口，4E-1 锁定）。
+  - 示例（CTO）：Invoice 1000、Paid 1000、CN -200 → AR.balance = 1000 - 200 - 1000 = **-200**（客户有 200 Credit）。
 
 ---
 
@@ -121,35 +123,59 @@ DRAFT → SUBMITTED →（无策略）APPLIED /（有策略）APPROVED → APPLI
 | accountsReceivableId | String FK | 目标 AR（invoiceId 1:1 推导，落库便于 Apply 锁定） |
 | customerId / currency | String | 冗余（Apply 事务校验与 AR 一致） |
 | adjustmentType | enum | CREDIT（负向）/ DEBIT（正向） |
-| amount | Decimal(18,4) | 调整金额（**CN 为负、DN 为正的带符号语义在聚合时应用**；存正数+type 或带符号，实现阶段定） |
+| quantity | Decimal(18,4) | 调整数量（与 CreditDebitNoteLine.quantity 一致；累计防超调用） |
+| adjustmentAmount | Decimal(18,4) | **有符号调整金额（CTO 拍板：CN < 0、DN > 0）**——全系统唯一符号口径，禁止“请求正数/落库负数”混合语义 |
 | appliedAt / appliedById | DateTime? / String? | Apply 回写时间（null = 未生效） |
+| reversedAt / reversedById | DateTime? / String? | **预留**（CTO：4E-3 首版可不实现 reversal，但字段预留） |
 | 统一审计字段 | | 同头 |
 
-### 事务红线（Apply，Final Review 检查点——对齐 4E-2 WriteOff Apply）
+### 事务红线（Apply，Final Review 检查点——CTO 98/100 锁定顺序）
 
 ```
 Lock CreditDebitNote（FOR UPDATE）
  ↓
-Lock 全部目标 AR（按 id ASC，FOR UPDATE——防死锁锁序）
+状态/审批门禁：APPLIED → 409 CN_DN_ALREADY_APPLIED（幂等稳定 409）
+             非 SUBMITTED → 409 CN_DN_INVALID_STATE
+             命中审批但未 APPROVED → 409 CN_DN_APPROVAL_REQUIRED
+             无策略 → 可直接 Apply
  ↓
-状态门禁：APPLIED → 409 CN_DN_ALREADY_APPLIED（幂等稳定 409）
-        非 SUBMITTED → 409 CN_DN_INVALID_STATE
-        命中审批但未 APPROVED → 409 CN_DN_APPROVAL_REQUIRED
-        无策略 → 可直接 Apply
+Lock Invoice（FOR UPDATE）
+ ↓
+Lock source InvoiceLines（按 id ASC，FOR UPDATE——防死锁锁序）
+ ↓
+Lock 全部目标 AR（按 id ASC，FOR UPDATE）
  ↓
 校验 customerId / currency 与 AR 一致（409 CN_DN_CUSTOMER_MISMATCH / CN_DN_CURRENCY_MISMATCH）
  ↓
+**累计 CN/DN 防超调（CTO 拍板，本轮最重要补充）**：
+  按 sourceInvoiceLineId 聚合所有已 APPLIED、未撤销的 InvoiceAdjustment：
+  remainingAdjustableQty = originalInvoiceQty - cumulativeAppliedCreditQty
+  newCreditQty ≤ remainingAdjustableQty（否则 409 CN_DN_QUANTITY_EXCEEDED）
+  金额同样累计上限校验（否则 409 CN_DN_AMOUNT_EXCEEDED）
+ ↓
 同事务：
-  AR.adjustedAmount += Σ adjustment.amount（CN 负 / DN 正，服务端聚合）
+  Create InvoiceAdjustment facts（signed adjustmentAmount：CN<0 / DN>0）
+  AR.adjustedAmount += Σ signed adjustmentAmount（服务端聚合）
   AR.balanceAmount 重算（computeBalance 单入口）
-  AR.status 投影（computeArStatus：balance=0 且 writeOff>0→CLOSED / balance=0→PAID / paid=0→OPEN / 否则 PARTIALLY_PAID）
+  AR status / credit projection（isCreditBalance / effectiveBalanceType——CTO 拍板）
   Invoice.balanceAmount 投影 = AR newBalance（4E-2 修复后口径；**Invoice 金额事实不动**）
   AR Revision + Snapshot（snapshotSource=ADJUSTMENT / snapshotType=ADJUSTED）
   InvoiceAdjustment 各条 appliedAt/appliedById 回写
   CreditDebitNote status=APPLIED + appliedAt/appliedById
  ↓
-事件（事务外，失败降级不阻断；DB 事实更新不静默失败）
+Audit / Events（事务外：InvoiceAdjustmentApplied + AccountsReceivableAdjusted 同时发布，失败降级不阻断；DB 事实更新不静默失败）
 ```
+
+### 累计防超调（CTO 98/100 拍板，本轮最重要补充）
+
+- **不能只检查本次** `quantity ≤ InvoiceLine.quantity`——连续多张 CN 会累计超调（例：原 100 PCS，CN#1=60、CN#2=60，单张均合法但累计 120）。
+- **Apply 时必须按 sourceInvoiceLineId 聚合所有已 APPLIED、未撤销的 Credit Adjustment**：
+  ```
+  remainingAdjustableQty = originalInvoiceQty - cumulativeAppliedCreditQty
+  newCreditQty ≤ remainingAdjustableQty
+  ```
+- **金额同样累计上限校验**（CN_DN_AMOUNT_EXCEEDED）。
+- **并发 Apply 锁序（CTO 锁定）**：Lock Note → Lock Invoice/InvoiceLine → Lock AR，统一稳定锁序——否则两张 CN 同时 Apply 仍可能双双通过累计检查。
 
 ### 防重复/幂等
 
@@ -165,25 +191,35 @@ Lock 全部目标 AR（按 id ASC，FOR UPDATE——防死锁锁序）
 - Invoice = 100，已全额收款（AR.paidAmount=100，balance=0，status=PAID）。
 - 客户退货开 CN = 20 → AR.adjustedAmount = -20 → balance = 100 + (-20) - 100 - 0 = **-20（负余额）**。
 
-### 6.2 负余额的含义
+### 6.2 负余额的含义与投影（CTO 98/100 拍板：不新增数据库状态）
 
 - **负余额 = 客户多付/可退或可抵**（应收为负 → 形成对客户负债方向，非收款事实）。
 - **不回滚 Receipt**：收款 RM100 是已发生事实，Receipt/ReceiptAllocation 原样保留；负余额是调整后的净额投影。
+- **CTO 拍板：不扩展 AccountsReceivableStatus**（不加 CREDIT 枚举）——数据库状态保持生命周期/付款状态语义（OPEN/PARTIALLY_PAID/PAID/CLOSED + OVERDUE effective），**负 AR 只做读取时投影**：
+  ```
+  isCreditBalance = balanceAmount < 0
+  creditAmount     = abs(balanceAmount)
+  effectiveBalanceType = balance < 0 ? "CREDIT" : balance == 0 ? "SETTLED" : "DEBIT"
+  ```
+- **锁死规则（CTO）**：
+  - balance < 0 → **不参与 Aging / OVERDUE 判定**
+  - balance < 0 → **禁止 WriteOff**（allocation ≤ AR.balanceAmount 校验自然拒绝 balance≤0）
+  - balance < 0 → **Receipt Allocation 不得继续核销到该 AR**（禁止向负余额 AR 再核销）
+  - 后续 **DN 可以把负余额向 0 拉回**（正向调整）
+  - 后续真正 Refund / CustomerCredit 模块再消费这笔 Credit（4E-3 不实现）
 
-### 6.3 两个处理方向（Pending ② 供 CTO 拍板）
+### 6.3 处理方案（Pending ② 已拍板：方案 A）
 
-| 方案 | 语义 | 优缺点 |
+| 方案 | 语义 | 结论 |
 | --- | --- | --- |
-| **A. 负 AR 余额（本设计默认）** | balanceAmount 允许为负，AR.status 保持/投影为特殊语义（如 NEGATIVE_BALANCE 仅枚举或维持 PAID+负余额）；后续退款走 4E-2 Receipt Reversal 或 4E-4/后续退款单 | 模型简单、事实清晰；但 AR 状态机需明确负余额表达 |
-| **B. Customer Credit（预收/贷项余额）** | CN 触发 AR.adjustedAmount 归零 + 生成独立 CustomerCredit（可抵后续发票/退款） | 语义贴合业务（可抵/可退）；但需新增 CustomerCredit 实体（模型膨胀） |
-
-- **设计倾向（待 CTO 拍板）**：第一版走 **方案 A（负 AR 余额投影）**，CustomerCredit 独立实体延后（4E-4/后续收款退款域）；负余额 AR 不再参与 aging/OVERDUE 判定（balance<=0 不逾期），可被后续 Receipt Allocation 正向冲抵（allocate 校验改为允许负余额被收款补齐）。
+| **A. 负 AR 余额投影（CTO 拍板采纳）** | balanceAmount 允许为负（=Customer Credit/可退可抵），只做读取投影 isCreditBalance/creditAmount/effectiveBalanceType，不新增数据库状态 | **✅ 第一版采用** |
+| B. Customer Credit 独立实体 | CN 触发 AR 归零 + 生成独立 CustomerCredit | ❌ 延后（模型膨胀，后续 Refund/CustomerCredit 模块） |
 
 ### 6.4 已付款 CN 的校验边界（不回滚）
 
 - CN Apply 不校验 AR.paidAmount 是否覆盖调整额——只按 `adjustedAmount 聚合 + balance 重算` 处理。
-- 若 balance 因 CN 变负，**不允许再 WriteOff**（writeOffAmount 增加只会更负；WriteOff 目标必须 balance>0——校验沿用 4E-2：allocation ≤ AR.balanceAmount，负余额自然被拒）。
-- 负余额 AR 允许后续正向调整（DN/新发票分配）与收款核销补平。
+- 若 balance 因 CN 变负，**禁止 WriteOff / 禁止继续 Receipt Allocation 核销**（CTO 锁死：balance<0 → 不参与 Aging、禁止 WriteOff、Receipt Allocation 不得继续核销到该 AR）。
+- 负余额 AR 允许后续 **DN 正向调整把余额向 0 拉回**（拉回至 ≥0 后恢复 normal 语义）。
 
 ---
 
@@ -196,9 +232,9 @@ Lock 全部目标 AR（按 id ASC，FOR UPDATE——防死锁锁序）
 | `CreditDebitNoteApproved` | 4E-3 | 审批通过（Workflow 回调，投影回写） |
 | `CreditDebitNoteRejected` | 4E-3 | 审批驳回（→ DRAFT 重提） |
 | `InvoiceAdjustmentApplied` | 4E-3 | **Apply 完成（AR.adjustedAmount 聚合回写）** |
-| `AccountsReceivableAdjusted` | v1.9 已注册 | 4E-3 实现时联动发布（调整后 AR 投影） |
+| `AccountsReceivableAdjusted` | **v1.9 已注册（复用，不重复注册）** | **Apply 成功时与 InvoiceAdjustmentApplied 同时发布**（CTO 拍板） |
 
-> 注：`AccountsReceivableAdjusted`（v1.9 已注册待实现）为 4E-3 核心联动事件；`InvoicePartiallyPaid/Paid`（4D 注册）与 4E-2 已实现事件不重复注册。
+> 注：`AccountsReceivableAdjusted`（v1.9 已注册待实现）为 4E-3 核心联动事件——**Apply 成功时同时发布 InvoiceAdjustmentApplied + AccountsReceivableAdjusted**，不重复定义新事件名。
 
 ---
 
@@ -210,25 +246,32 @@ Lock 全部目标 AR（按 id ASC，FOR UPDATE——防死锁锁序）
 
 ---
 
-## 9. CTO Pending Decisions（5 个，Design Review 拍板）
+## 9. CTO Pending Decisions 拍板结果（Design Review 98/100 APPROVED WITH CHANGES）
 
-| # | 问题 | 建议（待拍板） |
+| # | 问题 | CTO 拍板 |
 | --- | --- | --- |
-| ① | CN/DN 是否允许跨 Invoice 合并（一张调整单覆盖多张发票）？ | **第一版单票制**（sourceInvoiceId 单值）；跨票合并需多行多票 + 多 AR 聚合，复杂度高，延后（与 4D Consolidated Invoice 不同：调整单默认一对一） |
-| ② | 已全额付款后的 CN 产生负 AR 还是 Customer Credit？ | **第一版负 AR 余额投影（方案 A）**；CustomerCredit 独立实体延后；负余额不参与 aging，可被后续收款/DN 补平 |
-| ③ | CN/DN 是否必须审批？ | 对齐 WriteOff：**按 ApprovalPolicy(module=CN_DN 或 CREDIT_DEBIT_NOTE) 条件触发**；不强制全部审批（Receipt 不审批先例），策略缺失/未命中 → 可直接 Apply |
-| ④ | CN/DN 是否支持部分行数量调整？ | **支持**（CreditDebitNoteLine.quantity 可小于 InvoiceLine.quantity——退货部分数量场景）；累计调整数量 ≤ 原行数量（CN 场景，防超调） |
-| ⑤ | 是否允许 Debit Note 超过原 Invoice 金额？ | **默认禁止**（DN 累计调整 ≤ 原行金额/原票余额缺口，409 CN_DN_AMOUNT_EXCEEDED）；补价场景如有超出需单独授权 |
+| ① | CN/DN 是否允许跨 Invoice 合并？ | **第一版禁止，单票制**——sourceInvoiceId 必填且唯一；跨票 Consolidated Adjustment 延后 |
+| ② | 已全额付款后的 CN 产生负 AR 还是 Customer Credit？ | **负 AR 方案 A**——第一版允许 balanceAmount < 0（=Customer Credit/可退可抵余额）；**不新增数据库状态**（不加 CREDIT 枚举），只做读取投影 isCreditBalance/creditAmount/effectiveBalanceType；暂不建 CustomerCredit 实体 |
+| ③ | CN/DN 是否必须审批？ | **条件审批**——复用 ApprovalPolicy(module=CREDIT_DEBIT_NOTE)，不建 Approval 表；未命中策略可直接进入可 Apply 状态 |
+| ④ | CN/DN 是否支持部分行数量调整？ | **批准支持，但必须累计防超调**——不能只检查本次 quantity ≤ invoiceLine.quantity；按 sourceInvoiceLineId 聚合已 APPLIED 未撤销的 Credit：remainingAdjustableQty = originalInvoiceQty - cumulativeAppliedCreditQty，newCreditQty ≤ remainingAdjustableQty；金额同样累计上限校验（409 CN_DN_QUANTITY_EXCEEDED / CN_DN_AMOUNT_EXCEEDED）；并发 Apply 锁序：Lock Note → Lock Invoice/InvoiceLine → Lock AR（统一稳定锁序） |
+| ⑤ | 是否允许 Debit Note 超过原 Invoice 金额？ | **第一版禁止**——行级可调整上限：cumulative debit + current debit ≤ ceiling（第一版 ceiling = 原行金额）；超过 409；未来无上限补价（运输费/利息/额外费用）需单独 ADR + ADDITIONAL_CHARGE 类调整模型 + 权限/审批策略 |
+
+### 3 项设计调整（CTO 98/100 指令，进入 Schema 前必须落实）
+
+1. **CN 累计数量/金额防超调 + Apply 并发锁定规则**（见 §5 事务红线）——剩余可调 = 原数量 - 累计已生效 Credit；并发 Apply 统一锁序防止双双通过。
+2. **负 AR 只做 credit projection，不新增数据库状态**（见 §6）——isCreditBalance / creditAmount / effectiveBalanceType；锁死：balance<0 → 不参与 Aging、禁止 WriteOff、Receipt Allocation 不得继续核销到该 AR；DN 可拉回 0；Refund/CustomerCredit 后续消费。
+3. **CN/DN 符号口径统一**（见 §2.2）——CN → adjustmentAmount < 0；DN → adjustmentAmount > 0；AR 公式不变 balance = original + adjusted - paid - writeOff；请求可输入正数，但落 InvoiceAdjustment 的财务事实必须规范成有符号金额，禁止混合语义。
 
 ---
 
 ## 10. 边界红线（本阶段无越界实现）
 
 - ❌ 不写 Schema / Migration（Migration 0020 待拍板后实现）
-- ❌ 不修改 Invoice 金额事实（invoiceTotal/subtotal/taxAmount/行快照一律不动）
+- ❌ 不修改 Invoice 金额事实（invoiceTotal/subtotal/taxAmount/行快照一律不动；只允许 Invoice.balanceAmount 投影 = AR newBalance）
 - ❌ 不直接 PATCH AR.adjustedAmount / balanceAmount / paidAmount / writeOffAmount
 - ❌ CN/DN 不承担收款冲销（Receipt Reversal / Allocation Reversal 属 4E-2）
 - ❌ 不开 CN/DN 时不回滚已核销 Receipt / ReceiptAllocation
-- ❌ 不新建审批表（复用 Workflow / ApprovalPolicy；不建 CreditDebitNoteApproval）
-- ❌ 不建 CustomerCredit 实体（Pending ② 方案 B 延后）
+- ❌ 不新建审批表（复用 Workflow / ApprovalPolicy；不建 CreditDebitNoteApproval / CreditNoteApproval / DebitNoteApproval）
+- ❌ 不新增数据库状态表达负 AR（AccountsReceivableStatus 不加 CREDIT；只做读取投影 isCreditBalance/creditAmount/effectiveBalanceType）
+- ❌ 不建 CustomerCredit / Refund / AdjustmentAllocation / ADDITIONAL_CHARGE 实体（4E-3 范围不膨胀；未来单独 ADR）
 - ❌ 不调用 Pricing Engine（金额快照直接复制，与 4D 红线一致）
