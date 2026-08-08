@@ -465,3 +465,10 @@ export const creditDebitNoteCreateSchema = z.object({
 export const creditDebitNoteSubmitSchema = z.object({
   changeReason: z.string().max(500).optional(),
 });
+
+/** CreditDebitNote Apply：**唯一回写 AR.adjustedAmount 的动作**（CTO：APPROVED ≠ APPLIED，审批通过 ≠ 自动改余额）
+ * 重复 Apply → 409 CN_DN_ALREADY_APPLIED（幂等/稳定 409）
+ */
+export const creditDebitNoteApplySchema = z.object({
+  changeReason: z.string().max(500).optional(),
+});

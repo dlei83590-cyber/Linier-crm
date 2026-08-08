@@ -93,6 +93,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // ── 4. 校验每笔 allocationAmount ≤ AR.balanceAmount（锁内读，防超核销） ────
     for (const alloc of writeOff.allocations) {
       const ar = arMap.get(alloc.accountsReceivableId)!;
+      // 负 AR 门禁（CTO 锁死：balance < 0 = Customer Credit，禁止 WriteOff）
+      if (ar.balanceAmount.isNegative()) {
+        return {
+          error: "NEGATIVE_BALANCE" as const,
+          arId: alloc.accountsReceivableId,
+          balanceAmount: ar.balanceAmount.toString(),
+        };
+      }
       if (alloc.amount.greaterThan(ar.balanceAmount)) {
         return {
           error: "AMOUNT_EXCEEDED" as const,
@@ -214,6 +222,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return failConflict(
           ERROR_CODES.WRITE_OFF_AMOUNT_EXCEEDED,
           `写销金额超过应收余额（AR ${result.arId} 请求 ${result.requested}，balanceAmount ${result.balanceAmount}）`,
+        );
+      case "NEGATIVE_BALANCE":
+        return failConflict(
+          ERROR_CODES.WRITE_OFF_AR_NEGATIVE_BALANCE,
+          `应收余额为负（AR ${result.arId} balanceAmount ${result.balanceAmount}，Customer Credit）——禁止 WriteOff`,
         );
       default:
         return fail(ERROR_CODES.INTERNAL_ERROR, "Apply 失败：未知错误", 500);
