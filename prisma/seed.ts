@@ -109,6 +109,13 @@ const SEED_ACTION_MODULES = [
   "accounts-receivable",
   "accounts-receivable-revision",
   "accounts-receivable-snapshot",
+  // Sprint 4E-2：Receipt & Payment Allocation 模块（动作映射：create→receipt:create（创建即取号）；allocate/reverse→receipt:edit；void→receipt:close；write-off create/submit/approve/apply→write-off:create/edit/approve；revision/snapshot 只读 view）
+  "receipt",
+  "receipt-allocation",
+  "receipt-revision",
+  "receipt-snapshot",
+  "write-off",
+  "write-off-allocation",
   // Sprint 3A：平台底座模块
   "workflow-definition",
   "workflow-step",
