@@ -240,6 +240,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     return {
       receiptId: receipt.id,
+      customerId: receipt.customerId,
+      currency: receipt.currency,
+      amount: receipt.amount,
       totalAllocated,
       newUnallocated,
       receiptStatus: newReceiptStatus,
@@ -288,6 +291,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       entityId: result.receiptId,
       payload: {
         receiptId: result.receiptId,
+        customerId: result.customerId,
+        currency: result.currency,
+        amount: result.amount,
         allocatedAmount: result.totalAllocated.toString(),
         unallocatedAmount: result.newUnallocated.toString(),
         receiptStatus: result.receiptStatus,
