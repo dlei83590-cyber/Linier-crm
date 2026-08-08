@@ -10,7 +10,7 @@ import { Prisma } from "@prisma/client";
  */
 
 /** docType 映射：CREDIT → CREDIT_NOTE；DEBIT → DEBIT_NOTE（DocumentSequence 正式单据类型，已有） */
-export function creditDebitNoteDocType(noteType: "CREDIT" | "DEBIT"): string {
+export function creditDebitNoteDocType(noteType: "CREDIT" | "DEBIT"): "CREDIT_NOTE" | "DEBIT_NOTE" {
   return noteType === "CREDIT" ? "CREDIT_NOTE" : "DEBIT_NOTE";
 }
 

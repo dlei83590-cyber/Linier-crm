@@ -12,7 +12,7 @@ import { writeAuditLog } from "@/lib/api-helpers";
 export interface CreditDebitNoteEventPayload {
   noteId: string;
   noteCode?: string | null;
-  noteType: "CREDIT" | "DEBIT";
+  noteType: "CREDIT" | "DEBIT" | null;
   sourceInvoiceId: string;
   customerId: string;
   currency: string;
