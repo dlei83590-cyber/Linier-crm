@@ -116,6 +116,8 @@ const SEED_ACTION_MODULES = [
   "receipt-snapshot",
   "write-off",
   "write-off-allocation",
+  // Sprint 4E-3：Credit Note / Debit Note 模块（动作映射：create→credit-debit-note:create（创建即取号）；submit→credit-debit-note:edit；apply→credit-debit-note:approve（APPROVED≠APPLIED，不新造 apply 动作）；cancel DRAFT→credit-debit-note:close；approve→credit-debit-note:approve；line 仅 view/edit、adjustment 系统事实层仅 view——见 SEED_RESTRICTED_ACTION_PERMISSIONS）
+  "credit-debit-note",
   // Sprint 3A：平台底座模块
   "workflow-definition",
   "workflow-step",
@@ -145,6 +147,14 @@ const SEED_ACTIONS = ["view", "create", "edit", "delete", "approve", "audit", "e
 const SEED_ACTION_PERMISSIONS: Array<{ name: string; code: string; module: string }> = SEED_ACTION_MODULES.flatMap((module) =>
   SEED_ACTIONS.map((action) => ({ name: `${action} ${module}`, code: `${module}:${action}`, module })),
 );
+
+// Sprint 4E-3：受限动作权限（CreditDebitNoteLine 仅 view/edit——行由单据驱动，客户端不直接改行；
+// InvoiceAdjustment 系统事实层仅 view——客户端不允许直接创建（事实由 Apply 事务生成），不开放 create/edit）
+const SEED_RESTRICTED_ACTION_PERMISSIONS: Array<{ name: string; code: string; module: string }> = [
+  { name: "view credit-debit-note-line", code: "credit-debit-note-line:view", module: "credit-debit-note-line" },
+  { name: "edit credit-debit-note-line", code: "credit-debit-note-line:edit", module: "credit-debit-note-line" },
+  { name: "view invoice-adjustment", code: "invoice-adjustment:view", module: "invoice-adjustment" },
+];
 
 const SEED_UNITS = [
   { code: "KG", name: "千克", symbol: "kg" },
@@ -707,8 +717,8 @@ async function main() {
     roleMap.set(role.code, saved.id);
   }
 
-  // Permissions (read/write + 动作级)
-  for (const permission of [...SEED_PERMISSIONS, ...SEED_ACTION_PERMISSIONS]) {
+  // Permissions (read/write + 动作级 + 4E-3 受限动作)
+  for (const permission of [...SEED_PERMISSIONS, ...SEED_ACTION_PERMISSIONS, ...SEED_RESTRICTED_ACTION_PERMISSIONS]) {
     await prisma.permission.upsert({
       where: { code: permission.code },
       update: {},
