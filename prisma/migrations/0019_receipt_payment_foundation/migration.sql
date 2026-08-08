@@ -1,5 +1,5 @@
 -- Sprint 4E-2 Receipt & Payment Allocation Foundation（收款与核销领域，CTO Design Review 97/100 APPROVED WITH CHANGES 2026-08-08）
--- 红线：仅 CREATE TYPE / CREATE TABLE / CREATE INDEX / ADD CONSTRAINT
+-- 红线：仅 CREATE TYPE / CREATE TABLE / CREATE INDEX / ADD CONSTRAINT / ALTER TYPE ... ADD VALUE
 -- 禁止 DROP/RENAME/TRUNCATE/改旧字段类型/重建旧表（Invoice/AccountsReceivable/Delivery/SalesOrder 一律不动）
 -- 设计依据：ADR-0021（Receipt & Payment Allocation Domain）、Sprint4E2_ReceiptAllocation_Design.md、
 -- EVENTS.md v1.10（收款/核销 11 事件已注册：ReceiptCreated/Updated/Allocated/FullyAllocated/AllocationReversed/Voided + WriteOffCreated/Submitted/Approved/Rejected/Applied）
@@ -26,6 +26,9 @@ CREATE TYPE "ReceiptSnapshotType" AS ENUM ('CREATED', 'ALLOCATED', 'VOIDED', 'RE
 
 -- CreateEnum: WriteOffStatus（写销状态；审批边界：WriteOff 按 ApprovalPolicy 条件审批，审批完成前禁止改 AR.writeOffAmount）
 CREATE TYPE "WriteOffStatus" AS ENUM ('DRAFT', 'SUBMITTED', 'APPROVED', 'REJECTED', 'APPLIED');
+
+-- ExtendEnum: DocumentType + WRITE_OFF（写销单 DocumentSequence 取号用——拍板④：WO-2026-xxxx）
+ALTER TYPE "DocumentType" ADD VALUE 'WRITE_OFF';
 
 -- CreateTable: Receipt（收款事实源；Payment 不单独建表——CTO 拍板；code DocumentSequence 创建即取号）
 CREATE TABLE "Receipt" (

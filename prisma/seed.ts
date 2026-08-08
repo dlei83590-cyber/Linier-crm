@@ -461,6 +461,8 @@ const SEED_DOCUMENT_SEQUENCES = [
   { code: "DN", name: "借项通知单", docType: "DEBIT_NOTE", prefix: "DN", nextNo: 1, padLength: 6 },
   { code: "PV", name: "付款凭证", docType: "PAYMENT_VOUCHER", prefix: "PV", nextNo: 1, padLength: 6 },
   { code: "RCT", name: "收款收据", docType: "RECEIPT", prefix: "RCT", nextNo: 1, padLength: 6 },
+  // Sprint 4E-2：WriteOff 单据序列（CTO Design Review 拍板④：创建即取号 WO-2026-xxxx；幂等 upsert）
+  { code: "WO", name: "坏账核销", docType: "WRITE_OFF", prefix: "WO", nextNo: 1, padLength: 6 },
   { code: "EXP", name: "费用报销", docType: "EXPENSE", prefix: "EXP", nextNo: 1, padLength: 6 },
   { code: "JRN", name: "日记账", docType: "JOURNAL", prefix: "JRN", nextNo: 1, padLength: 6 },
   { code: "CT", name: "合同", docType: "CONTRACT", prefix: "CT", nextNo: 1, padLength: 6 },

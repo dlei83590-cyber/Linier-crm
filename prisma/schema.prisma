@@ -175,6 +175,7 @@ enum DocumentType {
   DEBIT_NOTE // 借项通知单
   PAYMENT_VOUCHER // 付款凭证
   RECEIPT // 收款收据
+  WRITE_OFF // 坏账/折让写销（Sprint 4E-2）
   EXPENSE // 费用报销
   JOURNAL // 日记账
   CONTRACT // 合同
