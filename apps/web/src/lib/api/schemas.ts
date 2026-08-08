@@ -403,3 +403,38 @@ export const receiptAllocationReverseSchema = z.object({
 export const receiptVoidSchema = z.object({
   changeReason: z.string().max(500).optional(),
 });
+
+// ============================================================================
+// WriteOff（Sprint 4E-2；独立事实——拍板③：WriteOff + WriteOffAllocation，不做三件套）
+// ============================================================================
+
+/** WriteOff 创建：DRAFT + WriteOffAllocation 明细（拍板④：DocumentSequence 创建即取号 WO-2026-xxxx）
+ * 校验：同 Customer / 同 Currency（409 WRITE_OFF_SOURCE_NOT_COMPATIBLE）；每笔 amount > 0；
+ * amount = Σ allocations（服务端 computeWriteOffTotal，禁止直传头金额）；**暂不修改 AR**。
+ */
+export const writeOffCreateSchema = z.object({
+  allocations: z
+    .array(
+      z.object({
+        accountsReceivableId: z.string().min(1),
+        amount: z.coerce.number().positive(),
+      }),
+    )
+    .min(1),
+  reason: z.string().min(1).max(500),
+  writeOffDate: z.string().datetime().optional(),
+  approvalPolicyId: z.string().nullable().optional(),
+  changeReason: z.string().max(500).optional(),
+});
+
+/** WriteOff 提交审批：DRAFT → SUBMITTED（命中 WRITE_OFF 策略则 maybeTriggerWriteOffApproval 建/复用 Workflow；无策略可直接进入可 Apply 状态） */
+export const writeOffSubmitSchema = z.object({
+  changeReason: z.string().max(500).optional(),
+});
+
+/** WriteOff Apply：**唯一回写 AR.writeOffAmount 的动作**（CTO：审批通过 ≠ 自动修改余额）
+ * 重复 Apply → 409 WRITE_OFF_ALREADY_APPLIED（幂等/稳定 409）
+ */
+export const writeOffApplySchema = z.object({
+  changeReason: z.string().max(500).optional(),
+});
