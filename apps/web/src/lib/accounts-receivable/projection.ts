@@ -60,3 +60,26 @@ export function computeBalance(
   // 对齐 Prisma Decimal 序列化：返回字符串，避免 Float/Number 精度损失（CTO 红线：Decimal 无 Float/Number 转换）
   return balance.toFixed(4);
 }
+
+/** AR 状态投影统一口径（CTO Final Review 2026-08-08 阻断项②修复）
+ * 规则（唯一 helper，Payment / Allocation Reversal / WriteOff Apply 全部复用，禁止各自计算）：
+ * - balance == 0 且 writeOffAmount > 0  → CLOSED（余额因坏账核销归零）
+ * - balance == 0                        → PAID（余额因收款归零）
+ * - paidAmount == 0                     → OPEN（无收款）
+ * - otherwise                           → PARTIALLY_PAID
+ */
+export function computeArStatus(
+  balanceAmount: { equals(n: number): boolean } | number | string,
+  paidAmount: { equals(n: number): boolean } | number | string,
+  writeOffAmount: { equals(n: number): boolean } | number | string,
+): "OPEN" | "PARTIALLY_PAID" | "PAID" | "CLOSED" {
+  const isZero = (v: { equals(n: number): boolean } | number | string): boolean =>
+    typeof v === "object" && v !== null && typeof (v as { equals?: unknown }).equals === "function"
+      ? (v as { equals(n: number): boolean }).equals(0)
+      : Number(v) === 0;
+
+  if (isZero(balanceAmount) && !isZero(writeOffAmount)) return "CLOSED";
+  if (isZero(balanceAmount)) return "PAID";
+  if (isZero(paidAmount)) return "OPEN";
+  return "PARTIALLY_PAID";
+}

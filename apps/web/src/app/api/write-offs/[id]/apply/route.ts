@@ -7,7 +7,7 @@ import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { writeOffApplySchema } from "@/lib/api/schemas";
 import { createAccountsReceivableRevision, createAccountsReceivableSnapshot, latestAccountsReceivableRevisionNo } from "@/lib/accounts-receivable/helpers";
-import { computeBalance } from "@/lib/accounts-receivable/projection";
+import { computeBalance, computeArStatus } from "@/lib/accounts-receivable/projection";
 import { publishWriteOffEvent } from "@/lib/write-off/events";
 
 export const dynamic = "force-dynamic";
@@ -112,8 +112,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const newBalance = new Prisma.Decimal(
         computeBalance(ar.originalAmount, ar.adjustedAmount, ar.paidAmount, newWriteOff),
       );
-      // 状态投影：write-off 完结（余额=0）→ CLOSED；否则保持（write-off 不改变付款状态）
-      const newStatus = newBalance.equals(0) ? "CLOSED" : ar.status;
+      // CTO Final Review 阻断项②：AR 状态统一走 computeArStatus——
+      // balance=0 且 writeOff>0 → CLOSED；balance=0 → PAID；paid=0 → OPEN；否则 PARTIALLY_PAID
+      const newStatus = computeArStatus(newBalance, ar.paidAmount, newWriteOff);
 
       await tx.accountsReceivable.update({
         where: { id: ar.id },
@@ -125,15 +126,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         },
       });
 
-      // Invoice 投影：balanceAmount 同步减少；**paidAmount 绝不因 write-off 增加**
+      // Invoice 投影：balanceAmount 直接回写 AR 的 newBalance（CTO 阻断项①）；**paidAmount 绝不因 write-off 增加**
       const invoice = await tx.invoice.findFirst({ where: { id: ar.invoiceId, deletedAt: null } });
       if (invoice) {
         await tx.invoice.update({
           where: { id: invoice.id },
           data: {
-            // 现有口径：Invoice.balanceAmount = invoiceTotal - paidAmount - writeOffAmount（投影同步减少）
+            // Invoice.balanceAmount = Projection：直接使用 AR 计算出的 newBalance（computeBalance 单入口），
+            // 不再用 invoiceTotal - paidAmount - writeOff 自算——未来 4E-3 adjustedAmount 加入后也不会破坏投影
             // paidAmount 保持不变——write-off 不是 Payment，不能把坏账核销算作客户实际付款
-            balanceAmount: invoice.invoiceTotal.minus(invoice.paidAmount).minus(newWriteOff),
+            balanceAmount: newBalance,
             updatedById: user?.id ?? null,
           },
         });

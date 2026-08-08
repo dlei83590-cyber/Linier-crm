@@ -8,7 +8,7 @@ import { requestLog } from "@/lib/api/logger";
 import { receiptAllocationReverseSchema } from "@/lib/api/schemas";
 import { createReceiptRevision, createReceiptSnapshot, latestReceiptRevisionNo } from "@/lib/receipt/helpers";
 import { createAccountsReceivableRevision, latestAccountsReceivableRevisionNo } from "@/lib/accounts-receivable/helpers";
-import { computeBalance } from "@/lib/accounts-receivable/projection";
+import { computeBalance, computeArStatus } from "@/lib/accounts-receivable/projection";
 import { publishReceiptEvent } from "@/lib/receipt/events";
 
 export const dynamic = "force-dynamic";
@@ -63,24 +63,35 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     });
     if (!ar) return { error: "AR_NOT_FOUND" as const };
 
-    // 4. 回退 AR 投影：paidAmount -= allocatedAmount；balanceAmount 重算；status 投影
+    // 4. 回退 AR 投影：paidAmount -= allocatedAmount；balanceAmount 重算；status 投影（统一 computeArStatus）
     const reversedAmount = allocation.allocatedAmount;
     const newPaid = ar.paidAmount.minus(reversedAmount);
     const newBalance = new Prisma.Decimal(computeBalance(ar.originalAmount, ar.adjustedAmount, newPaid, ar.writeOffAmount));
-    const newStatus = newBalance.equals(0) ? (newPaid.equals(0) ? "OPEN" : "PAID") : "PARTIALLY_PAID";
+    // CTO Final Review 阻断项②：AR 状态统一走 computeArStatus——
+    // 全额冲销后 newPaid=0 应回到 OPEN（旧逻辑误判 PARTIALLY_PAID）；余额因 WriteOff 归零应判 CLOSED
+    const newStatus = computeArStatus(newBalance, newPaid, ar.writeOffAmount);
     const now = new Date();
+
+    // CTO Final Review 阻断项③：lastPaymentAt 不得无条件置 null——
+    // 重新计算该 AR 所有未冲销（reversedAt=null，且排除当前这笔）的有效 ReceiptAllocation，取最新收款时间；无有效付款才 null
+    const latestActiveAllocation = await tx.receiptAllocation.findFirst({
+      where: { accountsReceivableId: ar.id, deletedAt: null, reversedAt: null, id: { not: allocation.id } },
+      orderBy: { allocatedAt: "desc" },
+      select: { allocatedAt: true },
+    });
+
     await tx.accountsReceivable.update({
       where: { id: ar.id },
       data: {
         paidAmount: newPaid,
         balanceAmount: newBalance,
         status: newStatus as never,
-        lastPaymentAt: null, // 最近收款时间回退（该笔核销已撤销）
+        lastPaymentAt: latestActiveAllocation?.allocatedAt ?? null, // 重算：仍有有效付款则保留最新时间，否则 null
         updatedById: user?.id ?? null,
       },
     });
 
-    // 5. Invoice 投影回退
+    // 5. Invoice 投影回退（balanceAmount 直接回写 AR 的 newBalance——CTO 阻断项①）
     const invoice = await tx.invoice.findFirst({ where: { id: ar.invoiceId, deletedAt: null } });
     if (invoice) {
       const newInvoicePaid = invoice.paidAmount.minus(reversedAmount);
@@ -88,7 +99,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         where: { id: invoice.id },
         data: {
           paidAmount: newInvoicePaid,
-          balanceAmount: invoice.invoiceTotal.minus(newInvoicePaid),
+          // Invoice.balanceAmount = Projection：直接使用 AR 计算出的 newBalance（computeBalance 单入口），
+          // 不得用 invoiceTotal - paidAmount 自己重算——否则已发生的 WriteOff（及未来 4E-3 adjustedAmount）会被“复活”/丢失
+          balanceAmount: newBalance,
           updatedById: user?.id ?? null,
         },
       });

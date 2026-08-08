@@ -8,7 +8,7 @@ import { requestLog } from "@/lib/api/logger";
 import { receiptAllocateSchema } from "@/lib/api/schemas";
 import { createReceiptRevision, createReceiptSnapshot, latestReceiptRevisionNo } from "@/lib/receipt/helpers";
 import { createAccountsReceivableRevision, createAccountsReceivableSnapshot, latestAccountsReceivableRevisionNo } from "@/lib/accounts-receivable/helpers";
-import { computeBalance } from "@/lib/accounts-receivable/projection";
+import { computeBalance, computeArStatus } from "@/lib/accounts-receivable/projection";
 import { publishReceiptEvent } from "@/lib/receipt/events";
 
 export const dynamic = "force-dynamic";
@@ -147,7 +147,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const newBalance = new Prisma.Decimal(
         computeBalance(ar.originalAmount, ar.adjustedAmount, newPaid, ar.writeOffAmount),
       );
-      const newStatus = newBalance.equals(0) ? "PAID" : "PARTIALLY_PAID";
+      // CTO Final Review 阻断项②：AR 状态统一走 computeArStatus（Payment/Reversal/WriteOff 禁止各自计算）
+      const newStatus = computeArStatus(newBalance, newPaid, ar.writeOffAmount);
 
       await tx.accountsReceivable.update({
         where: { id: arId },
@@ -160,7 +161,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         },
       });
 
-      // Invoice 投影回写（paidAmount += amount；balanceAmount = invoiceTotal - paidAmount）
+      // Invoice 投影回写（paidAmount += amount；balanceAmount 直接回写 AR 的 newBalance——CTO 阻断项①）
       const invoice = await tx.invoice.findFirst({ where: { id: ar.invoiceId, deletedAt: null } });
       if (invoice) {
         const newInvoicePaid = invoice.paidAmount.plus(amount);
@@ -168,7 +169,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           where: { id: invoice.id },
           data: {
             paidAmount: newInvoicePaid,
-            balanceAmount: invoice.invoiceTotal.minus(newInvoicePaid),
+            // Invoice.balanceAmount = Projection：直接使用 AR 计算出的 newBalance（computeBalance 单入口），
+            // 不得用 invoiceTotal - paidAmount 自己重算——否则已发生的 WriteOff（及未来 4E-3 adjustedAmount）会被“复活”/丢失
+            balanceAmount: newBalance,
             updatedById: user?.id ?? null,
           },
         });
@@ -195,7 +198,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       await createAccountsReceivableSnapshot(
         tx,
         arId,
-        newStatus === "PAID" ? "PAID" : "PARTIALLY_PAID",
+        newStatus === "PAID" ? "PAID" : newStatus === "CLOSED" ? "CLOSED" : "PARTIALLY_PAID",
         "PAYMENT",
         arRevisionNo,
         arSnapshotData,
