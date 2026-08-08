@@ -372,3 +372,20 @@ export const receiptCreateSchema = z.object({
   referenceNo: z.string().max(100).nullable().optional(),
   changeReason: z.string().max(500).optional(),
 });
+
+/** Allocation 核销：一次请求原子化（拍板①：创建与核销分离，allocate 为显式动作）
+ * allocations[]：一个 Receipt → 多 AR（M:N）；同一 (receipt, AR) 只核销一次（unique 约束）
+ * 事务红线（CTO 指定）：Lock Receipt → Lock AR(id ASC FOR UPDATE) → 校验 Customer/Currency →
+ * 校验 Receipt unallocated → 校验 ≤ AR.balanceAmount → Create ReceiptAllocation → 回写 AR/Invoice/Receipt 投影 → Snapshot/Audit → Events
+ */
+export const receiptAllocateSchema = z.object({
+  allocations: z
+    .array(
+      z.object({
+        accountsReceivableId: z.string().min(1),
+        amount: z.coerce.number().positive(),
+      }),
+    )
+    .min(1),
+  changeReason: z.string().max(500).optional(),
+});
