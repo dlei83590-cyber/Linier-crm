@@ -1,6 +1,6 @@
 # 产品路线图（ROADMAP）
 
-- 版本：v1.16
+- 版本：v1.17
 - 日期：2026-08-05
 - 维护者：CIO（JINZA）｜审核：CTO
 - 状态说明：✅ 已完成 ｜ 🔄 进行中 ｜ ⬜ 未开始
@@ -15,7 +15,7 @@
 | Sprint 1 | Infrastructure（基础设施） | ✅ Closed | Release v0.1.0-alpha |
 | Sprint 2 | Master Data（主数据） | ✅ Closed | Release v0.2.0-alpha（2A+2B+2C） |
 | Sprint 3 | ERP Foundation（ERP 底座） | ✅ Closed | 3A Workflow Foundation ✅（v0.3.0-alpha）+ 3B Platform Capabilities ✅（v0.4.0-alpha）+ 3C Business Foundation ✅（v0.5.0-alpha，3C-1~3C-5 全部完成） |
-| Sprint 4 | Sales（销售） | ✅ | 4A Quotation Foundation ✅（PR #12）；4B Sales Order Foundation ✅（PR #13）；4C Delivery Foundation ✅（PR #14）；4D Invoice Foundation ✅（PR #15 已合并）；4E-1 Accounts Receivable ✅（PR #16 已合并）；4E-2 Receipt/Payment Allocation ✅（PR #17 已合并）；4E-3 Credit/Debit Note ✅（PR #18 已合并，CTO Final Review 99/100 APPROVE & MERGE） |
+| Sprint 4 | Sales（销售） | ✅ | 4A Quotation Foundation ✅（PR #12）；4B Sales Order Foundation ✅（PR #13）；4C Delivery Foundation ✅（PR #14）；4D Invoice Foundation ✅（PR #15 已合并）；4E-1 Accounts Receivable ✅（PR #16 已合并）；4E-2 Receipt/Payment Allocation ✅（PR #17 已合并）；4E-3 Credit/Debit Note ✅（PR #18 已合并，CTO Final Review 99/100 APPROVE & MERGE）；**已发布 v0.6.0-alpha**（2026-08-08，annotated tag，GitHub Pre-release） |
 | Sprint 5 | Purchase（采购） | ⬜ | PR/PO/GRN/Supplier Invoice/Payment |
 | Sprint 6 | Inventory（库存） | ⬜ | Warehouse/Stock/Batch/Movement/Count/Transfer |
 | Sprint 7 | Finance（财务） | ⬜ | AR/AP/Expense/Voucher/Journal/GL/Profit/Cash Flow |
@@ -251,7 +251,7 @@
 | M1 | Sprint 1 完成 | Release v0.1.0-alpha ✅ |
 | M2 | Sprint 2 完成 | Release v0.2.0-alpha ✅（main 冻结） |
 | M3 | Sprint 3 完成 | Release v0.5.0-alpha ✅（3A ✅ v0.3.0-alpha；3B ✅ v0.4.0-alpha；3C ✅ v0.5.0-alpha，3C-1~3C-5 全部完成，PR #5-#11 合并） |
-| M4 | Sprint 4-6 完成 | 进销存闭环可用 |
+| M4 | Sprint 4-6 完成 | 进销存闭环可用（Sprint 4 ✅ **v0.6.0-alpha**，2026-08-08；Sprint 5-6 待完成） |
 | M5 | Sprint 7 完成 | 财务闭环可用 |
 | M6 | Sprint 8-10 完成 | 数据驱动 + 移动化 |
 
@@ -259,6 +259,7 @@
 
 | 日期 | 变更 | 说明 |
 | --- | --- | --- |
+| 2026-08-08 | 更新 v1.17 | **Linier ERP v0.6.0-alpha 发布完成**（annotated tag `v0.6.0-alpha` 指向 `a5d8214`——Release Gate 通过的最终 release commit，后续 post-release 文档 commit 不修改该 Tag；GitHub **Pre-release** 已创建：Linier ERP v0.6.0-alpha — Sales & Finance O2C Foundation，id=367214703；Release Gate：Sprint 4 O2C Total Acceptance **PASS → RELEASE CANDIDATE**（9/9 节点、6/6 系统级不变量、Blocking Issues = 0），证据 docs/reviews/Sprint4_O2C_Total_Acceptance.md；RELEASE_NOTES v0.6.0-alpha 段冻结（汇总 Sprint 4A-4E-3 + Known Limitations 6 项）；版本治理：以 Git Tag 为发布事实源，package.json 不随本版修改）；Sprint 4 已发布（4A ✅ 4B ✅ 4C ✅ 4D ✅ 4E-1 ✅ 4E-2 ✅ 4E-3 ✅ + v0.6.0-alpha）；整体成熟度约 92%；**下一步：Sprint 5（Purchase 采购）规划** |
 | 2026-08-08 | 更新 v1.16 | Sprint 4E-3 Credit Note / Debit Note Foundation 完成并合并（PR #18 squash merge `675923c`；CTO Final Review **99/100 APPROVE & MERGE，Blocking 0**——4 项核验全 PASS：① 事件机制（AuditLog=事件总线落地前正式承载层，与 EVENTS.md 一致）② 并发累计防超调锁序安全 ③ 负 AR 门禁锁内生效（Receipt Allocation/WriteOff Apply）④ Schema/Migration 事实链一致；Review Cover 16 项 Checklist APPROVED & MERGED）；Sprint 4 状态 **✅ COMPLETE**（4A ✅ 4B ✅ 4C ✅ 4D ✅ 4E-1 ✅ 4E-2 ✅ 4E-3 ✅——Quotation→SO→Delivery→Invoice→AR→Receipt→Allocation/Reversal→WriteOff→CN/DN 销售财务 O2C 主链完整闭环）；Credit/Debit Note 模块 ✅；保留 feature/sprint4-sales；待 Sprint 4 Sales+Finance 总验收后统一发布新 Alpha Tag；整体成熟度上调至约 92% |
 | 2026-08-08 | 更新 v1.15 | Sprint 4E-3 Credit Note / Debit Note Foundation Ready for Final Review（PR #18 待验收：Schema `07d98a3` / Migration 0020 `f84c887` / Seed-RBAC `196068c` / Create `3d0e75b` / Submit `70f4daf` / Apply `b49629c` / Workflow Actions `21098ce` / OpenAPI `23fa11e` / QA-TestCases `f6d3059`；CI 全绿；CTO Design Review 98/100 + Apply 专项复核 100/100（0 Blocking）；CN/DN = Invoice Adjustment 事实源 + InvoiceAdjustment 事实中间层 + 单票制 + 快照复制 + APPROVED≠APPLIED + 累计防超调锁内重算 + signed adjustment（CN<0/DN>0）+ 负 AR Customer Credit 投影（禁 Receipt Allocation / WriteOff）+ Invoice.balanceAmount 跟随 AR newBalance）；Sprint 4 状态 🔄（4A ✅ 4B ✅ 4C ✅ 4D ✅ 4E-1 ✅ 4E-2 ✅ 4E-3 🟡 Ready for Final Review）；Payment 模块 ✅；Credit/Debit Note 模块 🟡；保留 feature/sprint4-sales；不打新大版本 Tag（待 PR #18 合并 + Sprint 4 Sales 完整闭环后统一发布）；整体成熟度维持约 89% |
 | 2026-08-08 | 更新 v1.14 | Sprint 4E-2 Receipt & Payment Allocation Foundation 完成并合并（PR #17 squash 合并 b84b036；CTO Final Review APPROVE & MERGE，Blocking 0；3 项财务一致性阻断项（Invoice 投影/AR 状态统一/lastPaymentAt 重算）修复后复核全 PASS；CI 全绿；Receipt 唯一收款事实源 + 创建与核销分离 + M:N 锁 AR（id ASC FOR UPDATE）+ 防超核销 409 + 同客户同币种 + Allocation Reversal≠CN + VOID 边界 + WriteOff 独立事实（APPROVED≠APPLIED，Apply 唯一回写入口，**不增加 Invoice.paidAmount**））；Sprint 4 状态 🔄（4A ✅ 4B ✅ 4C ✅ 4D ✅ 4E-1 ✅ 4E-2 ✅）；Payment 模块 ✅；4E-3 CN/DN Design 启动；保留 feature/sprint4-sales；不打新大版本 Tag（待 Sprint 4 Sales 完整闭环（4E-2 + 4E-3）后统一发布）；整体成熟度上调至约 89% |
