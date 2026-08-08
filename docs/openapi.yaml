@@ -53,6 +53,10 @@ tags:
   - name: Invoices
   - name: Invoice Lines
   - name: Invoice Actions
+  # Sprint 4E-1 Accounts Receivable Foundation
+  - name: Accounts Receivables
+  - name: Accounts Receivable Revisions
+  - name: Accounts Receivable Snapshots
 
 paths:
   # ==========================================================================
@@ -8528,6 +8532,141 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # ==========================================================================
+  # Sprint 4E-1 Accounts Receivable Foundation（余额事实源查询，只读）
+  # ==========================================================================
+  /api/accounts-receivables:
+    get:
+      tags: [Accounts Receivables]
+      summary: List accounts receivables (paginated; customerId/status/effectiveStatus/currency/dueDate filters)
+      description: |
+        列表查询（CTO Review 97/100：OVERDUE 为惰性投影——status ∈ {OPEN, PARTIALLY_PAID} 且 dueDate < now，
+        查询时计算不落库；effectiveAgingBucket 动态计算 0-30/31-60/61-90/90+，不持久化——必改①）。
+        注意：无 POST/PATCH——AR 由 Invoice ISSUED 自动创建（拍板①），金额只能由 4E-2/4E-3 动作驱动（CTO 锁定）。
+      operationId: listAccountsReceivables
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: page, in: query, required: false, schema: { type: integer, default: 1 } }
+        - { name: pageSize, in: query, required: false, schema: { type: integer, default: 20, maximum: 100 } }
+        - { name: customerId, in: query, required: false, schema: { type: string } }
+        - { name: status, in: query, required: false, schema: { $ref: "#/components/schemas/AccountsReceivableStatus" } }
+        - { name: effectiveStatus, in: query, required: false, schema: { type: string, description: "惰性投影状态（OVERDUE 转换：status∈{OPEN,PARTIALLY_PAID}+dueDate<now）" } }
+        - { name: currency, in: query, required: false, schema: { type: string } }
+        - { name: dueDateFrom, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: dueDateTo, in: query, required: false, schema: { type: string, format: date-time } }
+      responses:
+        "200":
+          description: OK（分页列表，含 customer/invoice 摘要 + effectiveStatus/isOverdue/effectiveAgingBucket 惰性投影）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountsReceivableListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/accounts-receivables/aging:
+    get:
+      tags: [Accounts Receivables]
+      summary: Aging analysis (0-30/31-60/61-90/90+ buckets; lazy projection)
+      description: |
+        账龄分析（CTO 必改①：agingBucket 不存库，读取时动态计算，只依赖 today/dueDate/balance，属 Projection）。
+        返回按账龄区间聚合的余额合计与记录数（仅未清余额 balance>0 计入账龄桶；已清记录归入 settled）。
+      operationId: getAccountsReceivableAging
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: customerId, in: query, required: false, schema: { type: string } }
+        - { name: currency, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: OK（账龄汇总）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountsReceivableAgingResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/accounts-receivables/{id}:
+    get:
+      tags: [Accounts Receivables]
+      summary: Get accounts receivable detail (AR + Invoice/Customer summary + latest revision/snapshot)
+      description: |
+        详情（含 Invoice/Customer 摘要 + 最近 Revision/Snapshot）；无 PATCH——AR 金额禁止前端直改
+        （余额唯一口径 original+adjusted-paid-writeOff，由 4E-2/4E-3 动作驱动）。
+      operationId: getAccountsReceivable
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountsReceivableResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/accounts-receivables/{id}/revisions:
+    get:
+      tags: [Accounts Receivable Revisions]
+      summary: List accounts receivable revisions (read-only, desc)
+      operationId: listAccountsReceivableRevisions
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountsReceivableRevisionListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/accounts-receivables/{id}/snapshots:
+    get:
+      tags: [Accounts Receivable Snapshots]
+      summary: List accounts receivable snapshots (read-only, desc; snapshotSource enum)
+      description: |
+        快照列表（CTO 必改②：snapshotSource 来源枚举 ISSUE/PAYMENT/WRITE_OFF/ADJUSTMENT/MANUAL，
+        Receipt/CN/DN/WriteOff 全部可复用）。
+      operationId: listAccountsReceivableSnapshots
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountsReceivableSnapshotListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -13193,3 +13332,147 @@ components:
         - INVOICE_WORKFLOW_FAILED（409）审批流程定义不存在或未发布（INVOICE_APPROVAL），发票变更已回滚
         - DELIVERY_SOURCE_LINE_INVALID（400）交付行来源销售订单行无效或已删除
         - VERSION_CONFLICT（409）乐观锁版本冲突
+
+    # ==========================================================================
+    # Sprint 4E-1 Accounts Receivable Foundation（Enums + Models + Responses）
+    # ==========================================================================
+    AccountsReceivableStatus:
+      type: string
+      enum: [OPEN, PARTIALLY_PAID, PAID, OVERDUE, CLOSED]
+      description: 余额生命周期；OVERDUE 惰性判定（CTO 拍板②：effectiveStatus Projection，非数据库真实状态——status ∈ {OPEN,PARTIALLY_PAID} 且 dueDate < now）
+
+    AccountsReceivableSnapshotType:
+      type: string
+      enum: [CREATED, PARTIALLY_PAID, PAID, ADJUSTED, WRITTEN_OFF, CLOSED]
+      description: 快照类型（仅固化节点生成，只读）
+
+    AccountsReceivableSnapshotSource:
+      type: string
+      enum: [ISSUE, PAYMENT, WRITE_OFF, ADJUSTMENT, MANUAL]
+      description: CTO Review 必改②：快照来源枚举——Receipt/CN/DN/WriteOff 全部可复用
+
+    AccountsReceivable:
+      type: object
+      required: [id, invoiceId, customerId, currency, originalAmount, balanceAmount, status, version]
+      properties:
+        id: { type: string }
+        invoiceId: { type: string, description: "1:1 绑定 Invoice（单据事实源）；有 AR 的发票禁止删除（必改③）" }
+        customerId: { type: string, description: 客户（继承 Invoice.customerId；对账用） }
+        currency: { type: string, description: 币种（继承 Invoice.currency） }
+        originalAmount: { type: number, description: 原始金额（= Invoice.invoiceTotal，AR 创建时复制，不重算） }
+        adjustedAmount: { type: number, description: 调整金额（4E-3 CN/DN 聚合，可正可负） }
+        paidAmount: { type: number, description: 已收款（4E-2 Receipt 回写） }
+        writeOffAmount: { type: number, description: 坏账核销金额（4E-2 WriteOff 回写） }
+        balanceAmount: { type: number, description: 余额唯一口径 = originalAmount + adjustedAmount - paidAmount - writeOffAmount（服务端唯一计算，前端禁止 PATCH） }
+        status: { $ref: "#/components/schemas/AccountsReceivableStatus" }
+        effectiveStatus: { $ref: "#/components/schemas/AccountsReceivableStatus", description: 惰性投影（OVERDUE 判定；CTO 拍板②） }
+        isOverdue: { type: boolean, description: "惰性投影：status∈{OPEN,PARTIALLY_PAID} 且 dueDate<now" }
+        effectiveAgingBucket: { type: [string, "null"], description: "惰性投影：0-30/31-60/61-90/90+（CTO 必改①：不存库，读取时动态计算，只依赖 today/dueDate/balance）" }
+        dueDate: { type: [string, "null"], format: date-time, description: 到期日（继承 Invoice.dueDate；逾期判定基准） }
+        lastPaymentAt: { type: [string, "null"], format: date-time, description: 最近收款时间（4E-2 回写） }
+        version: { type: integer, description: 乐观锁版本 }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+
+    AccountsReceivableRevision:
+      type: object
+      required: [id, accountsReceivableId, revisionNo, changeReason]
+      properties:
+        id: { type: string }
+        accountsReceivableId: { type: string }
+        revisionNo: { type: integer, description: 系统自动递增（唯一版本载体） }
+        changeReason: { type: string }
+        snapshotData: { type: object, description: 当前余额状态快照（金额 Decimal 字符串，禁止 toNumber） }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+
+    AccountsReceivableSnapshot:
+      type: object
+      required: [id, accountsReceivableId, snapshotType, snapshotSource, revisionNo]
+      properties:
+        id: { type: string }
+        accountsReceivableId: { type: string }
+        snapshotType: { $ref: "#/components/schemas/AccountsReceivableSnapshotType" }
+        snapshotSource: { $ref: "#/components/schemas/AccountsReceivableSnapshotSource", description: CTO 必改②：来源枚举 }
+        revisionNo: { type: integer }
+        snapshotData: { type: object, description: 完整快照（Header + 四金额输入 + balanceAmount + customerId/currency/dueDate；Decimal 字符串） }
+        generatedById: { type: [string, "null"] }
+        generatedAt: { type: [string, "null"], format: date-time }
+        createdById: { type: [string, "null"] }
+        updatedById: { type: [string, "null"] }
+        deletedAt: { type: [string, "null"], format: date-time }
+        isActive: { type: boolean }
+
+    AccountsReceivableResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/AccountsReceivable" }
+
+    AccountsReceivableListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/AccountsReceivable" }
+
+    AccountsReceivableRevisionListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/AccountsReceivableRevision" }
+
+    AccountsReceivableSnapshotListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/AccountsReceivableSnapshot" }
+
+    AccountsReceivableAgingResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            asOf: { type: string, format: date-time }
+            buckets:
+              type: object
+              description: 账龄区间（0-30/31-60/61-90/90+ + settled 已清）聚合
+              properties:
+                "0-30": { $ref: "#/components/schemas/AgingBucketSummary" }
+                "31-60": { $ref: "#/components/schemas/AgingBucketSummary" }
+                "61-90": { $ref: "#/components/schemas/AgingBucketSummary" }
+                "90+": { $ref: "#/components/schemas/AgingBucketSummary" }
+                settled: { $ref: "#/components/schemas/AgingBucketSummary" }
+            totalRecords: { type: integer }
+            totalBalance: { type: number }
+
+    AgingBucketSummary:
+      type: object
+      properties:
+        count: { type: integer, description: 记录数 }
+        balance: { type: number, description: 余额合计 }
+
+    AccountsReceivableErrorCodes:
+      type: string
+      description: |
+        Accounts Receivable 领域错误码（与实现 errors.ts 一致）：
+        - ACCOUNTS_RECEIVABLE_NOT_FOUND（404）应收记录不存在
+        - VERSION_CONFLICT（409）乐观锁版本冲突（预留，4E-1 无 PATCH）
+        注意：AR 由 Invoice ISSUED 自动创建（拍板①），无 POST/PATCH 创建与金额修改端点；
+        金额只能由 4E-2 Receipt / WriteOff、4E-3 CN/DN 动作或下游事实表驱动（CTO 锁定）。

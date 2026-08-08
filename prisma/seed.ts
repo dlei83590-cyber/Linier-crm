@@ -105,6 +105,10 @@ const SEED_ACTION_MODULES = [
   "invoice-line",
   "invoice-revision",
   "invoice-snapshot",
+  // Sprint 4E-1：Accounts Receivable Foundation 模块（动作映射：view→accounts-receivable:view；revision/snapshot 只读 view；金额由 4E-2 Receipt/4E-3 CN-DN 动作驱动，本阶段无 create/edit 入口）
+  "accounts-receivable",
+  "accounts-receivable-revision",
+  "accounts-receivable-snapshot",
   // Sprint 3A：平台底座模块
   "workflow-definition",
   "workflow-step",
