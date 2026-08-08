@@ -2,9 +2,9 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased] - Sprint 4A + 4B + 4C + 4D + 4E-1 + 4E-2 + 4E-3（Quotation / Sales Order / Delivery / Invoice / Accounts Receivable / Receipt & Payment Allocation / Credit Note & Debit Note Foundation，2026-08-08，PR #12-#18；4E-3 待合并，未打 Tag）
+## [Unreleased] - Sprint 4A + 4B + 4C + 4D + 4E-1 + 4E-2 + 4E-3（Quotation / Sales Order / Delivery / Invoice / Accounts Receivable / Receipt & Payment Allocation / Credit Note & Debit Note Foundation，2026-08-08，PR #12-#18 已合并，未打 Tag）
 
-### 新增（Sprint 4E-3：Credit Note / Debit Note Foundation，PR #18，Ready for CTO Final Review）
+### 新增（Sprint 4E-3：Credit Note / Debit Note Foundation，PR #18，已合并——CTO Final Review **99/100 APPROVE & MERGE**（Blocking 0），squash `675923c`）
 
 - **发票调整领域（调整事实源）**：CreditDebitNote / CreditDebitNoteLine / InvoiceAdjustment（+3 模型 / +2 枚举，迁移 `0020_credit_debit_note_foundation`，纯增量不改既有；DocumentType 复用 CREDIT_NOTE/DEBIT_NOTE——4D 已建，不重复新增）；**CN/DN = Invoice Adjustment 事实源**；**InvoiceAdjustment = 事实中间层（唯一修改 AR.adjustedAmount 的入口，客户端禁直接创建/编辑，只读）**
 - **单票制 + 继承（CTO 拍板①）**：sourceInvoiceId 必填唯一；只接受已 ISSUED 的 Invoice（409 CN_DN_SOURCE_INVOICE_INVALID）；Customer/Currency 从原 Invoice 继承；行只传 sourceInvoiceLineId+quantity（>0），**金额/税率/价格只复制原 InvoiceLine 快照，不调用 Pricing Engine**；编号创建即取号 CN-/DN-2026-xxxx

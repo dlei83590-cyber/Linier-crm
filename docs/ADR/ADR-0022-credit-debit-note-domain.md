@@ -1,6 +1,6 @@
 # ADR-0022：Credit Note / Debit Note Domain（发票调整与应收调整领域决策）
 
-- 状态：**Accepted + Implemented（2026-08-08）**——CTO Design Review 98/100（Approved with Changes，5 个 Pending 全部拍板 + 3 项设计调整已落实）+ **Apply 专项复核 100/100（0 Blocking）**；Schema → Migration 0020 → Seed/RBAC → Create/Submit → Apply → Workflow Actions → OpenAPI → QA/Test Cases 全部实现并 CI 全绿；**Ready for CTO Final Review**（PR #18 合并后改 Completed）
+- 状态：**APPROVED & MERGED / Completed（2026-08-08）**——CTO Design Review 98/100（Approved with Changes，5 个 Pending 全部拍板 + 3 项设计调整已落实）+ Apply 专项复核 100/100（0 Blocking）+ **CTO Final Review 99/100（Blocking 0，APPROVE & MERGE）**；Schema → Migration 0020 → Seed/RBAC → Create/Submit → Apply → Workflow Actions → OpenAPI → QA/Test Cases → 最终文档同步全部完成并 CI 全绿；**PR #18 squash merge `675923c`（已合并）**
 - 日期：2026-08-08
 - 关联：ADR-0019（Invoice Domain）、ADR-0020（Accounts Receivable Domain）、ADR-0021（Receipt & Payment Allocation Domain）、Sprint4E3_CreditDebitNote_Design.md、EVENTS.md（v1.12 注册）
 - 背景：Sprint 4E-2 Receipt & Payment Allocation 已合并（PR #17，b84b036；CTO Final Review APPROVE & MERGE，3 项财务一致性阻断项修复后复核全 PASS）。CTO 启动 4E-3：**CN/DN = Invoice Adjustment 事实源**；补齐 **Invoice Adjustment → AR.adjustedAmount → Credit/Debit Note** 最后的销售财务调整链。

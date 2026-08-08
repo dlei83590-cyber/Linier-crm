@@ -2,8 +2,8 @@
 
 **PR:** #18 – Sprint 4E-3 Credit Note / Debit Note Foundation
 **Branch:** `feature/sprint4-sales`
-**Head:** `f6d3059`（最终文档同步前 HEAD；Apply 专项复核后 CI 全绿）
-**Status:** Ready for CTO Final Review（PR #18 待验收合并；合并后改 APPROVED & MERGED）
+**Head:** `6caea44`（最终文档同步后 HEAD）→ **PR #18 squash merge `675923c`（2026-08-08）**
+**Status:** **APPROVED & MERGED**（CTO Final Review **99/100，Blocking 0**；PR #18 squash merge `675923c`）
 
 ## 1. Scope
 
@@ -127,7 +127,7 @@ Audit / Events（事务外：InvoiceAdjustmentApplied + AccountsReceivableAdjust
 
 | 门禁 | 结果 |
 | --- | --- |
-| CI（Quality Gates / Build / Secret Scanning） | ✅ 全绿（head `f6d3059`，Generate Lockfile skipped 正常） |
+| CI（Quality Gates / Build / Secret Scanning） | ✅ 全绿（head `6caea44` → merge `675923c`；Generate Lockfile skipped 正常） |
 | OpenAPI | ✅ 174 paths / 466 schemas（+4 端点/+13 schemas；5 条财务边界 + 累计防超调公式写入描述） |
 | QA | ✅ docs/qa/Sprint4E3_QA.md（T1-T21 核心场景） |
 | Test Cases | ✅ docs/test-cases/CreditDebitNote_API.md（**166 用例**，A-O 15 组；Concurrency 5 重点：L1 两张 CN 并发 / L2 两张 DEBIT 并发 / L3 同一 Note 双 Apply / L4 CN∥Receipt Allocation / L5 CN∥WriteOff Apply） |
@@ -138,8 +138,9 @@ Audit / Events（事务外：InvoiceAdjustmentApplied + AccountsReceivableAdjust
 
 ## 6. Review Result
 
-**Sprint 4E-3 Credit Note / Debit Note Foundation：Ready for CTO Final Review（待审批）**
+**Sprint 4E-3 Credit Note / Debit Note Foundation：APPROVED & MERGED（CTO Final Review 99/100，Blocking 0）**
 
-- 提交链：Schema `07d98a3` → Migration 0020 `f84c887` → Seed/RBAC `196068c` → Create `3d0e75b` → Submit `70f4daf` → Apply `b49629c` → Workflow Actions `21098ce` → OpenAPI `23fa11e` → QA/Test Cases `f6d3059`
+- 提交链：Schema `07d98a3` → Migration 0020 `f84c887` → Seed/RBAC `196068c` → Create `3d0e75b` → Submit `70f4daf` → Apply `b49629c` → Workflow Actions `21098ce` → OpenAPI `23fa11e` → QA/Test Cases `f6d3059` → 最终文档同步 `6caea44` → **PR #18 squash merge `675923c`**
 - CTO Apply 专项复核：**APPROVED — 100/100（专项范围），0 Blocking，5/5 核心项通过**
+- **CTO Final Review：APPROVE & MERGE — 99/100，Blocking 0**（Domain Architecture 100 / Financial Consistency 100 / Transaction Safety 99 / Workflow Consistency 100 / Audit & Event Consistency 98 / API-QA-Docs 100）——① 事件机制 PASS（AuditLog=事件总线落地前正式承载层）② 并发防超调 PASS ③ 负 AR 门禁 PASS ④ 事实链/Schema 边界 PASS；PR #18 squash merge `675923c`
 - 财务不变量复核点：`AR.balanceAmount = originalAmount + adjustedAmount - paidAmount - writeOffAmount`；`Invoice.balanceAmount = AR.balanceAmount`

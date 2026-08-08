@@ -1,11 +1,11 @@
 # Release Notes
 
-## Sprint 4E-3 — Credit Note / Debit Note Foundation（2026-08-08，PR #18 待合并，未发布 Tag）
+## Sprint 4E-3 — Credit Note / Debit Note Foundation（2026-08-08，PR #18 已合并，未发布 Tag）
 
 > PR: #18（Sprint 4E-3 Credit Note / Debit Note Foundation，feature/sprint4-sales）
-> 状态：**Ready for CTO Final Review**（PR #18 待验收合并；合并后改 MERGED 并打 Tag）
-> CTO 结论：Design Review **98/100 APPROVED WITH CHANGES**（5 个 Pending 全部拍板）+ **Apply 专项复核 100/100 APPROVED（0 Blocking，5/5 核心项通过）**
-> 关联：docs/reviews/Sprint4E3_CTO_Review_Cover.md（16 项 Checklist 待 Final Review）；CI 全绿：Quality Gates/Build/Secret Scanning
+> 状态：**MERGED**（squash `675923c`；CTO Final Review **99/100 APPROVE & MERGE**，Blocking 0；未打 Tag，待 Sprint 4 Sales+Finance 总验收后统一发布 Alpha）
+> CTO 结论：Design Review **98/100 APPROVED WITH CHANGES**（5 个 Pending 全部拍板）+ **Apply 专项复核 100/100 APPROVED（0 Blocking，5/5 核心项通过）** + **Final Review 99/100 APPROVE & MERGE（Blocking 0）**
+> 关联：docs/reviews/Sprint4E3_CTO_Review_Cover.md（16 项 Checklist，**APPROVED & MERGED**）；CI 全绿：Quality Gates/Build/Secret Scanning
 
 ### Sprint 4E-3 Credit Note / Debit Note Foundation（PR #18）
 
