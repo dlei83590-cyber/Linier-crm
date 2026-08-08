@@ -118,6 +118,9 @@ const SEED_ACTION_MODULES = [
   "write-off-allocation",
   // Sprint 4E-3：Credit Note / Debit Note 模块（动作映射：create→credit-debit-note:create（创建即取号）；submit→credit-debit-note:edit；apply→credit-debit-note:approve（APPROVED≠APPLIED，不新造 apply 动作）；cancel DRAFT→credit-debit-note:close；approve→credit-debit-note:approve；line 仅 view/edit、adjustment 系统事实层仅 view——见 SEED_RESTRICTED_ACTION_PERMISSIONS）
   "credit-debit-note",
+  // Sprint 5A：Purchase Requisition & Purchase Order Foundation 模块（动作映射：create→purchase-requisition:create / purchase-order:create（创建即取号）；submit→purchase-requisition:edit / purchase-order:edit（复用统一 RBAC，**不新造 submit/confirm 权限体系**——CTO 拍板：Workflow Approval 权限与 PO Confirm 业务动作不是同一事实概念，领域代码不得把 APPROVED 当作自动 CONFIRMED）；approve→purchase-requisition:approve / purchase-order:approve；cancel DRAFT→purchase-requisition:close / purchase-order:close；line 仅 view/edit、revision/snapshot 只读 view——见 SEED_RESTRICTED_ACTION_PERMISSIONS）
+  "purchase-requisition",
+  "purchase-order",
   // Sprint 3A：平台底座模块
   "workflow-definition",
   "workflow-step",
@@ -154,6 +157,15 @@ const SEED_RESTRICTED_ACTION_PERMISSIONS: Array<{ name: string; code: string; mo
   { name: "view credit-debit-note-line", code: "credit-debit-note-line:view", module: "credit-debit-note-line" },
   { name: "edit credit-debit-note-line", code: "credit-debit-note-line:edit", module: "credit-debit-note-line" },
   { name: "view invoice-adjustment", code: "invoice-adjustment:view", module: "invoice-adjustment" },
+  // Sprint 5A：Purchase Requisition 子资源（line 受限 view/edit——行由单据驱动不作为独立业务入口；revision 只读 view）
+  { name: "view purchase-requisition-line", code: "purchase-requisition-line:view", module: "purchase-requisition-line" },
+  { name: "edit purchase-requisition-line", code: "purchase-requisition-line:edit", module: "purchase-requisition-line" },
+  { name: "view purchase-requisition-revision", code: "purchase-requisition-revision:view", module: "purchase-requisition-revision" },
+  // Sprint 5A：Purchase Order 子资源（line 受限 view/edit；revision/snapshot 只读 view——PO Snapshot 系统固化，客户端只读）
+  { name: "view purchase-order-line", code: "purchase-order-line:view", module: "purchase-order-line" },
+  { name: "edit purchase-order-line", code: "purchase-order-line:edit", module: "purchase-order-line" },
+  { name: "view purchase-order-revision", code: "purchase-order-revision:view", module: "purchase-order-revision" },
+  { name: "view purchase-order-snapshot", code: "purchase-order-snapshot:view", module: "purchase-order-snapshot" },
 ];
 
 const SEED_UNITS = [
@@ -459,6 +471,8 @@ const SEED_DOCUMENT_SEQUENCES = [
   { code: "QUO", name: "报价单", docType: "QUOTATION", prefix: "QT", nextNo: 1, padLength: 6 },
   { code: "SO", name: "销售订单", docType: "SALES_ORDER", prefix: "SO", nextNo: 1, padLength: 6 },
   { code: "PO", name: "采购订单", docType: "PURCHASE_ORDER", prefix: "PO", nextNo: 1, padLength: 6 },
+  // Sprint 5A：Purchase Requisition 单据序列（docType=PURCHASE_REQUISITION 为 5A 新增，prefix PR，padLength 6；幂等 upsert——仅补 PR，PO 序列复用上方已有，**禁止重复 seed**）
+  { code: "PR", name: "采购申请", docType: "PURCHASE_REQUISITION", prefix: "PR", nextNo: 1, padLength: 6 },
   { code: "PI", name: "形式发票", docType: "PROFORMA_INVOICE", prefix: "PI", nextNo: 1, padLength: 6 },
   { code: "CI", name: "商业发票", docType: "COMMERCIAL_INVOICE", prefix: "CI", nextNo: 1, padLength: 6 },
   // Sprint 4C：Delivery Foundation 单据序列（CTO 锁定：DELIVERY_ORDER / prefix DO / padLength 6；幂等 upsert）
