@@ -315,6 +315,7 @@ model UnitOfMeasure {
   salesOrderLines SalesOrderLine[]
   deliveryLines   DeliveryLine[]
   invoiceLines    InvoiceLine[]
+  creditDebitNoteLines CreditDebitNoteLine[] // 4E-3：调整单明细（CreditDebitNoteLine.uom 方向）
   createdAt     DateTime @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 
@@ -393,6 +394,7 @@ model Item {
   salesOrderLines SalesOrderLine[]
   deliveryLines   DeliveryLine[]
   invoiceLines    InvoiceLine[]
+  creditDebitNoteLines CreditDebitNoteLine[] // 4E-3：调整单明细（CreditDebitNoteLine.item 方向）
   createdAt     DateTime        @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime        @updatedAt @db.Timestamptz(3)
 
