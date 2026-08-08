@@ -117,6 +117,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         workflowTriggered: result.workflow.triggered,
         workflowSkipped: result.workflow.skipped ?? null,
         workflowInstanceId: writeOff?.workflowInstanceId ?? null,
+        ...(changeReason ? { changeReason } : {}),
       },
       ...meta,
     });

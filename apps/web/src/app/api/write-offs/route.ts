@@ -137,6 +137,7 @@ export async function POST(request: NextRequest) {
         reason: result.writeOff.reason,
         status: "DRAFT",
         allocationCount: result.writeOff.allocations.length,
+        ...(changeReason ? { changeReason } : {}),
       },
       ...meta,
     });
