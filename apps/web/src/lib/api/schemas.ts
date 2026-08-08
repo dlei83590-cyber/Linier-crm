@@ -389,3 +389,17 @@ export const receiptAllocateSchema = z.object({
     .min(1),
   changeReason: z.string().max(500).optional(),
 });
+
+/** Allocation Reversal：撤销原核销关系（CTO Design Review 新锁定边界；CN 不承担收款冲销）
+ * 留痕：reversedAt/reversedBy/reverseReason 写入原 ReceiptAllocation（**不删除**）；恢复 AR/Invoice/Receipt 三方投影
+ */
+export const receiptAllocationReverseSchema = z.object({
+  reverseReason: z.string().min(1).max(500),
+});
+
+/** Receipt Void：仅 UNALLOCATED 可 VOID（拍板②）；已有核销不得直接 VOID（须先 Reversal）
+ * 边界：Void 只作废收款事实，**不实现 Credit Note 语义**（CN 属 4E-3 发票调整域）
+ */
+export const receiptVoidSchema = z.object({
+  changeReason: z.string().max(500).optional(),
+});
