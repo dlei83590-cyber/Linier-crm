@@ -1,6 +1,6 @@
 # EVENTS 领域事件注册表（Domain Events）
 
-- 版本：v1.12
+- 版本：v1.13
 - 日期：2026-08-08
 - 维护者：CIO（JINZA）｜审核：CTO
 - 关联：[API_GUIDELINES.md](./API_GUIDELINES.md) ｜ [ARCHITECTURE_BASELINE.md](./ARCHITECTURE_BASELINE.md)
@@ -143,7 +143,7 @@
 | `AccountsReceivablePartiallyPaid` | 4E-2 部分收款回写（OPEN → PARTIALLY_PAID） | `{ accountsReceivableId, invoiceId, paidAmount, balanceAmount, receiptId, updatedAt }` | ⏳ 注册待实现（Sprint 4E-2） |
 | `AccountsReceivablePaid` | 4E-2 收清（→ PAID） | `{ accountsReceivableId, invoiceId, paidAmount, balanceAmount, receiptId, paidAt }` | ⏳ 注册待实现（Sprint 4E-2） |
 | `AccountsReceivableOverdue` | 惰性判定 OVERDUE（OPEN/PARTIALLY_PAID + dueDate < now） | `{ accountsReceivableId, invoiceId, customerId, dueDate, balanceAmount, effectiveStatus }` | ⏳ 注册待实现（Sprint 4E-1 投影查询） |
-| `AccountsReceivableAdjusted` | 4E-3 CN/DN 聚合调整（adjustedAmount 变更） | `{ accountsReceivableId, invoiceId, adjustedAmount, balanceAmount, sourceNoteId, updatedAt }` | ⏳ 注册待实现（Sprint 4E-3） |
+| `AccountsReceivableAdjusted` | 4E-3 CN/DN 聚合调整（adjustedAmount 变更；**Apply 时与 InvoiceAdjustmentApplied 同时发布**） | `{ accountsReceivableId, invoiceId, adjustedAmount, balanceAmount, sourceNoteId, updatedAt }` | ✅ 已实现（apply `b49629c`，v1.9 注册复用不重复定义） |
 | `AccountsReceivableWrittenOff` | 4E-2 write-off（writeOffAmount 回写） | `{ accountsReceivableId, invoiceId, writeOffAmount, balanceAmount, reason, updatedAt }` | ⏳ 注册待实现（Sprint 4E-2） |
 | `AccountsReceivableClosed` | 余额=0 且生命周期结束 → CLOSED（CTO Review 追加） | `{ accountsReceivableId, invoiceId, customerId, balanceAmount, closedAt, closedBy, reason }` | ⏳ 注册待实现（Sprint 4E-1/4E-2） |
 
@@ -176,11 +176,11 @@
 
 | eventType | 触发时机 | 载荷示例 | 实现状态 |
 | --- | --- | --- | --- |
-| `CreditDebitNoteCreated` | 创建调整单（DRAFT；CN-/DN-2026-xxxx 创建即取号） | `{ noteId, noteCode, noteType, sourceInvoiceId, customerId, currency, adjustmentTotal, reason }` | ⏳ 注册待实现（Sprint 4E-3） |
-| `CreditDebitNoteSubmitted` | 提交审批（命中策略触发 Workflow） | `{ noteId, workflowInstanceId, submittedBy, submittedAt }` | ⏳ 注册待实现（Sprint 4E-3） |
-| `CreditDebitNoteApproved` | 审批通过（Workflow 回调，投影回写） | `{ noteId, workflowInstanceId, approvedBy, approvedAt }` | ⏳ 注册待实现（Sprint 4E-3） |
-| `CreditDebitNoteRejected` | 审批驳回（→ DRAFT 重提） | `{ noteId, workflowInstanceId, rejectedBy, rejectedAt, reason }` | ⏳ 注册待实现（Sprint 4E-3） |
-| `InvoiceAdjustmentApplied` | **Apply 完成（AR.adjustedAmount 聚合回写；APPROVED ≠ APPLIED）** | `{ adjustmentId, noteId, noteCode, invoiceId, invoiceLineId, accountsReceivableId, adjustmentType, amount, adjustedAmount, balanceAmount, appliedBy, appliedAt }` | ⏳ 注册待实现（Sprint 4E-3） |
+| `CreditDebitNoteCreated` | 创建调整单（DRAFT；CN-/DN-2026-xxxx 创建即取号） | `{ noteId, noteCode, noteType, sourceInvoiceId, customerId, currency, adjustmentTotal, reason }` | ✅ 已实现（create `3d0e75b`） |
+| `CreditDebitNoteSubmitted` | 提交审批（命中策略触发 Workflow） | `{ noteId, workflowInstanceId, submittedBy, submittedAt }` | ✅ 已实现（submit `70f4daf`） |
+| `CreditDebitNoteApproved` | 审批通过（Workflow 回调，投影回写） | `{ noteId, workflowInstanceId, approvedBy, approvedAt }` | ✅ 已实现（workflow actions `21098ce`） |
+| `CreditDebitNoteRejected` | 审批驳回（→ DRAFT 重提） | `{ noteId, workflowInstanceId, rejectedBy, rejectedAt, reason }` | ✅ 已实现（workflow actions `21098ce`） |
+| `InvoiceAdjustmentApplied` | **Apply 完成（AR.adjustedAmount 聚合回写；APPROVED ≠ APPLIED）** | `{ adjustmentId, noteId, noteCode, invoiceId, invoiceLineId, accountsReceivableId, adjustmentType, amount, adjustedAmount, balanceAmount, appliedBy, appliedAt }` | ✅ 已实现（apply `b49629c`；与 AccountsReceivableAdjusted 同时发布，后者复用不重复注册） |
 
 > 注：**Apply 成功时同时发布 `InvoiceAdjustmentApplied` + `AccountsReceivableAdjusted`**（后者 v1.9 已注册，复用不重复定义——CTO 98/100 拍板）；`InvoicePartiallyPaid/Paid`（4D 注册）与 4E-2 已实现事件不重复注册。
 
@@ -217,6 +217,7 @@
 
 | 日期 | 版本 | 说明 |
 | --- | --- | --- |
+| 2026-08-08 | v1.13 | Sprint 4E-3 发票调整领域事件全部实现（CreditDebitNoteCreated/Submitted/ApprovalStarted/Approved/Rejected + InvoiceAdjustmentApplied 共 6 个 ✅；**Apply 时同时发布 InvoiceAdjustmentApplied + AccountsReceivableAdjusted**（后者 v1.9 已注册复用，不重复定义）；统一载荷含 noteId/noteCode/noteType/sourceInvoiceId/customerId/currency/adjustmentTotal；实现提交链：create `3d0e75b` / submit `70f4daf` / apply `b49629c` / workflow actions `21098ce`（businessType=credit-debit-note 终态回写）/ 负 AR 门禁（Receipt Allocation `RECEIPT_AR_NEGATIVE_BALANCE`、WriteOff Apply `WRITE_OFF_AR_NEGATIVE_BALANCE`）；PR #18 Ready for CTO Final Review |
 | 2026-08-08 | v1.12 | Sprint 4E-3 注册发票调整领域事件 5 个（CreditDebitNoteCreated/Submitted/Approved/Rejected + InvoiceAdjustmentApplied，统一载荷含 noteId/noteCode/noteType/sourceInvoiceId/invoiceId/accountsReceivableId/adjustmentType/amount/adjustedAmount；**CN/DN = Invoice Adjustment 事实源**；不修改原 Invoice 金额事实；不承担 Receipt/Allocation Reversal；AR.adjustedAmount 聚合结果禁 PATCH（唯一入口 InvoiceAdjustment Apply）；CN 负向/DN 正向调整 AR；全部调整可溯源 sourceInvoiceId/sourceInvoiceLineId；已有付款允许 CN 不回滚 Receipt；负余额（可退/可抵）第一版负 AR 投影、CustomerCredit 延后；见 2.3.7，ADR-0022）；AccountsReceivableAdjusted（v1.9 已注册）4E-3 实现时联动发布 |
 | 2026-08-08 | v1.11 | Sprint 4E-2 收款/核销/写销事件全部实现（ReceiptCreated/ReceiptAllocated/ReceiptFullyAllocated/ReceiptAllocationReversed/ReceiptVoided + WriteOffCreated/WriteOffSubmitted/WriteOffApproved/WriteOffRejected/WriteOffApplied 共 10 个 ✅，ReceiptUpdated 无 PATCH 端点保留注册；统一载荷含 receiptId/writeOffId/customerId/currency/amount/accountsReceivableIds 基境字段）；实现提交链：Receipt Create `d076e3a` / Allocation `c075dde`+`0440cd8` / Reversal-Void `68d697c`+`2353c8f` / WriteOff 三件套 `35bde4e`+`3b44ed0` / Create-Submit `4a89268`+`68fbe53` / Apply `224624d` / Workflow actions `aabedf2`（businessType=write-off 终态回写）；AR PartiallyPaid/Paid/WrittenOff/Closed 与 Invoice 投影事件联动发布（AuditLog 留痕，事件总线落地前）；PR #17 Ready for Final Review |
 | 2026-08-08 | v1.9 | Sprint 4E-1 注册 AR 事件 8 个（Created/Updated/PartiallyPaid/Paid/Overdue/Adjusted/WrittenOff/**Closed**，统一载荷含 accountsReceivableId；Invoice=单据事实源，AR=余额事实源；余额唯一口径 original+adjusted-paid-writeOff；Overdue 惰性判定；Closed 为 CTO Review 97/100 追加；见 2.3.5）；InvoicePartiallyPaid/InvoicePaid 仍为 4E 待实现 |
