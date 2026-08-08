@@ -1,6 +1,6 @@
 # 产品路线图（ROADMAP）
 
-- 版本：v1.1
+- 版本：v1.13
 - 日期：2026-08-05
 - 维护者：CIO（JINZA）｜审核：CTO
 - 状态说明：✅ 已完成 ｜ 🔄 进行中 ｜ ⬜ 未开始
@@ -15,7 +15,7 @@
 | Sprint 1 | Infrastructure（基础设施） | ✅ Closed | Release v0.1.0-alpha |
 | Sprint 2 | Master Data（主数据） | ✅ Closed | Release v0.2.0-alpha（2A+2B+2C） |
 | Sprint 3 | ERP Foundation（ERP 底座） | ✅ Closed | 3A Workflow Foundation ✅（v0.3.0-alpha）+ 3B Platform Capabilities ✅（v0.4.0-alpha）+ 3C Business Foundation ✅（v0.5.0-alpha，3C-1~3C-5 全部完成） |
-| Sprint 4 | Sales（销售） | 🔄 | 4A Quotation Foundation ✅（PR #12）；4B Sales Order Foundation ✅（PR #13）；4C Delivery Foundation ✅（PR #14）；4D Invoice Foundation ✅（PR #15 已合并）；4E-1 Accounts Receivable ✅（PR #16 已合并）；4E-2 Receipt/Payment Design 启动 |
+| Sprint 4 | Sales（销售） | 🔄 | 4A Quotation Foundation ✅（PR #12）；4B Sales Order Foundation ✅（PR #13）；4C Delivery Foundation ✅（PR #14）；4D Invoice Foundation ✅（PR #15 已合并）；4E-1 Accounts Receivable ✅（PR #16 已合并）；4E-2 Receipt/Payment Allocation ✅（PR #17 Ready for Final Review） |
 | Sprint 5 | Purchase（采购） | ⬜ | PR/PO/GRN/Supplier Invoice/Payment |
 | Sprint 6 | Inventory（库存） | ⬜ | Warehouse/Stock/Batch/Movement/Count/Transfer |
 | Sprint 7 | Finance（财务） | ⬜ | AR/AP/Expense/Voucher/Journal/GL/Profit/Cash Flow |
@@ -155,7 +155,7 @@
 | Delivery | 发货单（DO，关联订单，触发库存出库） | ✅ 4C 完成（PR #14，2026-08-07；交付事实源 + 防超交 + POD 投影 + SO 聚合） |
 | Invoice | 销售发票（CI，关联发货/订单，应收挂账） | ✅ 4D 完成（PR #15 已合并，2026-08-08；Invoice 财务事实源 + 唯一来源 Delivery + Partial/Consolidated Billing + Issue 原子取号 + 快照税务/汇率 + Workflow 集成；CTO Final Review APPROVE & MERGE 98/100） |
 | Accounts Receivable | 应收（余额事实源，Invoice 1:1，账龄/逾期惰性投影） | ✅ 4E-1 完成（PR #16 已合并，2026-08-08；余额唯一事实源 + Invoice 1:1 + OVERDUE 惰性投影 + agingBucket 动态计算 + Snapshot snapshotSource + Invoice 删除保护 + AR 不审批；CTO Final Review APPROVE & MERGE 98/100） |
-| Payment | 收款（回款核销，更新应收余额） | 🔄 4E-2 Design（2026-08-08 启动） |
+| Payment | 收款（回款核销，更新应收余额；WriteOff 坏账核销） | 🟡 4E-2 Ready for Final Review（PR #17，2026-08-08；Receipt 唯一收款事实源 + 创建与核销分离 + M:N 核销锁 AR（id ASC FOR UPDATE）+ 防超核销 + Allocation Reversal（≠CN）+ VOID 边界 + WriteOff 独立事实（APPROVED≠APPLIED，Apply 唯一回写入口，不增加 Invoice.paidAmount）+ Workflow 条件审批；CTO Final Review 待验收） |
 
 ---
 
@@ -258,7 +258,7 @@
 
 | 日期 | 变更 | 说明 |
 | --- | --- | --- |
-| 2026-08-08 | 更新 v1.12 | Sprint 4E-1 Accounts Receivable Foundation 完成并合并（PR #16 squash 合并 f58fd87；CTO Final Review 98/100 APPROVE & MERGE；Checklist 12 项全 ✅；Blocking 0；CI 全绿；余额唯一口径 original+adjusted-paid-writeOff / OVERDUE 惰性投影 / agingBucket 动态计算 / Snapshot snapshotSource / Invoice 删除保护 / AR 不审批）；Sprint 4 状态 🔄（4A ✅ 4B ✅ 4C ✅ 4D ✅ 4E-1 ✅）；Accounts Receivable 模块 ✅，4E-2 Receipt/Payment Allocation Design 启动；保留 feature/sprint4-sales；不打新大版本 Tag（待 Sprint 4 Sales 完整闭环（4E-2 + 4E-3）后统一发布）；整体成熟度约 87% |
+| 2026-08-08 | 更新 v1.13 | Sprint 4E-2 Receipt & Payment Allocation Foundation Ready for Final Review（PR #17：Schema/Migration 0019/Seed/RBAC/Receipt Create+Allocation+Reversal+Void/WriteOff Create+Submit+Apply/Workflow actions 接入/OpenAPI/QA/TestCases；CI 全绿；Receipt 唯一收款事实源 + 创建与核销分离 + M:N 锁 AR（id ASC FOR UPDATE）+ 防超核销 409 + 同客户同币种 + Allocation Reversal≠CN + VOID 边界 + WriteOff 独立事实（APPROVED≠APPLIED，Apply 唯一回写入口，**不增加 Invoice.paidAmount**））；Sprint 4 状态 🔄（4A ✅ 4B ✅ 4C ✅ 4D ✅ 4E-1 ✅ 4E-2 Ready）；Payment 模块 🟡 待 CTO Final Review；4E-3 CN/DN 下一步；保留 feature/sprint4-sales；不打新大版本 Tag（待 Sprint 4 Sales 完整闭环（4E-2 合并 + 4E-3）后统一发布）；整体成熟度约 87%（PR #17 合并后统一上调） |
 | 2026-08-08 | 更新 v1.11 | Sprint 4E-1 Accounts Receivable Foundation Ready for Final Review（PR #16：Schema/Migration 0018/Seed/RBAC/查询 API 5 端点/OpenAPI/QA/TestCases；CTO Review 97/100 APPROVED WITH CHANGES 4 项必改 + 4 项拍板 + Closed 事件全部落实；CI 全绿；余额唯一口径 + OVERDUE 惰性投影 + agingBucket 动态计算 + Snapshot snapshotSource + Invoice 删除保护 + Workflow 边界）；Sprint 4 状态 🔄（4A ✅ 4B ✅ 4C ✅ 4D ✅ 4E-1 Ready）；Accounts Receivable 模块 🔄；4E-2 Receipt/Payment 下一步；保留 feature/sprint4-sales；不打新大版本 Tag（待 Sprint 4 Sales 完整闭环（4E-1 合并 + 4E-2 + 4E-3）后统一发布）；整体成熟度约 86% |
 | 2026-08-08 | 更新 v1.10 | Sprint 4D Invoice Foundation 完成并合并（PR #15 squash 合并 cea4162；CTO Final Review 98/100 APPROVE & MERGE；Checklist 14 项全 ✅；CI 全绿；四段溯源链取价不调 Pricing Engine / Partial+Consolidated Billing / DRAFT 不占号+Issue 原子取号 / Cancel 释放开票投影 / 快照税务汇率 / Workflow 唯一事实源）；Sprint 4 状态 🔄（4A ✅ 4B ✅ 4C ✅ 4D ✅）；Invoice 模块 ✅，4E AR/Payment 下一步；保留 feature/sprint4-sales；不打新大版本 Tag（待 Sprint 4 Sales 完整闭环（4E）后统一发布）；整体成熟度约 85% |
 | 2026-08-08 | 更新 v1.9 | Sprint 4D Invoice Foundation Ready for Final Review（PR #15：Schema/Migration 0017/Seed/RBAC/创建+Partial+Consolidated Billing/Issue/Cancel/查询 API/Workflow 集成；CTO Review 96/100 四项拍板 + 两项必改（编号延后生成、快照税务/汇率）全部落地；CI 全绿；文档（OpenAPI 8 端点/19 schemas + QA T1-T18 + 137 用例 + DOMAIN_MODEL v1.11 + ADR-0019 Accepted+Implemented + EVENTS v1.8）已交付）；整体成熟度约 83% |

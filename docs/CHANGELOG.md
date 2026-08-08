@@ -2,7 +2,21 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased] - Sprint 4A + 4B + 4C + 4D + 4E-1（Quotation / Sales Order / Delivery / Invoice / Accounts Receivable Foundation，2026-08-08，PR #12/#13/#14/#15/#16 已合并，未打 Tag）
+## [Unreleased] - Sprint 4A + 4B + 4C + 4D + 4E-1 + 4E-2（Quotation / Sales Order / Delivery / Invoice / Accounts Receivable / Receipt & Payment Allocation Foundation，2026-08-08，PR #12/#13/#14/#15/#16 已合并 + PR #17 Ready for Final Review，未打 Tag）
+
+### 新增（Sprint 4E-2：Receipt & Payment Allocation Foundation，PR #17，Ready for Final Review）
+
+- **收款领域（收款事实源）**：Receipt / ReceiptAllocation / ReceiptRevision / ReceiptSnapshot + WriteOff / WriteOffAllocation（+6 模型 / +4 枚举，迁移 `0019_receipt_payment_foundation`，仅新增不改既有）；**Receipt = 唯一收款事实源（Payment 不单独建表——CTO 拍板，避免两个重复入账事实）**；Receipt.code / WriteOff.code DocumentSequence **创建即取号**（拍板④：RCT-/WO-2026-xxxx）
+- **创建与核销分离（拍板①）**：POST /api/receipts 只记录实际收到的钱（UNALLOCATED，unallocatedAmount=amount，**不核销**）；POST /api/receipts/{id}/allocate 显式核销且**一次请求原子化**（多 AR 批量同事务，任何一步失败整体回滚）
+- **核销 M:N + 事务红线（CTO 指定顺序）**：Lock Receipt（FOR UPDATE）→ Lock 全部目标 AR（**id ASC FOR UPDATE**，防死锁锁序）→ 校验同 Customer / 同 Currency（409 RECEIPT_CUSTOMER_MISMATCH / RECEIPT_CURRENCY_MISMATCH——第一版禁止跨币种核销）→ 校验 ≤ Receipt.unallocatedAmount（409 UNALLOCATED_EXCEEDED）→ 校验每笔 ≤ AR.balanceAmount（409 ALLOCATION_EXCEEDED——并发双核销不超余额）→ Create ReceiptAllocation → 回写 AR paidAmount/balanceAmount（computeBalance 单入口）+ status 投影 → 回写 Invoice paidAmount/balanceAmount 投影 → 回写 Receipt allocatedAmount/unallocatedAmount/status 投影 → AR Revision + Snapshot(PAYMENT) → 事件
+- **Allocation Reversal（CTO Design Review 新锁定边界）**：解除核销关系并**留痕**（reversedAt/reversedBy/reverseReason 写入原记录，**不删除**——独立逆向事实）；恢复 AR / Invoice / Receipt 三方投影；重复冲销 409 RECEIPT_ALLOCATION_REVERSED；**Reversal ≠ Credit Note**（CN 属 4E-3 发票调整域，不承担收款冲销——银行退票不是 CN）
+- **VOID 规则（拍板②）**：仅 UNALLOCATED 可 VOID（→ VOIDED + voidedAt/voidedById）；**已有核销不得直接 VOID**（必须先 Reversal，否则 409 RECEIPT_VOID_FORBIDDEN）；无 CN 语义
+- **WriteOff 独立事实（拍板③）**：WriteOff + WriteOffAllocation（**不做三件套**——审批历史由 Workflow、审计由 AuditLog，避免模型膨胀）；创建校验同 Customer / 同 Currency（409 WRITE_OFF_SOURCE_NOT_COMPATIBLE）、每笔 amount>0、头金额 = Σ allocations（服务端计算，禁止直传）；**创建/提交/审批均不修改 AR**
+- **APPROVED ≠ APPLIED（CTO 锁死）**：WriteOff 按 ApprovalPolicy(module=WRITE_OFF) 条件触发 Workflow；submit 同事务 maybeTriggerWriteOffApproval（命中策略→PENDING 须 APPROVED 后才能 Apply / 未命中→可直接 Apply）；**Apply 是唯一修改 AR.writeOffAmount / balanceAmount 的入口**；重复 Apply 稳定 409 WRITE_OFF_ALREADY_APPLIED（幂等）
+- **WriteOff ≠ Payment（财务红线）**：Apply 同事务 AR.writeOffAmount += allocation / balanceAmount 重算 / **Invoice.balanceAmount 投影同步减少，但 Invoice.paidAmount 绝不因 write-off 增加**（防止报表把坏账核销误认为客户实际付款）→ AR Revision + Snapshot(snapshotSource=WRITE_OFF) → WriteOff=APPLIED+appliedAt/appliedById → 事件 WriteOffApplied + AccountsReceivableWrittenOff
+- **Workflow actions 接入**：businessType="write-off" → COMPLETED→syncWriteOffApproval(APPROVED) / REJECTED→REJECTED；保持 APPROVED ≠ APPLIED
+- **事件**：EVENTS.md v1.11——4E-2 收款/核销/写销事件 10 个全部实现（ReceiptCreated/ReceiptAllocated/ReceiptFullyAllocated/ReceiptAllocationReversed/ReceiptVoided + WriteOffCreated/WriteOffSubmitted/WriteOffApproved/WriteOffRejected/WriteOffApplied；ReceiptUpdated 无 PATCH 端点保留注册）；AR PartiallyPaid/Paid/WrittenOff/Closed 与 Invoice 投影事件联动发布
+- **文档**：OpenAPI +10 端点/+30 schemas（171 paths/453 schemas，5 项财务边界写入描述）、docs/qa/Sprint4E2_QA.md（T1-T18）、docs/test-cases/Receipt_WriteOff_API.md（140+ 用例，A-N 14 组）、DOMAIN_MODEL v1.13（第 24 章）、ADR-0021（Accepted + Implemented，Ready for Final Review）、docs/reviews/Sprint4E2_CTO_Review_Cover.md（待 CTO Final Review）
 
 ### 新增（Sprint 4E-1：Accounts Receivable Foundation，PR #16，已合并）
 

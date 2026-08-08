@@ -1,6 +1,7 @@
 # ADR-0021：Receipt & Payment Allocation Domain（收款事实源与核销领域决策）
 
-- 状态：**Approved with Changes（2026-08-08，CTO Design Review 97/100）**——5 个 Pending 全部拍板 + 3 项调整已落实；**无需第二轮设计评审**，直接进入 Schema → Migration 0019 → Seed → RBAC → API 实现阶段
+- 状态：**Accepted + Implemented（2026-08-08，Sprint 4E-2 完成）——Ready for Final Review（PR #17 待合并；合并后改 Completed）**
+  历史：CTO Design Review（2026-08-08，97/100 APPROVED WITH CHANGES）5 个 Pending 全部拍板 + 3 项调整已落实；Schema（0019）、Migration、Seed、RBAC、全链路 API（Receipt Create/Allocation/Reversal/Void + WriteOff Create/Submit/Apply + Workflow actions 接入）全部实现并通过 CI（PR #17）
 - 日期：2026-08-08
 - 关联：ADR-0019（Invoice Domain）、ADR-0020（Accounts Receivable Domain）、Sprint4E2_ReceiptAllocation_Design.md、EVENTS.md（v1.10 注册）、Sprint4E1_AR_Design.md（已实现，PR #16 已合并）
 - 背景：Sprint 4E-1 Accounts Receivable Foundation 已合并（PR #16，f58fd87）。CTO Final Review（2026-08-08，98/100）启动 4E-2；CTO Design Review（2026-08-08，97/100 APPROVED WITH CHANGES）拍板全部设计决策。
