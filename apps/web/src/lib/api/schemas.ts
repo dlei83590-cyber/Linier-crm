@@ -736,10 +736,10 @@ export const warehouseReceiptCreateSchema = z.object({
   lines: z.array(warehouseReceiptLineCreateSchema).min(1, '至少需要一行'),
 });
 
-/** 入库单更新（仅 DRAFT；version 乐观锁；行整体替换；warehouseId/locationId 可改） */
+/** 入库单更新（仅 DRAFT；version 乐观锁；行整体替换；warehouseId 模型必填不可清空、locationId 可空——组合 FK 同属校验） */
 export const warehouseReceiptUpdateSchema = z.object({
   version: z.number().int().positive(),
-  warehouseId: z.string().min(1).nullable().optional(),
+  warehouseId: z.string().min(1).optional(), // 模型必填非空 String：不可置 null
   locationId: z.string().min(1).nullable().optional(),
   remark: z.string().max(500).nullable().optional(),
   lines: z.array(warehouseReceiptLineCreateSchema).min(1).optional(),

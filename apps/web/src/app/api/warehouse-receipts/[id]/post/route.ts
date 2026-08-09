@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { authenticate, requirePermission, requestMeta } from '@/lib/api-helpers';
+import { authenticate, requirePermission, requestMeta, writeAuditLog } from '@/lib/api-helpers';
 import { ok, fail, failValidation, failConflict, failNotFound } from '@/lib/api/response';
 import { ERROR_CODES } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
@@ -197,27 +197,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // 事件总线未落地（Known Risk）：发布失败不阻断业务事实（事务已提交）；生产前升级 Transactional Outbox（CTO #7045 债务记录）
   }
 
-  // ⑥ 显式 AuditLog（Audit 与 Domain Event 分离，有 Event 不省 Audit——CTO #7115 Minor 教训沿用）
-  await prisma.auditLog
-    .create({
-      data: {
-        actorId,
-        action: 'WarehouseReceiptPosted',
-        entityType: 'warehouse-receipt',
-        entityId: result.warehouseReceiptId,
-        afterData: {
-          warehouseReceiptId: result.warehouseReceiptId,
-          warehouseReceiptCode: result.warehouseReceiptCode,
-          purchaseReceiptId: result.purchaseReceiptId,
-          warehouseId: result.warehouseId,
-          locationId: result.locationId,
-          postedById: actorId,
-          postedAt: result.postedAt,
-        },
-        meta,
-      },
-    })
-    .catch(() => undefined);
+  // ⑥ 显式 AuditLog（Audit 与 Domain Event 分离，有 Event 不省 Audit——CTO #7115 Minor 教训沿用；
+  // 走 writeAuditLog helper 统一处理 meta Json 类型，不直接操作 prisma.auditLog）
+  await writeAuditLog({
+    actorId,
+    action: 'WarehouseReceiptPosted',
+    entityType: 'warehouse-receipt',
+    entityId: result.warehouseReceiptId,
+    afterData: {
+      warehouseReceiptId: result.warehouseReceiptId,
+      warehouseReceiptCode: result.warehouseReceiptCode,
+      purchaseReceiptId: result.purchaseReceiptId,
+      warehouseId: result.warehouseId,
+      locationId: result.locationId,
+      postedById: actorId,
+      postedAt: result.postedAt,
+    },
+    meta,
+  });
 
   return ok({
     id: result.warehouseReceiptId,
