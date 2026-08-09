@@ -181,7 +181,6 @@ export async function POST(request: NextRequest) {
       });
       const inspectionById = new Map(inspections.map((i) => [i.id, i]));
 
-      let lineNo = 10;
       for (const line of data.lines) {
         const inspection = inspectionById.get(line.inspectionId);
         if (!inspection) {
@@ -223,7 +222,6 @@ export async function POST(request: NextRequest) {
             updatedById: actorId,
           },
         });
-        lineNo += 10;
       }
 
       return { id: header.id, code: header.code };
