@@ -1,20 +1,22 @@
-import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { authenticate, requirePermission, clientIp, writeAuditLog } from "@/lib/api-helpers";
-import { ok, fail, failValidation, failConflict, failNotFound } from "@/lib/api/response";
-import { ERROR_CODES } from "@/lib/api/errors";
-import { requestLog } from "@/lib/api/logger";
-import { workflowActionSchema } from "@/lib/api/schemas";
-import { isValidAction, isStepComplete, resolveStepApprovers } from "@/lib/workflow/engine";
-import { syncQuotationApproval } from "@/lib/quotation/workflow-sync";
-import { syncSalesOrderApproval } from "@/lib/sales-order/workflow-sync";
-import { syncInvoiceApproval } from "@/lib/invoice/workflow-sync";
-import { syncWriteOffApproval } from "@/lib/write-off/workflow-sync";
-import { syncCreditDebitNoteApproval } from "@/lib/credit-debit-note/workflow-sync";
+import type { NextRequest } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { authenticate, requirePermission, clientIp, writeAuditLog } from '@/lib/api-helpers';
+import { ok, fail, failValidation, failConflict, failNotFound } from '@/lib/api/response';
+import { ERROR_CODES } from '@/lib/api/errors';
+import { requestLog } from '@/lib/api/logger';
+import { workflowActionSchema } from '@/lib/api/schemas';
+import { isValidAction, isStepComplete, resolveStepApprovers } from '@/lib/workflow/engine';
+import { syncQuotationApproval } from '@/lib/quotation/workflow-sync';
+import { syncSalesOrderApproval } from '@/lib/sales-order/workflow-sync';
+import { syncInvoiceApproval } from '@/lib/invoice/workflow-sync';
+import { syncWriteOffApproval } from '@/lib/write-off/workflow-sync';
+import { syncCreditDebitNoteApproval } from '@/lib/credit-debit-note/workflow-sync';
+import { syncPurchaseRequisitionApproval } from '@/lib/purchase-requisition/workflow-sync';
+import { syncPurchaseOrderApproval } from '@/lib/purchase-order/workflow-sync';
 
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic';
 
-const TERMINAL_STATES = ["COMPLETED", "REJECTED", "TERMINATED", "WITHDRAWN"] as const;
+const TERMINAL_STATES = ['COMPLETED', 'REJECTED', 'TERMINATED', 'WITHDRAWN'] as const;
 
 /**
  * POST /api/workflows/instances/:id/actions
@@ -23,9 +25,9 @@ const TERMINAL_STATES = ["COMPLETED", "REJECTED", "TERMINATED", "WITHDRAWN"] as 
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await authenticate(request);
-  const denied = requirePermission(user, "workflow-instance:approve");
+  const denied = requirePermission(user, 'workflow-instance:approve');
   if (denied) return denied;
-  requestLog(request, user?.id, "workflow-instance.action");
+  requestLog(request, user?.id, 'workflow-instance.action');
 
   const { id } = await params;
   const parsed = workflowActionSchema.safeParse(await request.json().catch(() => null));
@@ -34,19 +36,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { actionType, targetUserId, comment } = parsed.data;
 
   if (!isValidAction(actionType)) {
-    return fail(ERROR_CODES.WORKFLOW_ACTION_INVALID, "无效的工作流动作", 400);
+    return fail(ERROR_CODES.WORKFLOW_ACTION_INVALID, '无效的工作流动作', 400);
   }
-  if ((actionType === "TRANSFER" || actionType === "DELEGATE") && !targetUserId) {
-    return fail(ERROR_CODES.WORKFLOW_TARGET_REQUIRED, "转交/委托必须指定 targetUserId", 400);
+  if ((actionType === 'TRANSFER' || actionType === 'DELEGATE') && !targetUserId) {
+    return fail(ERROR_CODES.WORKFLOW_TARGET_REQUIRED, '转交/委托必须指定 targetUserId', 400);
   }
 
   // 预加载（事务外校验，避免长事务）
   const instance = await prisma.workflowInstance.findFirst({ where: { id, deletedAt: null } });
   if (!instance) {
-    return failNotFound(ERROR_CODES.WORKFLOW_INSTANCE_NOT_FOUND, "审批实例不存在");
+    return failNotFound(ERROR_CODES.WORKFLOW_INSTANCE_NOT_FOUND, '审批实例不存在');
   }
-  if ((TERMINAL_STATES as readonly string[]).includes(instance.status) && actionType !== "COMMENT") {
-    return failConflict(ERROR_CODES.WORKFLOW_INSTANCE_CLOSED, "审批已结束，仅可评论");
+  if (
+    (TERMINAL_STATES as readonly string[]).includes(instance.status) &&
+    actionType !== 'COMMENT'
+  ) {
+    return failConflict(ERROR_CODES.WORKFLOW_INSTANCE_CLOSED, '审批已结束，仅可评论');
   }
 
   const definition = await prisma.workflowDefinition.findFirst({
@@ -54,13 +59,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     include: {
       steps: {
         where: { deletedAt: null },
-        orderBy: { stepNo: "asc" },
+        orderBy: { stepNo: 'asc' },
         include: { conditions: { where: { deletedAt: null } } },
       },
     },
   });
   if (!definition) {
-    return failNotFound(ERROR_CODES.WORKFLOW_DEFINITION_NOT_FOUND, "工作流定义不存在");
+    return failNotFound(ERROR_CODES.WORKFLOW_DEFINITION_NOT_FOUND, '工作流定义不存在');
   }
 
   const currentStepNo = instance.currentStepNo ?? 1;
@@ -69,21 +74,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   });
 
   // 需要"我的待办"的动作：审批/驳回/转交/委托
-  const needMine = ["APPROVE", "REJECT", "TRANSFER", "DELEGATE"];
+  const needMine = ['APPROVE', 'REJECT', 'TRANSFER', 'DELEGATE'];
   if ((needMine as readonly string[]).includes(actionType)) {
-    const mine = currentApprovers.find((a) => a.userId === user!.id && a.status === "PENDING");
+    const mine = currentApprovers.find((a) => a.userId === user!.id && a.status === 'PENDING');
     if (!mine) {
-      return fail(ERROR_CODES.WORKFLOW_ACTION_FORBIDDEN, "您没有当前步骤的待审批任务", 403);
+      return fail(ERROR_CODES.WORKFLOW_ACTION_FORBIDDEN, '您没有当前步骤的待审批任务', 403);
     }
   }
-  if (actionType === "WITHDRAW" && instance.startedBy !== user!.id) {
-    return fail(ERROR_CODES.WORKFLOW_ACTION_FORBIDDEN, "仅发起人可撤销", 403);
+  if (actionType === 'WITHDRAW' && instance.startedBy !== user!.id) {
+    return fail(ERROR_CODES.WORKFLOW_ACTION_FORBIDDEN, '仅发起人可撤销', 403);
   }
 
   const now = new Date();
-  const ua = request.headers.get("user-agent") ?? "";
-  const device = /mobile|android|iphone/i.test(ua) ? "mobile" : "desktop";
-  const browser = ua.split(" ")[0] ?? null;
+  const ua = request.headers.get('user-agent') ?? '';
+  const device = /mobile|android|iphone/i.test(ua) ? 'mobile' : 'desktop';
+  const browser = ua.split(' ')[0] ?? null;
 
   const result = await prisma.$transaction(async (tx) => {
     const beforeStatus = instance.status;
@@ -92,34 +97,43 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     let completedAt: Date | null = null;
     let extraApproverIds: string[] = [];
 
-    if (actionType === "APPROVE") {
-      const target = currentApprovers.find((a) => a.userId === user!.id && a.status === "PENDING")!;
+    if (actionType === 'APPROVE') {
+      const target = currentApprovers.find((a) => a.userId === user!.id && a.status === 'PENDING')!;
       await tx.approver.update({
         where: { id: target.id },
-        data: { status: "APPROVED", decidedAt: now, comment: comment ?? null, updatedById: user!.id },
+        data: {
+          status: 'APPROVED',
+          decidedAt: now,
+          comment: comment ?? null,
+          updatedById: user!.id,
+        },
       });
       const updated = currentApprovers.map((a) =>
-        a.id === target.id ? { ...a, status: "APPROVED" as const } : a,
+        a.id === target.id ? { ...a, status: 'APPROVED' as const } : a,
       );
       const step = definition.steps.find((s) => s.stepNo === currentStepNo);
       // COUNTERSIGN 会签：默认要求全部审批人通过（等同 PARALLEL），避免无法推进
       const complete = isStepComplete(
-        step?.approvalMode ?? "SEQUENTIAL",
+        step?.approvalMode ?? 'SEQUENTIAL',
         updated,
-        step?.approvalMode === "COUNTERSIGN" ? updated.length : undefined,
+        step?.approvalMode === 'COUNTERSIGN' ? updated.length : undefined,
       );
       if (complete) {
         const nextStep = definition.steps.find((s) => s.stepNo > currentStepNo);
         if (nextStep) {
           newStepNo = nextStep.stepNo;
-          const userIds = await resolveStepApprovers(tx, nextStep.approverType, nextStep.approverValue);
+          const userIds = await resolveStepApprovers(
+            tx,
+            nextStep.approverType,
+            nextStep.approverValue,
+          );
           extraApproverIds = userIds;
           await tx.approver.createMany({
             data: userIds.map((uid) => ({
               instanceId: id,
               stepNo: nextStep.stepNo,
               userId: uid,
-              status: "PENDING",
+              status: 'PENDING',
               createdById: user!.id,
               updatedById: user!.id,
             })),
@@ -129,54 +143,63 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             data: { currentStepNo: nextStep.stepNo, updatedById: user!.id },
           });
         } else {
-          afterStatus = "COMPLETED";
+          afterStatus = 'COMPLETED';
           completedAt = now;
           await tx.workflowInstance.update({
             where: { id },
-            data: { status: "COMPLETED", completedAt: now, updatedById: user!.id },
+            data: { status: 'COMPLETED', completedAt: now, updatedById: user!.id },
           });
         }
       }
     }
 
-    if (actionType === "REJECT") {
-      const target = currentApprovers.find((a) => a.userId === user!.id && a.status === "PENDING")!;
+    if (actionType === 'REJECT') {
+      const target = currentApprovers.find((a) => a.userId === user!.id && a.status === 'PENDING')!;
       await tx.approver.update({
         where: { id: target.id },
-        data: { status: "REJECTED", decidedAt: now, comment: comment ?? null, updatedById: user!.id },
+        data: {
+          status: 'REJECTED',
+          decidedAt: now,
+          comment: comment ?? null,
+          updatedById: user!.id,
+        },
       });
-      afterStatus = "REJECTED";
+      afterStatus = 'REJECTED';
       completedAt = now;
       await tx.workflowInstance.update({
         where: { id },
-        data: { status: "REJECTED", completedAt: now, updatedById: user!.id },
+        data: { status: 'REJECTED', completedAt: now, updatedById: user!.id },
       });
     }
 
-    if (actionType === "RETURN") {
+    if (actionType === 'RETURN') {
       const prevStep = definition.steps.find((s) => s.stepNo < currentStepNo);
       if (!prevStep) {
         // 第一步退回 = 驳回
-        afterStatus = "REJECTED";
+        afterStatus = 'REJECTED';
         completedAt = now;
         await tx.workflowInstance.update({
           where: { id },
-          data: { status: "REJECTED", completedAt: now, updatedById: user!.id },
+          data: { status: 'REJECTED', completedAt: now, updatedById: user!.id },
         });
       } else {
         await tx.approver.updateMany({
           where: { instanceId: id, stepNo: currentStepNo, deletedAt: null },
-          data: { status: "SKIPPED", updatedById: user!.id },
+          data: { status: 'SKIPPED', updatedById: user!.id },
         });
         newStepNo = prevStep.stepNo;
-        const userIds = await resolveStepApprovers(tx, prevStep.approverType, prevStep.approverValue);
+        const userIds = await resolveStepApprovers(
+          tx,
+          prevStep.approverType,
+          prevStep.approverValue,
+        );
         extraApproverIds = userIds;
         await tx.approver.createMany({
           data: userIds.map((uid) => ({
             instanceId: id,
             stepNo: prevStep.stepNo,
             userId: uid,
-            status: "PENDING",
+            status: 'PENDING',
             createdById: user!.id,
             updatedById: user!.id,
           })),
@@ -188,26 +211,31 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
     }
 
-    if (actionType === "TRANSFER") {
-      const target = currentApprovers.find((a) => a.userId === user!.id && a.status === "PENDING")!;
+    if (actionType === 'TRANSFER') {
+      const target = currentApprovers.find((a) => a.userId === user!.id && a.status === 'PENDING')!;
       await tx.approver.update({
         where: { id: target.id },
         data: { userId: targetUserId!, updatedById: user!.id },
       });
     }
 
-    if (actionType === "DELEGATE") {
-      const target = currentApprovers.find((a) => a.userId === user!.id && a.status === "PENDING")!;
+    if (actionType === 'DELEGATE') {
+      const target = currentApprovers.find((a) => a.userId === user!.id && a.status === 'PENDING')!;
       await tx.approver.update({
         where: { id: target.id },
-        data: { status: "DELEGATED", delegatedFrom: user!.id, decidedAt: now, updatedById: user!.id },
+        data: {
+          status: 'DELEGATED',
+          delegatedFrom: user!.id,
+          decidedAt: now,
+          updatedById: user!.id,
+        },
       });
       await tx.approver.create({
         data: {
           instanceId: id,
           stepNo: currentStepNo,
           userId: targetUserId!,
-          status: "PENDING",
+          status: 'PENDING',
           delegatedFrom: user!.id,
           createdById: user!.id,
           updatedById: user!.id,
@@ -215,44 +243,53 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       });
     }
 
-    if (actionType === "WITHDRAW") {
-      afterStatus = "WITHDRAWN";
+    if (actionType === 'WITHDRAW') {
+      afterStatus = 'WITHDRAWN';
       completedAt = now;
       await tx.workflowInstance.update({
         where: { id },
-        data: { status: "WITHDRAWN", completedAt: now, updatedById: user!.id },
+        data: { status: 'WITHDRAWN', completedAt: now, updatedById: user!.id },
       });
     }
 
-    if (actionType === "TERMINATE") {
-      afterStatus = "TERMINATED";
+    if (actionType === 'TERMINATE') {
+      afterStatus = 'TERMINATED';
       completedAt = now;
       await tx.workflowInstance.update({
         where: { id },
-        data: { status: "TERMINATED", completedAt: now, updatedById: user!.id },
+        data: { status: 'TERMINATED', completedAt: now, updatedById: user!.id },
       });
     }
 
-    if (actionType === "SUBMIT") {
+    if (actionType === 'SUBMIT') {
       if ((TERMINAL_STATES as readonly string[]).includes(instance.status)) {
         // 重新提交：回到运行中，重置到第一步
         const firstStep = definition.steps[0];
         newStepNo = firstStep?.stepNo ?? 1;
-        afterStatus = "RUNNING";
+        afterStatus = 'RUNNING';
         completedAt = null;
         await tx.workflowInstance.update({
           where: { id },
-          data: { status: "RUNNING", currentStepNo: newStepNo, completedAt: null, updatedById: user!.id },
+          data: {
+            status: 'RUNNING',
+            currentStepNo: newStepNo,
+            completedAt: null,
+            updatedById: user!.id,
+          },
         });
         if (firstStep) {
-          const userIds = await resolveStepApprovers(tx, firstStep.approverType, firstStep.approverValue);
+          const userIds = await resolveStepApprovers(
+            tx,
+            firstStep.approverType,
+            firstStep.approverValue,
+          );
           extraApproverIds = userIds;
           await tx.approver.createMany({
             data: userIds.map((uid) => ({
               instanceId: id,
               stepNo: firstStep.stepNo,
               userId: uid,
-              status: "PENDING",
+              status: 'PENDING',
               createdById: user!.id,
               updatedById: user!.id,
             })),
@@ -262,7 +299,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     // COMMENT：无状态变更，仅记录
-    const duration = completedAt ? Math.max(0, Math.round((completedAt.getTime() - instance.startedAt.getTime()) / 1000)) : null;
+    const duration = completedAt
+      ? Math.max(0, Math.round((completedAt.getTime() - instance.startedAt.getTime()) / 1000))
+      : null;
 
     const action = await tx.workflowAction.create({
       data: {
@@ -282,7 +321,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         instanceId: id,
         stepNo: newStepNo ?? currentStepNo,
         actionType,
-        beforeStatus: beforeStatus === afterStatus && actionType === "COMMENT" ? instance.status : beforeStatus,
+        beforeStatus:
+          beforeStatus === afterStatus && actionType === 'COMMENT' ? instance.status : beforeStatus,
         afterStatus,
         actorId: user!.id,
         ip: clientIp(request) ?? null,
@@ -301,7 +341,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   await writeAuditLog({
     actorId: user?.id,
     action: `workflow-instance.${actionType.toLowerCase()}`,
-    entityType: "workflow-instance",
+    entityType: 'workflow-instance',
     entityId: id,
     ipAddress: clientIp(request),
     meta: { actionType, afterStatus: result.afterStatus },
@@ -310,8 +350,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // Sprint 4A：Quotation 审批终态回写（Workflow 为唯一事实源，Quotation 仅保存投影 + 发布事件）
   // CTO Final Review（PR #12）：Quotation 投影失败不能被静默吞掉（不 catch）；事件发布降级在 sync 内部处理
   if (
-    instance.businessType === "quotation" &&
-    (result.afterStatus === "COMPLETED" || result.afterStatus === "REJECTED")
+    instance.businessType === 'quotation' &&
+    (result.afterStatus === 'COMPLETED' || result.afterStatus === 'REJECTED')
   ) {
     await syncQuotationApproval({
       quotationId: instance.businessId,
@@ -323,8 +363,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // Sprint 4B：SalesOrder 审批终态回写（ADR-0017 §6：Workflow 唯一事实源，SO 仅保存投影）
   // CTO 锁定项③：SO Confirm 不重复审批；仅当 SO 修改关键商业字段时才触发新审批（编辑路由触发创建实例）
   if (
-    instance.businessType === "sales-order" &&
-    (result.afterStatus === "COMPLETED" || result.afterStatus === "REJECTED")
+    instance.businessType === 'sales-order' &&
+    (result.afterStatus === 'COMPLETED' || result.afterStatus === 'REJECTED')
   ) {
     await syncSalesOrderApproval({
       salesOrderId: instance.businessId,
@@ -336,8 +376,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // Sprint 4D：Invoice 审批终态回写（ADR-0019：Workflow 唯一事实源，Invoice 仅保存投影；不建 InvoiceApproval）
   // issue 前审批门禁：workflowInstanceId != null 时仅 approvalStatus=APPROVED 允许 Issue（issue 路由校验）
   if (
-    instance.businessType === "invoice" &&
-    (result.afterStatus === "COMPLETED" || result.afterStatus === "REJECTED")
+    instance.businessType === 'invoice' &&
+    (result.afterStatus === 'COMPLETED' || result.afterStatus === 'REJECTED')
   ) {
     await syncInvoiceApproval({
       invoiceId: instance.businessId,
@@ -350,8 +390,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // **红线（CTO 锁死）：APPROVED ≠ APPLIED**——审批终态只回写 WriteOff.approvalStatus（APPROVED/REJECTED + approvedAt/ById），
   // 绝不修改 AR；财务影响只能由显式 POST /api/write-offs/{id}/apply 完成（Apply 是唯一入口，幂等 409）。
   if (
-    instance.businessType === "write-off" &&
-    (result.afterStatus === "COMPLETED" || result.afterStatus === "REJECTED")
+    instance.businessType === 'write-off' &&
+    (result.afterStatus === 'COMPLETED' || result.afterStatus === 'REJECTED')
   ) {
     await syncWriteOffApproval({
       writeOffId: instance.businessId,
@@ -364,11 +404,40 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // **红线（CTO 98/100 锁死）：APPROVED ≠ APPLIED**——审批终态只回写 Note.approvalStatus（APPROVED/REJECTED + approvedAt/ById），
   // 绝不修改 AR.adjustedAmount/balanceAmount；财务影响只能由显式 POST /api/credit-debit-notes/{id}/apply 完成（Apply 是唯一入口，幂等 409）。
   if (
-    instance.businessType === "credit-debit-note" &&
-    (result.afterStatus === "COMPLETED" || result.afterStatus === "REJECTED")
+    instance.businessType === 'credit-debit-note' &&
+    (result.afterStatus === 'COMPLETED' || result.afterStatus === 'REJECTED')
   ) {
     await syncCreditDebitNoteApproval({
       noteId: instance.businessId,
+      workflowStatus: result.afterStatus,
+      actorId: user!.id,
+    });
+  }
+
+  // Sprint 5A：PurchaseRequisition 审批终态回写（ADR-0023：Workflow 唯一审批事实源，PR 仅保存审批/状态投影；不建 Approval 表）
+  // **红线（CTO 拍板）：审批只改变 PR 审批/状态投影，绝不创建 PO**——PR→PO Convert 是 PO 阶段显式动作；
+  // COMPLETED → status=APPROVED + approvalStatus=APPROVED；REJECTED → status=DRAFT（可重提）
+  if (
+    instance.businessType === 'purchase-requisition' &&
+    (result.afterStatus === 'COMPLETED' || result.afterStatus === 'REJECTED')
+  ) {
+    await syncPurchaseRequisitionApproval({
+      requisitionId: instance.businessId,
+      workflowStatus: result.afterStatus,
+      actorId: user!.id,
+    });
+  }
+
+  // Sprint 5A Phase 4B：PurchaseOrder 审批终态回写（Workflow 唯一审批事实源；不建 Approval 表）
+  // **红线（CTO Phase 4B 再次锁死）：审批只回写 approvalStatus=APPROVED + status=APPROVED，绝不自动 CONFIRMED**——
+  // 正式下单必须显式 POST /api/purchase-orders/{id}/confirm；只有 Confirmed PO 才是 5B GR 来源；
+  // REJECTED → status=DRAFT（可重提）
+  if (
+    instance.businessType === 'purchase-order' &&
+    (result.afterStatus === 'COMPLETED' || result.afterStatus === 'REJECTED')
+  ) {
+    await syncPurchaseOrderApproval({
+      purchaseOrderId: instance.businessId,
       workflowStatus: result.afterStatus,
       actorId: user!.id,
     });

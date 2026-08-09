@@ -4,6 +4,19 @@
 
 ## [Unreleased] - Sprint 4A + 4B + 4C + 4D + 4E-1 + 4E-2 + 4E-3（Quotation / Sales Order / Delivery / Invoice / Accounts Receivable / Receipt & Payment Allocation / Credit Note & Debit Note Foundation，2026-08-08，PR #12-#18 已合并，未打 Tag）
 
+### 新增（Sprint 5A：Purchase Requisition & Purchase Order Foundation，PR #19，待 CTO Final Review——CTO #6575 方案 A 重定义完整范围）
+
+- **采购领域事实源（设计拍板③/⑤）**：`PurchaseRequisition` = 需求事实源（**无金额字段**，只表达要什么/多少/何时/为何）；`PurchaseOrder` = 对供应商的采购承诺事实源（金额服务端 Decimal 聚合，禁客户端直传头金额）；PR→PO Convert 是复制投影、不修改 PR 事实；Supplier 主数据复用（Sprint 3C-1）不新建
+- **PO 生命周期锁死（拍板③）**：`DRAFT → SUBMITTED → APPROVED → CONFIRMED → PARTIALLY_RECEIVED → RECEIVED`；`DRAFT → CANCELLED`；**APPROVED ≠ CONFIRMED**（审批通过 = 公司内部同意采购；显式 `POST /confirm` = 正式形成对供应商的采购承诺；**只有 CONFIRMED PO 才是 5B Goods Receipt 唯一合法来源**——代码/OpenAPI/QA/文档四处一致）
+- **Schema/Migration（纯增量）**：Migration 0021（5 枚举 + 7 模型，0 DROP/RENAME/TRUNCATE）+ Migration 0022（**PurchaseOrderSnapshot 唯一约束修复** `[purchaseOrderId, snapshotType]` → `[purchaseOrderId, snapshotType, revisionNo]`——多轮审批快照不冲突；PO Header +**purchaserId/departmentId** 采购员/采购部门维度）
+- **双入口 + 溯源**：PO `sourceType = REQUISITION | DIRECT`（Direct 显式可审计、不能绕过 PO Approval）；行级 `sourcePurchaseRequisitionLineId`（REQUISITION 必填 + 服务端三条件校验 409 SOURCE_LINE_INVALID；DIRECT 强制禁止 400 SOURCE_LINE_FORBIDDEN）
+- **价格双通道（拍板③）**：`SUPPLIER_PRICE_SNAPSHOT`（PartnerPrice 服务端解析，未命中 409 PRICE_NOT_FOUND）｜`MANUAL`（unitPrice + priceReason + priceSetById/At 审计三件套）；税率快照复制；行金额/头金额服务端 Decimal 计算
+- **审批复用 Workflow（拍板①）**：ApprovalPolicy module=PURCHASE_REQUISITION / PURCHASE_ORDER 各自独立条件审批；单 WorkflowInstance 多轮重提（REJECTED 后复用同一实例重新 SUBMIT，对齐 SalesOrder/WriteOff 模式）；businessType=purchase-requisition/purchase-order 终态回写（COMPLETED→APPROVED，**永不自动 CONFIRMED**；REJECTED→DRAFT）；不建 Approval 表
+- **Submit / Confirm / Cancel（CTO Phase 4B）**：Submit 仅 DRAFT + 校验（≥1 行/qty>0/Supplier 有效/来源一致/金额重算一致），命中策略→PENDING、无策略→直接 APPROVED 投影（仍非 CONFIRMED）；Confirm 事务 FOR UPDATE 行锁 + 状态门禁（仅 APPROVED + approvalStatus=APPROVED）→ CONFIRMED + confirmedAt/ById + CONFIRMED Snapshot + Revision + 事件，**并发第二个 Confirm 稳定 409（幂等）**；Cancel DRAFT/APPROVED 可取消、SUBMITTED 409（先 Withdraw→DRAFT）、CONFIRMED+ 409 禁止（已形成外部承诺）
+- **并发/一致性门禁**：PATCH 原子 CAS（updateMany where {id, version, status} count===1 → 409 VERSION_CONFLICT）；Convert 事务 FOR UPDATE 行锁 + 重复转换 409 ALREADY_CONVERTED；revision/snapshot 变更留痕
+- **事件**：EVENTS.md v1.14 → v1.17，11 个采购事件全注册（含 PurchaseOrderConfirmed/Cancelled；GR/Supplier Invoice 事件 5B/5C 注册）
+- **文档**：OpenAPI +9 端点/+17 schemas（PR/PO 全生命周期 + 错误码；APPROVED≠CONFIRMED / Confirm 并发 / Snapshot 多轮 / 双来源链 / purchaserId/departmentId / 只有 CONFIRMED PO 才是 5B GR 来源 全部写清）；QA/Test Cases（PurchaseRequisition_API.md + PurchaseOrder_API.md）；ADR-0023 → Implemented；ROADMAP Sprint 5 🔄；AGENTS.md Verification Policy（禁止本地高资源验证，CI 为验证事实源）
+
 ### 新增（Sprint 4E-3：Credit Note / Debit Note Foundation，PR #18，已合并——CTO Final Review **99/100 APPROVE & MERGE**（Blocking 0），squash `675923c`）
 
 - **发票调整领域（调整事实源）**：CreditDebitNote / CreditDebitNoteLine / InvoiceAdjustment（+3 模型 / +2 枚举，迁移 `0020_credit_debit_note_foundation`，纯增量不改既有；DocumentType 复用 CREDIT_NOTE/DEBIT_NOTE——4D 已建，不重复新增）；**CN/DN = Invoice Adjustment 事实源**；**InvoiceAdjustment = 事实中间层（唯一修改 AR.adjustedAmount 的入口，客户端禁直接创建/编辑，只读）**

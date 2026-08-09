@@ -165,6 +165,7 @@ enum DocumentType {
   QUOTATION // 报价单
   SALES_ORDER // 销售订单 SO
   PURCHASE_ORDER // 采购订单 PO
+  PURCHASE_REQUISITION // 采购申请 PR（Sprint 5A 新增）
   PROFORMA_INVOICE // 形式发票 PI
   COMMERCIAL_INVOICE // 商业发票 CI
   DELIVERY_ORDER // 送货单 DO
@@ -193,6 +194,8 @@ model User {
   department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   roles        UserRole[]
   auditLogs    AuditLog[]
+  purchaseRequisitions PurchaseRequisition[] // 5A：采购申请（requesterId 方向）
+  purchaseOrders PurchaseOrder[] // 5A：采购订单（purchaserId 方向，采购员；CTO Phase 4B 指令）
   createdAt    DateTime    @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime    @updatedAt @db.Timestamptz(3)
 
@@ -209,6 +212,8 @@ model Department {
   parent    Department?  @relation("DepartmentTree", fields: [parentId], references: [id], onDelete: SetNull)
   children  Department[] @relation("DepartmentTree")
   users     User[]
+  purchaseRequisitions PurchaseRequisition[] // 5A：采购申请（departmentId 方向）
+  purchaseOrders PurchaseOrder[] // 5A：采购订单（departmentId 方向，采购部门；CTO Phase 4B 指令）
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
@@ -316,6 +321,8 @@ model UnitOfMeasure {
   deliveryLines   DeliveryLine[]
   invoiceLines    InvoiceLine[]
   creditDebitNoteLines CreditDebitNoteLine[] // 4E-3：调整单明细（CreditDebitNoteLine.uom 方向）
+  purchaseRequisitionLines PurchaseRequisitionLine[] // 5A：采购申请行（PurchaseRequisitionLine.uom 方向）
+  purchaseOrderLines PurchaseOrderLine[] // 5A：采购订单行（PurchaseOrderLine.uom 方向）
   createdAt     DateTime @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 
@@ -395,6 +402,8 @@ model Item {
   deliveryLines   DeliveryLine[]
   invoiceLines    InvoiceLine[]
   creditDebitNoteLines CreditDebitNoteLine[] // 4E-3：调整单明细（CreditDebitNoteLine.item 方向）
+  purchaseRequisitionLines PurchaseRequisitionLine[] // 5A：采购申请行（PurchaseRequisitionLine.item 方向）
+  purchaseOrderLines PurchaseOrderLine[] // 5A：采购订单行（PurchaseOrderLine.item 方向）
   createdAt     DateTime        @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime        @updatedAt @db.Timestamptz(3)
 
@@ -704,6 +713,8 @@ model PartnerPrice {
   deletedAt        DateTime?
   createdAt        DateTime      @default(now()) @db.Timestamptz(3)
   updatedAt        DateTime      @updatedAt @db.Timestamptz(3)
+
+  purchaseOrderLines PurchaseOrderLine[] // 5A：PO 行价格快照来源（SUPPLIER_PRICE_SNAPSHOT 时引用 PartnerPrice）
 
   @@index([partnerId])
   @@index([itemId])
@@ -1595,6 +1606,8 @@ model WorkflowInstance {
   invoices     Invoice[]
   writeOffs    WriteOff[] // 4E-2：写销审批（Workflow 唯一审批事实源）
   creditDebitNotes CreditDebitNote[] // 4E-3：CN/DN 审批（Workflow 唯一审批事实源）
+  purchaseRequisitions PurchaseRequisition[] // 5A：采购申请审批（Workflow 唯一审批事实源）
+  purchaseOrders PurchaseOrder[] // 5A：采购订单审批（Workflow 唯一审批事实源）
   isActive     Boolean         @default(true)
   createdById  String?
   updatedById  String?
@@ -2810,6 +2823,7 @@ model Supplier {
   qualifications SupplierQualification[]
   certificates  SupplierCertificate[]
   settlements   SupplierSettlement[]
+  purchaseOrders PurchaseOrder[] // 5A：采购订单（PurchaseOrder.supplierId 方向）
   isActive      Boolean  @default(true)
   createdById   String?
   updatedById   String?
@@ -4393,5 +4407,298 @@ model InvoiceAdjustment {
   @@index([invoiceId])
   @@index([invoiceLineId])
   @@index([accountsReceivableId])
+  @@index([deletedAt])
+}
+
+// ============================================================================
+// Sprint 5A - Purchase Requisition & Purchase Order Foundation（采购域，CTO Design Review 97/100 APPROVED WITH CHANGES 2026-08-09）
+// ============================================================================
+
+/// 采购申请状态（PR 生命周期；审批状态走 approvalStatus 投影复用 ApprovalStatus——不膨胀）
+enum PurchaseRequisitionStatus {
+  DRAFT              // 草稿（创建后初始态，可编辑行）
+  SUBMITTED          // 已提交审批（命中策略触发 Workflow）
+  APPROVED           // 审批通过（投影；PR APPROVED 才能转 PO）
+  CONVERTED          // 已转 PO（PR → PO 转单后投影，不改 PR 数量/金额事实）
+  CANCELLED          // 已取消（DRAFT/SUBMITTED 可取消）
+}
+
+/// 采购订单状态（CTO 拍板调整③锁死：APPROVED ≠ CONFIRMED；只有 Confirmed PO 才是 5B GR 来源）
+enum PurchaseOrderStatus {
+  DRAFT              // 草稿（创建后初始态，可编辑行）
+  SUBMITTED          // 已提交审批
+  APPROVED           // 审批通过（内部批准投影）
+  CONFIRMED          // 正式下单给供应商（确认动作；APPROVED → CONFIRMED）
+  PARTIALLY_RECEIVED // 部分收货（5B GR 聚合投影）
+  RECEIVED           // 已全部收货（5B GR 聚合投影）
+  CANCELLED          // 已取消（DRAFT 可取消）
+}
+
+/// PO 快照类型（仅固化节点生成；含 CONFIRMED 定稿快照）
+enum PurchaseOrderSnapshotType {
+  CREATED
+  SUBMITTED
+  APPROVED
+  CONFIRMED
+  RECEIVED
+  CANCELLED
+}
+
+/// PO 创建来源（CTO 拍板②：Direct Purchase 显式可审计）
+enum PurchaseOrderSourceType {
+  REQUISITION        // PR Convert（line 保留 sourcePurchaseRequisitionLineId）
+  DIRECT             // 直接采购（来源字段为空；不能绕过 PO Approval）
+}
+
+/// PO 行价格来源（CTO 拍板③：双通道；MANUAL 必须记录 priceReason/priceSetById/priceSetAt）
+enum PurchaseOrderPriceSource {
+  SUPPLIER_PRICE_SNAPSHOT // Supplier 价格快照（PartnerPrice priceSource=SUPPLIER）复制，优先
+  MANUAL                   // 授权手工录入（审计留痕）
+}
+
+/// 采购申请头（PR = 需求事实源：表达"需要什么、多少、何时要"，非供应商交互单据；**不带任何金额事实**——CTO 拍板⑤）
+model PurchaseRequisition {
+  id           String   @id @default(cuid())
+  code         String   @unique // 单据编号（DocumentSequence docType=PURCHASE_REQUISITION，如 PR-2026-0001）
+  requesterId  String?  // 申请人
+  requester    User?    @relation(fields: [requesterId], references: [id], onDelete: SetNull)
+  departmentId String?  // 申请部门
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  status       PurchaseRequisitionStatus @default(DRAFT)
+  needDate     DateTime? @db.Timestamptz(3) // 期望需求日期
+  remark       String?
+  // 审批投影（Workflow 唯一事实源，仅查询投影）
+  workflowInstanceId String?
+  workflowInstance WorkflowInstance? @relation(fields: [workflowInstanceId], references: [id], onDelete: SetNull)
+  approvedAt    DateTime? @db.Timestamptz(3)
+  approvedById  String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  lines     PurchaseRequisitionLine[]
+  revisions PurchaseRequisitionRevision[]
+  purchaseOrders PurchaseOrder[] // 5A：PO（PurchaseOrder.requisitionId 方向；可空=Direct）
+
+  @@index([code])
+  @@index([requesterId])
+  @@index([departmentId])
+  @@index([status])
+  @@index([workflowInstanceId])
+  @@index([deletedAt])
+}
+
+/// 采购申请行（纯需求；**无任何金额事实字段**——CTO 拍板⑤；suggestedUnitPrice 不带入）
+model PurchaseRequisitionLine {
+  id           String   @id @default(cuid())
+  purchaseRequisitionId String
+  purchaseRequisition PurchaseRequisition @relation(fields: [purchaseRequisitionId], references: [id], onDelete: Cascade)
+  lineNo       Int      @default(10) // 行号（10/20/30/40 步进）
+  itemId       String?
+  item         Item?    @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  description  String   // 需求描述
+  quantity     Decimal  @db.Decimal(18, 4) // 需求数量（正数；防超转由 5A convert 校验）
+  uomId        String?
+  uom          UnitOfMeasure? @relation(fields: [uomId], references: [id], onDelete: SetNull)
+  needDate     DateTime? @db.Timestamptz(3) // 行级需求日期
+  remark       String?
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  purchaseOrderLines PurchaseOrderLine[] // 5A：PO 行溯源（sourcePurchaseRequisitionLineId；Direct 为空）
+
+  @@unique([purchaseRequisitionId, lineNo])
+  @@index([purchaseRequisitionId])
+  @@index([itemId])
+  @@index([deletedAt])
+}
+
+/// 采购申请修订（PR 仅 Revision，**无 Snapshot**——CTO 拍板⑥；PR 无财务事实，快照价值低）
+model PurchaseRequisitionRevision {
+  id           String   @id @default(cuid())
+  purchaseRequisitionId String
+  purchaseRequisition PurchaseRequisition @relation(fields: [purchaseRequisitionId], references: [id], onDelete: Cascade)
+  revisionNo   Int      // 版本号（1,2,3...）
+  changeReason String   // 变更原因
+  snapshotData Json?    // 变更前快照（Header + Lines 集合）
+  createdById  String?
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([purchaseRequisitionId, revisionNo])
+  @@index([purchaseRequisitionId])
+  @@index([deletedAt])
+}
+
+/// 采购订单头（PO = 采购承诺事实源；**sourceType=REQUISITION|DIRECT**（拍板②）；金额事实=服务端 Σ 行快照；**APPROVED ≠ CONFIRMED**）
+model PurchaseOrder {
+  id           String   @id @default(cuid())
+  code         String   @unique // 单据编号（DocumentSequence docType=PURCHASE_ORDER，如 PO-2026-0001）
+  sourceType   PurchaseOrderSourceType // REQUISITION | DIRECT（CTO 拍板②：Direct 显式可审计）
+  supplierId   String
+  supplier     Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  purchaserId  String? // 采购员（CTO Phase 4B 指令：PO Header 落地，Direct 无 PR 时无法从 requester 推导）
+  purchaser    User?    @relation(fields: [purchaserId], references: [id], onDelete: SetNull)
+  departmentId String? // 采购部门（CTO Phase 4B 指令：PO Header 落地）
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  requisitionId String? // 溯源（REQUISITION 必填 / DIRECT 为空）
+  requisition  PurchaseRequisition? @relation(fields: [requisitionId], references: [id], onDelete: SetNull)
+  status       PurchaseOrderStatus @default(DRAFT)
+  orderDate    DateTime @default(now()) @db.Timestamptz(3) // 下单日期
+  expectedDeliveryDate DateTime? @db.Timestamptz(3) // 期望交期
+  currency     String   @default("CNY")
+  paymentTerm  String?  // 付款条款（NET30/TT/LC...）
+  subtotal     Decimal  @default(0) @db.Decimal(18, 4) // 未税合计（服务端 Σ 行，禁客户端直传）
+  taxAmount    Decimal  @default(0) @db.Decimal(18, 4) // 税额
+  totalAmount  Decimal  @default(0) @db.Decimal(18, 4) // 含税合计（服务端聚合）
+  remark       String?
+  // 审批投影（Workflow 唯一事实源）
+  workflowInstanceId String?
+  workflowInstance WorkflowInstance? @relation(fields: [workflowInstanceId], references: [id], onDelete: SetNull)
+  approvedAt    DateTime? @db.Timestamptz(3)
+  approvedById  String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  // CONFIRMED 投影（拍板③：APPROVED ≠ CONFIRMED；只有 Confirmed PO 才是 5B GR 来源）
+  confirmedAt   DateTime? @db.Timestamptz(3)
+  confirmedById String?
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  lines     PurchaseOrderLine[]
+  revisions PurchaseOrderRevision[]
+  snapshots PurchaseOrderSnapshot[]
+
+  @@index([code])
+  @@index([supplierId])
+  @@index([purchaserId])
+  @@index([departmentId])
+  @@index([requisitionId])
+  @@index([status])
+  @@index([workflowInstanceId])
+  @@index([deletedAt])
+}
+
+/// 采购订单行（价格双通道快照；PR Convert line 保留 sourcePurchaseRequisitionLineId；receivedQty/remainingReceiveQty 预留 5B 回写）
+model PurchaseOrderLine {
+  id           String   @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  sourcePurchaseRequisitionLineId String? // PR 转 PO 保留；Direct 为空（CTO 拍板②）
+  sourcePurchaseRequisitionLine PurchaseRequisitionLine? @relation(fields: [sourcePurchaseRequisitionLineId], references: [id], onDelete: SetNull)
+  lineNo       Int      @default(10) // 行号（10/20/30/40 步进）
+  itemId       String?
+  item         Item?    @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  description  String   // 描述（快照）
+  quantity     Decimal  @db.Decimal(18, 4) // 采购数量
+  uomId        String?
+  uom          UnitOfMeasure? @relation(fields: [uomId], references: [id], onDelete: SetNull)
+  priceSource  PurchaseOrderPriceSource @default(SUPPLIER_PRICE_SNAPSHOT) // 双通道（CTO 拍板③）
+  sourcePartnerPriceId String? // SUPPLIER_PRICE_SNAPSHOT 时引用供应商价格（可追溯）
+  sourcePartnerPrice PartnerPrice? @relation(fields: [sourcePartnerPriceId], references: [id], onDelete: SetNull)
+  unitPrice    Decimal  @db.Decimal(18, 4) // 单价快照（不重算、不调 Pricing Engine）
+  // MANUAL 审计留痕（CTO 拍板③：Manual 必须记录 priceReason / actor / audit）
+  priceReason  String?
+  priceSetById String?
+  priceSetAt   DateTime? @db.Timestamptz(3)
+  discountRate Decimal  @default(0) @db.Decimal(18, 4)
+  taxRate      Decimal  @db.Decimal(18, 4) // 税率快照（拍板④：税档变化不影响已 APPROVED PO）
+  lineAmount   Decimal  @db.Decimal(18, 4) // 行未税金额
+  taxAmount    Decimal  @db.Decimal(18, 4) // 行税额
+  totalAmount  Decimal  @db.Decimal(18, 4) // 行含税金额
+  // 收货投影（5B GR 聚合回写，只读；**5A 禁止客户端修改，5B 才是唯一回写方**——拍板调整③）
+  receivedQty  Decimal  @default(0) @db.Decimal(18, 4) // 已收货量（5B 累计）
+  remainingReceiveQty Decimal @db.Decimal(18, 4) // 剩余可收量 = quantity - receivedQty（创建时服务端初始化=quantity）
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([purchaseOrderId, lineNo])
+  @@index([purchaseOrderId])
+  @@index([sourcePurchaseRequisitionLineId])
+  @@index([itemId])
+  @@index([sourcePartnerPriceId])
+  @@index([deletedAt])
+}
+
+/// 采购订单修订（系统生成，不开放自由编辑；财务/承诺字段变更触发重审——拍板⑦）
+model PurchaseOrderRevision {
+  id           String   @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  revisionNo   Int      // 版本号（1,2,3...）
+  revisionStatus String  @default("DRAFT") // DRAFT/SUBMITTED/APPROVED/SUPERSEDED（简化：String，不建专属枚举）
+  changeReason String   // 变更原因
+  snapshotData Json?    // 变更前快照（Header + Lines 集合）
+  createdById  String?
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([purchaseOrderId, revisionNo])
+  @@index([purchaseOrderId])
+  @@index([deletedAt])
+}
+
+/// 采购订单快照（仅固化节点生成，只读；金额统一 Decimal 字符串保存，禁止 toNumber()）
+model PurchaseOrderSnapshot {
+  id           String   @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  snapshotType PurchaseOrderSnapshotType
+  revisionNo   Int      // 快照对应的修订号
+  snapshotData Json?    // 完整快照（Header + Lines + 价格来源 priceSource/sourcePartnerPriceId）
+  generatedById String?
+  generatedAt  DateTime @default(now()) @db.Timestamptz(3)
+  // 统一审计字段
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT)
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([purchaseOrderId, snapshotType, revisionNo])
+  @@index([purchaseOrderId])
   @@index([deletedAt])
 }
