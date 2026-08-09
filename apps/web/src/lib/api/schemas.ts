@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 /**
  * Sprint 3A - 统一 Zod Schemas（平台 API）
@@ -9,10 +9,20 @@ import { z } from "zod";
 // Workflow Definition（第一批）
 // ============================================================================
 
-export const workflowStatusSchema = z.enum(["DRAFT", "ACTIVE", "ARCHIVED"]);
-export const approvalModeSchema = z.enum(["SEQUENTIAL", "PARALLEL", "ANY_ONE", "COUNTERSIGN"]);
-export const approverTypeSchema = z.enum(["USER", "ROLE", "DEPARTMENT", "APPROVER_GROUP"]);
-export const conditionOperatorSchema = z.enum(["EQ", "NEQ", "GT", "GTE", "LT", "LTE", "IN", "NOT_IN", "CONTAINS"]);
+export const workflowStatusSchema = z.enum(['DRAFT', 'ACTIVE', 'ARCHIVED']);
+export const approvalModeSchema = z.enum(['SEQUENTIAL', 'PARALLEL', 'ANY_ONE', 'COUNTERSIGN']);
+export const approverTypeSchema = z.enum(['USER', 'ROLE', 'DEPARTMENT', 'APPROVER_GROUP']);
+export const conditionOperatorSchema = z.enum([
+  'EQ',
+  'NEQ',
+  'GT',
+  'GTE',
+  'LT',
+  'LTE',
+  'IN',
+  'NOT_IN',
+  'CONTAINS',
+]);
 
 export const workflowConditionSchema = z.object({
   expression: z.string().max(200).optional(),
@@ -26,7 +36,7 @@ export const workflowStepSchema = z.object({
   stepName: z.string().min(1).max(100),
   approverType: approverTypeSchema,
   approverValue: z.string().min(1).max(100).optional(),
-  approvalMode: approvalModeSchema.default("SEQUENTIAL"),
+  approvalMode: approvalModeSchema.default('SEQUENTIAL'),
   timeoutHours: z.number().int().positive().optional(),
   allowReject: z.boolean().default(true),
   allowTransfer: z.boolean().default(false),
@@ -40,11 +50,11 @@ export const workflowDefinitionCreateSchema = z.object({
     .string()
     .min(2)
     .max(64)
-    .regex(/^[A-Z0-9_]+$/, "Code 仅允许大写字母、数字、下划线"),
+    .regex(/^[A-Z0-9_]+$/, 'Code 仅允许大写字母、数字、下划线'),
   name: z.string().min(1).max(100),
   module: z.string().min(1).max(50),
   description: z.string().max(500).optional(),
-  steps: z.array(workflowStepSchema).min(1, "至少需要一个步骤"),
+  steps: z.array(workflowStepSchema).min(1, '至少需要一个步骤'),
 });
 
 export const workflowDefinitionUpdateSchema = workflowDefinitionCreateSchema
@@ -55,17 +65,23 @@ export const workflowDefinitionUpdateSchema = workflowDefinitionCreateSchema
 // Workflow Instance（第二批）
 // ============================================================================
 
-export const workflowInstanceStatusSchema = z.enum(["RUNNING", "COMPLETED", "REJECTED", "TERMINATED", "WITHDRAWN"]);
+export const workflowInstanceStatusSchema = z.enum([
+  'RUNNING',
+  'COMPLETED',
+  'REJECTED',
+  'TERMINATED',
+  'WITHDRAWN',
+]);
 export const workflowActionTypeSchema = z.enum([
-  "SUBMIT",
-  "APPROVE",
-  "REJECT",
-  "RETURN",
-  "TRANSFER",
-  "DELEGATE",
-  "WITHDRAW",
-  "TERMINATE",
-  "COMMENT",
+  'SUBMIT',
+  'APPROVE',
+  'REJECT',
+  'RETURN',
+  'TRANSFER',
+  'DELEGATE',
+  'WITHDRAW',
+  'TERMINATE',
+  'COMMENT',
 ]);
 
 export const workflowInstanceCreateSchema = z.object({
@@ -92,7 +108,7 @@ export const approverGroupCreateSchema = z.object({
     .string()
     .min(2)
     .max(64)
-    .regex(/^[A-Z0-9_]+$/, "Code 仅允许大写字母、数字、下划线"),
+    .regex(/^[A-Z0-9_]+$/, 'Code 仅允许大写字母、数字、下划线'),
   name: z.string().min(1).max(100),
   description: z.string().max(500).optional(),
   memberUserIds: z.array(z.string().min(1)).default([]),
@@ -106,7 +122,7 @@ export const dictionaryTypeCreateSchema = z.object({
   code: z.string().min(2).max(64),
   name: z.string().min(1).max(100),
   category: z.string().max(50).optional(),
-  language: z.string().max(20).default("zh-CN"),
+  language: z.string().max(20).default('zh-CN'),
   sort: z.number().int().default(0),
   icon: z.string().max(100).optional(),
   color: z.string().max(20).optional(),
@@ -130,8 +146,8 @@ export const dictionaryItemUpdateSchema = dictionaryItemCreateSchema.partial().e
   version: z.number().int().positive(),
 });
 
-export const settingScopeSchema = z.enum(["SYSTEM", "TENANT", "USER"]);
-export const settingDataTypeSchema = z.enum(["STRING", "NUMBER", "BOOLEAN", "JSON", "SECRET"]);
+export const settingScopeSchema = z.enum(['SYSTEM', 'TENANT', 'USER']);
+export const settingDataTypeSchema = z.enum(['STRING', 'NUMBER', 'BOOLEAN', 'JSON', 'SECRET']);
 
 export const settingCreateSchema = z.object({
   scope: settingScopeSchema,
@@ -139,7 +155,7 @@ export const settingCreateSchema = z.object({
   userId: z.string().min(1).optional(), // scope=USER 必填
   key: z.string().min(1).max(100),
   value: z.string().max(4000).optional(),
-  dataType: settingDataTypeSchema.default("STRING"),
+  dataType: settingDataTypeSchema.default('STRING'),
   encrypted: z.boolean().default(false),
   description: z.string().max(500).optional(),
 });
@@ -148,12 +164,19 @@ export const settingUpdateSchema = settingCreateSchema.partial().extend({
   version: z.number().int().positive(),
 });
 
-export const notificationChannelTypeSchema = z.enum(["SYSTEM", "EMAIL", "TELEGRAM", "WEBHOOK", "WECHAT", "DINGTALK"]);
+export const notificationChannelTypeSchema = z.enum([
+  'SYSTEM',
+  'EMAIL',
+  'TELEGRAM',
+  'WEBHOOK',
+  'WECHAT',
+  'DINGTALK',
+]);
 
 export const notificationTemplateCreateSchema = z.object({
   code: z.string().min(2).max(64),
   name: z.string().min(1).max(100),
-  channel: notificationChannelTypeSchema.default("SYSTEM"),
+  channel: notificationChannelTypeSchema.default('SYSTEM'),
   subject: z.string().max(200).optional(),
   content: z.string().min(1).max(4000),
 });
@@ -178,12 +201,12 @@ export const quotationCreateSchema = z.object({
   customerId: z.string().min(1),
   opportunityId: z.string().min(1).nullable().optional(),
   projectId: z.string().min(1).nullable().optional(),
-  currency: z.string().max(10).default("CNY"),
+  currency: z.string().max(10).default('CNY'),
   validFrom: z.string().datetime().nullable().optional(),
   validUntil: z.string().datetime().nullable().optional(),
   taxProfileId: z.string().min(1).nullable().optional(),
   remark: z.string().max(1000).nullable().optional(),
-  lines: z.array(quotationLineCreateSchema).min(1, "至少需要一行"),
+  lines: z.array(quotationLineCreateSchema).min(1, '至少需要一行'),
 });
 
 export const quotationUpdateSchema = z
@@ -195,7 +218,7 @@ export const quotationUpdateSchema = z
     changeReason: z.string().max(500).optional(),
     version: z.number().int().positive(),
   })
-  .refine((v) => Object.keys(v).length > 1, { message: "至少提供一个更新字段" });
+  .refine((v) => Object.keys(v).length > 1, { message: '至少提供一个更新字段' });
 
 export const quotationLineUpdateSchema = z
   .object({
@@ -206,7 +229,7 @@ export const quotationLineUpdateSchema = z
     changeReason: z.string().max(500).optional(),
     version: z.number().int().positive(),
   })
-  .refine((v) => Object.keys(v).length > 1, { message: "至少提供一个更新字段" });
+  .refine((v) => Object.keys(v).length > 1, { message: '至少提供一个更新字段' });
 
 export const quotationRevisionCreateSchema = z.object({
   changeReason: z.string().min(1).max(500),
@@ -226,7 +249,7 @@ export const salesOrderUpdateSchema = z
     changeReason: z.string().max(500).optional(),
     version: z.number().int().positive(),
   })
-  .refine((v) => Object.keys(v).length > 1, { message: "至少提供一个更新字段" });
+  .refine((v) => Object.keys(v).length > 1, { message: '至少提供一个更新字段' });
 
 /** 行更新：允许改描述/数量/UOM/行号；禁止 unitPrice（价格字段不得前端直接写入） */
 export const salesOrderLineUpdateSchema = z
@@ -238,7 +261,7 @@ export const salesOrderLineUpdateSchema = z
     changeReason: z.string().max(500).optional(),
     version: z.number().int().positive(),
   })
-  .refine((v) => Object.keys(v).length > 1, { message: "至少提供一个更新字段" });
+  .refine((v) => Object.keys(v).length > 1, { message: '至少提供一个更新字段' });
 
 export const salesOrderRevisionCreateSchema = z.object({
   changeReason: z.string().min(1).max(500),
@@ -278,7 +301,7 @@ export const deliveryUpdateSchema = z
     changeReason: z.string().max(500).optional(),
     version: z.number().int().positive(),
   })
-  .refine((v) => Object.keys(v).length > 1, { message: "至少提供一个更新字段" });
+  .refine((v) => Object.keys(v).length > 1, { message: '至少提供一个更新字段' });
 
 /** 行更新：仅 DRAFT 可编辑；quantity 变更必须过 availableQty 动态校验（防超交） */
 export const deliveryLineUpdateSchema = z
@@ -290,7 +313,7 @@ export const deliveryLineUpdateSchema = z
     changeReason: z.string().max(500).optional(),
     version: z.number().int().positive(),
   })
-  .refine((v) => Object.keys(v).length > 1, { message: "至少提供一个更新字段" });
+  .refine((v) => Object.keys(v).length > 1, { message: '至少提供一个更新字段' });
 
 /** ready：无业务字段，仅可选变更原因 */
 export const deliveryReadySchema = z.object({
@@ -307,7 +330,7 @@ export const deliveryDispatchSchema = z.object({
 
 /** confirm-delivery：POD 门禁（podStatus ∈ {RECEIVED, WAIVED}，否则 409）；RECEIVED 时回填签收投影 */
 export const deliveryConfirmSchema = z.object({
-  podStatus: z.enum(["RECEIVED", "WAIVED"]).optional(),
+  podStatus: z.enum(['RECEIVED', 'WAIVED']).optional(),
   podReceivedAt: z.string().datetime().optional(),
   changeReason: z.string().max(500).optional(),
 });
@@ -353,7 +376,7 @@ export const invoiceUpdateSchema = z
     changeReason: z.string().max(500).optional(),
     version: z.number().int().positive(),
   })
-  .refine((v) => Object.keys(v).length > 1, { message: "至少提供一个更新字段" });
+  .refine((v) => Object.keys(v).length > 1, { message: '至少提供一个更新字段' });
 
 // ============================================================================
 // Receipt / Payment Allocation（Sprint 4E-2）
@@ -365,10 +388,10 @@ export const invoiceUpdateSchema = z
  */
 export const receiptCreateSchema = z.object({
   customerId: z.string().min(1),
-  currency: z.string().min(3).max(3).default("CNY"),
+  currency: z.string().min(3).max(3).default('CNY'),
   amount: z.coerce.number().positive(),
   receiptDate: z.string().datetime().optional(),
-  paymentMethod: z.enum(["BANK_TRANSFER", "CHEQUE", "CASH", "CARD", "OTHER"]),
+  paymentMethod: z.enum(['BANK_TRANSFER', 'CHEQUE', 'CASH', 'CARD', 'OTHER']),
   referenceNo: z.string().max(100).nullable().optional(),
   changeReason: z.string().max(500).optional(),
 });
@@ -447,7 +470,7 @@ export const writeOffApplySchema = z.object({
  * **不创建 InvoiceAdjustment、不改 AR、不改 Invoice.balanceAmount**（事实由 Apply 事务生成）
  */
 export const creditDebitNoteCreateSchema = z.object({
-  noteType: z.enum(["CREDIT", "DEBIT"]), // CREDIT 负向调整 / DEBIT 正向调整（符号口径在 Apply 落 InvoiceAdjustment）
+  noteType: z.enum(['CREDIT', 'DEBIT']), // CREDIT 负向调整 / DEBIT 正向调整（符号口径在 Apply 落 InvoiceAdjustment）
   sourceInvoiceId: z.string().min(1),
   reason: z.string().min(1).max(500),
   lines: z
@@ -472,3 +495,37 @@ export const creditDebitNoteSubmitSchema = z.object({
 export const creditDebitNoteApplySchema = z.object({
   changeReason: z.string().max(500).optional(),
 });
+
+// ============================================================================
+// Sprint 5A：Purchase Requisition（Phase 3 PR API；PO API 冻结）
+// 红线：PR Header/Line 不得出现金额/单价/税额（需求事实源）；Line quantity 必须 > 0
+// ============================================================================
+
+export const purchaseRequisitionLineCreateSchema = z.object({
+  itemId: z.string().min(1),
+  description: z.string().max(500).optional(),
+  quantity: z.coerce.number().positive(), // 需求数量 > 0（服务端 Decimal 精确校验）
+  uomId: z.string().min(1).optional(),
+  lineNo: z.number().int().positive().optional(),
+  needDate: z.string().datetime().nullable().optional(),
+  remark: z.string().max(500).nullable().optional(),
+});
+
+export const purchaseRequisitionCreateSchema = z.object({
+  requesterId: z.string().min(1).nullable().optional(),
+  departmentId: z.string().min(1).nullable().optional(),
+  needDate: z.string().datetime().nullable().optional(),
+  remark: z.string().max(1000).nullable().optional(),
+  lines: z.array(purchaseRequisitionLineCreateSchema).min(1, '至少需要一行'),
+});
+
+/** PR 头更新 + 可选行全量替换（Line 不作为独立业务入口 → 行修改经 PATCH /{id} 整体替换；仅 DRAFT） */
+export const purchaseRequisitionUpdateSchema = z
+  .object({
+    needDate: z.string().datetime().nullable().optional(),
+    remark: z.string().max(1000).nullable().optional(),
+    lines: z.array(purchaseRequisitionLineCreateSchema).optional(),
+    changeReason: z.string().max(500).optional(),
+    version: z.number().int().positive(),
+  })
+  .refine((v) => Object.keys(v).length > 1, { message: '至少提供一个更新字段' });
