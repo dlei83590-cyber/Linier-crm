@@ -44,7 +44,7 @@ CTO #6680 要求先把 5 个业务事实边界拍死：**到货、收货、验�
 | 触发方 | 仓库/收货员（线下验单 → 系统录入） |
 | 事实属性 | 供应商实际送达的数量（**物理到货事实 arrivedQty**，可小于、等于或大于 PO 订购数量——超收是独立问题，见 §7）；**只保留收货现场事实**：quantity / visibleDamageQty / rejectedOnReceiptQty / remark |
 | 与库存关系 | **不直接产生库存增加**；更新 PO Line 收货投影（**receivedQty = 已被采购履约接受、可冲减 PO 未交数量的累计数量——当场拒收 rejectedOnReceiptQty 不计入**，Blocking ②） |
-| 关键约束 | 来源必须是 CONFIRMED（或已部分收货）PO；无 Direct GR（对齐无 Direct Delivery 锁定项）；**不承载 QC 事实**（Blocking ③，质量判定归 Inspection） |
+| 关键约束 | 来源门禁（D2）：`CONFIRMED`→可收；`PARTIALLY_RECEIVED`→可继续收；**`RECEIVED`→禁止普通新增收货**（D9，需 Reopen/Amendment/Approved Over-Receipt Exception）；`DRAFT/SUBMITTED/APPROVED/CANCELLED`→拒绝；无 Direct GR（对齐无 Direct Delivery 锁定项）；**不承载 QC 事实**（Blocking ③，质量判定归 Inspection） |
 
 ### 2.2 验收 / 质检（Inspection / QC）——质量合格事实
 
@@ -74,7 +74,9 @@ CTO #6680 要求先把 5 个业务事实边界拍死：**到货、收货、验�
 | 触发方 | 采购/项目侧标记 + 收货确认 |
 | 事实链 | `PO CONFIRMED → PurchaseReceipt / Inspection → Direct Delivery → 不进入 Warehouse Stock` |
 | 与库存关系 | 不产生 InventoryMovement(IN)；消费/领用由项目侧另行记录（6D 或项目成本） |
-| 关键约束 | **Line 级**（P4 Final）；**PO Line 预先声明**，Receipt 只能确认/补充，**不得静默改变采购履约类型**；直送判定与字段见 Field Matrix |
+| **履约类型** | **`fulfillmentType = WAREHOUSE \| DIRECT_PROJECT`（P4 Final，非简单 boolean）**——在 **PO Line 预先声明**，Confirm PO 时已明确入仓还是直送；PurchaseReceipt 只记录实际执行结果，**不得在到货时把原本"入仓"改成"直送"** |
+| 直送字段 | Direct 至少保存：`projectId / deliveryAddress（site）/ receiver / receivedBy / receivedAt / proof（attachment reference）` |
+| 关键约束 | **Line 级**（P4 Final）；直送 = 有 PurchaseReceipt、**无 WarehouseReceipt**、无 InventoryMovement(IN) |
 
 ### 2.5 采购退货（Purchase Return）——独立退货事实
 
@@ -194,8 +196,9 @@ Stock Projection（库存余额投影，任何模块不得直接改）
 | --- | --- |
 | **不直接写库存** | 5B 任何模型/API **不得**直接修改 Stock 余额字段（`stock.qty += x` 禁止） |
 | 触发事实 | **WarehouseReceipt（采购入库事实）= 应产生库存动作的业务事实** |
+| **Created ≠ Posted（D10）** | **WarehouseReceipt 创建（Created）只是草稿/登记态，不触发任何库存动作；只有 Posted（过账/确认）才触发 InventoryMovement(IN)** |
 | 库存唯一事实源 | 只有 Sprint 6A 的 `InventoryMovement(IN)` 才能改变 Stock Projection |
-| 5B-6A 衔接 | WarehouseReceipt 事实落库后，5B 发布事件（如 `WarehouseReceiptCreated`），6A 消费并生成 InventoryMovement(IN)；或 6A 实现时 WarehouseReceipt 直接驱动 Movement（实现细节 Gate 后定） |
+| 5B-6A 衔接 | WarehouseReceipt **Posted** 后 5B 发布事件（如 `WarehouseReceiptPosted`），6A 消费并生成 InventoryMovement(IN)；或 6A 实现时 WarehouseReceipt Posted 直接驱动 Movement（实现细节 Gate 后定） |
 | 投影 | PO Line receivedQty/remainingReceiveQty 的"已收"口径由 5B 收货层回写（**这是允许的投影**，不是库存） |
 
 ## 10. 采购退货（Purchase Return）设计草案

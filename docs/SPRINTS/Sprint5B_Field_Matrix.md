@@ -75,7 +75,9 @@
 | purchaseReceiptId | 来源收货单 | FK → PurchaseReceipt | 可多次入库（部分入库） |
 | warehouseId | 入库仓库 | FK → Warehouse（**5B 建最小主数据**，P8 Final） | 必填 |
 | locationId 🔶 | 库位 | FK → Location（可空） | **P8** 剩余子项：库位是否必填 |
-| status | 入库单状态 | 草案：`DRAFT / STOCKED / CANCELLED` | |
+| status | 入库单状态 | 草案：`DRAFT / POSTED / CANCELLED`（**Created ≠ Posted，D10**） | **只有 POSTED 才触发 InventoryMovement(IN)**；DRAFT 只是草稿/登记态 |
+| postedAt | 过账时间（D10） | date-time | 触发库存动作的生效点 |
+| postedById | 过账人（D10） | FK → User | |
 | stockedAt | 入库时间 | date-time | |
 | stockedById | 仓管员 | FK → User | |
 | createdById / updatedById | 审计 | FK → User | |
@@ -101,15 +103,19 @@
 
 ---
 
-## 4. Direct Delivery（直送）标记（P4 Final：Line 级，PO Line 预先声明）
+## 4. Direct Delivery（直送）标记（P4 Final：Line 级 + fulfillmentType，PO Line 预先声明）
 
 | 字段（草案） | 语义 | 类型/约束草案 | 备注 |
 | --- | --- | --- | --- |
-| isDirectDelivery | 是否直送 | boolean，默认 false | **Line 级**（P4 Final）；在 PO Line 预先声明 |
-| projectId 🔶 | 直送项目/使用地点 | FK → Project（可空） | **P4** 剩余子项：字段确认 |
-| deliveryAddress 🔶 | 直送地址 | string | **P4** 剩余子项：字段确认 |
+| fulfillmentType | **履约类型（P4 Final，非简单 boolean）** | 枚举：`WAREHOUSE \| DIRECT_PROJECT` | 在 **PO Line 预先声明**；Confirm PO 时已明确入仓还是直送 |
+| projectId 🔶 | 直送项目/使用地点 | FK → Project（可空） | Direct 必填 |
+| deliveryAddress 🔶 | 直送地址 / site | string | Direct 必填 |
+| receiver 🔶 | 现场接收人 | string | Direct 必填 |
+| receivedBy | 确认收货人 | FK → User | Direct 必填 |
+| receivedAt | 现场收货时间 | date-time | Direct 必填 |
+| proof 🔶 | 签收证明 / attachment reference | string | Direct 必填 |
 
-> 直送 = 有 PurchaseReceipt、**无 WarehouseReceipt**；不产生 InventoryMovement(IN)。**Receipt 只能确认/补充 PO Line 已声明的直送，不得静默改变采购履约类型**（P4 Final）。
+> 直送 = 有 PurchaseReceipt、**无 WarehouseReceipt**；不产生 InventoryMovement(IN)。**PO Line 在 Confirm 时已声明 fulfillmentType=DIRECT_PROJECT，PurchaseReceipt 只记录实际执行结果，不得在到货时把原本"入仓"改成"直送"**（P4 Final）。
 
 ---
 

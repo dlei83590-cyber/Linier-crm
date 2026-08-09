@@ -98,4 +98,6 @@
 
 > **Blocking Design Changes 4 项**（全部已写回 ADR-0024 / Gate / Field Matrix / 本清单）：① 超收默认 0% ② receivedQty 口径 + PurchaseReturn.disposition ③ PurchaseReceipt 不承载 QC 事实（Inspection 独立）④ 5B 建最小 Warehouse/Location（消除 5B/6A 阶段依赖冲突）。
 >
-> **下一步**：CTO 复核 4 项修正 → Schema + Migration 0023 实现放行。
+> **CTO #6719 补充 Final Decision 2 项（已写回）**：**D9** RECEIVED PO 不得普通新增 PurchaseReceipt（需 Reopen/Amendment/Approved Over-Receipt Exception）；**D10** WarehouseReceipt Created ≠ Posted，只有 Posted 才触发 InventoryMovement(IN)。**P4** 直送改为 `fulfillmentType = WAREHOUSE | DIRECT_PROJECT`（PO Line 预声明，非简单 boolean）。
+>
+> **下一步**：CTO Gate Re-review（8 门禁点：0% 默认超收 / receivedQty 精确定义 / Inspection 唯一 QC 事实源 / PurchaseReturn disposition / RECEIVED 禁普通继续收货 / 5B 最小 Warehouse/Location / WarehouseReceipt Created≠Posted / P1-P10 全部 Final）→ 一致后批准 Schema Design → Migration 0023。

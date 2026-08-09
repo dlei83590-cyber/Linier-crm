@@ -13,9 +13,13 @@
 - **`WarehouseReceipt`（采购入库事实）**：记录“验收合格数量正式入库到仓库/库位”（仓库/库位、批次/序列号、生产日期/有效期、合格入库数量）；**是驱动 InventoryMovement(IN) 的业务事实**；**是库存追溯信息（批次/序列号/效期）的 canonical capture point**（P6 Final）
 - 理由：直送（只有 PurchaseReceipt 无 WarehouseReceipt）、质检待入库（Receipt 已建 WarehouseReceipt 未建）、部分收货/部分入库（各自多次、各自 ceiling）、退货（独立 PurchaseReturn 与两层正交）——单一 GoodsReceipt 状态矩阵会压垮模型
 
-### D2：只有 CONFIRMED PO 才是收货合法来源（5A 已锁，延续）
+### D2：只有 CONFIRMED PO 才是收货合法来源（5A 已锁，延续；**CTO #6719 状态机修正**）
 
-- 来源门禁：`PO.status = CONFIRMED / PARTIALLY_RECEIVED / RECEIVED` 才允许创建 PurchaseReceipt；DRAFT/SUBMITTED/APPROVED/CANCELLED 拒绝（对齐 ADR-0023 D2）
+- 来源门禁（CTO Design Review 94/100 拍板）：
+  - `CONFIRMED` → **可收**（首次收货）
+  - `PARTIALLY_RECEIVED` → **可继续收**
+  - `RECEIVED` → **禁止普通新增收货**（履约已完成，是终止新增 Receipt 的 Gate；若需追加超收，必须走 `Reopen / Amendment / Approved Over-Receipt Exception`，不能直接允许 Receipt API 继续写）
+  - `DRAFT/SUBMITTED/APPROVED/CANCELLED` → 拒绝
 - 无 Direct GR（对齐无 Direct Delivery 锁定项）——收货必须挂在 PO 上
 
 ### D3：库存数量唯一事实源 = InventoryMovement（6A），5B 永不直接写库存
@@ -60,12 +64,25 @@
 - 免检（SKIP）→ 系统生成 `Inspection = SKIP + QUALIFIED`（不绕过 Inspection 直接让 Receipt 成为质量事实）
 - 质量链统一：`PurchaseReceipt → Inspection → WarehouseReceipt`；待检 = 未获得入库资格（不产生 WarehouseReceipt）
 
-### D9：事件语义（P10 Final）
+### D9：RECEIVED PO 不得普通新增 PurchaseReceipt（CTO #6719 新增 Final Decision）
+
+- **`RECEIVED` 状态 = 采购履约完成，是终止普通新增 Receipt 的 Gate**（对齐 D2 状态机修正）
+- 若 RECEIVED 后确实需要追加超收/补充收货：必须走 `Reopen / Amendment / Approved Over-Receipt Exception` 显式流程，**不得直接允许 Receipt API 继续写**
+- 否则 RECEIVED 状态没有实际约束力
+
+### D10：WarehouseReceipt Created ≠ Posted；只有 Posted 才触发 InventoryMovement(IN)（CTO #6719 新增 Final Decision）
+
+- **`Created` ≠ `Posted`**：WarehouseReceipt 创建（Created）只是入库事实的草稿/登记态，**不触发任何库存动作**
+- **只有 `Posted`（过账/确认）才触发 InventoryMovement(IN)**——Posted 是“应产生库存动作”的生效点
+- Field Matrix：WarehouseReceipt.status = `DRAFT → POSTED → CANCELLED`（或 Created/Posted 两态，实现阶段定命名）
+- 6A 消费 Posted 事件生成 InventoryMovement(IN)，Stock Projection 才更新
+
+### D11：事件语义（P10 Final）
 
 - 用**业务动作事件**，不以 Draft `Created` 作为完成事实事件
-- 草案：`PurchaseReceiptReceived`（收货完成）/ `InspectionCompleted`（质检落定）/ `WarehouseReceiptStocked`（入库完成）/ `PurchaseReturned`（退货完成）——最终命名见 EVENTS.md 注册
+- 草案：`PurchaseReceiptReceived`（收货完成）/ `InspectionCompleted`（质检落定）/ `WarehouseReceiptPosted`（入库过账完成，驱动 6A）/ `PurchaseReturned`（退货完成）——最终命名见 EVENTS.md 注册
 
-### D10：边界红线（本阶段无越界实现）
+### D12：边界红线（本阶段无越界实现）
 
 - ❌ 不创建 Schema / Migration 0023 / Prisma model / API
 - ❌ **5B 创建最小 Warehouse / Location 主数据**（P8 Final：收货/入库需要仓库维度），但**不创建 Stock / InventoryMovement / 库存余额**（属 6A 接管库存能力扩展）
