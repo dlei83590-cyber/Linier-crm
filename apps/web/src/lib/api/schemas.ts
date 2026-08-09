@@ -536,7 +536,9 @@ export const purchaseRequisitionUpdateSchema = z
 //       PO 不调 Pricing Engine、不重算；税率先例快照复制；receivedQty/remainingReceiveQty 仅 5B 回写（5A 禁改）
 // ============================================================================
 
-/** PO 行（价格双通道：SUPPLIER_PRICE_SNAPSHOT 服务端从 PartnerPrice 解析 / MANUAL 客户端授权录入+priceReason） */
+/** PO 行（价格双通道：SUPPLIER_PRICE_SNAPSHOT 服务端从 PartnerPrice 解析 / MANUAL 客户端授权录入+priceReason）
+ * sourcePurchaseRequisitionLineId：**REQUISITION PO PATCH 时每行必须提供且非空（服务端验证属于 Header.requisitionId + itemId 一致）**；
+ * Direct PO 强制为空（Phase 4A Review Blocking ③：不再用 lineNo 猜溯源）。 */
 export const purchaseOrderLineCreateSchema = z
   .object({
     itemId: z.string().min(1),
@@ -544,6 +546,7 @@ export const purchaseOrderLineCreateSchema = z
     quantity: z.coerce.number().positive(), // 采购数量 > 0（服务端 Decimal 精确校验）
     uomId: z.string().min(1).optional(),
     lineNo: z.number().int().positive().optional(),
+    sourcePurchaseRequisitionLineId: z.string().min(1).optional(),
     priceSource: z.enum(['SUPPLIER_PRICE_SNAPSHOT', 'MANUAL']).default('SUPPLIER_PRICE_SNAPSHOT'),
     // MANUAL 通道：unitPrice + priceReason 必填（CTO 拍板③：MANUAL 必须记录 priceReason/actor/audit）
     unitPrice: z.coerce.number().positive().optional(),

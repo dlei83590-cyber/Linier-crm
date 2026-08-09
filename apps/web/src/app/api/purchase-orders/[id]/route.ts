@@ -90,7 +90,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return failConflict(ERROR_CODES.VERSION_CONFLICT, '版本冲突，请刷新后重试');
   }
 
-  // 行替换时服务端验证 Item/UOM 引用 + 价格双通道预解析
+  // 行替换时服务端验证 Item/UOM 引用 + REQUISITION 溯源（CTO Phase 4A Review Blocking ③）+ 价格双通道预解析
   let resolvedPrices: Array<{
     lineNo: number;
     unitPrice: Prisma.Decimal;
@@ -121,6 +121,50 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (uoms.length !== uomIds.length) {
       return fail(ERROR_CODES.PURCHASE_ORDER_UOM_NOT_FOUND, '存在无效的 UOM 引用', 400);
     }
+
+    // **CTO Phase 4A Review Blocking ③**：溯源不得靠 lineNo 猜测——
+    // REQUISITION 行必须显式提供 sourcePurchaseRequisitionLineId，服务端验证属于 Header.requisitionId + 未 deleted + itemId 一致；
+    // Direct 行强制 source 为空。
+    if (existing.sourceType === 'REQUISITION') {
+      const missingSource = lines.filter((l) => !l.sourcePurchaseRequisitionLineId);
+      if (missingSource.length > 0) {
+        return fail(
+          ERROR_CODES.PURCHASE_ORDER_SOURCE_LINE_REQUIRED,
+          'REQUISITION 采购订单每行必须提供 sourcePurchaseRequisitionLineId',
+          400,
+        );
+      }
+      const sourceIds = [...new Set(lines.map((l) => l.sourcePurchaseRequisitionLineId!))];
+      const sourceLines = await prisma.purchaseRequisitionLine.findMany({
+        where: { id: { in: sourceIds }, deletedAt: null },
+        select: { id: true, purchaseRequisitionId: true, itemId: true, uomId: true },
+      });
+      const sourceById = new Map(sourceLines.map((s) => [s.id, s]));
+      for (const line of lines) {
+        const src = sourceById.get(line.sourcePurchaseRequisitionLineId!);
+        if (!src || src.purchaseRequisitionId !== existing.requisitionId) {
+          return fail(
+            ERROR_CODES.PURCHASE_ORDER_SOURCE_LINE_INVALID,
+            'sourcePurchaseRequisitionLineId 不属于该采购申请（PR）',
+            409,
+          );
+        }
+        if (src.itemId !== line.itemId) {
+          return fail(
+            ERROR_CODES.PURCHASE_ORDER_SOURCE_LINE_INVALID,
+            'PO 行 itemId 与来源 PR Line 不一致，禁止替换 Item 溯源',
+            409,
+          );
+        }
+      }
+    } else if (lines.some((l) => l.sourcePurchaseRequisitionLineId)) {
+      return fail(
+        ERROR_CODES.PURCHASE_ORDER_SOURCE_LINE_FORBIDDEN,
+        'Direct 采购订单不允许提供 sourcePurchaseRequisitionLineId',
+        400,
+      );
+    }
+
     resolvedPrices = [];
     for (const [idx, line] of lines.entries()) {
       if (line.priceSource === 'SUPPLIER_PRICE_SNAPSHOT') {
@@ -217,12 +261,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           where: { purchaseOrderId: id, deletedAt: null },
           data: { deletedAt: new Date(), updatedById: user!.id },
         });
-        // REQUISITION 来源行替换后保留溯源：按 lineNo 映射旧行 sourcePurchaseRequisitionLineId（Direct 恒为空）
-        const oldSourceByLineNo = new Map(
-          existing.lines
-            .filter((l) => l.sourcePurchaseRequisitionLineId)
-            .map((l) => [l.lineNo, l.sourcePurchaseRequisitionLineId]),
-        );
+        // **CTO Phase 4A Review Blocking ③**：溯源不再按 lineNo 猜测——
+        // REQUISITION 行使用请求中显式提供且已服务端验证的 sourcePurchaseRequisitionLineId；Direct 恒为空。
         const createdLines: Array<{
           lineAmount: Prisma.Decimal;
           taxAmount: Prisma.Decimal;
@@ -242,7 +282,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           await tx.purchaseOrderLine.create({
             data: {
               purchaseOrderId: id,
-              sourcePurchaseRequisitionLineId: oldSourceByLineNo.get(lineNo) ?? null,
+              sourcePurchaseRequisitionLineId:
+                existing.sourceType === 'REQUISITION' ? (line.sourcePurchaseRequisitionLineId ?? null) : null,
               lineNo,
               itemId: line.itemId,
               description: line.description ?? '',

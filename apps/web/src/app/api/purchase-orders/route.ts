@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
   const actorId = user!.id;
 
   // 事务：取号 + Header + Lines（价格双通道 + 金额服务端聚合 + receivedQty/remainingReceiveQty 初始化）
-  let created: { id: string; code: string } | null = null;
+  let created: { id: string; code: string; totalAmount: Prisma.Decimal } | null = null;
   try {
     created = await prisma.$transaction(async (tx) => {
       const code = await nextPurchaseOrderCode(tx);
@@ -142,11 +142,6 @@ export async function POST(request: NextRequest) {
         select: { id: true, code: true },
       });
 
-      const createdLines: Array<{
-        lineAmount: Prisma.Decimal;
-        taxAmount: Prisma.Decimal;
-        totalAmount: Prisma.Decimal;
-      }> = [];
       for (const [idx, line] of data.lines.entries()) {
         const quantity = new Prisma.Decimal(line.quantity);
         if (quantity.lte(0)) throw new Error('PO_QUANTITY_INVALID');
@@ -179,7 +174,6 @@ export async function POST(request: NextRequest) {
         }
 
         const amounts = computePurchaseOrderLineAmounts({ unitPrice, taxRate, quantity });
-        createdLines.push(amounts);
 
         await tx.purchaseOrderLine.create({
           data: {
@@ -210,8 +204,15 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // 头金额服务端聚合（禁客户端直传）
-      await recalcPurchaseOrderTotals(tx, header.id, createdLines);
+      // **CTO Phase 4A Review Blocking ②**：Revision 必须从**实际落库的 PO Lines** 生成（不是请求 body 重组）——
+      // SUPPLIER_PRICE_SNAPSHOT 的真实 unitPrice/taxRate/sourcePartnerPriceId 才进历史留痕
+      const actualLines = await tx.purchaseOrderLine.findMany({
+        where: { purchaseOrderId: header.id, deletedAt: null },
+        orderBy: { lineNo: 'asc' },
+      });
+
+      // 头金额服务端聚合（禁客户端直传；用实际落库行重算，防 body 与事实偏差）
+      await recalcPurchaseOrderTotals(tx, header.id, actualLines);
 
       // Revision(CREATED) + Snapshot(CREATED)（金额 Decimal toString 落 JSON）
       const headerFull = await tx.purchaseOrder.findFirstOrThrow({ where: { id: header.id } });
@@ -230,16 +231,19 @@ export async function POST(request: NextRequest) {
             expectedDeliveryDate: headerFull.expectedDeliveryDate,
             remark: headerFull.remark,
           },
-          lines: data.lines.map((l, i) => ({
-            lineNo: l.lineNo ?? (i + 1) * 10,
+          lines: actualLines.map((l) => ({
+            lineNo: l.lineNo,
             itemId: l.itemId,
-            description: l.description ?? '',
-            quantity: new Prisma.Decimal(l.quantity).toString(),
+            description: l.description,
+            quantity: l.quantity.toString(),
+            uomId: l.uomId,
             priceSource: l.priceSource,
-            unitPrice:
-              (l.priceSource === 'MANUAL' ? new Prisma.Decimal(l.unitPrice!) : null)?.toString() ??
-              null,
-            taxRate: (l.taxRate ?? 0).toString(),
+            sourcePartnerPriceId: l.sourcePartnerPriceId,
+            unitPrice: l.unitPrice.toString(),
+            taxRate: l.taxRate.toString(),
+            lineAmount: l.lineAmount.toString(),
+            taxAmount: l.taxAmount.toString(),
+            totalAmount: l.totalAmount.toString(),
           })),
         },
         actorId,
@@ -263,7 +267,7 @@ export async function POST(request: NextRequest) {
         actorId,
       );
 
-      return header;
+      return { id: header.id, code, totalAmount: headerFull.totalAmount };
     });
   } catch (e) {
     if (e instanceof Error) {
@@ -283,6 +287,7 @@ export async function POST(request: NextRequest) {
 
   if (!created) return failServer('创建采购订单失败');
 
+  // **CTO Phase 4A Review Blocking ①**：Domain Event 必须携带真实金额，禁止 placeholder
   await publishPurchaseOrderEvent({
     eventType: 'PurchaseOrderCreated',
     actorId: user?.id,
@@ -294,7 +299,7 @@ export async function POST(request: NextRequest) {
       supplierId: supplier.id,
       requisitionId: null,
       currency,
-      totalAmount: 'pending-read',
+      totalAmount: created.totalAmount.toString(),
       createdBy: user?.id,
     },
     meta,
