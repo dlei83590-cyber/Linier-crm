@@ -88,6 +88,16 @@ export async function POST(request: NextRequest) {
   const data = parsed.data;
   const meta = requestMeta(request);
 
+  // **CTO Phase 4A Re-review 细节①**：Direct 模式必须**强制禁止** sourcePurchaseRequisitionLineId，不是只忽略客户端传值——
+  // 客户端传了就是非法请求，直接 400 拒绝（对齐 PATCH 的 SOURCE_LINE_FORBIDDEN 语义）
+  if (data.lines.some((l) => l.sourcePurchaseRequisitionLineId)) {
+    return fail(
+      ERROR_CODES.PURCHASE_ORDER_SOURCE_LINE_FORBIDDEN,
+      'Direct 采购订单不允许提供 sourcePurchaseRequisitionLineId',
+      400,
+    );
+  }
+
   // 服务端验证 Supplier / Item / UOM 引用
   const supplier = await prisma.supplier.findFirst({
     where: { id: data.supplierId, deletedAt: null },
