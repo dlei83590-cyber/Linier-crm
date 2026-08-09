@@ -600,6 +600,8 @@ export const purchaseOrderUpdateSchema = z
  * lines 可选：不传则全部行走 SUPPLIER_PRICE_SNAPSHOT（服务端解析）；传则按 PR 行顺序覆盖价格。 */
 export const purchaseOrderConvertSchema = z.object({
   supplierId: z.string().min(1),
+  purchaserId: z.string().min(1).nullable().optional(),
+  departmentId: z.string().min(1).nullable().optional(),
   currency: z.string().min(1).max(10).optional(),
   paymentTerm: z.string().max(100).nullable().optional(),
   expectedDeliveryDate: z.string().datetime().nullable().optional(),

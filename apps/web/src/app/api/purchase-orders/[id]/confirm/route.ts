@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from '@/lib/api-helpers';
-import { ok, failConflict, failNotFound } from '@/lib/api/response';
+import { ok, fail, failConflict, failNotFound } from '@/lib/api/response';
 import { ERROR_CODES } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
 import {
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const result = await prisma.$transaction(async (tx) => {
     // ① Lock PO（FOR UPDATE）
     const locked = await tx.$queryRaw<Array<{ id: string }>>(
-      `SELECT "id" FROM "PurchaseOrder" WHERE "id" = ${id} AND "deletedAt" IS NULL FOR UPDATE`,
+      Prisma.sql`SELECT "id" FROM "PurchaseOrder" WHERE "id" = ${id} AND "deletedAt" IS NULL FOR UPDATE`,
     );
     if (locked.length === 0) return { error: 'NOT_FOUND' as const };
 

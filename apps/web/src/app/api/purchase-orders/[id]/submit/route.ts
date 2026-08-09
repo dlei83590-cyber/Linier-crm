@@ -36,7 +36,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const result = await prisma.$transaction(async (tx) => {
     // ① Lock PO（FOR UPDATE）
     const locked = await tx.$queryRaw<Array<{ id: string }>>(
-      `SELECT "id" FROM "PurchaseOrder" WHERE "id" = ${id} AND "deletedAt" IS NULL FOR UPDATE`,
+      Prisma.sql`SELECT "id" FROM "PurchaseOrder" WHERE "id" = ${id} AND "deletedAt" IS NULL FOR UPDATE`,
     );
     if (locked.length === 0) return { error: 'NOT_FOUND' as const };
 
