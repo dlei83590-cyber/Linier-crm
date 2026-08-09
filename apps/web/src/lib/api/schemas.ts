@@ -529,3 +529,98 @@ export const purchaseRequisitionUpdateSchema = z
     version: z.number().int().positive(),
   })
   .refine((v) => Object.keys(v).length > 1, { message: '至少提供一个更新字段' });
+
+// ============================================================================
+// Sprint 5A：Purchase Order（Phase 4A PO API；PO = 采购承诺事实源）
+// 红线：金额事实 = 服务端 Decimal 聚合（禁客户端直传头金额）；行金额快照复制（SUPPLIER_PRICE_SNAPSHOT 优先 / MANUAL 授权双通道）；
+//       PO 不调 Pricing Engine、不重算；税率先例快照复制；receivedQty/remainingReceiveQty 仅 5B 回写（5A 禁改）
+// ============================================================================
+
+/** PO 行（价格双通道：SUPPLIER_PRICE_SNAPSHOT 服务端从 PartnerPrice 解析 / MANUAL 客户端授权录入+priceReason） */
+export const purchaseOrderLineCreateSchema = z
+  .object({
+    itemId: z.string().min(1),
+    description: z.string().max(500).optional(),
+    quantity: z.coerce.number().positive(), // 采购数量 > 0（服务端 Decimal 精确校验）
+    uomId: z.string().min(1).optional(),
+    lineNo: z.number().int().positive().optional(),
+    priceSource: z.enum(['SUPPLIER_PRICE_SNAPSHOT', 'MANUAL']).default('SUPPLIER_PRICE_SNAPSHOT'),
+    // MANUAL 通道：unitPrice + priceReason 必填（CTO 拍板③：MANUAL 必须记录 priceReason/actor/audit）
+    unitPrice: z.coerce.number().positive().optional(),
+    priceReason: z.string().max(500).optional(),
+    // 税率快照（SUPPLIER_PRICE_SNAPSHOT 时服务端从税档解析；MANUAL 时可传，默认 0）
+    taxRate: z.coerce.number().nonnegative().optional(),
+  })
+  .refine(
+    (v) => {
+      if (v.priceSource === 'MANUAL') {
+        return (
+          v.unitPrice !== undefined &&
+          v.unitPrice > 0 &&
+          v.priceReason !== undefined &&
+          v.priceReason.length > 0
+        );
+      }
+      return true;
+    },
+    { message: 'MANUAL 价格通道必须提供 unitPrice 和 priceReason' },
+  );
+
+/** PO 创建（Direct Purchase：sourceType=DIRECT，requisitionId 为空；行 sourcePurchaseRequisitionLineId 为空） */
+export const purchaseOrderCreateSchema = z.object({
+  supplierId: z.string().min(1),
+  currency: z.string().min(1).max(10).optional(),
+  paymentTerm: z.string().max(100).nullable().optional(),
+  expectedDeliveryDate: z.string().datetime().nullable().optional(),
+  remark: z.string().max(1000).nullable().optional(),
+  lines: z.array(purchaseOrderLineCreateSchema).min(1, '至少需要一行'),
+});
+
+/** PO 头更新 + 可选行全量替换（仅 DRAFT；金额服务端重算；ReceivedQty/remainingReceiveQty 禁止客户端传入） */
+export const purchaseOrderUpdateSchema = z
+  .object({
+    paymentTerm: z.string().max(100).nullable().optional(),
+    expectedDeliveryDate: z.string().datetime().nullable().optional(),
+    remark: z.string().max(1000).nullable().optional(),
+    lines: z.array(purchaseOrderLineCreateSchema).optional(),
+    changeReason: z.string().max(500).optional(),
+    version: z.number().int().positive(),
+  })
+  .refine((v) => Object.keys(v).length > 1, { message: '至少提供一个更新字段' });
+
+/** PR → PO Convert（sourceType=REQUISITION；行快照复制自 PR Line + 保留 sourcePurchaseRequisitionLineId；价格双通道）
+ * lines 可选：不传则全部行走 SUPPLIER_PRICE_SNAPSHOT（服务端解析）；传则按 PR 行顺序覆盖价格。 */
+export const purchaseOrderConvertSchema = z.object({
+  supplierId: z.string().min(1),
+  currency: z.string().min(1).max(10).optional(),
+  paymentTerm: z.string().max(100).nullable().optional(),
+  expectedDeliveryDate: z.string().datetime().nullable().optional(),
+  remark: z.string().max(1000).nullable().optional(),
+  lines: z
+    .array(
+      z
+        .object({
+          priceSource: z
+            .enum(['SUPPLIER_PRICE_SNAPSHOT', 'MANUAL'])
+            .default('SUPPLIER_PRICE_SNAPSHOT'),
+          unitPrice: z.coerce.number().positive().optional(),
+          priceReason: z.string().max(500).optional(),
+          taxRate: z.coerce.number().nonnegative().optional(),
+        })
+        .refine(
+          (v) => {
+            if (v.priceSource === 'MANUAL') {
+              return (
+                v.unitPrice !== undefined &&
+                v.unitPrice > 0 &&
+                v.priceReason !== undefined &&
+                v.priceReason.length > 0
+              );
+            }
+            return true;
+          },
+          { message: 'MANUAL 价格通道必须提供 unitPrice 和 priceReason' },
+        ),
+    )
+    .optional(),
+});
