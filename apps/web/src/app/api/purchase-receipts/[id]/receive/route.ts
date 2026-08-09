@@ -86,23 +86,37 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     // ⑤ WAREHOUSE 行必须有有效 warehouse（规则③；DIRECT_PROJECT 不要求）
-    const poLineIds = [...new Set(receipt.lines.map((l) => l.purchaseOrderLineId))];
-    const poLines = await tx.purchaseOrderLine.findMany({
-      where: { id: { in: poLineIds }, deletedAt: null },
-      select: {
-        id: true,
-        purchaseOrderId: true,
-        fulfillmentType: true,
-        quantity: true,
-        receivedQty: true,
-        remainingReceiveQty: true,
-        overReceiptToleranceRate: true,
-      },
-    });
-    if (poLines.length !== poLineIds.length) {
+    const receiptPoLineIds = receipt.lines.map((l) => l.purchaseOrderLineId);
+    // **B②（CTO #6963/#7014）**：同一 Receipt 内一个 PO Line 只能出现一次（防重复引用导致 receivedQty 少记）
+    if (new Set(receiptPoLineIds).size !== receiptPoLineIds.length) {
+      return { error: 'DUPLICATE_PO_LINE' as const };
+    }
+    const poLineIds = [...new Set(receiptPoLineIds)].sort(); // 排序锁行，避免多事务不同顺序死锁
+    // **B①（CTO #6963/#7014）**：单条 FOR UPDATE 行锁读取（排序 + ORDER BY；锁后结果即唯一事实快照，不再额外 findMany）
+    const lockedPoLines = await tx.$queryRaw<
+      Array<{
+        id: string;
+        purchaseOrderId: string;
+        fulfillmentType: string;
+        quantity: Prisma.Decimal;
+        receivedQty: Prisma.Decimal;
+        remainingReceiveQty: Prisma.Decimal;
+        overReceiptToleranceRate: Prisma.Decimal | null;
+      }>
+    >(
+      Prisma.sql`
+        SELECT "id", "purchaseOrderId", "fulfillmentType", "quantity", "receivedQty", "remainingReceiveQty", "overReceiptToleranceRate"
+        FROM "PurchaseOrderLine"
+        WHERE "id" IN (${Prisma.join(poLineIds)})
+          AND "deletedAt" IS NULL
+        ORDER BY "id"
+        FOR UPDATE
+      `,
+    );
+    if (lockedPoLines.length !== poLineIds.length) {
       return { error: 'LINE_PO_MISMATCH' as const }; // 行不属于该 PO（规则②）
     }
-    const poLineById = new Map(poLines.map((l) => [l.id, l]));
+    const poLineById = new Map(lockedPoLines.map((l) => [l.id, l]));
 
     const needsWarehouse = receipt.lines.some(
       (rl) => poLineById.get(rl.purchaseOrderLineId)?.fulfillmentType === 'WAREHOUSE',
@@ -121,7 +135,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     // ⑥ 逐行校验（规则②③④⑤⑥）：行归属 + 数量公式 + ceiling（均在 FOR UPDATE 锁内）
-    const lineUpdates: Array<{ id: string; quantity: Prisma.Decimal; receivedQty: Prisma.Decimal; remainingReceiveQty: Prisma.Decimal }> = [];
+    const lineUpdates: Array<{
+      id: string;
+      quantity: Prisma.Decimal;
+      receivedQty: Prisma.Decimal;
+      remainingReceiveQty: Prisma.Decimal;
+    }> = [];
     for (const rl of receipt.lines) {
       const poLine = poLineById.get(rl.purchaseOrderLineId);
       if (!poLine || poLine.purchaseOrderId !== receipt.purchaseOrderId) {
@@ -148,10 +167,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // 规则⑦：remainingReceiveQty = 正常合同未交量 max(quantity - newReceivedQty, 0)（服务端唯一计算）
       const remaining = computeRemainingReceiveQty(poLine.quantity, newReceivedQty);
 
-      lineUpdates.push({ id: poLine.id, quantity: poLine.quantity, receivedQty: newReceivedQty, remainingReceiveQty: remaining });
+      lineUpdates.push({
+        id: poLine.id,
+        quantity: poLine.quantity,
+        receivedQty: newReceivedQty,
+        remainingReceiveQty: remaining,
+      });
     }
 
-    // ⑦ 回写 PO Line 投影（receivedQty / remainingReceiveQty 服务端唯一回写）
+    // ⑦ 回写 PO Line 投影（receivedQty / remainingReceiveQty 服务端唯一回写；**第五步：同步递增 version**）
     for (const u of lineUpdates) {
       await tx.purchaseOrderLine.update({
         where: { id: u.id },
@@ -159,22 +183,34 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           receivedQty: u.receivedQty,
           remainingReceiveQty: u.remainingReceiveQty,
           updatedById: actorId,
+          version: { increment: 1 },
         },
       });
     }
 
-    // ⑧ Receipt → RECEIVED（收货完成事实；普通收货不走审批 P1b）
-    await tx.purchaseReceipt.update({
-      where: { id: receipt.id },
-      data: { status: 'RECEIVED', receivedAt: new Date(), receivedById: actorId, updatedById: actorId },
+    // ⑧ Receipt → RECEIVED（收货完成事实；普通收货不走审批 P1b；**B③：CAS 递增 version**）
+    const receivedAt = new Date();
+    const receiptUpdate = await tx.purchaseReceipt.update({
+      where: { id: receipt.id, version: receipt.version },
+      data: {
+        status: 'RECEIVED',
+        receivedAt,
+        receivedById: actorId,
+        updatedById: actorId,
+        version: { increment: 1 },
+      },
     });
+    if (!receiptUpdate) {
+      return { error: 'VERSION_CONFLICT' as const };
+    }
 
     // ⑨ PO 聚合状态（规则⑧）：全部正常履约数量完成 → RECEIVED；否则 PARTIALLY_RECEIVED
     const allPoLines = await tx.purchaseOrderLine.findMany({
       where: { purchaseOrderId: po.id, deletedAt: null },
       select: { quantity: true, receivedQty: true },
     });
-    const allReceived = allPoLines.length > 0 && allPoLines.every((l) => l.receivedQty.gte(l.quantity));
+    const allReceived =
+      allPoLines.length > 0 && allPoLines.every((l) => l.receivedQty.gte(l.quantity));
     const newPoStatus = allReceived ? 'RECEIVED' : 'PARTIALLY_RECEIVED';
     await tx.purchaseOrder.update({
       where: { id: po.id },
@@ -189,6 +225,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       purchaseOrderCode: po.code,
       poStatus: newPoStatus,
       supplierId: po.supplierId,
+      warehouseId: receipt.warehouseId,
+      receivedAt: receivedAt.toISOString(),
     };
   });
 
@@ -227,18 +265,30 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       case 'WAREHOUSE_INVALID':
         return fail(ERROR_CODES.PURCHASE_RECEIPT_WAREHOUSE_INVALID, '仓库不存在或已停用', 400);
       case 'QUANTITY_INVALID':
-        return fail(ERROR_CODES.PURCHASE_RECEIPT_QUANTITY_INVALID, '收货数量不合法（quantity>0 且 0<=rejectedOnReceiptQty<=quantity）', 400);
+        return fail(
+          ERROR_CODES.PURCHASE_RECEIPT_QUANTITY_INVALID,
+          '收货数量不合法（quantity>0 且 0<=rejectedOnReceiptQty<=quantity）',
+          400,
+        );
       case 'OVER_RECEIPT':
         return failConflict(
           ERROR_CODES.PURCHASE_RECEIPT_OVER_RECEIPT,
           `超收超过容差 ceiling（System Default 0%；PO Line rate 可配置），拒绝收货`,
         );
+      case 'DUPLICATE_PO_LINE':
+        return fail(
+          ERROR_CODES.PURCHASE_RECEIPT_DUPLICATE_PO_LINE,
+          '同一收货单内一个 PO Line 只能出现一次（防重复引用导致 receivedQty 少记）',
+          400,
+        );
+      case 'VERSION_CONFLICT':
+        return failConflict(ERROR_CODES.VERSION_CONFLICT, '版本冲突，请刷新后重试（并发修改）');
       default:
         return failServer();
     }
   }
 
-  // ⑩ 事务成功提交后发布事件（规则⑧：只有 receive 成功后发 PurchaseReceiptReceived）
+  // ⑩ 事务成功提交后发布事件（规则⑧：只有 receive 成功后发 PurchaseReceiptReceived；**B④：用事务产生的事实值**）
   try {
     await publishPurchaseReceiptEvent({
       eventType: 'PurchaseReceiptReceived',
@@ -249,14 +299,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         purchaseReceiptCode: result.receiptCode,
         purchaseOrderId: result.purchaseOrderId,
         supplierId: result.supplierId,
-        warehouseId: null,
+        warehouseId: result.warehouseId,
         receivedById: actorId,
-        receivedAt: new Date().toISOString(),
+        receivedAt: result.receivedAt,
       },
       meta,
     });
     await publishPurchaseOrderReceiptProjectionEvent({
-      eventType: result.poStatus === 'RECEIVED' ? 'PurchaseOrderReceived' : 'PurchaseOrderPartiallyReceived',
+      eventType:
+        result.poStatus === 'RECEIVED' ? 'PurchaseOrderReceived' : 'PurchaseOrderPartiallyReceived',
       actorId,
       entityId: result.purchaseOrderId,
       payload: {

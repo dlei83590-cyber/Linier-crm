@@ -107,7 +107,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     remark: string | null;
   }> | null = null;
   if (lines) {
-    const poLineIds = [...new Set(lines.map((l) => l.purchaseOrderLineId))];
+    // **B②（CTO #6963/#7014）**：同一 Receipt 内一个 PO Line 只能出现一次（防重复引用导致 receivedQty 少记）
+    const rawPoLineIds = lines.map((l) => l.purchaseOrderLineId);
+    if (new Set(rawPoLineIds).size !== rawPoLineIds.length) {
+      return fail(
+        ERROR_CODES.PURCHASE_RECEIPT_DUPLICATE_PO_LINE,
+        '同一收货单内一个 PO Line 只能出现一次（防重复引用导致 receivedQty 少记）',
+        400,
+      );
+    }
+    const poLineIds = [...new Set(rawPoLineIds)];
     const poLines = await prisma.purchaseOrderLine.findMany({
       where: { id: { in: poLineIds }, purchaseOrderId: existing.purchaseOrderId, deletedAt: null },
       select: { id: true, purchaseOrderId: true, fulfillmentType: true, itemId: true, uomId: true },
@@ -120,6 +129,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       );
     }
     const poLineById = new Map(poLines.map((l) => [l.id, l]));
+    // **非阻塞（CTO #6963/#7014）**：与 Create 一致的 WAREHOUSE 校验——行替换后 WAREHOUSE 行必须有有效 warehouseId（禁止 PATCH 清空）
+    const effectiveWarehouseId =
+      fields.warehouseId !== undefined ? fields.warehouseId : existing.warehouseId;
+    const hasWarehouseLines = lines.some(
+      (l) => poLineById.get(l.purchaseOrderLineId)?.fulfillmentType === 'WAREHOUSE',
+    );
+    if (hasWarehouseLines && !effectiveWarehouseId) {
+      return fail(
+        ERROR_CODES.PURCHASE_RECEIPT_WAREHOUSE_REQUIRED,
+        'WAREHOUSE 收货行必须提供有效 warehouseId（DIRECT_PROJECT 行不要求）',
+        400,
+      );
+    }
     for (const line of lines) {
       if (line.quantity <= 0 || line.rejectedOnReceiptQty > line.quantity) {
         return fail(ERROR_CODES.PURCHASE_RECEIPT_QUANTITY_INVALID, '收货数量不合法', 400);
@@ -140,62 +162,79 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
   }
 
-  const updated = await prisma.$transaction(async (tx) => {
-    // 原子 CAS 乐观锁（Phase 3 教训沿用）：仅当 id + version + status=DRAFT 同时命中才更新
-    const cas = await tx.purchaseReceipt.updateMany({
-      where: { id, version, status: 'DRAFT', deletedAt: null },
-      data: {
-        ...(fields.warehouseId !== undefined ? { warehouseId: fields.warehouseId } : {}),
-        ...(fields.remark !== undefined ? { remark: fields.remark } : {}),
-        updatedById: actorId,
-      },
+  // **非阻塞（CTO #6963/#7014）**：warehouseId 若提供则必须有效（与 Create 一致；含仅更新头不换行场景）
+  const proposedWarehouseId =
+    fields.warehouseId !== undefined ? fields.warehouseId : existing.warehouseId;
+  if (proposedWarehouseId) {
+    const wh = await prisma.warehouse.findFirst({
+      where: { id: proposedWarehouseId, deletedAt: null, isActive: true },
+      select: { id: true },
     });
-    if (cas.count !== 1) {
-      throw new Error('VERSION_CONFLICT');
+    if (!wh) {
+      return fail(ERROR_CODES.PURCHASE_RECEIPT_WAREHOUSE_INVALID, '仓库不存在或已停用', 400);
     }
+  }
 
-    // 行整体替换（软删旧行 + 重建；行由头单据驱动，无独立 Line CRUD）
-    if (validatedLines) {
-      await tx.purchaseReceiptLine.updateMany({
-        where: { purchaseReceiptId: id, deletedAt: null },
-        data: { deletedAt: new Date(), updatedById: actorId },
+  const updated = await prisma
+    .$transaction(async (tx) => {
+      // 原子 CAS 乐观锁（Phase 3 教训沿用）：仅当 id + version + status=DRAFT 同时命中才更新（**B③：CAS 成功必须递增 version**）
+      const cas = await tx.purchaseReceipt.updateMany({
+        where: { id, version, status: 'DRAFT', deletedAt: null },
+        data: {
+          ...(fields.warehouseId !== undefined ? { warehouseId: fields.warehouseId } : {}),
+          ...(fields.remark !== undefined ? { remark: fields.remark } : {}),
+          updatedById: actorId,
+          version: { increment: 1 },
+        },
       });
-      let lineNo = 10;
-      for (const line of validatedLines) {
-        const poLine = await tx.purchaseOrderLine.findFirstOrThrow({
-          where: { id: line.purchaseOrderLineId, deletedAt: null },
-          select: { id: true, itemId: true, uomId: true },
-        });
-        await tx.purchaseReceiptLine.create({
-          data: {
-            purchaseReceiptId: id,
-            purchaseOrderLineId: line.purchaseOrderLineId,
-            lineNo,
-            itemId: poLine.itemId,
-            quantity: line.quantity,
-            uomId: poLine.uomId,
-            visibleDamageQty: line.visibleDamageQty,
-            rejectedOnReceiptQty: line.rejectedOnReceiptQty,
-            deliveryAddress: line.deliveryAddress,
-            receiver: line.receiver,
-            proof: line.proof,
-            remark: line.remark,
-            createdById: actorId,
-            updatedById: actorId,
-          },
-        });
-        lineNo += 10;
+      if (cas.count !== 1) {
+        throw new Error('VERSION_CONFLICT');
       }
-    }
 
-    return tx.purchaseReceipt.findFirstOrThrow({
-      where: { id, deletedAt: null },
-      include: { lines: { where: { deletedAt: null }, orderBy: { lineNo: 'asc' } } },
+      // 行整体替换（软删旧行 + 重建；行由头单据驱动，无独立 Line CRUD）
+      if (validatedLines) {
+        await tx.purchaseReceiptLine.updateMany({
+          where: { purchaseReceiptId: id, deletedAt: null },
+          data: { deletedAt: new Date(), updatedById: actorId },
+        });
+        let lineNo = 10;
+        for (const line of validatedLines) {
+          const poLine = await tx.purchaseOrderLine.findFirstOrThrow({
+            where: { id: line.purchaseOrderLineId, deletedAt: null },
+            select: { id: true, itemId: true, uomId: true },
+          });
+          await tx.purchaseReceiptLine.create({
+            data: {
+              purchaseReceiptId: id,
+              purchaseOrderLineId: line.purchaseOrderLineId,
+              lineNo,
+              itemId: poLine.itemId,
+              quantity: line.quantity,
+              uomId: poLine.uomId,
+              visibleDamageQty: line.visibleDamageQty,
+              rejectedOnReceiptQty: line.rejectedOnReceiptQty,
+              deliveryAddress: line.deliveryAddress,
+              receiver: line.receiver,
+              proof: line.proof,
+              remark: line.remark,
+              createdById: actorId,
+              updatedById: actorId,
+            },
+          });
+          lineNo += 10;
+        }
+      }
+
+      return tx.purchaseReceipt.findFirstOrThrow({
+        where: { id, deletedAt: null },
+        include: { lines: { where: { deletedAt: null }, orderBy: { lineNo: 'asc' } } },
+      });
+    })
+    .catch((e) => {
+      if (e instanceof Error && e.message === 'VERSION_CONFLICT')
+        return { error: 'VERSION_CONFLICT' as const };
+      throw e;
     });
-  }).catch((e) => {
-    if (e instanceof Error && e.message === 'VERSION_CONFLICT') return { error: 'VERSION_CONFLICT' as const };
-    throw e;
-  });
 
   if ('error' in updated && updated.error === 'VERSION_CONFLICT') {
     return failConflict(ERROR_CODES.VERSION_CONFLICT, '版本冲突，请刷新后重试（并发修改）');

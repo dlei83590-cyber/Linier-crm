@@ -101,8 +101,16 @@ export async function POST(request: NextRequest) {
     return fail(ERROR_CODES.PURCHASE_ORDER_SUPPLIER_NOT_FOUND, '供应商不存在或已停用', 400);
   }
 
-  // 行校验：PO Line 存在 + 属于同一 PO（规则②）
-  const poLineIds = [...new Set(data.lines.map((l) => l.purchaseOrderLineId))];
+  // 行校验：**B②（CTO #6963/#7014）** 同一 Receipt 内一个 PO Line 只能出现一次（防重复引用导致 receivedQty 少记）+ 行归属（规则②）
+  const rawPoLineIds = data.lines.map((l) => l.purchaseOrderLineId);
+  if (new Set(rawPoLineIds).size !== rawPoLineIds.length) {
+    return fail(
+      ERROR_CODES.PURCHASE_RECEIPT_DUPLICATE_PO_LINE,
+      '同一收货单内一个 PO Line 只能出现一次（防重复引用导致 receivedQty 少记）',
+      400,
+    );
+  }
+  const poLineIds = [...new Set(rawPoLineIds)];
   const poLines = await prisma.purchaseOrderLine.findMany({
     where: { id: { in: poLineIds }, purchaseOrderId: po.id, deletedAt: null },
     select: { id: true, purchaseOrderId: true, fulfillmentType: true, itemId: true, uomId: true },

@@ -55,12 +55,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return { error: 'INVALID_STATE' as const, status: receipt.status };
     }
 
-    // ③ CAS/version 乐观锁：id + version + status=DRAFT 同时命中才更新（原子条件）
+    // ③ CAS/version 乐观锁：id + version + status=DRAFT 同时命中才更新（原子条件；**B③：CAS 成功必须递增 version**）
     const cas = await tx.purchaseReceipt.updateMany({
       where: { id, version, status: 'DRAFT', deletedAt: null },
       data: {
         status: 'CANCELLED',
         updatedById: actorId,
+        version: { increment: 1 },
       },
     });
     if (cas.count !== 1) {
