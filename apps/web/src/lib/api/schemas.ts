@@ -634,3 +634,46 @@ export const purchaseOrderConvertSchema = z.object({
     )
     .optional(),
 });
+
+/** Sprint 5B：PurchaseReceipt（采购收货事实）schema（CTO Phase 2 Review 98/100 APPROVED 后开发）
+ * 设计依据：ADR-0024 + Sprint5B Field Matrix §1 + CTO #6923 Receive 8 条硬规则：
+ * - quantity = **物理到货毛数量**（>0）；0 <= rejectedOnReceiptQty <= quantity（规则④）；
+ *   **acceptedReceiptQty = quantity - rejectedOnReceiptQty**（服务端计算，客户端只提交毛数量与现场拒收）；
+ * - receivedQty / remainingReceiveQty **禁止客户端提交**（服务端唯一回写，规则⑦）；
+ * - fulfillmentType **不在此层**——以 PO Line 已确认的 fulfillmentType 为准（规则③，禁静默改）；
+ * - warehouseId 可空（仅 WAREHOUSE 收货场景使用；DIRECT_PROJECT 不要求，规则③）。
+ */
+
+/** PurchaseReceipt 行（客户端提交：purchaseOrderLineId + 物理到货毛数量 + 现场拒收/可见损坏 + 直送执行补充） */
+export const purchaseReceiptLineCreateSchema = z
+  .object({
+    purchaseOrderLineId: z.string().min(1), // 溯源 PO Line（行级溯源；服务端校验属于同一 PO——规则②）
+    quantity: z.coerce.number().positive(), // 物理到货毛数量 > 0（规则④）
+    visibleDamageQty: z.coerce.number().nonnegative().default(0), // 收货现场可见损坏
+    rejectedOnReceiptQty: z.coerce.number().nonnegative().default(0), // 现场即拒收（不计入 receivedQty）
+    // 直送执行补充（P4 Final：PO Line 已声明 DIRECT_PROJECT；此处记录实际执行结果；receivedBy/receivedAt 用 Header）
+    deliveryAddress: z.string().max(500).optional(),
+    receiver: z.string().max(200).optional(),
+    proof: z.string().max(500).optional(),
+    remark: z.string().max(500).optional(),
+  })
+  .refine((v) => v.rejectedOnReceiptQty <= v.quantity, {
+    message: 'rejectedOnReceiptQty 不能超过物理到货毛数量 quantity',
+    path: ['rejectedOnReceiptQty'],
+  });
+
+/** PurchaseReceipt 创建（DRAFT；普通收货不走审批——P1b Final；warehouseId 可空：仅 WAREHOUSE 场景） */
+export const purchaseReceiptCreateSchema = z.object({
+  purchaseOrderId: z.string().min(1),
+  warehouseId: z.string().min(1).optional(), // 公司仓库到货地点（仅 WAREHOUSE 收货场景；DIRECT_PROJECT 不要求）
+  remark: z.string().max(500).optional(),
+  lines: z.array(purchaseReceiptLineCreateSchema).min(1, '至少需要一行'),
+});
+
+/** PurchaseReceipt 更新（仅 DRAFT；version 乐观锁；行整体替换；receivedQty/remainingReceiveQty 禁客户端提交） */
+export const purchaseReceiptUpdateSchema = z.object({
+  version: z.number().int().positive(),
+  warehouseId: z.string().min(1).nullable().optional(),
+  remark: z.string().max(500).nullable().optional(),
+  lines: z.array(purchaseReceiptLineCreateSchema).min(1).optional(),
+});
