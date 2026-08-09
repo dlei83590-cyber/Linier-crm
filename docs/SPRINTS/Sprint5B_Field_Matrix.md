@@ -19,15 +19,15 @@
 | code | 收货单号 | DocumentSequence（前缀 REC / GRN-，**P10 拍板**） | 创建即取号 |
 | purchaseOrderId | 来源 PO | FK → PurchaseOrder，必填 | **只有 CONFIRMED/PARTIALLY_RECEIVED/RECEIVED PO 可收货**（D2） |
 | supplierId | 供应商 | 快照自 PO（不单独校验） | 对齐 PO 快照原则 |
-| warehouseId | 到货地点 | FK → Warehouse（6A 或 5B 最小主档，**P8**） | 到货地点 ≠ 入库仓库 |
-| status | 收货单状态 | 草案：`DRAFT / RECEIVED / CANCELLED` | 是否走审批 **P1b** |
+| warehouseId | 到货地点 | FK → Warehouse（**5B 建最小主数据**，P8 Final） | 到货地点 ≠ 入库仓库 |
+| status | 收货单状态 | 草案：`DRAFT / RECEIVED / CANCELLED` | **普通收货不走审批**（P1b Final）；超收/特殊退货才走 Workflow |
 | receivedAt | 收货时间 | date-time | |
 | receivedById | 收货员 | FK → User | |
 | remark | 备注 | string(500) | |
 | createdById / updatedById | 审计 | FK → User | |
 | deletedAt / isActive | 软删 | 对齐既有模式 | |
 
-### Lines
+### Lines（Blocking ③：只保留收货现场事实，不承载 QC 事实）
 
 | 字段（草案） | 语义 | 类型/约束草案 | 备注 |
 | --- | --- | --- | --- |
@@ -36,21 +36,19 @@
 | purchaseOrderLineId | 来源 PO Line | FK → PurchaseOrderLine，必填 | 行级溯源 |
 | lineNo | 行号 | int | |
 | itemId | 物料 | FK → Item | |
-| quantity | **到货数量** | Decimal > 0 | 可 <、=、> PO 订购量（超收见 §5） |
+| quantity | **物理到货数量（arrivedQty）** | Decimal > 0 | 可 <、=、> PO 订购量（超收见 §7） |
 | uomId | 单位 | FK → UoM | 快照自 PO Line |
-| rejectedQty | 收货时即拒收数量 | Decimal ≥ 0，默认 0 | 收货当场发现损坏/错发 |
-| acceptedQty | 收货验收合格数量 | Decimal ≥ 0（= quantity - rejectedQty 初值） | 后续质检可修正 |
-| batchNo 🔶 | 批次号 | string | **P6**：收货层采集 vs 入库层采集 |
-| serialNos 🔶 | 序列号列表 | string[] | **P6** |
-| mfgDate 🔶 | 生产日期 | date | **P6** |
-| expDate 🔶 | 有效期至 | date | **P6** |
+| visibleDamageQty | 收货现场可见损坏数量 | Decimal ≥ 0，默认 0 | 收货当场发现损坏（Blocking ③：改名自 rejectedQty，避免与 QC 拒收混淆） |
+| rejectedOnReceiptQty | 收货现场即拒收数量 | Decimal ≥ 0，默认 0 | **不计入 PO receivedQty**（Blocking ②） |
 | remark | 备注 | string(500) | |
+| ~~acceptedQty / rejectedQty~~ | ~~收货验收合格/拒收~~ | **移除** | **质量判定统一归 Inspection**（Blocking ③，避免两套 QC 事实源） |
+| batchNo / serialNos / mfgDate / expDate | 批次/序列号/效期 | **不在此层** | **canonical capture point = WarehouseReceipt**（P6 Final） |
 
 ---
 
-## 2. Inspection / QC（验收/质检事实）—— 质量结论
+## 2. Inspection / QC（验收/质检事实）—— 独立质量事实源（Blocking ③，P3 Final）
 
-> 若质检与收货合并录入，则 Inspection 结论字段并入 PurchaseReceipt Line（accept/reject）；若独立，则单独模型。**P3 拍板**。
+> **Inspection 独立模型，统一承载质量判定**（SKIP / SPOT / FULL）；PurchaseReceipt 不承载 acceptedQty/rejectedQty；免检 = 系统生成 Inspection=SKIP+QUALIFIED。质量链：`PurchaseReceipt → Inspection → WarehouseReceipt`。
 
 | 字段（草案） | 语义 | 类型/约束草案 | 备注 |
 | --- | --- | --- | --- |
@@ -66,17 +64,17 @@
 
 ---
 
-## 3. WarehouseReceipt（采购入库事实）—— 合格入库
+## 3. WarehouseReceipt（采购入库事实）—— 合格入库（P6 Final：库存追溯信息 canonical capture point）
 
 ### Header
 
 | 字段（草案） | 语义 | 类型/约束草案 | 备注 |
 | --- | --- | --- | --- |
 | id | 主键 | UUID | |
-| code | 入库单号 | DocumentSequence（前缀 IN / WHR-**，P10 拍板） | 创建即取号 |
+| code | 入库单号 | DocumentSequence（前缀 IN / WHR-，P10 Final 命名） | 创建即取号 |
 | purchaseReceiptId | 来源收货单 | FK → PurchaseReceipt | 可多次入库（部分入库） |
-| warehouseId | 入库仓库 | FK → Warehouse（**P8**） | 必填 |
-| locationId 🔶 | 库位 | FK → Location（可空） | **P8** |
+| warehouseId | 入库仓库 | FK → Warehouse（**5B 建最小主数据**，P8 Final） | 必填 |
+| locationId 🔶 | 库位 | FK → Location（可空） | **P8** 剩余子项：库位是否必填 |
 | status | 入库单状态 | 草案：`DRAFT / STOCKED / CANCELLED` | |
 | stockedAt | 入库时间 | date-time | |
 | stockedById | 仓管员 | FK → User | |
@@ -93,40 +91,40 @@
 | itemId | 物料 | FK → Item | |
 | quantity | **入库数量** | Decimal > 0 | ≤ 合格数量（逐层 ceiling） |
 | uomId | 单位 | FK → UoM | |
-| batchNo 🔶 | 批次号 | string | **P6**：入库层采集（推荐） |
-| serialNos 🔶 | 序列号列表 | string[] | **P6** |
-| mfgDate 🔶 | 生产日期 | date | **P6** |
-| expDate 🔶 | 有效期至 | date | **P6** |
+| batchNo | 批次号 | string | **P6 Final：canonical capture point**（入库层采集） |
+| serialNos | 序列号列表 | string[] | **P6 Final** |
+| mfgDate | 生产日期 | date | **P6 Final** |
+| expDate | 有效期至 | date | **P6 Final** |
 | remark | 备注 | string(500) | |
 
-> **红线（D3）**：WarehouseReceipt = "应产生库存动作"的业务事实，**不直接写库存余额**；驱动 6A `InventoryMovement(IN)`。
+> **红线（D3）**：WarehouseReceipt = “应产生库存动作”的业务事实，**不直接写库存余额**；驱动 6A `InventoryMovement(IN)`。
 
 ---
 
-## 4. Direct Delivery（直送）标记
+## 4. Direct Delivery（直送）标记（P4 Final：Line 级，PO Line 预先声明）
 
 | 字段（草案） | 语义 | 类型/约束草案 | 备注 |
 | --- | --- | --- | --- |
-| isDirectDelivery | 是否直送 | boolean，默认 false | 在 PurchaseReceipt Header 或 Line 标记（**P4**） |
-| projectId 🔶 | 直送项目/使用地点 | FK → Project（可空） | **P4** |
-| deliveryAddress 🔶 | 直送地址 | string | **P4** |
+| isDirectDelivery | 是否直送 | boolean，默认 false | **Line 级**（P4 Final）；在 PO Line 预先声明 |
+| projectId 🔶 | 直送项目/使用地点 | FK → Project（可空） | **P4** 剩余子项：字段确认 |
+| deliveryAddress 🔶 | 直送地址 | string | **P4** 剩余子项：字段确认 |
 
-> 直送 = 有 PurchaseReceipt、**无 WarehouseReceipt**；不产生 InventoryMovement(IN)。
+> 直送 = 有 PurchaseReceipt、**无 WarehouseReceipt**；不产生 InventoryMovement(IN)。**Receipt 只能确认/补充 PO Line 已声明的直送，不得静默改变采购履约类型**（P4 Final）。
 
 ---
 
-## 5. PurchaseReturn（采购退货事实）—— 独立事实，非负 GR
+## 5. PurchaseReturn（采购退货事实）—— 独立事实，非负 GR（P5 Final：必须有来源 + disposition）
 
 ### Header
 
 | 字段（草案） | 语义 | 类型/约束草案 | 备注 |
 | --- | --- | --- | --- |
 | id | 主键 | UUID | |
-| code | 退货单号 | DocumentSequence（前缀 PRT-**，P10 拍板） | 创建即取号 |
+| code | 退货单号 | DocumentSequence（前缀 PRT-，P10 Final 命名） | 创建即取号 |
 | purchaseOrderId | 来源 PO | FK | 溯源 |
 | supplierId | 供应商 | 快照自 PO | |
 | returnType | 退货类型 | 枚举：`REJECTED_ON_RECEIPT`（收货拒收）/ `RETURN_AFTER_STOCK_IN`（入库后退货）/ `QUALITY_ISSUE`（质量问题） | |
-| status | 退货单状态 | 草案：`DRAFT / RETURNED / CANCELLED` | 是否走审批 **P1b** |
+| status | 退货单状态 | 草案：`DRAFT / RETURNED / CANCELLED` | **P1b Final**：普通退货不审批；特殊退货走 Workflow |
 | returnedAt | 退货时间 | date-time | |
 | returnedById | 经办人 | FK → User | |
 | remark | 备注 | string(500) | |
@@ -139,26 +137,29 @@
 | --- | --- | --- | --- |
 | id | 主键 | UUID | |
 | purchaseReturnId | 头 | FK | |
-| sourceRefType 🔶 | 来源引用类型 | 枚举：`RECEIPT_LINE / WAREHOUSE_RECEIPT_LINE / NONE` | **P5**：退货可引用的来源 |
-| sourceRefId 🔶 | 来源引用 id | string（可空） | **P5** |
+| sourceRefType | 来源引用类型 | 枚举：`RECEIPT_LINE / WAREHOUSE_RECEIPT_LINE / INSPECTION` | **P5 Final：必须有来源** |
+| sourceRefId | 来源引用 id | string（可空） | **P5 Final** |
 | itemId | 物料 | FK → Item | |
 | quantity | 退货数量 | Decimal > 0 | ≤ 可退数量（防超退，锁内校验） |
 | uomId | 单位 | FK → UoM | |
 | batchNo / serialNos | 批次/序列号 | 可空 | 已入库退货追溯 |
+| **disposition** | **履约处置（Blocking ② 新增，必填）** | 枚举：`REPLACE_REQUIRED`（供应商仍欠货，重新增加履约剩余待交数量）/ `CREDIT_ONLY`（采购数量最终减少/财务冲减，PO 不一定重新待收） | **防止 PO/退货/AP 互相打架** |
 | returnReason | 退货原因 | string(500) | 必填 |
 | remark | 备注 | string(500) | |
 
-> **红线（D5）**：PurchaseReturn 独立事实；已入库部分 → 6A `InventoryMovement(OUT)`；未入库部分 → 仅事实。是否允许"负 movement"表达退货 → **留 6A Inventory Ledger 定**。
+> **红线（D5）**：PurchaseReturn 独立事实；已入库部分 → 6A `InventoryMovement(OUT)`；未入库部分 → 仅事实。是否允许“负 movement”表达退货 → **留 6A Inventory Ledger 定**。
 
 ---
 
-## 6. PO Line 收货投影（5B 唯一回写方，已存在于 5A）
+## 6. PO Line 收货投影（5B 唯一回写方，已存在于 5A；Blocking ② 精确定义）
 
 | 字段 | 语义 | 5B 回写规则 |
 | --- | --- | --- |
-| receivedQty | 累计到货数量 | 每次 PurchaseReceipt 后 += 到货数量（服务端计算） |
-| remainingReceiveQty | 剩余可收数量 | = quantity × (1 + tolerance%) - receivedQty（服务端计算；**P2** 定容差） |
+| receivedQty | **已被采购履约接受、可冲减 PO 未交数量的累计数量**（非到货毛数量；**当场拒收 rejectedOnReceiptQty 不计入**） | 每次 PurchaseReceipt 后 +=（quantity - rejectedOnReceiptQty）（服务端计算）；退货 REPLACE_REQUIRED 时重新打开待交数量 |
+| remainingReceiveQty | 剩余可收数量 | = quantity × (1 + 有效容差) - receivedQty（服务端计算；**容差 System Default = 0%**，P2 Final） |
 | PO.status | 收货聚合状态 | 全部收完（且无退货挂起）→ `RECEIVED`；否则 `PARTIALLY_RECEIVED` |
+
+> 5A 已建列、禁客户端改；**5B 是唯一回写方**（ADR-0023 D2 延续）。
 
 > 5A 已建列、禁客户端改；**5B 是唯一回写方**（ADR-0023 D2 延续）。
 
@@ -169,4 +170,5 @@
 - ❌ 本矩阵**不是 Schema**；任何字段不落库直到 Gate 批准 + Migration 0023
 - ❌ 无 Stock / InventoryMovement / 库存余额字段（6A）
 - ❌ 无供应商发票 / 三单匹配 / AP 字段（5C）
-- 🔶 带 🔶 字段待 CTO Design Review 拍板（P2/P3/P4/P5/P6/P8/P10）
+- ✅ **CTO Design Review 94/100 已拍板（2026-08-09）**：P1 方案 B 拆两层 / P2 超收默认 0%+配置容差 / P3 Inspection 独立事实 / P4 直送 Line 级预声明 / P5 退货独立事实+必须有来源+disposition / P6 批次效期 canonical capture point=WarehouseReceipt / P7 receivedQty 精确定义 / P8 5B 建最小 Warehouse/Location / P9 库存触发=6A Movement / P10 业务动作事件
+- 🔶 剩余待确认子项（不阻塞设计方向）：P3b 待检库存 6A 表达、P4 projectId/address 字段、P8 库位是否必填、P10 事件最终命名（EVENTS.md 注册时定）
