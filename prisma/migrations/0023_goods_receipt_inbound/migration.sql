@@ -196,6 +196,7 @@ ALTER TABLE "Inspection" ADD CONSTRAINT "Inspection_purchaseReceiptLineId_fkey" 
 ALTER TABLE "Inspection" ADD CONSTRAINT "Inspection_inspectedById_fkey" FOREIGN KEY ("inspectedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- Indexes
+CREATE UNIQUE INDEX "Inspection_id_purchaseReceiptLineId_key" ON "Inspection"("id", "purchaseReceiptLineId");
 CREATE INDEX "Inspection_purchaseReceiptLineId_idx" ON "Inspection"("purchaseReceiptLineId");
 CREATE INDEX "Inspection_inspectedById_idx" ON "Inspection"("inspectedById");
 CREATE INDEX "Inspection_deletedAt_idx" ON "Inspection"("deletedAt");
@@ -225,7 +226,7 @@ CREATE TABLE "WarehouseReceipt" (
 -- Foreign Keys（onDelete Restrict：收货单/仓库删除受入库单约束；locationId/postedById SetNull；Blocking ④ 已删除 stockedById）
 ALTER TABLE "WarehouseReceipt" ADD CONSTRAINT "WarehouseReceipt_purchaseReceiptId_fkey" FOREIGN KEY ("purchaseReceiptId") REFERENCES "PurchaseReceipt"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "WarehouseReceipt" ADD CONSTRAINT "WarehouseReceipt_warehouseId_fkey" FOREIGN KEY ("warehouseId") REFERENCES "Warehouse"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "WarehouseReceipt" ADD CONSTRAINT "WarehouseReceipt_locationId_warehouseId_fkey" FOREIGN KEY ("locationId", "warehouseId") REFERENCES "WarehouseLocation"("id", "warehouseId") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "WarehouseReceipt" ADD CONSTRAINT "WarehouseReceipt_locationId_warehouseId_fkey" FOREIGN KEY ("locationId", "warehouseId") REFERENCES "WarehouseLocation"("id", "warehouseId") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "WarehouseReceipt" ADD CONSTRAINT "WarehouseReceipt_postedById_fkey" FOREIGN KEY ("postedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- Indexes
@@ -264,7 +265,7 @@ CREATE TABLE "WarehouseReceiptLine" (
 -- Foreign Keys（onDelete：头 Cascade / 收货行 Restrict / Item Restrict / UOM SetNull）
 ALTER TABLE "WarehouseReceiptLine" ADD CONSTRAINT "WarehouseReceiptLine_warehouseReceiptId_fkey" FOREIGN KEY ("warehouseReceiptId") REFERENCES "WarehouseReceipt"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "WarehouseReceiptLine" ADD CONSTRAINT "WarehouseReceiptLine_purchaseReceiptLineId_fkey" FOREIGN KEY ("purchaseReceiptLineId") REFERENCES "PurchaseReceiptLine"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "WarehouseReceiptLine" ADD CONSTRAINT "WarehouseReceiptLine_inspectionId_fkey" FOREIGN KEY ("inspectionId") REFERENCES "Inspection"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "WarehouseReceiptLine" ADD CONSTRAINT "WarehouseReceiptLine_inspectionId_purchaseReceiptLineId_fkey" FOREIGN KEY ("inspectionId", "purchaseReceiptLineId") REFERENCES "Inspection"("id", "purchaseReceiptLineId") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "WarehouseReceiptLine" ADD CONSTRAINT "WarehouseReceiptLine_itemId_fkey" FOREIGN KEY ("itemId") REFERENCES "Item"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "WarehouseReceiptLine" ADD CONSTRAINT "WarehouseReceiptLine_uomId_fkey" FOREIGN KEY ("uomId") REFERENCES "UnitOfMeasure"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
@@ -338,9 +339,9 @@ CREATE TABLE "PurchaseReturnLine" (
 
 -- Foreign Keys（onDelete：头 Cascade / Item Restrict / UOM SetNull）
 ALTER TABLE "PurchaseReturnLine" ADD CONSTRAINT "PurchaseReturnLine_purchaseReturnId_fkey" FOREIGN KEY ("purchaseReturnId") REFERENCES "PurchaseReturn"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "PurchaseReturnLine" ADD CONSTRAINT "PurchaseReturnLine_sourcePurchaseReceiptLineId_fkey" FOREIGN KEY ("sourcePurchaseReceiptLineId") REFERENCES "PurchaseReceiptLine"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-ALTER TABLE "PurchaseReturnLine" ADD CONSTRAINT "PurchaseReturnLine_sourceWarehouseReceiptLineId_fkey" FOREIGN KEY ("sourceWarehouseReceiptLineId") REFERENCES "WarehouseReceiptLine"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-ALTER TABLE "PurchaseReturnLine" ADD CONSTRAINT "PurchaseReturnLine_sourceInspectionId_fkey" FOREIGN KEY ("sourceInspectionId") REFERENCES "Inspection"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "PurchaseReturnLine" ADD CONSTRAINT "PurchaseReturnLine_sourcePurchaseReceiptLineId_fkey" FOREIGN KEY ("sourcePurchaseReceiptLineId") REFERENCES "PurchaseReceiptLine"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "PurchaseReturnLine" ADD CONSTRAINT "PurchaseReturnLine_sourceWarehouseReceiptLineId_fkey" FOREIGN KEY ("sourceWarehouseReceiptLineId") REFERENCES "WarehouseReceiptLine"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "PurchaseReturnLine" ADD CONSTRAINT "PurchaseReturnLine_sourceInspectionId_fkey" FOREIGN KEY ("sourceInspectionId") REFERENCES "Inspection"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "PurchaseReturnLine" ADD CONSTRAINT "PurchaseReturnLine_itemId_fkey" FOREIGN KEY ("itemId") REFERENCES "Item"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "PurchaseReturnLine" ADD CONSTRAINT "PurchaseReturnLine_uomId_fkey" FOREIGN KEY ("uomId") REFERENCES "UnitOfMeasure"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 

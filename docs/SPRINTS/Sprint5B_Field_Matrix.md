@@ -88,7 +88,7 @@
 | id | 主键 | UUID | |
 | warehouseReceiptId | 头 | FK | |
 | purchaseReceiptLineId | 来源收货行 | FK | 溯源 |
-| inspectionId | 来源质检结论（**必填**，Blocking ②） | FK → Inspection | 入库必须引用具体质检结论（已完成且 qualifiedQty>0）；累计 posted qty ≤ 对应 Inspection qualifiedQty |
+| inspectionId | 来源质检结论（**必填**，Blocking ②） | FK → Inspection（**组合 FK**：`(inspectionId, purchaseReceiptLineId)` → `Inspection(id, purchaseReceiptLineId)`，Schema Integrity B①） | 入库必须引用**同一收货行**的具体质检结论（拒绝"收货行 A + 检验 B"串线）；累计 posted qty ≤ 对应 Inspection qualifiedQty |
 | itemId | 物料 | FK → Item | |
 | quantity | **入库数量** | Decimal > 0 | ≤ 合格数量（逐层 ceiling） |
 | uomId | 单位 | FK → UoM | |
@@ -143,9 +143,9 @@
 | id | 主键 | UUID | |
 | purchaseReturnId | 头 | FK | |
 | sourceRefType | 来源引用类型 | 枚举：`RECEIPT_LINE / WAREHOUSE_RECEIPT_LINE / INSPECTION`（业务类型，与 exactly-one FK 匹配） | **P5 Final：必须有来源** |
-| sourcePurchaseReceiptLineId | 来源收货行（真实 FK） | FK → PurchaseReceiptLine（可空） | **Blocking ③：三个真实 FK 之一，exactly-one 非空且与 sourceRefType 匹配（API+QA 强制，不用 polymorphic string）** |
-| sourceWarehouseReceiptLineId | 来源入库行（真实 FK） | FK → WarehouseReceiptLine（可空） | **Blocking ③** |
-| sourceInspectionId | 来源质检（真实 FK） | FK → Inspection（可空） | **Blocking ③** |
+| sourcePurchaseReceiptLineId | 来源收货行（真实 FK） | FK → PurchaseReceiptLine（可空，**onDelete Restrict**，Schema Integrity B②） | **Blocking ③：三个真实 FK 之一，exactly-one 非空且与 sourceRefType 匹配（API+QA 强制，不用 polymorphic string）；来源已成为退货事实则不得物理删除** |
+| sourceWarehouseReceiptLineId | 来源入库行（真实 FK） | FK → WarehouseReceiptLine（可空，**onDelete Restrict**，Schema Integrity B②） | **Blocking ③** |
+| sourceInspectionId | 来源质检（真实 FK） | FK → Inspection（可空，**onDelete Restrict**，Schema Integrity B②） | **Blocking ③** |
 | itemId | 物料 | FK → Item | |
 | quantity | 退货数量 | Decimal > 0 | ≤ 可退数量（防超退，锁内校验） |
 | uomId | 单位 | FK → UoM | |

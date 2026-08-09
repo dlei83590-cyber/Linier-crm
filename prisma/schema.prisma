@@ -4943,6 +4943,7 @@ model Inspection {
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
+  @@unique([id, purchaseReceiptLineId]) // Schema Integrity B①：支持 WarehouseReceiptLine 组合 FK（Inspection 必须属于同一收货行）
   @@index([purchaseReceiptLineId])
   @@index([inspectedById])
   @@index([deletedAt])
@@ -4957,7 +4958,7 @@ model WarehouseReceipt {
   warehouseId String // 入库仓库（必填）
   warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
   locationId String? // 库位（可空；Minor ②：组合 FK 保证 location 属于同一 warehouse）
-  location  WarehouseLocation? @relation(fields: [locationId, warehouseId], references: [id, warehouseId], onDelete: SetNull)
+  location  WarehouseLocation? @relation(fields: [locationId, warehouseId], references: [id, warehouseId], onDelete: Restrict) // Schema Integrity B②：组合 FK 用 Restrict（SET NULL 会尝试置空 NOT NULL warehouseId）
   status   WarehouseReceiptStatus @default(DRAFT)
   postedAt DateTime? @db.Timestamptz(3) // 过账时间（D10：Created ≠ Posted，只有 POSTED 触发 InventoryMovement(IN)）
   postedById String?
@@ -4988,8 +4989,8 @@ model WarehouseReceiptLine {
   warehouseReceipt WarehouseReceipt @relation(fields: [warehouseReceiptId], references: [id], onDelete: Cascade)
   purchaseReceiptLineId String // 溯源收货行
   purchaseReceiptLine PurchaseReceiptLine @relation(fields: [purchaseReceiptLineId], references: [id], onDelete: Restrict)
-  inspectionId String // 质量结论引用（Blocking ②：入库必须来自已完成、具有合格数量的 Inspection；累计 posted qty ≤ qualifiedQty）
-  inspection Inspection @relation(fields: [inspectionId], references: [id], onDelete: Restrict)
+  inspectionId String // 质量结论引用（Blocking ②：入库必须来自已完成、具有合格数量的 Inspection；累计 posted qty ≤ qualifiedQty；Schema Integrity B①：组合 FK 保证 Inspection 属于同一收货行）
+  inspection Inspection @relation(fields: [inspectionId, purchaseReceiptLineId], references: [id, purchaseReceiptLineId], onDelete: Restrict)
   itemId   String?
   item     Item?    @relation(fields: [itemId], references: [id], onDelete: Restrict)
   quantity Decimal  @db.Decimal(18, 4) // 入库数量（≤ 合格数量，逐层 ceiling）
@@ -5054,11 +5055,11 @@ model PurchaseReturnLine {
   purchaseReturn PurchaseReturn @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
   sourceRefType PurchaseReturnSourceType // RECEIPT_LINE / WAREHOUSE_RECEIPT_LINE / INSPECTION（业务类型，与 exactly-one FK 匹配）
   sourcePurchaseReceiptLineId String? // Blocking ③：三个真实 FK 之一，exactly-one 非空且与 sourceRefType 匹配（API+QA 强制）
-  sourcePurchaseReceiptLine PurchaseReceiptLine? @relation(fields: [sourcePurchaseReceiptLineId], references: [id], onDelete: SetNull)
+  sourcePurchaseReceiptLine PurchaseReceiptLine? @relation(fields: [sourcePurchaseReceiptLineId], references: [id], onDelete: Restrict) // Schema Integrity B②：来源已成为退货事实则不得物理删除
   sourceWarehouseReceiptLineId String?
-  sourceWarehouseReceiptLine WarehouseReceiptLine? @relation(fields: [sourceWarehouseReceiptLineId], references: [id], onDelete: SetNull)
+  sourceWarehouseReceiptLine WarehouseReceiptLine? @relation(fields: [sourceWarehouseReceiptLineId], references: [id], onDelete: Restrict)
   sourceInspectionId String?
-  sourceInspection Inspection? @relation(fields: [sourceInspectionId], references: [id], onDelete: SetNull)
+  sourceInspection Inspection? @relation(fields: [sourceInspectionId], references: [id], onDelete: Restrict)
   itemId   String?
   item     Item?    @relation(fields: [itemId], references: [id], onDelete: Restrict)
   quantity Decimal  @db.Decimal(18, 4) // 退货数量（> 0，≤ 可退数量防超退）
