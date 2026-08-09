@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from '@/lib/api-helpers';
 import { ok, fail, failValidation, parsePagination } from '@/lib/api/response';
@@ -120,22 +121,42 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const created = await prisma.inspection.create({
-    data: {
-      purchaseReceiptLineId: data.purchaseReceiptLineId,
-      inspectionMode: data.inspectionMode,
-      remark: data.remark ?? null,
-      createdById: actorId,
-      updatedById: actorId,
-    },
-    select: {
-      id: true,
-      purchaseReceiptLineId: true,
-      inspectionMode: true,
-      result: true,
-      createdAt: true,
-    },
-  });
+  // **CTO #7115 Blocking**：并发下 findFirst 预检不能防双建——DB 唯一约束（Migration 0024）是最终防线，
+  // 捕获 Prisma unique violation（P2002）→ 稳定返回 INSPECTION_ALREADY_EXISTS / 409。
+  let created: {
+    id: string;
+    purchaseReceiptLineId: string;
+    inspectionMode: 'SKIP' | 'SPOT' | 'FULL';
+    result: string;
+    createdAt: Date;
+  };
+  try {
+    created = await prisma.inspection.create({
+      data: {
+        purchaseReceiptLineId: data.purchaseReceiptLineId,
+        inspectionMode: data.inspectionMode,
+        remark: data.remark ?? null,
+        createdById: actorId,
+        updatedById: actorId,
+      },
+      select: {
+        id: true,
+        purchaseReceiptLineId: true,
+        inspectionMode: true,
+        result: true,
+        createdAt: true,
+      },
+    });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      return fail(
+        ERROR_CODES.INSPECTION_ALREADY_EXISTS,
+        '该收货行已存在有效质检记录（一次检验即最终结果；并发创建被数据库唯一约束拒绝）',
+        409,
+      );
+    }
+    throw e;
+  }
 
   // DRAFT/PENDING 创建不发领域事件（对齐规则⑧事件纪律）——仅 AuditLog 留痕
   await writeAuditLog({

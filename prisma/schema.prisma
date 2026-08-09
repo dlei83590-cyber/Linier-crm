@@ -4923,7 +4923,7 @@ model PurchaseReceiptLine {
 /// 检验（QC 唯一事实源，Blocking ③ / P3 Final；免检 = SKIP + QUALIFIED，不绕过 Inspection）
 model Inspection {
   id       String   @id @default(cuid())
-  purchaseReceiptLineId String
+  purchaseReceiptLineId String @unique // CTO #7115 Blocking：一个 PurchaseReceiptLine 只有一个最终 Inspection（业务不变量落数据库，并发 Create 由 DB unique 拒绝）
   purchaseReceiptLine PurchaseReceiptLine @relation(fields: [purchaseReceiptLineId], references: [id], onDelete: Cascade)
   inspectionMode InspectionMode // SKIP/SPOT/FULL
   result   InspectionResult @default(PENDING)

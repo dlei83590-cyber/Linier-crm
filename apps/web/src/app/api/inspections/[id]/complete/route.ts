@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { authenticate, requirePermission, requestMeta } from '@/lib/api-helpers';
+import { authenticate, requirePermission, requestMeta, writeAuditLog } from '@/lib/api-helpers';
 import { ok, fail, failValidation, failConflict, failNotFound } from '@/lib/api/response';
 import { ERROR_CODES } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
@@ -186,6 +186,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   } catch {
     // 事件总线未落地（Known Risk）：发布失败不阻断业务事实（事务已提交）；生产前升级 Transactional Outbox（CTO #7045 债务记录）
   }
+
+  // **Minor（CTO #7115）**：Audit 与 Domain Event 是两个不同用途——有 Event 不能省 Audit。
+  // 最终质检动作显式留审计（action=InspectionCompleted / entityType=inspection，完整事实字段）。
+  await writeAuditLog({
+    actorId,
+    action: 'InspectionCompleted',
+    entityType: 'inspection',
+    entityId: result.inspectionId,
+    afterData: {
+      inspectionId: result.inspectionId,
+      purchaseReceiptLineId: result.purchaseReceiptLineId,
+      inspectionMode: result.inspectionMode,
+      result: result.result,
+      qualifiedQty: result.qualifiedQty,
+      rejectedQty: result.rejectedQty,
+      inspectedById: actorId,
+      inspectedAt: result.inspectedAt,
+    },
+    meta,
+  });
 
   return ok({
     id: result.inspectionId,
