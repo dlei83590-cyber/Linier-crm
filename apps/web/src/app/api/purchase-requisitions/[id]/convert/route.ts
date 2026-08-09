@@ -2,7 +2,14 @@ import type { NextRequest } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from '@/lib/api-helpers';
-import { ok, fail, failConflict, failNotFound, failServer } from '@/lib/api/response';
+import {
+  ok,
+  fail,
+  failValidation,
+  failConflict,
+  failNotFound,
+  failServer,
+} from '@/lib/api/response';
 import { ERROR_CODES } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
 import { purchaseOrderConvertSchema } from '@/lib/api/schemas';
@@ -58,11 +65,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         include: { lines: { where: { deletedAt: null }, orderBy: { lineNo: 'asc' } } },
       });
       if (!pr) return { error: 'NOT_FOUND' as const };
-      if (pr.status !== 'APPROVED') {
-        return { error: 'NOT_APPROVED' as const };
-      }
       if (pr.status === 'CONVERTED') {
         return { error: 'ALREADY_CONVERTED' as const };
+      }
+      if (pr.status !== 'APPROVED') {
+        return { error: 'NOT_APPROVED' as const };
       }
       const existingPos = await tx.purchaseOrder.count({
         where: { requisitionId: id, deletedAt: null },
@@ -269,6 +276,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
   if (result.error === 'SUPPLIER_NOT_FOUND') {
     return fail(ERROR_CODES.PURCHASE_ORDER_SUPPLIER_NOT_FOUND, '供应商不存在', 400);
+  }
+  if (result.error === 'ITEM_MISSING') {
+    return fail(
+      ERROR_CODES.PURCHASE_ORDER_ITEM_NOT_FOUND,
+      'PR 行缺少 Item 引用，无法走供应商价格快照，请改用 MANUAL 通道',
+      400,
+    );
   }
   if (result.error === 'PRICE_NOT_FOUND') {
     return fail(
