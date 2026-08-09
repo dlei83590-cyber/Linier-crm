@@ -12,6 +12,7 @@ import { syncInvoiceApproval } from '@/lib/invoice/workflow-sync';
 import { syncWriteOffApproval } from '@/lib/write-off/workflow-sync';
 import { syncCreditDebitNoteApproval } from '@/lib/credit-debit-note/workflow-sync';
 import { syncPurchaseRequisitionApproval } from '@/lib/purchase-requisition/workflow-sync';
+import { syncPurchaseOrderApproval } from '@/lib/purchase-order/workflow-sync';
 
 export const dynamic = 'force-dynamic';
 
@@ -422,6 +423,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   ) {
     await syncPurchaseRequisitionApproval({
       requisitionId: instance.businessId,
+      workflowStatus: result.afterStatus,
+      actorId: user!.id,
+    });
+  }
+
+  // Sprint 5A Phase 4B：PurchaseOrder 审批终态回写（Workflow 唯一审批事实源；不建 Approval 表）
+  // **红线（CTO Phase 4B 再次锁死）：审批只回写 approvalStatus=APPROVED + status=APPROVED，绝不自动 CONFIRMED**——
+  // 正式下单必须显式 POST /api/purchase-orders/{id}/confirm；只有 Confirmed PO 才是 5B GR 来源；
+  // REJECTED → status=DRAFT（可重提）
+  if (
+    instance.businessType === 'purchase-order' &&
+    (result.afterStatus === 'COMPLETED' || result.afterStatus === 'REJECTED')
+  ) {
+    await syncPurchaseOrderApproval({
+      purchaseOrderId: instance.businessId,
       workflowStatus: result.afterStatus,
       actorId: user!.id,
     });

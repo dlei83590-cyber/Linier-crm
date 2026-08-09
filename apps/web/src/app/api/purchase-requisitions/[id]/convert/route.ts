@@ -99,6 +99,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           code,
           sourceType: 'REQUISITION',
           supplierId: supplier.id,
+          purchaserId: data.purchaserId ?? null, // 采购员（CTO Phase 4B 指令：PO Header 落地）
+          departmentId: data.departmentId ?? null, // 采购部门（默认取 PR.departmentId）
           requisitionId: pr.id,
           status: 'DRAFT',
           orderDate: new Date(),

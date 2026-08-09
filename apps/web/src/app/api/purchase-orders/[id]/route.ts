@@ -236,10 +236,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       };
       await createPurchaseOrderRevision(tx, id, changeReason ?? '更新采购订单', snapshot, user?.id);
 
-      // 原子 CAS 头更新（仅非金额字段：paymentTerm/expectedDeliveryDate/remark；金额由行聚合重算）
+      // 原子 CAS 头更新（仅非金额字段：purchaserId/departmentId/paymentTerm/expectedDeliveryDate/remark；金额由行聚合重算）
       const cas = await tx.purchaseOrder.updateMany({
         where: { id, version, status: 'DRAFT' },
         data: {
+          ...(fields.purchaserId !== undefined ? { purchaserId: fields.purchaserId } : {}),
+          ...(fields.departmentId !== undefined ? { departmentId: fields.departmentId } : {}),
           ...(fields.paymentTerm !== undefined ? { paymentTerm: fields.paymentTerm } : {}),
           ...(fields.expectedDeliveryDate !== undefined
             ? {

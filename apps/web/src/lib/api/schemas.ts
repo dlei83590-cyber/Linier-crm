@@ -572,6 +572,9 @@ export const purchaseOrderLineCreateSchema = z
 /** PO 创建（Direct Purchase：sourceType=DIRECT，requisitionId 为空；行 sourcePurchaseRequisitionLineId 为空） */
 export const purchaseOrderCreateSchema = z.object({
   supplierId: z.string().min(1),
+  // 采购员/采购部门（CTO Phase 4B 指令：PO Header 落地；Direct 无 PR 时采购员不可推导）
+  purchaserId: z.string().min(1).nullable().optional(),
+  departmentId: z.string().min(1).nullable().optional(),
   currency: z.string().min(1).max(10).optional(),
   paymentTerm: z.string().max(100).nullable().optional(),
   expectedDeliveryDate: z.string().datetime().nullable().optional(),
@@ -582,6 +585,8 @@ export const purchaseOrderCreateSchema = z.object({
 /** PO 头更新 + 可选行全量替换（仅 DRAFT；金额服务端重算；ReceivedQty/remainingReceiveQty 禁止客户端传入） */
 export const purchaseOrderUpdateSchema = z
   .object({
+    purchaserId: z.string().min(1).nullable().optional(),
+    departmentId: z.string().min(1).nullable().optional(),
     paymentTerm: z.string().max(100).nullable().optional(),
     expectedDeliveryDate: z.string().datetime().nullable().optional(),
     remark: z.string().max(1000).nullable().optional(),
