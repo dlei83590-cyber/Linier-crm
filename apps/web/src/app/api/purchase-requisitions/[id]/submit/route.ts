@@ -20,7 +20,11 @@ export const dynamic = 'force-dynamic';
  * 流程：PR → ApprovalPolicy（module=PURCHASE_REQUISITION，规则 priority DESC；PR 无金额 → 优先无金额区间约束规则）
  *       → WorkflowDefinition → WorkflowInstance → PR.workflowInstanceId → status=SUBMITTED
  * 红线（Phase 3）：Submit 后进入条件 Workflow；审批只改变 PR 审批/状态投影，**不创建 PO**（PR→PO Convert 是 PO 阶段显式动作）；
- * PR 无 Snapshot 模型（仅 Revision），不生成快照；已有审批实例（单实例架构 @@unique）→ 409 不重复创建。
+ * PR 无 Snapshot 模型（仅 Revision），不生成快照；
+ * **单实例架构（@@unique([businessType, businessId])，不建 Approval 表）**：RUNNING → 409 不重复提交；
+ * **终态实例（COMPLETED/REJECTED/WITHDRAWN/TERMINATED）→ 复用同一 WorkflowInstance 重新 SUBMIT 重启审批**
+ * （CTO Phase 3 Review Blocking ②：REJECTED 后必须可重提；失效旧 Approver → 重置 RUNNING → 新建 PENDING Approver →
+ * PR=SUBMITTED + approvalStatus=PENDING + 清 approvedAt/approvedById → 新一轮 WorkflowAction/History 留痕）。
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await authenticate(request);
@@ -66,7 +70,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     );
   }
 
-  // ② 创建 WorkflowInstance（复用 Sprint 3A Workflow Engine：ACTIVE 定义 + 首步审批人解析）
+  // ② 创建/复用 WorkflowInstance（单实例架构 @@unique([businessType, businessId])；不建 Approval 表）
+  // **CTO Phase 3 Review Blocking ②**：REJECTED 后必须可重提——终态实例不能重新 create，
+  // 复用同一个 WorkflowInstance 重新 SUBMIT（对齐 SalesOrder/WriteOff 已验证的单实例重启模式）：
+  //   失效旧 Approver → instance 重置 RUNNING + currentStep 首步 → 新建新一轮 PENDING Approver →
+  //   PR=SUBMITTED + approvalStatus=PENDING + 清 approvedAt/approvedById → 新一轮 WorkflowAction/History 留痕
   let instance: { id: string } | null = null;
   try {
     instance = await prisma
@@ -83,14 +91,94 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         });
         if (!definition) throw new Error('WORKFLOW_DEFINITION_NOT_FOUND');
 
-        const dup = await tx.workflowInstance.findFirst({
-          where: { businessType: 'purchase-requisition', businessId: id, deletedAt: null },
-          select: { id: true },
-        });
-        if (dup) throw new Error('WORKFLOW_INSTANCE_EXISTS');
-
         const firstStep = definition.steps[0];
         const startStepNo = firstStep?.stepNo ?? 1;
+
+        const existing = await tx.workflowInstance.findFirst({
+          where: { businessType: 'purchase-requisition', businessId: id, deletedAt: null },
+          select: { id: true, status: true },
+        });
+
+        // 已有实例：RUNNING → 409（审批进行中不重复创建）；终态 → 复用重启
+        if (existing) {
+          if (existing.status === 'RUNNING') {
+            throw new Error('WORKFLOW_INSTANCE_EXISTS');
+          }
+          // 复用同一 WorkflowInstance 重启：重置 RUNNING + currentStep 首步 + 清 completedAt
+          await tx.workflowInstance.update({
+            where: { id: existing.id },
+            data: {
+              status: 'RUNNING',
+              currentStepNo: startStepNo,
+              completedAt: null,
+              updatedById: actorId,
+            },
+          });
+          // 失效上一轮全部 Approver（isActive=false + deletedAt=now），防止旧 REJECTED 卡死新一轮
+          await tx.approver.updateMany({
+            where: { instanceId: existing.id, deletedAt: null },
+            data: { isActive: false, deletedAt: new Date(), updatedById: actorId },
+          });
+          // 新一轮 SUBMIT 留痕（WorkflowAction + WorkflowHistory）
+          await tx.workflowAction.create({
+            data: {
+              instanceId: existing.id,
+              actionType: 'SUBMIT',
+              actorId,
+              stepNo: startStepNo,
+              comment: '驳回后重新提交采购申请审批',
+              createdById: actorId,
+              updatedById: actorId,
+            },
+          });
+          await tx.workflowHistory.create({
+            data: {
+              instanceId: existing.id,
+              stepNo: startStepNo,
+              actionType: 'SUBMIT',
+              beforeStatus: null,
+              afterStatus: 'RUNNING',
+              actorId,
+              ip: clientIp(request) ?? null,
+              remark: '驳回后重新提交采购申请审批',
+              createdById: actorId,
+              updatedById: actorId,
+            },
+          });
+          // 创建新一轮 PENDING Approver
+          if (firstStep) {
+            const userIds = await resolveStepApprovers(
+              tx,
+              firstStep.approverType,
+              firstStep.approverValue,
+            );
+            if (userIds.length > 0) {
+              await tx.approver.createMany({
+                data: userIds.map((uid) => ({
+                  instanceId: existing.id,
+                  stepNo: firstStep.stepNo,
+                  userId: uid,
+                  status: 'PENDING',
+                  createdById: actorId,
+                  updatedById: actorId,
+                })),
+              });
+            }
+          }
+          // 回写 PR 投影：status=SUBMITTED + approvalStatus=PENDING + 清空上一轮 approval projection
+          await tx.purchaseRequisition.update({
+            where: { id },
+            data: {
+              status: 'SUBMITTED',
+              approvalStatus: 'PENDING',
+              approvedAt: null,
+              approvedById: null,
+              updatedById: actorId,
+            },
+          });
+          return existing;
+        }
+
         const created = await tx.workflowInstance.create({
           data: {
             definitionId: definition.id,

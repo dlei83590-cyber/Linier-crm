@@ -106,9 +106,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
   }
 
-  let updated: Awaited<ReturnType<typeof prisma.purchaseRequisition.update>>;
+  let updated: Awaited<ReturnType<typeof prisma.purchaseRequisition.findFirstOrThrow>>;
   try {
-    // 单事务：Revision（变更前快照）+ 头更新 + 行全量替换 + version 乐观锁
+    // 单事务：Revision（变更前快照）+ 原子 CAS 头更新 + 行全量替换
+    // **CTO Phase 3 Review Blocking ①**：乐观锁必须数据库级原子（预检查不足以防并发 lost update）——
+    // 真正更新时把 version + status 放进原子条件（updateMany where {id, version, status:"DRAFT"}，count===1）；
+    // 失败统一 409 VERSION_CONFLICT。Revision + Header + Lines 替换仍保持同一事务。
     updated = await prisma.$transaction(async (tx) => {
       // 变更前快照 → Revision（修改必须产生 Revision；红线）
       const snapshot = {
@@ -139,9 +142,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         user?.id,
       );
 
-      // 头更新（仅非金额字段：needDate/remark）
-      const saved = await tx.purchaseRequisition.update({
-        where: { id },
+      // 原子 CAS 头更新（仅非金额字段：needDate/remark；version + DRAFT 条件，count===1 才成功）
+      const cas = await tx.purchaseRequisition.updateMany({
+        where: { id, version, status: 'DRAFT' },
         data: {
           ...(fields.needDate !== undefined
             ? { needDate: fields.needDate ? new Date(fields.needDate) : null }
@@ -151,6 +154,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           updatedById: user!.id,
         },
       });
+      if (cas.count !== 1) throw new Error('PR_VERSION_CONFLICT');
+      // updateMany 不返回记录 → 同事务重读更新后的 Header
+      const saved = await tx.purchaseRequisition.findFirstOrThrow({ where: { id } });
 
       // 行全量替换（Line 不作为独立业务入口 → 软删旧行 + 重建；服务端验证 Item/UOM + quantity>0）
       if (lines) {
@@ -181,6 +187,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return saved;
     });
   } catch (e) {
+    if (e instanceof Error && e.message === 'PR_VERSION_CONFLICT') {
+      return failConflict(ERROR_CODES.VERSION_CONFLICT, '版本冲突，请刷新后重试（并发修改）');
+    }
     if (e instanceof Error && e.message === 'PR_QUANTITY_INVALID') {
       return fail(ERROR_CODES.PURCHASE_REQUISITION_QUANTITY_INVALID, '需求数量必须大于 0', 400);
     }
