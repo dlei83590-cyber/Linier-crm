@@ -153,9 +153,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (cas.count !== 1) {
       throw new Error('VERSION_CONFLICT');
     }
-    const current = await tx.purchaseReceipt.findFirstOrThrow({
-      where: { id, deletedAt: null },
-    });
 
     // 行整体替换（软删旧行 + 重建；行由头单据驱动，无独立 Line CRUD）
     if (validatedLines) {
