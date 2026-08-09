@@ -79,7 +79,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   const existing = await prisma.warehouseReceipt.findFirst({
     where: { id, deletedAt: null },
-    select: { id: true, status: true, version: true, purchaseReceiptId: true },
+    select: { id: true, status: true, version: true, purchaseReceiptId: true, warehouseId: true, locationId: true },
   });
   if (!existing) return failNotFound(ERROR_CODES.WAREHOUSE_RECEIPT_NOT_FOUND, '入库单不存在');
   if (existing.status !== 'DRAFT') {
@@ -92,9 +92,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return failConflict(ERROR_CODES.VERSION_CONFLICT, '版本冲突，请刷新后重试');
   }
 
-  // 头字段预校验（warehouse / location 组合 FK）
-  const effectiveWarehouseId = fields.warehouseId !== undefined ? fields.warehouseId : null;
-  const effectiveLocationId = fields.locationId !== undefined ? fields.locationId : null;
+  // 头字段预校验（warehouse / location 组合 FK；**Minor（CTO #7192）：effective 值 = incoming ?? existing，
+  // 只改 locationId 不重提 warehouseId 时不得误拒**——DB 组合 FK 是最终防线，API 给稳定业务错误）
+  const effectiveWarehouseId = fields.warehouseId !== undefined ? fields.warehouseId : existing.warehouseId;
+  const effectiveLocationId = fields.locationId !== undefined ? fields.locationId : existing.locationId;
   if (effectiveWarehouseId) {
     const wh = await prisma.warehouse.findFirst({
       where: { id: effectiveWarehouseId, deletedAt: null, isActive: true },
@@ -185,7 +186,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     });
     const inspectionById = new Map(inspections.map((i) => [i.id, i]));
 
-    // 可入库余额：排除本单自身行（本单 DRAFT 未过账不占额度，仅统计其他非 CANCELLED 单）
+    // 可入库余额：postedUsedQty（CTO #7192：只有 POSTED 消耗正式额度；本单 DRAFT 未过账不占额度，不双计）
     validatedLines = [];
     for (const line of lines) {
       const inspection = inspectionById.get(line.inspectionId);

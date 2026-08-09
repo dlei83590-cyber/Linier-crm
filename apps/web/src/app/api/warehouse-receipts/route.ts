@@ -196,7 +196,7 @@ export async function POST(request: NextRequest) {
         if (inspection.purchaseReceiptLineId !== line.purchaseReceiptLineId) {
           throw new Error('INSPECTION_MISMATCH');
         }
-        // 可入库余额 = qualifiedQty - 已占用（本单未过账不占额度；仅统计非 CANCELLED 单）
+        // 可入库余额 = qualifiedQty - **已 POSTED 占用**（CTO #7192：只有 POSTED 消耗正式额度；本单 DRAFT 未过账不占额度，不双计）
         const usedQty = await computeInspectionUsedQty(tx, inspection.id);
         const availableQty = computeInspectionAvailableQty(inspection.qualifiedQty, usedQty);
         const qty = new Prisma.Decimal(line.quantity);

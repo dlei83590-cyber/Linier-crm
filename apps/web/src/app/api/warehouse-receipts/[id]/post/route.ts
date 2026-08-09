@@ -21,7 +21,7 @@ export const dynamic = 'force-dynamic';
  * - 幂等：已 POSTED → 409 `WAREHOUSE_RECEIPT_ALREADY_POSTED`（重复 Post 拒绝）；CANCELLED → 409 INVALID_STATE；
  * - 事务锁：`FOR UPDATE` 锁 WarehouseReceipt + 涉及 Inspection 行（防并发超入）；
  * - 再次校验来源 Inspection 已完成（result ≠ PENDING）+ qualifiedQty > 0 + 属于同一收货行；
- * - **累计入库不得超余额**：本单行 + 其他非 CANCELLED 单已占用 ≤ qualifiedQty（POST 时本单行计入占用——Create/PATCH 时本单未过账不占额度）；
+ * - **累计入库不得超余额**：`postedUsedQty`（**仅 POSTED 单——CTO #7192：只有 POSTED 消耗正式可入库额度，DRAFT 不占额度**）≤ qualifiedQty；Post 锁 Inspection 后以本单 DRAFT 数量 ≤ availableQty 校验（本单未过账不占额度，不双计）；
  * - CAS：`id + version + status=DRAFT` 同时命中才更新，成功 `version: { increment: 1 }`；
  * - 事件：只有 POST 事务成功提交后才发 `WarehouseReceiptPosted`（EVENTS.md 2.3.9；载荷含入库单/来源收货/仓库库位/操作人/时间，**不含库存余额**）。
  */
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return { error: 'INVALID_STATE' as const, status: receipt.status };
     }
 
-    // ③ 行级校验（FOR UPDATE 锁 Inspection 后重算余额：本单行 + 其他非 CANCELLED 单已占用 ≤ qualifiedQty）
+    // ③ 行级校验（FOR UPDATE 锁 Inspection 后重算余额：postedUsedQty 仅统计 POSTED——本单 DRAFT 未过账不占额度，不双计）
     const lines = await tx.warehouseReceiptLine.findMany({
       where: { warehouseReceiptId: id, deletedAt: null },
       orderBy: { createdAt: 'asc' },
@@ -97,8 +97,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (inspection.purchaseReceiptLineId !== line.purchaseReceiptLineId) {
         return { error: 'INSPECTION_MISMATCH' as const };
       }
-      // 累计占用 = 本单行 + 其他非 CANCELLED 单（POST 时本单行计入占用，防并发超入）
-      const usedQty = await computeInspectionUsedQty(tx, inspection.id); // 含本单（未排除）
+      // 可入库余额 = qualifiedQty - **postedUsedQty**（CTO #7192：只有 POSTED 消耗正式额度；本单 DRAFT 未过账不计入，不双计）
+      const usedQty = await computeInspectionUsedQty(tx, inspection.id); // postedUsedQty（仅 POSTED）
       if (line.quantity.gt(computeInspectionAvailableQty(inspection.qualifiedQty, usedQty))) {
         return { error: 'OVER_INSPECTION_BALANCE' as const };
       }
