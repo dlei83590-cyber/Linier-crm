@@ -705,3 +705,47 @@ export const inspectionCompleteSchema = z.object({
   qualifiedQty: z.coerce.number().nonnegative().optional(),
   rejectedQty: z.coerce.number().nonnegative().optional(),
 });
+
+/** Sprint 5B - WarehouseReceipt（采购入库事实，CTO Inspection API Final 98/100 APPROVED #7135 后开发；D10：Created ≠ Posted，只有 POSTED 才触发 6A InventoryMovement(IN)）
+ * - 入库行只能消费**已完成且 qualifiedQty > 0** 的 Inspection（组合 FK [inspectionId, purchaseReceiptLineId] 保证 Inspection 属于同一收货行）；
+ * - quantity <= 可入库余额（qualifiedQty - 已占用），累计入库不得超过 Inspection 可入库余额；
+ * - DIRECT_PROJECT（直送）禁入库（P4）；Warehouse-Location 必须同属；
+ * - POST 幂等（ALREADY_POSTED → 409）；DRAFT 创建/编辑不发领域事件（只有 POST 发 WarehouseReceiptPosted）；
+ * - 红线：5B 禁写 Stock/InventoryMovement（6A 唯一事实源）。
+ */
+
+/** 入库行（客户端提交：溯源收货行 + 已完成 Inspection + 数量 + P6 批次/序列号/效期采集） */
+export const warehouseReceiptLineCreateSchema = z.object({
+  purchaseReceiptLineId: z.string().min(1), // 溯源收货行（组合 FK 约束 Inspection 属于同一收货行）
+  inspectionId: z.string().min(1), // 质量结论（必须已完成且 qualifiedQty > 0）
+  quantity: z.coerce.number().positive(), // 入库数量（> 0；≤ 可入库余额，服务端校验）
+  // P6 Final：批次/序列号/效期 canonical capture point = 入库层采集
+  batchNo: z.string().max(100).optional(),
+  serialNos: z.array(z.string().max(100)).optional(),
+  mfgDate: z.string().max(50).optional(), // 生产日期（ISO 日期字符串，服务端转 Date）
+  expDate: z.string().max(50).optional(), // 有效期至（ISO 日期字符串，服务端转 Date）
+  remark: z.string().max(500).optional(),
+});
+
+/** 入库单创建（DRAFT；仓库必填；location 若提供必须属于同一 warehouse） */
+export const warehouseReceiptCreateSchema = z.object({
+  purchaseReceiptId: z.string().min(1),
+  warehouseId: z.string().min(1),
+  locationId: z.string().min(1).optional(),
+  remark: z.string().max(500).optional(),
+  lines: z.array(warehouseReceiptLineCreateSchema).min(1, '至少需要一行'),
+});
+
+/** 入库单更新（仅 DRAFT；version 乐观锁；行整体替换；warehouseId/locationId 可改） */
+export const warehouseReceiptUpdateSchema = z.object({
+  version: z.number().int().positive(),
+  warehouseId: z.string().min(1).nullable().optional(),
+  locationId: z.string().min(1).nullable().optional(),
+  remark: z.string().max(500).nullable().optional(),
+  lines: z.array(warehouseReceiptLineCreateSchema).min(1).optional(),
+});
+
+/** 入库过账（真 Gate：DRAFT → POSTED；version 乐观锁 + 幂等 ALREADY_POSTED） */
+export const warehouseReceiptPostSchema = z.object({
+  version: z.number().int().positive(),
+});
