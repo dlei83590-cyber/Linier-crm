@@ -219,21 +219,21 @@ Stock Projection（库存余额投影，任何模块不得直接改）
 | --- | --- | --- |
 | `PurchaseReceiptReceived` | 收货完成（业务动作） | 5B 实现时 |
 | `InspectionCompleted` | 质检结论落定 | 5B 实现时 |
-| `WarehouseReceiptStocked` | 入库完成（驱动 6A） | 5B 实现时 |
+| `WarehouseReceiptPosted` | 入库过账完成（驱动 6A；Created≠Posted，只有 POSTED 触发） | 5B 实现时 |
 | `PurchaseReturned` | 退货完成 | 5B 实现时 |
 | `PurchaseOrderPartiallyReceived` / `PurchaseOrderReceived` | PO 收货投影聚合（ADR-0023 已预留） | 5B 实现时 |
 | `GoodsReceived` | 5C 注册（EVENTS.md 已注明） | 5C |
 
 > 事件命名采用业务动作完成态（Received/Completed/Stocked/Returned），非 Draft Created（P10 Final）。
 
-## 12. 边界红线（本阶段无越界实现）
+## 12. 边界红线（5B 实现范围）
 
-- ❌ 不创建 Schema / Migration 0023 / Prisma model / API
-- ❌ 不创建 Warehouse / Location / Stock / InventoryMovement 模型（属 6A）
+- ✅ **Schema + Migration 0023 已获 CTO Gate 批准**（范围见 §13：Warehouse/WarehouseLocation 最小主数据 + GoodsReceipt 相关模型）
+- ✅ **5B 允许创建最小 Warehouse / WarehouseLocation 主数据**（P8 Final）；❌ **不创建 Stock / InventoryMovement / 库存余额模型（OnHandQty/AvailableQty/ReservedQty/InventoryBalance），这些属于 6A**
 - ❌ 任何代码不得直接写库存余额
 - ❌ 不实现 Supplier Invoice / 三单匹配 / AP（5C）
 - ❌ 不决定"负 movement 是否允许"（留 6A Inventory Ledger）
-- ✅ 本阶段产出：4 份设计文档（本文 + ADR-0024 + Field Matrix + Pending Decisions）
+- ✅ 本阶段产出：4 份设计文档（本文 + ADR-0024 + Field Matrix + Pending Decisions）→ Schema + Migration 0023
 
 ## 13. CTO Design Review 后动作
 

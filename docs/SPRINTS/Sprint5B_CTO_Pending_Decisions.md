@@ -72,11 +72,11 @@
 - 5B 任何模型/API 不得直接写库存余额（`stock.qty += x` 禁止）
 - 5B-6A 衔接：WarehouseReceipt 落库后发布事件，6A 消费生成 InventoryMovement(IN)（实现细节 Gate 后定）
 
-## P10：事件命名 —— ⚠️ 修改后固化
+## P10：事件命名 —— ✅ Final（CTO Gate Re-review 统一为 WarehouseReceiptPosted）
 
-**决策**：**用业务动作事件，不以 Draft `Created` 作为完成事实事件**。
-- 草案：`PurchaseReceiptReceived` / `InspectionCompleted` / `WarehouseReceiptStocked` / `PurchaseReturned` / `PurchaseOrderPartiallyReceived` / `PurchaseOrderReceived`
-- 最终命名与载荷在 EVENTS.md 注册时定
+**决策**：**用业务动作事件，不以 Draft `Created` 作为完成事实事件**；命名与状态机一致（状态已叫 `POSTED`，核心语义是"过账生效"）。
+- ✅ Final：`PurchaseReceiptReceived` / `InspectionCompleted` / `WarehouseReceiptPosted` / `PurchaseReturned` / `PurchaseOrderPartiallyReceived` / `PurchaseOrderReceived`
+- 最终命名与载荷在 EVENTS.md 注册时定（**统一使用 `WarehouseReceiptPosted`，与状态机 POSTED 一致**）
 
 ---
 

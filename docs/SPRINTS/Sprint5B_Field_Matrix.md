@@ -144,7 +144,7 @@
 | id | 主键 | UUID | |
 | purchaseReturnId | 头 | FK | |
 | sourceRefType | 来源引用类型 | 枚举：`RECEIPT_LINE / WAREHOUSE_RECEIPT_LINE / INSPECTION` | **P5 Final：必须有来源** |
-| sourceRefId | 来源引用 id | string（可空） | **P5 Final** |
+| sourceRefId | 来源引用 id | string（**必填**，P5 Final：必须有来源；Schema 按必填业务语义处理，不照抄 nullable 草案） | **P5 Final** |
 | itemId | 物料 | FK → Item | |
 | quantity | 退货数量 | Decimal > 0 | ≤ 可退数量（防超退，锁内校验） |
 | uomId | 单位 | FK → UoM | |
