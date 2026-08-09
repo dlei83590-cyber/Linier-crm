@@ -749,3 +749,58 @@ export const warehouseReceiptUpdateSchema = z.object({
 export const warehouseReceiptPostSchema = z.object({
   version: z.number().int().positive(),
 });
+
+/** Sprint 5B - PurchaseReturn（采购退货独立事实，CTO WarehouseReceipt Final Re-review 98/100 APPROVED #7219 后开发；P5 Final：非负 GR + 必须有真实来源 + disposition）
+ * - 三来源（exactly-one FK + API 强制匹配）：RECEIPT_LINE / WAREHOUSE_RECEIPT_LINE / INSPECTION；
+ *   RECEIPT_LINE / INSPECTION = 未入库退货（不碰库存）；WAREHOUSE_RECEIPT_LINE = 已入库退货（必须来自 POSTED 入库事实，**不得写 InventoryMovement(OUT)**）；
+ * - quantity > 0 且 ≤ 来源可退余额（Return Gate 锁内重算累计 RETURNED，防并发超退）；
+ * - disposition：REPLACE_REQUIRED（重开 PO 履约剩余）/ CREDIT_ONLY（不自动重开待交）；returnReason 必填；
+ * - RETURN 事务锁 + CAS + Audit + PurchaseReturned 事务后事件；DRAFT 创建/编辑不发领域事件；
+ * - 红线：5B 禁写 Stock/InventoryMovement（6A 唯一事实源）。
+ */
+
+/** 退货行（客户端提交：来源引用三选一 + 数量 + 处置 + 原因） */
+export const purchaseReturnLineCreateSchema = z
+  .object({
+    sourceRefType: z.enum(['RECEIPT_LINE', 'WAREHOUSE_RECEIPT_LINE', 'INSPECTION']),
+    sourcePurchaseReceiptLineId: z.string().min(1).optional(),
+    sourceWarehouseReceiptLineId: z.string().min(1).optional(),
+    sourceInspectionId: z.string().min(1).optional(),
+    quantity: z.coerce.number().positive(), // 退货数量（> 0；≤ 来源可退余额，服务端校验）
+    disposition: z.enum(['REPLACE_REQUIRED', 'CREDIT_ONLY']), // 必填（P5 Final / Blocking ②）
+    returnReason: z.string().min(1).max(500), // 退货原因必填
+    batchNo: z.string().max(100).optional(), // 已入库退货批次追溯（可空）
+    serialNos: z.array(z.string().max(100)).optional(),
+    remark: z.string().max(500).optional(),
+  })
+  .refine(
+    (v) =>
+      (v.sourceRefType === 'RECEIPT_LINE' && !!v.sourcePurchaseReceiptLineId) ||
+      (v.sourceRefType === 'WAREHOUSE_RECEIPT_LINE' && !!v.sourceWarehouseReceiptLineId) ||
+      (v.sourceRefType === 'INSPECTION' && !!v.sourceInspectionId),
+    {
+      message: 'sourceRefType 必须与对应来源 FK 匹配（exactly-one 非空）',
+      path: ['sourceRefType'],
+    },
+  );
+
+/** 退货单创建（DRAFT；来源必须属于该 PO） */
+export const purchaseReturnCreateSchema = z.object({
+  purchaseOrderId: z.string().min(1),
+  returnType: z.enum(['REJECTED_ON_RECEIPT', 'RETURN_AFTER_STOCK_IN', 'QUALITY_ISSUE']),
+  remark: z.string().max(500).optional(),
+  lines: z.array(purchaseReturnLineCreateSchema).min(1, '至少需要一行'),
+});
+
+/** 退货单更新（仅 DRAFT；version 乐观锁；行整体替换；来源/数量重新校验） */
+export const purchaseReturnUpdateSchema = z.object({
+  version: z.number().int().positive(),
+  returnType: z.enum(['REJECTED_ON_RECEIPT', 'RETURN_AFTER_STOCK_IN', 'QUALITY_ISSUE']).optional(),
+  remark: z.string().max(500).nullable().optional(),
+  lines: z.array(purchaseReturnLineCreateSchema).min(1).optional(),
+});
+
+/** 退货完成（真 Gate：DRAFT → RETURNED；version 乐观锁 + 幂等 ALREADY_RETURNED） */
+export const purchaseReturnReturnSchema = z.object({
+  version: z.number().int().positive(),
+});
