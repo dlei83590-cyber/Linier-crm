@@ -202,7 +202,6 @@ model User {
   receivedPurchaseReceipts PurchaseReceipt[] // 5B：收货单（receivedById 方向，收货员）
   inspectedInspections Inspection[] // 5B：检验（inspectedById 方向，质检员）
   postedWarehouseReceipts WarehouseReceipt[] @relation("WarehouseReceiptPostedBy") // 5B：入库单（postedById 方向，过账人 D10）
-  stockedWarehouseReceipts WarehouseReceipt[] @relation("WarehouseReceiptStockedBy") // 5B：入库单（stockedById 方向，仓管员）
   returnedPurchaseReturns PurchaseReturn[] // 5B：退货单（returnedById 方向，经办人）
   createdAt    DateTime    @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime    @updatedAt @db.Timestamptz(3)
@@ -4657,7 +4656,7 @@ model PurchaseOrderLine {
   projectId String? // 直送项目（DIRECT_PROJECT 必填，预声明）
   project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
   // 超收容差 override（P2 Final：System Default = 0%；PO Line 可配置；null = 按 Supplier/Item/System 配置回退）
-  overReceiptTolerancePercent Decimal? @db.Decimal(5, 4)
+  overReceiptToleranceRate Decimal? @db.Decimal(8, 6) // Minor ①：0.050000 = 5%（rate 单位，非百分数整数；Schema/API/OpenAPI/QA 唯一单位定义）
   purchaseReceiptLines PurchaseReceiptLine[] // 5B：收货行（PurchaseReceiptLine.purchaseOrderLineId 方向）
   // 统一审计字段
   isActive    Boolean  @default(true)
@@ -4843,6 +4842,7 @@ model WarehouseLocation {
   warehouseReceipts WarehouseReceipt[] // 入库单库位方向（WarehouseReceipt.locationId，可空）
 
   @@unique([warehouseId, code])
+  @@unique([id, warehouseId]) // 支持 WarehouseReceipt 组合 FK（Minor ②：location 必须属于同一 warehouse）
   @@index([warehouseId])
   @@index([deletedAt])
 }
@@ -4855,8 +4855,8 @@ model PurchaseReceipt {
   purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
   supplierId String // 供应商快照自 PO（不单独校验）
   supplier  Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
-  warehouseId String // 到货地点（≠ 入库仓库）
-  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  warehouseId String? // 公司仓库到货地点，仅 WAREHOUSE 收货场景使用（Blocking ①：DIRECT_PROJECT 直送不使用 warehouse）
+  warehouse Warehouse? @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
   status   PurchaseReceiptStatus @default(DRAFT)
   receivedAt DateTime? @db.Timestamptz(3)
   receivedById String?
@@ -4911,6 +4911,7 @@ model PurchaseReceiptLine {
 
   inspections Inspection[]
   warehouseReceiptLines WarehouseReceiptLine[]
+  purchaseReturnLines PurchaseReturnLine[] // 反向：退货行来源（Blocking ③）
 
   @@unique([purchaseReceiptId, lineNo])
   @@index([purchaseReceiptId])
@@ -4932,6 +4933,8 @@ model Inspection {
   inspectedBy User? @relation(fields: [inspectedById], references: [id], onDelete: SetNull)
   inspectedAt DateTime? @db.Timestamptz(3)
   remark   String?
+  warehouseReceiptLines WarehouseReceiptLine[] // 反向：入库行引用（Blocking ②）
+  purchaseReturnLines PurchaseReturnLine[] // 反向：退货行来源（Blocking ③）
   isActive Boolean  @default(true)
   createdById String?
   updatedById String?
@@ -4953,15 +4956,12 @@ model WarehouseReceipt {
   purchaseReceipt PurchaseReceipt @relation(fields: [purchaseReceiptId], references: [id], onDelete: Restrict)
   warehouseId String // 入库仓库（必填）
   warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
-  locationId String? // 库位（可空，P8 剩余子项）
-  location  WarehouseLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  locationId String? // 库位（可空；Minor ②：组合 FK 保证 location 属于同一 warehouse）
+  location  WarehouseLocation? @relation(fields: [locationId, warehouseId], references: [id, warehouseId], onDelete: SetNull)
   status   WarehouseReceiptStatus @default(DRAFT)
-  postedAt DateTime? @db.Timestamptz(3) // 过账时间（D10）
+  postedAt DateTime? @db.Timestamptz(3) // 过账时间（D10：Created ≠ Posted，只有 POSTED 触发 InventoryMovement(IN)）
   postedById String?
   postedBy User? @relation("WarehouseReceiptPostedBy", fields: [postedById], references: [id], onDelete: SetNull)
-  stockedAt DateTime? @db.Timestamptz(3) // 入库时间
-  stockedById String?
-  stockedBy User? @relation("WarehouseReceiptStockedBy", fields: [stockedById], references: [id], onDelete: SetNull)
   remark   String?
   isActive Boolean  @default(true)
   createdById String?
@@ -4988,6 +4988,8 @@ model WarehouseReceiptLine {
   warehouseReceipt WarehouseReceipt @relation(fields: [warehouseReceiptId], references: [id], onDelete: Cascade)
   purchaseReceiptLineId String // 溯源收货行
   purchaseReceiptLine PurchaseReceiptLine @relation(fields: [purchaseReceiptLineId], references: [id], onDelete: Restrict)
+  inspectionId String // 质量结论引用（Blocking ②：入库必须来自已完成、具有合格数量的 Inspection；累计 posted qty ≤ qualifiedQty）
+  inspection Inspection @relation(fields: [inspectionId], references: [id], onDelete: Restrict)
   itemId   String?
   item     Item?    @relation(fields: [itemId], references: [id], onDelete: Restrict)
   quantity Decimal  @db.Decimal(18, 4) // 入库数量（≤ 合格数量，逐层 ceiling）
@@ -4998,6 +5000,7 @@ model WarehouseReceiptLine {
   mfgDate  DateTime? @db.Date // 生产日期（P6 Final）
   expDate  DateTime? @db.Date // 有效期至（P6 Final）
   remark   String?
+  purchaseReturnLines PurchaseReturnLine[] // 反向：退货行来源（Blocking ③）
   isActive Boolean  @default(true)
   createdById String?
   updatedById String?
@@ -5008,6 +5011,7 @@ model WarehouseReceiptLine {
 
   @@index([warehouseReceiptId])
   @@index([purchaseReceiptLineId])
+  @@index([inspectionId])
   @@index([itemId])
   @@index([deletedAt])
 }
@@ -5043,13 +5047,18 @@ model PurchaseReturn {
   @@index([deletedAt])
 }
 
-/// 退货行（P5 Final：sourceRefId 必填；disposition 必填）
+/// 退货行（P5 Final：必须有来源——三个真实 FK 之一非空且与 sourceRefType 匹配，exactly-one 由 API+QA 强制；disposition 必填）
 model PurchaseReturnLine {
   id       String   @id @default(cuid())
   purchaseReturnId String
   purchaseReturn PurchaseReturn @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
-  sourceRefType PurchaseReturnSourceType // RECEIPT_LINE / WAREHOUSE_RECEIPT_LINE / INSPECTION
-  sourceRefId String // 来源引用 id（**必填**，P5 Final：必须有来源；不照抄 nullable 草案）
+  sourceRefType PurchaseReturnSourceType // RECEIPT_LINE / WAREHOUSE_RECEIPT_LINE / INSPECTION（业务类型，与 exactly-one FK 匹配）
+  sourcePurchaseReceiptLineId String? // Blocking ③：三个真实 FK 之一，exactly-one 非空且与 sourceRefType 匹配（API+QA 强制）
+  sourcePurchaseReceiptLine PurchaseReceiptLine? @relation(fields: [sourcePurchaseReceiptLineId], references: [id], onDelete: SetNull)
+  sourceWarehouseReceiptLineId String?
+  sourceWarehouseReceiptLine WarehouseReceiptLine? @relation(fields: [sourceWarehouseReceiptLineId], references: [id], onDelete: SetNull)
+  sourceInspectionId String?
+  sourceInspection Inspection? @relation(fields: [sourceInspectionId], references: [id], onDelete: SetNull)
   itemId   String?
   item     Item?    @relation(fields: [itemId], references: [id], onDelete: Restrict)
   quantity Decimal  @db.Decimal(18, 4) // 退货数量（> 0，≤ 可退数量防超退）
@@ -5069,6 +5078,9 @@ model PurchaseReturnLine {
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([purchaseReturnId])
+  @@index([sourcePurchaseReceiptLineId])
+  @@index([sourceWarehouseReceiptLineId])
+  @@index([sourceInspectionId])
   @@index([itemId])
   @@index([deletedAt])
 }

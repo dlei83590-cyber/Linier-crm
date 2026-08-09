@@ -19,7 +19,7 @@
 | code | 收货单号 | DocumentSequence（前缀 REC / GRN-，**P10 拍板**） | 创建即取号 |
 | purchaseOrderId | 来源 PO | FK → PurchaseOrder，必填 | **只有 CONFIRMED/PARTIALLY_RECEIVED/RECEIVED PO 可收货**（D2） |
 | supplierId | 供应商 | 快照自 PO（不单独校验） | 对齐 PO 快照原则 |
-| warehouseId | 到货地点 | FK → Warehouse（**5B 建最小主数据**，P8 Final） | 到货地点 ≠ 入库仓库 |
+| warehouseId | 到货地点 | FK → Warehouse（**5B 建最小主数据**，P8 Final），**可空** | **仅 WAREHOUSE 收货场景使用**（Blocking ①）；DIRECT_PROJECT 直送不用 warehouse，用 deliveryAddress/receiver/proof + Header receivedAt/receivedBy |
 | status | 收货单状态 | 草案：`DRAFT / RECEIVED / CANCELLED` | **普通收货不走审批**（P1b Final）；超收/特殊退货才走 Workflow |
 | receivedAt | 收货时间 | date-time | |
 | receivedById | 收货员 | FK → User | |
@@ -75,11 +75,9 @@
 | purchaseReceiptId | 来源收货单 | FK → PurchaseReceipt | 可多次入库（部分入库） |
 | warehouseId | 入库仓库 | FK → Warehouse（**5B 建最小主数据**，P8 Final） | 必填 |
 | locationId 🔶 | 库位 | FK → Location（可空） | **P8** 剩余子项：库位是否必填 |
-| status | 入库单状态 | 草案：`DRAFT / POSTED / CANCELLED`（**Created ≠ Posted，D10**） | **只有 POSTED 才触发 InventoryMovement(IN)**；DRAFT 只是草稿/登记态 |
+| status | 入库单状态 | 草案：`DRAFT / POSTED / CANCELLED`（**Created ≠ Posted，D10**） | **只有 POSTED 才触发 InventoryMovement(IN)**；DRAFT 只是草稿/登记态；**已删除 stockedAt/stockedById（Blocking ④：杜绝双完成事实，统一 status+postedAt+postedById）** |
 | postedAt | 过账时间（D10） | date-time | 触发库存动作的生效点 |
 | postedById | 过账人（D10） | FK → User | |
-| stockedAt | 入库时间 | date-time | |
-| stockedById | 仓管员 | FK → User | |
 | createdById / updatedById | 审计 | FK → User | |
 | deletedAt / isActive | 软删 | | |
 
@@ -90,6 +88,7 @@
 | id | 主键 | UUID | |
 | warehouseReceiptId | 头 | FK | |
 | purchaseReceiptLineId | 来源收货行 | FK | 溯源 |
+| inspectionId | 来源质检结论（**必填**，Blocking ②） | FK → Inspection | 入库必须引用具体质检结论（已完成且 qualifiedQty>0）；累计 posted qty ≤ 对应 Inspection qualifiedQty |
 | itemId | 物料 | FK → Item | |
 | quantity | **入库数量** | Decimal > 0 | ≤ 合格数量（逐层 ceiling） |
 | uomId | 单位 | FK → UoM | |
@@ -143,8 +142,10 @@
 | --- | --- | --- | --- |
 | id | 主键 | UUID | |
 | purchaseReturnId | 头 | FK | |
-| sourceRefType | 来源引用类型 | 枚举：`RECEIPT_LINE / WAREHOUSE_RECEIPT_LINE / INSPECTION` | **P5 Final：必须有来源** |
-| sourceRefId | 来源引用 id | string（**必填**，P5 Final：必须有来源；Schema 按必填业务语义处理，不照抄 nullable 草案） | **P5 Final** |
+| sourceRefType | 来源引用类型 | 枚举：`RECEIPT_LINE / WAREHOUSE_RECEIPT_LINE / INSPECTION`（业务类型，与 exactly-one FK 匹配） | **P5 Final：必须有来源** |
+| sourcePurchaseReceiptLineId | 来源收货行（真实 FK） | FK → PurchaseReceiptLine（可空） | **Blocking ③：三个真实 FK 之一，exactly-one 非空且与 sourceRefType 匹配（API+QA 强制，不用 polymorphic string）** |
+| sourceWarehouseReceiptLineId | 来源入库行（真实 FK） | FK → WarehouseReceiptLine（可空） | **Blocking ③** |
+| sourceInspectionId | 来源质检（真实 FK） | FK → Inspection（可空） | **Blocking ③** |
 | itemId | 物料 | FK → Item | |
 | quantity | 退货数量 | Decimal > 0 | ≤ 可退数量（防超退，锁内校验） |
 | uomId | 单位 | FK → UoM | |

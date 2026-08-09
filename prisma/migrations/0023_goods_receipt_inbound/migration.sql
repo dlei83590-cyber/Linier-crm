@@ -11,7 +11,7 @@
 -- ② receivedQty 精确定义：PurchaseReceipt.quantity=物理到货；PO Line.receivedQty=被采购履约接受、可冲减未交数量（当场拒收 rejectedOnReceiptQty 不计入）（Blocking ②）
 -- ③ Inspection 唯一 QC 事实源：PurchaseReceipt 只留现场事实（quantity/visibleDamageQty/rejectedOnReceiptQty/remark）；免检=SKIP+QUALIFIED（Blocking ③）
 -- ④ 5B 建最小 Warehouse/WarehouseLocation 主数据；Stock/InventoryMovement/库存余额模型属 6A（Blocking ④ / P8 Final）
--- ⑤ 退货=独立 PurchaseReturn（非负 GR）：必须有来源（sourceRefId 必填）+ disposition（REPLACE_REQUIRED/CREDIT_ONLY）（P5 Final / Blocking ②）
+-- ⑤ 退货=独立 PurchaseReturn（非负 GR）：必须有来源（三个真实 FK 之一非空且与 sourceRefType 匹配，exactly-one 由 API+QA 强制）+ disposition（REPLACE_REQUIRED/CREDIT_ONLY）（P5 Final / Blocking ②）
 -- ⑥ D2/D9：CONFIRMED→可收 / PARTIALLY_RECEIVED→可继续收 / RECEIVED→禁止普通新增收货（需 Reopen/Amendment/Approved Over-Receipt Exception）
 -- ⑦ D10：WarehouseReceipt status = DRAFT → POSTED → CANCELLED；Created ≠ Posted，只有 Posted 才触发 InventoryMovement(IN)
 -- ⑧ P4 Final：直送 fulfillmentType = WAREHOUSE | DIRECT_PROJECT（PO Line 预声明，非简单 boolean）；直送=有 PurchaseReceipt 无 WarehouseReceipt 无 InventoryMovement(IN)
@@ -38,7 +38,7 @@ ALTER TYPE "DocumentType" ADD VALUE 'PURCHASE_RETURN';
 -- ③ PurchaseOrderLine 扩展（履约类型 / 直送项目 / 超收容差 override）
 ALTER TABLE "PurchaseOrderLine" ADD COLUMN "fulfillmentType" "PurchaseOrderFulfillmentType" NOT NULL DEFAULT 'WAREHOUSE';
 ALTER TABLE "PurchaseOrderLine" ADD COLUMN "projectId" TEXT;
-ALTER TABLE "PurchaseOrderLine" ADD COLUMN "overReceiptTolerancePercent" DECIMAL(5,4);
+ALTER TABLE "PurchaseOrderLine" ADD COLUMN "overReceiptToleranceRate" DECIMAL(8,6);
 
 -- Foreign Keys（onDelete SetNull：项目删除不影响 PO Line 历史）
 ALTER TABLE "PurchaseOrderLine" ADD CONSTRAINT "PurchaseOrderLine_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -90,6 +90,7 @@ ALTER TABLE "WarehouseLocation" ADD CONSTRAINT "WarehouseLocation_warehouseId_fk
 
 -- Indexes
 CREATE UNIQUE INDEX "WarehouseLocation_warehouseId_code_key" ON "WarehouseLocation"("warehouseId", "code");
+CREATE UNIQUE INDEX "WarehouseLocation_id_warehouseId_key" ON "WarehouseLocation"("id", "warehouseId");
 CREATE INDEX "WarehouseLocation_warehouseId_idx" ON "WarehouseLocation"("warehouseId");
 CREATE INDEX "WarehouseLocation_deletedAt_idx" ON "WarehouseLocation"("deletedAt");
 
@@ -99,7 +100,7 @@ CREATE TABLE "PurchaseReceipt" (
     "code" TEXT NOT NULL,
     "purchaseOrderId" TEXT NOT NULL,
     "supplierId" TEXT NOT NULL,
-    "warehouseId" TEXT NOT NULL,
+    "warehouseId" TEXT,
     "status" "PurchaseReceiptStatus" NOT NULL DEFAULT 'DRAFT',
     "receivedAt" TIMESTAMP(3) WITH TIME ZONE,
     "receivedById" TEXT,
@@ -118,7 +119,7 @@ CREATE TABLE "PurchaseReceipt" (
 -- Foreign Keys（onDelete Restrict：PO/供应商/仓库删除受收货单约束；receivedById SetNull）
 ALTER TABLE "PurchaseReceipt" ADD CONSTRAINT "PurchaseReceipt_purchaseOrderId_fkey" FOREIGN KEY ("purchaseOrderId") REFERENCES "PurchaseOrder"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "PurchaseReceipt" ADD CONSTRAINT "PurchaseReceipt_supplierId_fkey" FOREIGN KEY ("supplierId") REFERENCES "Supplier"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "PurchaseReceipt" ADD CONSTRAINT "PurchaseReceipt_warehouseId_fkey" FOREIGN KEY ("warehouseId") REFERENCES "Warehouse"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "PurchaseReceipt" ADD CONSTRAINT "PurchaseReceipt_warehouseId_fkey" FOREIGN KEY ("warehouseId") REFERENCES "Warehouse"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "PurchaseReceipt" ADD CONSTRAINT "PurchaseReceipt_receivedById_fkey" FOREIGN KEY ("receivedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- Indexes
@@ -209,8 +210,6 @@ CREATE TABLE "WarehouseReceipt" (
     "status" "WarehouseReceiptStatus" NOT NULL DEFAULT 'DRAFT',
     "postedAt" TIMESTAMP(3) WITH TIME ZONE,
     "postedById" TEXT,
-    "stockedAt" TIMESTAMP(3) WITH TIME ZONE,
-    "stockedById" TEXT,
     "remark" TEXT,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "createdById" TEXT,
@@ -223,12 +222,11 @@ CREATE TABLE "WarehouseReceipt" (
     CONSTRAINT "WarehouseReceipt_pkey" PRIMARY KEY ("id")
 );
 
--- Foreign Keys（onDelete Restrict：收货单/仓库删除受入库单约束；locationId/postedById/stockedById SetNull）
+-- Foreign Keys（onDelete Restrict：收货单/仓库删除受入库单约束；locationId/postedById SetNull；Blocking ④ 已删除 stockedById）
 ALTER TABLE "WarehouseReceipt" ADD CONSTRAINT "WarehouseReceipt_purchaseReceiptId_fkey" FOREIGN KEY ("purchaseReceiptId") REFERENCES "PurchaseReceipt"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "WarehouseReceipt" ADD CONSTRAINT "WarehouseReceipt_warehouseId_fkey" FOREIGN KEY ("warehouseId") REFERENCES "Warehouse"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "WarehouseReceipt" ADD CONSTRAINT "WarehouseReceipt_locationId_fkey" FOREIGN KEY ("locationId") REFERENCES "WarehouseLocation"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "WarehouseReceipt" ADD CONSTRAINT "WarehouseReceipt_locationId_warehouseId_fkey" FOREIGN KEY ("locationId", "warehouseId") REFERENCES "WarehouseLocation"("id", "warehouseId") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "WarehouseReceipt" ADD CONSTRAINT "WarehouseReceipt_postedById_fkey" FOREIGN KEY ("postedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-ALTER TABLE "WarehouseReceipt" ADD CONSTRAINT "WarehouseReceipt_stockedById_fkey" FOREIGN KEY ("stockedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- Indexes
 CREATE UNIQUE INDEX "WarehouseReceipt_code_key" ON "WarehouseReceipt"("code");
@@ -243,6 +241,7 @@ CREATE TABLE "WarehouseReceiptLine" (
     "id" TEXT NOT NULL,
     "warehouseReceiptId" TEXT NOT NULL,
     "purchaseReceiptLineId" TEXT NOT NULL,
+    "inspectionId" TEXT NOT NULL,
     "itemId" TEXT,
     "quantity" DECIMAL(18,4) NOT NULL,
     "uomId" TEXT,
@@ -265,12 +264,14 @@ CREATE TABLE "WarehouseReceiptLine" (
 -- Foreign Keys（onDelete：头 Cascade / 收货行 Restrict / Item Restrict / UOM SetNull）
 ALTER TABLE "WarehouseReceiptLine" ADD CONSTRAINT "WarehouseReceiptLine_warehouseReceiptId_fkey" FOREIGN KEY ("warehouseReceiptId") REFERENCES "WarehouseReceipt"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "WarehouseReceiptLine" ADD CONSTRAINT "WarehouseReceiptLine_purchaseReceiptLineId_fkey" FOREIGN KEY ("purchaseReceiptLineId") REFERENCES "PurchaseReceiptLine"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "WarehouseReceiptLine" ADD CONSTRAINT "WarehouseReceiptLine_inspectionId_fkey" FOREIGN KEY ("inspectionId") REFERENCES "Inspection"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "WarehouseReceiptLine" ADD CONSTRAINT "WarehouseReceiptLine_itemId_fkey" FOREIGN KEY ("itemId") REFERENCES "Item"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "WarehouseReceiptLine" ADD CONSTRAINT "WarehouseReceiptLine_uomId_fkey" FOREIGN KEY ("uomId") REFERENCES "UnitOfMeasure"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- Indexes
 CREATE INDEX "WarehouseReceiptLine_warehouseReceiptId_idx" ON "WarehouseReceiptLine"("warehouseReceiptId");
 CREATE INDEX "WarehouseReceiptLine_purchaseReceiptLineId_idx" ON "WarehouseReceiptLine"("purchaseReceiptLineId");
+CREATE INDEX "WarehouseReceiptLine_inspectionId_idx" ON "WarehouseReceiptLine"("inspectionId");
 CREATE INDEX "WarehouseReceiptLine_itemId_idx" ON "WarehouseReceiptLine"("itemId");
 CREATE INDEX "WarehouseReceiptLine_deletedAt_idx" ON "WarehouseReceiptLine"("deletedAt");
 
@@ -308,12 +309,14 @@ CREATE INDEX "PurchaseReturn_supplierId_idx" ON "PurchaseReturn"("supplierId");
 CREATE INDEX "PurchaseReturn_status_idx" ON "PurchaseReturn"("status");
 CREATE INDEX "PurchaseReturn_deletedAt_idx" ON "PurchaseReturn"("deletedAt");
 
--- ⑫ PurchaseReturnLine（P5 Final：sourceRefId 必填（不照抄 nullable 草案）；disposition 必填；returnReason 必填）
+-- ⑫ PurchaseReturnLine（P5 Final：三个真实来源 FK 之一非空且与 sourceRefType 匹配，不采用 polymorphic string；disposition 必填；returnReason 必填）
 CREATE TABLE "PurchaseReturnLine" (
     "id" TEXT NOT NULL,
     "purchaseReturnId" TEXT NOT NULL,
     "sourceRefType" "PurchaseReturnSourceType" NOT NULL,
-    "sourceRefId" TEXT NOT NULL,
+    "sourcePurchaseReceiptLineId" TEXT,
+    "sourceWarehouseReceiptLineId" TEXT,
+    "sourceInspectionId" TEXT,
     "itemId" TEXT,
     "quantity" DECIMAL(18,4) NOT NULL,
     "uomId" TEXT,
@@ -335,10 +338,16 @@ CREATE TABLE "PurchaseReturnLine" (
 
 -- Foreign Keys（onDelete：头 Cascade / Item Restrict / UOM SetNull）
 ALTER TABLE "PurchaseReturnLine" ADD CONSTRAINT "PurchaseReturnLine_purchaseReturnId_fkey" FOREIGN KEY ("purchaseReturnId") REFERENCES "PurchaseReturn"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "PurchaseReturnLine" ADD CONSTRAINT "PurchaseReturnLine_sourcePurchaseReceiptLineId_fkey" FOREIGN KEY ("sourcePurchaseReceiptLineId") REFERENCES "PurchaseReceiptLine"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "PurchaseReturnLine" ADD CONSTRAINT "PurchaseReturnLine_sourceWarehouseReceiptLineId_fkey" FOREIGN KEY ("sourceWarehouseReceiptLineId") REFERENCES "WarehouseReceiptLine"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "PurchaseReturnLine" ADD CONSTRAINT "PurchaseReturnLine_sourceInspectionId_fkey" FOREIGN KEY ("sourceInspectionId") REFERENCES "Inspection"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "PurchaseReturnLine" ADD CONSTRAINT "PurchaseReturnLine_itemId_fkey" FOREIGN KEY ("itemId") REFERENCES "Item"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "PurchaseReturnLine" ADD CONSTRAINT "PurchaseReturnLine_uomId_fkey" FOREIGN KEY ("uomId") REFERENCES "UnitOfMeasure"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- Indexes
 CREATE INDEX "PurchaseReturnLine_purchaseReturnId_idx" ON "PurchaseReturnLine"("purchaseReturnId");
+CREATE INDEX "PurchaseReturnLine_sourcePurchaseReceiptLineId_idx" ON "PurchaseReturnLine"("sourcePurchaseReceiptLineId");
+CREATE INDEX "PurchaseReturnLine_sourceWarehouseReceiptLineId_idx" ON "PurchaseReturnLine"("sourceWarehouseReceiptLineId");
+CREATE INDEX "PurchaseReturnLine_sourceInspectionId_idx" ON "PurchaseReturnLine"("sourceInspectionId");
 CREATE INDEX "PurchaseReturnLine_itemId_idx" ON "PurchaseReturnLine"("itemId");
 CREATE INDEX "PurchaseReturnLine_deletedAt_idx" ON "PurchaseReturnLine"("deletedAt");
