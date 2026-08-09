@@ -1,7 +1,7 @@
 # ADR-0023：Purchase Requisition & Purchase Order Domain（采购申请与采购订单领域决策）
 
-- 状态：**Approved with Changes（2026-08-09，CTO Design Review 97/100——7 个 Pending 全部拍板 + 3 项必改调整已落实；Schema/Migration 0021 待放行后启动）**
-- 关联：Sprint5A_PurchaseRequisition_PO_Design.md / EVENTS.md v1.14 / ROADMAP v1.17
+- 状态：**Implemented（2026-08-09，Sprint 5A 全量落地）**——从 Approved with Changes（CTO Design Review 97/100）推进到实际实现：Schema/Migration 0021 + 0022、Seed/RBAC、PR API、PO API（Create/Convert/Query/PATCH/Submit/Confirm/Cancel）、Workflow 接入、EVENTS v1.14→v1.17、OpenAPI/QA/Test Cases 同步。CTO Reviews：Phase 3 ✅ APPROVED（2 Blocking 修复）/ Phase 4A ✅ APPROVED（3 Blocking 修复 + Re-review 4 细节）/ Phase 4B 98/100 APPROVED（Blocking 0，2 Verification Items 本地取证通过）。详见下文 Implementation Status。
+- 关联：Sprint5A_PurchaseRequisition_PO_Design.md / EVENTS.md v1.17 / ROADMAP / CHANGELOG / RELEASE_NOTES
 - 决策人：CIO（JINZA）提案 ｜ 审核：CTO
 - 背景：Sprint 5 进入采购域（Procure-to-Pay）。5A 先锁定 Purchase Requisition（采购申请）+ Purchase Order（采购订单）Foundation，明确 PR/PO 事实源边界、Supplier 复用、审批、价格/金额事实来源、GR 边界；**本阶段只做 Design / ADR / EVENTS，禁止 Schema / Migration / API**（Gate 模式延续 Sprint 4 纪律）
 
@@ -63,3 +63,19 @@
 | ⑦ | PO 修改重审 | **财务/承诺字段变更触发重新审批**（对齐 Invoice keyFinancialChanged） |
 
 > **3 项必改调整（进入 Schema 前已落实）**：① PO 价格双通道（SUPPLIER_PRICE_SNAPSHOT/MANUAL + priceReason/actor/audit + 头金额服务端聚合）② Direct Purchase 显式可审计（sourceType + sourcePurchaseRequisitionLineId + 不能绕过 PO Approval）③ PO 生命周期锁死（DRAFT→SUBMITTED→APPROVED→CONFIRMED→PARTIALLY_RECEIVED→RECEIVED；DRAFT→CANCELLED；**APPROVED ≠ CONFIRMED**，只有 Confirmed PO 才是 5B GR 来源；PO Line 预留 receivedQty/remainingReceiveQty，5A 禁客户端改）
+
+## Implementation Status（Sprint 5A 实际落地，2026-08-09）
+
+| 领域 | 状态 | 证据 |
+| --- | --- | --- |
+| Schema + Migration 0021 | ✅ Implemented | 5 枚举 + 7 模型；纯增量（0 DROP/RENAME/TRUNCATE）；commit `9378358`/`725d1c8` |
+| Migration 0022（快照约束 + 采购员/部门） | ✅ Implemented | PurchaseOrderSnapshot 唯一约束 `[purchaseOrderId, snapshotType, revisionNo]`（多轮审批不冲突）；PO Header +purchaserId/departmentId；commit `6bc5094` |
+| Seed + RBAC | ✅ Implemented | 7 权限模块 + PR 序列；不新造 submit/confirm 权限体系；commit `426dfe7` |
+| PR API（Create/Query/PATCH/Submit/Convert） | ✅ Implemented | Phase 3 Review APPROVED（PATCH 原子 CAS + REJECTED 单实例重提 2 Blocking 修复）；commits `31e892a`/`8b29a77` |
+| PO API（Create/Convert/Query/PATCH） | ✅ Implemented | Phase 4A Review APPROVED（3 Blocking 修复：事件真金额/CREATED Revision 用 actualLines/REQUISITION 行溯源强制）；commits `26473f5`/`690c1de`/`18418ef` |
+| Submit / Confirm / Cancel | ✅ Implemented | Phase 4B Review 98/100 APPROVED（Blocking 0）；Submit 永不自动 CONFIRMED；Confirm 事务 FOR UPDATE 行锁 + 并发稳定 409；Cancel DRAFT/APPROVED 可取消、SUBMITTED 409（先 Withdraw）、CONFIRMED+ 409 禁止；commit `079be6c` |
+| Workflow 接入 | ✅ Implemented | businessType=purchase-requisition/purchase-order 终态回写；单 WorkflowInstance 多轮重提；COMPLETED→APPROVED（永不自动 CONFIRMED）/ REJECTED→DRAFT |
+| 事件 | ✅ Implemented | EVENTS.md v1.14→v1.17：11 个采购事件全注册 |
+| 文档 | ✅ Implemented | OpenAPI +9 paths/+17 schemas（v 当前）；QA/Test Cases（PurchaseRequisition_API.md + PurchaseOrder_API.md）；AGENTS.md Verification Policy |
+
+**边界保持（未越线）**：❌ 不实现 GR/GRN（5B）；❌ 不实现 Supplier Invoice/三单匹配/AP（5C）；❌ PR/PO 不承载库存动作（Sprint 6）；❌ 前端业务规则不自行实现（Track B 只调 API）。**只有 CONFIRMED PO 才是 5B Goods Receipt 合法来源**（D2 锁死，代码/文档/QA 三处一致）。

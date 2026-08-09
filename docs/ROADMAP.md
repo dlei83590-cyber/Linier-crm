@@ -16,7 +16,7 @@
 | Sprint 2 | Master Data（主数据） | ✅ Closed | Release v0.2.0-alpha（2A+2B+2C） |
 | Sprint 3 | ERP Foundation（ERP 底座） | ✅ Closed | 3A Workflow Foundation ✅（v0.3.0-alpha）+ 3B Platform Capabilities ✅（v0.4.0-alpha）+ 3C Business Foundation ✅（v0.5.0-alpha，3C-1~3C-5 全部完成） |
 | Sprint 4 | Sales（销售） | ✅ | 4A Quotation Foundation ✅（PR #12）；4B Sales Order Foundation ✅（PR #13）；4C Delivery Foundation ✅（PR #14）；4D Invoice Foundation ✅（PR #15 已合并）；4E-1 Accounts Receivable ✅（PR #16 已合并）；4E-2 Receipt/Payment Allocation ✅（PR #17 已合并）；4E-3 Credit/Debit Note ✅（PR #18 已合并，CTO Final Review 99/100 APPROVE & MERGE）；**已发布 v0.6.0-alpha**（2026-08-08，annotated tag，GitHub Pre-release） |
-| Sprint 5 | Purchase（采购） | ⬜ | PR/PO/GRN/Supplier Invoice/Payment |
+| Sprint 5 | Purchase（采购） | 🔄 | **5A PR+PO Foundation ✅**（PR #19 待 CTO Final Review：Schema/Migration 0021+0022 / Seed+RBAC / PR API / PO API（Create/Convert/Query/PATCH/Submit/Confirm/Cancel）/ Workflow 接入；QA/Test Cases/OpenAPI/EVENTS v1.17 已同步；CI 全绿）；5B GRN / 5C Supplier Invoice / Payment 未开始（待 China ERP Process & Field Gate） |
 | Sprint 6 | Inventory（库存） | ⬜ | Warehouse/Stock/Batch/Movement/Count/Transfer |
 | Sprint 7 | Finance（财务） | ⬜ | AR/AP/Expense/Voucher/Journal/GL/Profit/Cash Flow |
 | Sprint 8 | BI（商业智能） | ⬜ | 报表 / Dashboard / 数据分析 |
@@ -160,15 +160,22 @@
 
 ---
 
-## 7. Sprint 5：Purchase（采购）⬜
+## 7. Sprint 5：Purchase（采购）🔄（5A 完成，5B/5C 未开始）
 
-| 模块 | 说明 |
-| --- | --- |
-| Purchase Request | 请购单（需求来源：库存预警/项目/手工） |
-| Purchase Order | 采购订单（PO，引用供应商/物料/价格） |
-| GRN | 收货单（GRN，入库触发库存） |
-| Supplier Invoice | 供应商发票（应付挂账） |
-| Payment | 付款（核销应付） |
+### 5A — Purchase Requisition & Purchase Order Foundation ✅（PR #19，2026-08-09）
+
+| 模块 | 说明 | 状态 |
+| --- | --- | --- |
+| Purchase Requisition | 请购单（PR = 需求事实源，无金额字段；Create/Query/PATCH/Submit/Convert） | ✅ 完成 |
+| Purchase Order | 采购订单（PO = 对供应商的采购承诺事实源；Direct + PR Convert 双入口；价格双通道 SUPPLIER_PRICE_SNAPSHOT/MANUAL；金额服务端 Decimal 聚合；Submit → Workflow 审批 → Confirm → Cancel 状态机） | ✅ 完成 |
+| 生命周期锁死 | DRAFT → SUBMITTED → APPROVED → CONFIRMED → PARTIALLY_RECEIVED → RECEIVED；DRAFT → CANCELLED；**APPROVED ≠ CONFIRMED**（审批=内部同意，Confirm=正式下单；只有 CONFIRMED PO 才是 5B GR 唯一来源） | ✅ 完成 |
+| 审批 | Workflow 单实例多轮重提（不建 Approval 表）；purchase-requisition / purchase-order 独立条件审批；COMPLETED→APPROVED / REJECTED→DRAFT | ✅ 完成 |
+| 溯源 | sourceType=REQUISITION\|DIRECT；行级 sourcePurchaseRequisitionLineId（REQUISITION 必填三条件校验 / DIRECT 禁止） | ✅ 完成 |
+| 采购员/部门 | PO Header +purchaserId/departmentId（Migration 0022；中国采购分析与报表维度） | ✅ 完成 |
+| Snapshot/Revision | PO Snapshot 唯一约束 [purchaseOrderId, snapshotType, revisionNo]（多轮审批不冲突）；CONFIRMED Snapshot + Revision 留痕 | ✅ 完成 |
+| GRN | 收货单（GRN，入库触发库存） | ⬜ 未开始（5B；需先过 China ERP Process & Field Gate） |
+| Supplier Invoice | 供应商发票（应付挂账） | ⬜ 未开始（5C；区分 Supplier Invoice Fact / 中国增值税发票 Tax Invoice；已收未票→暂估应付→到票→三单匹配→进项税→AP） |
+| Payment | 付款（核销应付） | ⬜ 未开始（7B） |
 
 ---
 
@@ -259,6 +266,7 @@
 
 | 日期 | 变更 | 说明 |
 | --- | --- | --- |
+| 2026-08-09 | 更新 v1.18 | **Sprint 5A Purchase Requisition & Purchase Order Foundation 完成**（PR #19 待 CTO Final Review：Schema/Migration 0021（纯增量）+ Migration 0022（Snapshot 唯一约束 [purchaseOrderId, snapshotType, revisionNo] 修复 + PO Header +purchaserId/departmentId）/ Seed+RBAC（7 权限模块）/ PR API（Create/Query/PATCH/Submit/Convert）/ PO API（Direct+Convert 双入口、价格双通道 SUPPLIER_PRICE_SNAPSHOT/MANUAL、金额服务端 Decimal 聚合、REQUISITION 行级溯源）/ Submit→Workflow→Confirm→Cancel（**APPROVED ≠ CONFIRMED 锁死**，只有 CONFIRMED PO 才是 5B GR 唯一来源；Confirm 事务 FOR UPDATE 行锁并发幂等；Cancel DRAFT/APPROVED 可取消、SUBMITTED 409 先 Withdraw、CONFIRMED+ 409 禁止）/ EVENTS v1.14→v1.17 / QA+Test Cases / OpenAPI 完整补齐 / AGENTS.md Verification Policy（禁止本地高资源验证，CI 为验证事实源）；CTO Reviews：Phase 3 ✅ / Phase 4A ✅ / Phase 4B 98/100（Blocking 0，2 Verification Items 本地取证通过）；CI 全绿 @ d8d4beb；Sprint 5 状态 🔄（5A ✅，5B/5C 未开始）；整体成熟度约 94-96%）；分支治理（CTO #6575）：远程删除 codex×2 + feature/sprint4-sales（归档 tag `archive/sprint4-sales-final`），远程仅剩 main + feature/sprint5-purchase |
 | 2026-08-08 | 更新 v1.17 | **Linier ERP v0.6.0-alpha 发布完成**（annotated tag `v0.6.0-alpha` 指向 `a5d8214`——Release Gate 通过的最终 release commit，后续 post-release 文档 commit 不修改该 Tag；GitHub **Pre-release** 已创建：Linier ERP v0.6.0-alpha — Sales & Finance O2C Foundation，id=367214703；Release Gate：Sprint 4 O2C Total Acceptance **PASS → RELEASE CANDIDATE**（9/9 节点、6/6 系统级不变量、Blocking Issues = 0），证据 docs/reviews/Sprint4_O2C_Total_Acceptance.md；RELEASE_NOTES v0.6.0-alpha 段冻结（汇总 Sprint 4A-4E-3 + Known Limitations 6 项）；版本治理：以 Git Tag 为发布事实源，package.json 不随本版修改）；Sprint 4 已发布（4A ✅ 4B ✅ 4C ✅ 4D ✅ 4E-1 ✅ 4E-2 ✅ 4E-3 ✅ + v0.6.0-alpha）；整体成熟度约 92%；**下一步：Sprint 5（Purchase 采购）规划** |
 | 2026-08-08 | 更新 v1.16 | Sprint 4E-3 Credit Note / Debit Note Foundation 完成并合并（PR #18 squash merge `675923c`；CTO Final Review **99/100 APPROVE & MERGE，Blocking 0**——4 项核验全 PASS：① 事件机制（AuditLog=事件总线落地前正式承载层，与 EVENTS.md 一致）② 并发累计防超调锁序安全 ③ 负 AR 门禁锁内生效（Receipt Allocation/WriteOff Apply）④ Schema/Migration 事实链一致；Review Cover 16 项 Checklist APPROVED & MERGED）；Sprint 4 状态 **✅ COMPLETE**（4A ✅ 4B ✅ 4C ✅ 4D ✅ 4E-1 ✅ 4E-2 ✅ 4E-3 ✅——Quotation→SO→Delivery→Invoice→AR→Receipt→Allocation/Reversal→WriteOff→CN/DN 销售财务 O2C 主链完整闭环）；Credit/Debit Note 模块 ✅；保留 feature/sprint4-sales；待 Sprint 4 Sales+Finance 总验收后统一发布新 Alpha Tag；整体成熟度上调至约 92% |
 | 2026-08-08 | 更新 v1.15 | Sprint 4E-3 Credit Note / Debit Note Foundation Ready for Final Review（PR #18 待验收：Schema `07d98a3` / Migration 0020 `f84c887` / Seed-RBAC `196068c` / Create `3d0e75b` / Submit `70f4daf` / Apply `b49629c` / Workflow Actions `21098ce` / OpenAPI `23fa11e` / QA-TestCases `f6d3059`；CI 全绿；CTO Design Review 98/100 + Apply 专项复核 100/100（0 Blocking）；CN/DN = Invoice Adjustment 事实源 + InvoiceAdjustment 事实中间层 + 单票制 + 快照复制 + APPROVED≠APPLIED + 累计防超调锁内重算 + signed adjustment（CN<0/DN>0）+ 负 AR Customer Credit 投影（禁 Receipt Allocation / WriteOff）+ Invoice.balanceAmount 跟随 AR newBalance）；Sprint 4 状态 🔄（4A ✅ 4B ✅ 4C ✅ 4D ✅ 4E-1 ✅ 4E-2 ✅ 4E-3 🟡 Ready for Final Review）；Payment 模块 ✅；Credit/Debit Note 模块 🟡；保留 feature/sprint4-sales；不打新大版本 Tag（待 PR #18 合并 + Sprint 4 Sales 完整闭环后统一发布）；整体成熟度维持约 89% |
