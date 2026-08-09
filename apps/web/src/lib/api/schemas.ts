@@ -677,3 +677,31 @@ export const purchaseReceiptUpdateSchema = z.object({
   remark: z.string().max(500).nullable().optional(),
   lines: z.array(purchaseReceiptLineCreateSchema).min(1).optional(),
 });
+
+/** Sprint 5B - Inspection（质检唯一事实源，CTO #7045 97/100 APPROVED 后开发）
+ * - 创建：绑定已 RECEIVED 的 PurchaseReceiptLine + 检验模式（SKIP/SPOT/FULL）；
+ * - 数量在 complete 时定稿（SPOT/FULL 必提交 qualifiedQty/rejectedQty，服务端校验 = inspectableQty）；
+ * - SKIP 免检：complete 时服务端强制 QUALIFIED + qualifiedQty=inspectableQty + rejectedQty=0（不绕开 Inspection 记录）；
+ * - result 服务端推导（客户端不得传）；inspectableQty = quantity - rejectedOnReceiptQty（不含现场拒收）。
+ */
+
+/** Inspection 创建 */
+export const inspectionCreateSchema = z.object({
+  purchaseReceiptLineId: z.string().min(1),
+  inspectionMode: z.enum(['SKIP', 'SPOT', 'FULL']),
+  remark: z.string().max(500).optional(),
+});
+
+/** Inspection 更新（仅 PENDING；version 乐观锁；只允许改 inspectionMode/remark——数量在 complete 时定稿） */
+export const inspectionUpdateSchema = z.object({
+  version: z.number().int().positive(),
+  inspectionMode: z.enum(['SKIP', 'SPOT', 'FULL']).optional(),
+  remark: z.string().max(500).nullable().optional(),
+});
+
+/** Inspection 完成（真 Gate；SPOT/FULL 必须提交 qualifiedQty+rejectedQty，服务端校验 = inspectableQty；SKIP 免检服务端强制，数量忽略） */
+export const inspectionCompleteSchema = z.object({
+  version: z.number().int().positive(),
+  qualifiedQty: z.coerce.number().nonnegative().optional(),
+  rejectedQty: z.coerce.number().nonnegative().optional(),
+});
