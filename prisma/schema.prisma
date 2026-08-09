@@ -195,6 +195,7 @@ model User {
   roles        UserRole[]
   auditLogs    AuditLog[]
   purchaseRequisitions PurchaseRequisition[] // 5A：采购申请（requesterId 方向）
+  purchaseOrders PurchaseOrder[] // 5A：采购订单（purchaserId 方向，采购员；CTO Phase 4B 指令）
   createdAt    DateTime    @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime    @updatedAt @db.Timestamptz(3)
 
@@ -212,6 +213,7 @@ model Department {
   children  Department[] @relation("DepartmentTree")
   users     User[]
   purchaseRequisitions PurchaseRequisition[] // 5A：采购申请（departmentId 方向）
+  purchaseOrders PurchaseOrder[] // 5A：采购订单（departmentId 方向，采购部门；CTO Phase 4B 指令）
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
@@ -4554,6 +4556,10 @@ model PurchaseOrder {
   sourceType   PurchaseOrderSourceType // REQUISITION | DIRECT（CTO 拍板②：Direct 显式可审计）
   supplierId   String
   supplier     Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  purchaserId  String? // 采购员（CTO Phase 4B 指令：PO Header 落地，Direct 无 PR 时无法从 requester 推导）
+  purchaser    User?    @relation(fields: [purchaserId], references: [id], onDelete: SetNull)
+  departmentId String? // 采购部门（CTO Phase 4B 指令：PO Header 落地）
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   requisitionId String? // 溯源（REQUISITION 必填 / DIRECT 为空）
   requisition  PurchaseRequisition? @relation(fields: [requisitionId], references: [id], onDelete: SetNull)
   status       PurchaseOrderStatus @default(DRAFT)
@@ -4589,6 +4595,8 @@ model PurchaseOrder {
 
   @@index([code])
   @@index([supplierId])
+  @@index([purchaserId])
+  @@index([departmentId])
   @@index([requisitionId])
   @@index([status])
   @@index([workflowInstanceId])
@@ -4690,7 +4698,7 @@ model PurchaseOrderSnapshot {
   createdAt   DateTime @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @db.Timestamptz(3)
 
-  @@unique([purchaseOrderId, snapshotType])
+  @@unique([purchaseOrderId, snapshotType, revisionNo])
   @@index([purchaseOrderId])
   @@index([deletedAt])
 }
