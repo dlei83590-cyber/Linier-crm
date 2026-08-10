@@ -1,9 +1,9 @@
 # Sprint 6B：Inventory Operations Field Matrix（库存作业字段矩阵）
 
-- 版本：v0.2（CTO 6B Design Review #7975 89/100 APPROVED WITH CHANGES 落实——P1-P12 Final；Re-review 通过前仍禁止 Schema / Migration / API）
+- 版本：v0.3（CTO 6B Gate Re-review #8014 98/100 APPROVED FOR SCHEMA DESIGN——Schema/Migration 0026 已批准（InventoryTransfer/Line、StockCount/Line、InventoryAdjustment/Line、InventoryConversion/Line 业务事实层）；API/Workflow/Seed/RBAC/共享 LedgerCommand core 抽取/Consumer 改造仍 HOLD）
 - 日期：2026-08-11
 - 维护者：CIO（JINZA）｜审核：CTO
-- 关联：Sprint6B_Inventory_Operations_Architecture_Process_Gate.md / ADR-0026（Proposed）/ Sprint6B_CTO_Pending_Decisions.md / Sprint6A_Inventory_Field_Matrix.md（6A：InventoryMovement / StockProjection / OutboxMessage 已实现）/ EVENTS.md（v1.26）
+- 关联：Sprint6B_Inventory_Operations_Architecture_Process_Gate.md / ADR-0026（Approved with Changes）/ Sprint6B_CTO_Pending_Decisions.md / Sprint6A_Inventory_Field_Matrix.md（6A：InventoryMovement / StockProjection / OutboxMessage 已实现）/ EVENTS.md（v1.27）
 
 > **⚠️ 铁律（CTO #7895 锁死）**：本矩阵是**字段草案（Design Only / Not Schema）**——不是 Schema，不建任何表。**业务 API 不得直接创建 InventoryMovement / 修改 StockProjection**——所有库存变化必须经 Ledger Command（同步）或 Transactional Outbox + Consumer（异步），复用 6A 已固化的 `writeInventoryOutboxAtom` / `consumeOutboxMessage` 模式。字段命名在 Schema Gate 批准后再定稿。
 
