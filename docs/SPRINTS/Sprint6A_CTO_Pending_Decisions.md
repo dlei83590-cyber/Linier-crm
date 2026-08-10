@@ -1,19 +1,17 @@
 # Sprint 6A：CTO Pending Decisions（库存账本待拍板决策清单）
 
-- 版本：v0.1（草案，待 CTO Design Review）
+- 版本：v0.2（CTO 6A Design Review #7458 拍板结果——P1-P10 全部 Final）
 - 日期：2026-08-10
 - 维护者：CIO（JINZA）提案 ｜ 审核：CTO
-- 关联：Sprint6A_Inventory_Ledger_Architecture_Process_Gate.md / ADR-0025（草案）/ Sprint6A_Inventory_Field_Matrix.md / EVENTS.md / ADR-0024（5B 已 Implemented）
+- 关联：Sprint6A_Inventory_Ledger_Architecture_Process_Gate.md / ADR-0025（Approved with Changes）/ Sprint6A_Inventory_Field_Matrix.md / EVENTS.md / ADR-0024（5B 已 Implemented）
 
-> **Gate 铁律（CTO #7405）**：6A 是 ERP 最易出数据一致性事故的领域。本清单只拍事实边界，**未拍板前禁止 Schema / Migration 0024 / API**。全部 Pending 拍板后才允许进入 Schema。
+> **Gate 铁律（CTO #7405/#7458）**：6A 是 ERP 最易出数据一致性事故的领域。**Schema/Migration 0024 继续 HOLD**——Re-review 通过后才放行，且**只允许 InventoryMovement + StockProjection + Outbox**，不允许 Transfer/Conversion/Count/Costing/ReservedQty 越界。
 
 ---
 
-## P1：Inventory Movement 写入方式（同步同事务 / Outbox 驱动 / 异步消费）—— 🔴 本 Gate 第一号决策
+## P1：Inventory Movement 写入方式 —— ✅ Final（CTO #7458）
 
-**问题（CTO #7405 明确提出）**：WarehouseReceipt 已 POSTED，但 `WarehouseReceiptPosted` 事件发布失败 → 库存是否永远没入账？**答案必须是否定的**——库存不能接受"偶尔少一笔"。
-
-**CTO 倾向方案（默认采纳，待正式拍板）**：
+**Transactional Outbox**。业务事实 + Outbox 同事务落库 → Inventory consumer 独立事务消费。
 ```
 业务事实事务（如 WarehouseReceipt POST 事务）
   ├─ 写入业务事实（status = POSTED）
@@ -21,75 +19,70 @@
   └─ 事务提交（业务事实 + Outbox 原子落库）
         ↓
 Inventory consumer（独立事务）
-  ├─ 读取 Outbox 未发送记录
-  ├─ 幂等消费（sourceType + sourceId + sourceLineId）
-  └─ 调用 Inventory Ledger command 层生成 Movement（COMMITTED）
+  ├─ 读取 Outbox 待处理记录（PROCESSING 租约）
+  ├─ 幂等检查（sourceType+sourceId+sourceLineId+movementRole）
+  └─ 单事务：INSERT Movement(COMMITTED) + UPSERT StockProjection + MARK Outbox PROCESSED
 ```
-- 备选 a：同步同事务直接建 Movement（强一致，但跨模块耦合、无事件中间层）
-- 备选 b：维持异步 best-effort（**拒绝**——库存不接受丢账）
-- **红线**：Transactional Outbox 提升为 6A 前置能力；业务事实 + Outbox 写入必须同事务
+- **红线**：Transactional Outbox 提升为 6A 前置能力；不再容忍 5B 当前 best-effort 事件发布（库存不能接受"偶尔少一笔"）；业务事实 + Outbox 写入必须同事务
 
-## P2：Movement 状态机与命名
+## P2：Movement 状态机与命名 —— ✅ Final（CTO #7458）
 
-- 草案：`PENDING（可选暂存） → COMMITTED`；`COMMITTED →（仅通过 Reversal/Correction 追加，不改变原行）`
-- 待拍板：是否需要 PENDING 暂存态，还是创建即 COMMITTED（无暂存）？状态命名是否对齐 5B（POSTED 语义）？
+**创建即 COMMITTED**。6A 第一版不需要 PENDING Movement；**需要暂存的是业务单据，不是 Ledger**。
+`创建（幂等校验）→ COMMITTED + committedAt/ById`；`COMMITTED →（仅通过 Reversal/Correction 追加，不改变原行）`
 
-## P3：ReservedQty 是否进入 6A
+## P3：ReservedQty 是否进入 6A —— ✅ Final（CTO #7458）
 
-- **CTO 倾向（#7405）**：**不进入 6A 核心 Ledger**（预留是可用性投影的一部分，可在更高层处理或后续 Sprint）
-- 待拍板：若进入，reservedQty 的写入者、释放规则、与 Movement 的关系
+**ReservedQty 不进入 6A**。`availableQty` / `reservedQty` 从 6A canonical Projection 字段移除（本阶段不作为 canonical 库存字段；预留可在更高层/后续 Sprint 处理）。
 
-## P4：Costing 边界
+## P4：Costing 边界 —— ✅ Final（CTO #7458）
 
-- **CTO 倾向（#7405）**：**Costing 不混进 6A Ledger**；除非只保留 `costSnapshot / costReference`（引用来源单据成本快照，不做计算）
-- **移动平均 / FIFO 单独 Gate（6B+）**
-- 待拍板：costSnapshot 字段是否本期保留（仅快照/引用）
+**Costing 不进入 6A**。第一版**连 `costSnapshot` 也不放**（避免 6B 边界污染）；移动平均 / FIFO 单独 Gate（6B+）。
 
-## P5：Transfer / Conversion / Count 的 Schema 是否本期建
+## P5：Transfer / Conversion / Count 的 Schema 是否本期建 —— ✅ Final（CTO #7458）
 
-- 规则已锁（ADR D8-D10）：Transfer = 成对 Movement；Conversion = Consume/Produce 组；Count = 盘盈/盘亏 Adjustment Movement
-- 待拍板：本期只建 InventoryMovement + Stock Projection + Outbox（Transfer/Conversion/Count 后续 Sprint），还是本期一并建相关业务单据模型？
+**6A 只建 Ledger + Projection + Outbox**；Transfer/Conversion/Count **本期只锁规则，不建业务单据 Schema**（后续 Sprint 再建）。
 
-## P6：负库存策略
+## P6：负库存策略 —— ✅ Final（CTO #7458）
 
-- 待拍板：是否允许临时负库存（OUT > 当前投影时）？选项：a) 禁止（OUT 前校验，无货不可出）b) 允许负库存 + 告警 c) 允许负库存 + 强制作业阻塞
-- 影响：Transfer OUT / 已入库退货 OUT / 未来 Sales OUT 的校验语义
+**禁止负库存**。所有 OUT 在锁定库存维度后必须保证 `onHandQty >= outQty`；不足**稳定拒绝**（409）。
 
-## P7：Stock Projection 存储形态
+## P7：Stock Projection 存储形态 —— ✅ Final（CTO #7458）
 
-- 待拍板：a) 物化表（Movement 聚合时增量更新，查询快）b) 视图/聚合查询（无冗余，但查询慢）c) 物化表 + 定期对账（推荐）
-- 影响：BI/查询性能与一致性成本
+**物化 StockProjection + 与 Movement 同事务更新 + Ledger Reconciliation**。
+- consumer 单事务：`BEGIN → 幂等检查 → INSERT Movement(COMMITTED) → UPSERT StockProjection(onHandQty += signed) → MARK Outbox PROCESSED → COMMIT`
+- **Movement 是事实源；Projection 是缓存/投影，但与 Movement commit 原子更新**
+- ❌ 不用"Movement 先提交、异步 consumer 再更新 StockProjection"的双重最终一致链
+- **Reconciliation**：`SUM(COMMITTED Movement)` vs `StockProjection.onHandQty` → 差异 → 报警/修复投影，**不修改历史 Movement**
 
-## P8：Outbox 表归属与重放机制
+## P8：Outbox 表归属与重放机制 —— ✅ Final（CTO #7458）
 
-- 待拍板：Outbox 表放哪个模块（6A 独立表 vs 平台公共表）；消费确认机制（SENT 后删除 vs 保留审计）；失败重试/死信策略
-- 红线：业务事实 + Outbox 写入同事务（P1）
+**平台级持久 Outbox**；状态 `PENDING / PROCESSING / PROCESSED / DEAD_LETTER`；失败 `PROCESSING → PENDING(retry)` 或超阈值 → `DEAD_LETTER`；带 `attemptCount / nextAttemptAt / lockedAt / lockedBy / lastError / processedAt`；**处理成功不删除 Outbox（保留审计记录）**。
 
-## P9：已入库退货 OUT 的 Movement 数量与批次继承
+## P9：已入库退货 OUT 的 Movement 数量与批次继承 —— ✅ Final（CTO #7458）
 
-- 草案：`PURCHASE_RETURN_RETURNED`（WAREHOUSE_RECEIPT_LINE 来源行）→ OUT，数量 = PurchaseReturnLine.quantity，批次/序列号继承来源 WarehouseReceiptLine（P6 Final）
-- 待拍板：退货 OUT 是否必须按原批次扣减（批次维度精确追踪），还是允许任意批次扣减（FIFO/加权）
+**按原 WarehouseReceiptLine 的 warehouse/location/batch/serial 精确 OUT**；**不得 FIFO/任意批次替代**。
 
-## P10：6A 事件命名
+## P10：6A 事件命名 —— ✅ Final（CTO #7458）
 
-- 草案：`InventoryMovementCommitted`（Movement 落定后发布）/ `InventoryStockProjectionChanged`（可选，投影变化后发，供 BI/查询缓存）
-- 待拍板：命名是否对齐 EVENTS.md 注册纪律（业务动作事件，不以 PENDING 创建为完成事实；载荷不含投影余额）
+**`InventoryMovementCommitted` 保留**（Movement COMMITTED 后发布）；**暂不发布** `InventoryStockProjectionChanged`（避免把 projection 变成业务事实）。
 
 ---
 
-## 汇总表（CTO Design Review 拍板结果——待填）
+## 汇总表（CTO 6A Design Review #7458 拍板结果）
 
-| # | Pending | CTO 决策 | 结论 |
+| # | Pending | CTO Final 决策 | 结论 |
 | --- | --- | --- | --- |
-| P1 | Movement 写入方式（同步同事务 / Outbox / 异步） | 待拍板（CTO 倾向：业务事实事务 + Outbox 同事务 → consumer 幂等生成） | ⏳ |
-| P2 | Movement 状态机与命名 | 待拍板 | ⏳ |
-| P3 | ReservedQty 是否进入 6A | 待拍板（CTO 倾向：不进入） | ⏳ |
-| P4 | Costing 边界 | 待拍板（CTO 倾向：不混入，仅 cost snapshot；移动平均/FIFO 单独 Gate） | ⏳ |
-| P5 | Transfer/Conversion/Count 的 Schema 是否本期建 | 待拍板（规则已锁，Schema 范围待定） | ⏳ |
-| P6 | 负库存策略 | 待拍板 | ⏳ |
-| P7 | Stock Projection 存储形态 | 待拍板 | ⏳ |
-| P8 | Outbox 归属与重放机制 | 待拍板 | ⏳ |
-| P9 | 已入库退货 OUT 数量与批次继承 | 待拍板 | ⏳ |
-| P10 | 6A 事件命名 | 待拍板 | ⏳ |
+| P1 | Movement 写入方式（同步同事务 / Outbox / 异步） | **Transactional Outbox**：业务事实 + Outbox 同事务；Inventory consumer 独立事务消费 | ✅ Final |
+| P2 | Movement 状态机与命名 | **创建即 COMMITTED**（6A 第一版无 PENDING；需暂存的是业务单据，不是 Ledger） | ✅ Final |
+| P3 | ReservedQty 是否进入 6A | **不进入**；availableQty 本阶段不作为 canonical 库存字段 | ✅ Final |
+| P4 | Costing 边界 | **不进入 6A**；第一版连 costSnapshot 也不放（避免 6B 边界污染） | ✅ Final |
+| P5 | Transfer/Conversion/Count Schema | **只建 Ledger + Projection + Outbox**；本期只锁规则不建业务单据 Schema | ✅ Final |
+| P6 | 负库存策略 | **禁止负库存**：OUT 锁定维度后 onHandQty >= outQty；不足稳定拒绝 | ✅ Final |
+| P7 | Stock Projection 存储形态 | **物化 + 与 Movement 同事务更新 + reconciliation** | ✅ Final |
+| P8 | Outbox 归属与重放 | **平台级持久 Outbox**：PENDING/PROCESSING/PROCESSED/DEAD_LETTER + lease/retry metadata；保留记录不删除 | ✅ Final |
+| P9 | 已入库退货 OUT 规则 | **按原 WarehouseReceiptLine 的 warehouse/location/batch/serial 精确 OUT**；不得 FIFO/任意批次替代 | ✅ Final |
+| P10 | 6A 事件命名 | `InventoryMovementCommitted` 保留；**暂不发布** `InventoryStockProjectionChanged` | ✅ Final |
 
-> **CTO 红线（本 Gate 直接锁定，不待拍板）**：业务模块不得直接创建 InventoryMovement——必须通过 Inventory Ledger service / command 层，以受支持的 `sourceType + sourceId + sourceLineId` 生成 Movement。否则 Purchase、Sales、Transfer、Count、Conversion 会各自写库存表，事实源再次分裂。
+> **CTO 红线（本 Gate 直接锁定，不待拍板）**：业务模块不得直接创建 InventoryMovement——必须通过 Inventory Ledger service / command 层，以受支持的 `sourceType + sourceId + sourceLineId + movementRole` 生成 Movement。否则 Purchase、Sales、Transfer、Count、Conversion 会各自写库存表，事实源再次分裂。
+>
+> **8 项 Design Consistency Fixes（CTO #7458）**：① 幂等键 + movementRole ② serialNo 原子化（quantity=1，单值 serialNo）③ Outbox PROCESSING/lease/retry/dead-letter ④ StockProjection 同事务更新 + reconciliation ⑤ P1-P10 全部 Final ⑥ Movement 单层原子事实 + 可选 movementGroupId ⑦ 删除 costSnapshot ⑧ availableQty/reservedQty 从 canonical Projection 移除。**Re-review 只核这 8 项。**
