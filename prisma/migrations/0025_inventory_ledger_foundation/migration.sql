@@ -12,7 +12,7 @@
 --           Sprint6A_Inventory_Field_Matrix.md、Sprint6A_CTO_Pending_Decisions.md（P1-P10 全部 Final）
 -- 核心事实（CTO #7405/#7458 锁死）：
 -- ① InventoryMovement = 库存数量唯一事实源（SSOT）；Stock/OnHandQty 只能投影，不能成为独立业务事实
--- ② 业务模块不得直接创建 InventoryMovement——必须走 Inventory Ledger command 层（sourceType+sourceId+sourceLineId+movementRole 四元幂等键）
+-- ② 业务模块不得直接创建 InventoryMovement——必须走 Inventory Ledger command 层（sourceType+sourceId+sourceLineId+movementRole+movementAtomKey 五元幂等键）
 -- ③ 来源映射：WarehouseReceiptPosted → IN；PurchaseReturned（WAREHOUSE_RECEIPT_LINE 来源）→ OUT；未入库退货无 Movement
 -- ④ Movement 历史不可变：COMMITTED 后禁止 UPDATE/DELETE（数据库层约束）；纠错只能追加 Reversal/Correction（独立幂等身份）
 -- ⑤ 单层原子事实：一行 = 一个不可变库存原子事实（无 Header/Line 两层）；编组用 movementGroupId（CTO #7458）
@@ -75,7 +75,10 @@ CREATE TABLE "InventoryMovement" (
     CONSTRAINT "InventoryMovement_sourceType_sourceId_sourceLineId_movementRole_movementAtomKey_key" UNIQUE ("sourceType", "sourceId", "sourceLineId", "movementRole", "movementAtomKey"),
     -- CTO #7458 Blocking ②：serial-managed 原子化（serialNo 非空 ⇒ quantity 必须 = 1）；quantity 恒 > 0（方向承载正负语义）
     CONSTRAINT "InventoryMovement_quantity_positive_check" CHECK ("quantity" > 0),
-    CONSTRAINT "InventoryMovement_serial_quantity_check" CHECK ("serialNo" IS NULL OR "quantity" = 1)
+    CONSTRAINT "InventoryMovement_serial_quantity_check" CHECK ("serialNo" IS NULL OR "quantity" = 1),
+    -- CTO #7495 Schema Final Re-check（唯一 Blocking）：serial 存在时 atomKey 必须 = serialNo（每个 serial 的原子身份就是该 serial）
+    -- 不做“serialNo IS NULL → movementAtomKey = BULK”：未来非 serial 的 Transfer/Conversion 可能需要多个 atom key，只约束 serial 存在时相等
+    CONSTRAINT "InventoryMovement_serial_atom_key_check" CHECK ("serialNo" IS NULL OR "movementAtomKey" = "serialNo")
 );
 
 -- Foreign Keys（onDelete Restrict：历史不可变，来源/主数据删除受 Movement 约束；committedById SetNull）

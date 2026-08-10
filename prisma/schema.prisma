@@ -5098,7 +5098,7 @@ model PurchaseReturnLine {
 // ============================================================================
 // Sprint 6A — Inventory Ledger（库存数量唯一事实源，CTO 6A Gate Re-review 97/100 APPROVED FOR SCHEMA DESIGN #7446）
 // 红线：InventoryMovement = 库存数量唯一业务事实；Stock/OnHandQty 只能投影；业务模块不得直接创建 Movement
-// （必须走 Inventory Ledger command 层，sourceType+sourceId+sourceLineId+movementRole 四元幂等键）
+// （必须走 Inventory Ledger command 层，sourceType+sourceId+sourceLineId+movementRole+movementAtomKey 五元幂等键）
 // P1-P10 Final：Outbox / 创建即 COMMITTED / ReservedQty 不进 / Costing 不进（无 costSnapshot）/
 // 只建 Ledger+Projection+Outbox（Transfer/Conversion/Count 只锁规则）/ 禁负库存 / 物化同事务+reconciliation /
 // 平台级持久 Outbox / 精确 OUT / InventoryMovementCommitted 保留
@@ -5170,6 +5170,8 @@ model InventoryMovement {
   sourceLineId   String // 来源行 id（如 WarehouseReceiptLine.id / PurchaseReturnLine.id）
   movementRole   InventoryMovementRole // CTO #7458：幂等键组成部分
   movementAtomKey String @default("BULK") // CTO #7469 Blocking ①：原子子键（非 serial = "BULK"；serial = serialNo；未来 Transfer/Conversion 多原子同 role 区分）
+  // DB invariant（CTO #7495 Final Re-check）：serialNo 非空 ⇒ movementAtomKey 必须 = serialNo（CHECK "InventoryMovement_serial_atom_key_check"）
+  // 不做“serialNo IS NULL → movementAtomKey = BULK”——未来非 serial 的 Transfer/Conversion 可能需要多个 atom key
   movementGroupId String? // 编组（Transfer/Conversion 多笔 Movement，可选；替代 Header/Line 两层）
   direction      InventoryMovementDirection
   status         InventoryMovementStatus @default(COMMITTED) // P2 Final：创建即 COMMITTED
