@@ -163,7 +163,7 @@
 | 字段 | 语义 | 5B 回写规则 |
 | --- | --- | --- |
 | receivedQty | **已被采购履约接受、可冲减 PO 未交数量的累计数量**（非到货毛数量；**当场拒收 rejectedOnReceiptQty 不计入**） | 每次 PurchaseReceipt 后 +=（quantity - rejectedOnReceiptQty）（服务端计算）；退货 REPLACE_REQUIRED 时重新打开待交数量 |
-| remainingReceiveQty | 剩余可收数量 | = quantity × (1 + 有效容差) - receivedQty（服务端计算；**容差 System Default = 0%**，P2 Final） |
+| remainingReceiveQty | 剩余可收数量 | = max(quantity - receivedQty, 0)（服务端唯一计算；**tolerance 只决定 receiveCeiling，不改变正常未交数量**——CTO Sprint 5B Final Review 锁死口径；例：PO=100、Tolerance=5%、receivedQty=100 → remainingReceiveQty=0、receiveCeiling=105，不能显示“还欠 5 件”；容差见下） |
 | PO.status | 收货聚合状态 | 全部收完（且无退货挂起）→ `RECEIVED`；否则 `PARTIALLY_RECEIVED` |
 
 > 5A 已建列、禁客户端改；**5B 是唯一回写方**（ADR-0023 D2 延续）。

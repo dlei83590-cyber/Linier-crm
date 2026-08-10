@@ -2,7 +2,7 @@
 
 > Sprint：5B（China ERP Process & Field Gate）| 模块：PurchaseReceipt / Inspection / WarehouseReceipt / PurchaseReturn Foundation（Schema/Migration 0023 + Seed/RBAC + 四模块全链路 API + PO 履约投影 reopen） | PR：#20（feature/sprint5b-gate，Open 待 Final Review 合并）
 > 日期：2026-08-10
-> 状态：✅ 代码门禁通过（CI 全绿：`6e41d3a` PurchaseReturn API / `37f7d68` TS 修复 / `b4c2170` CTO Re-review 修复——Quality Gates + Build + Secret Scanning 全 success）；**CTO PurchaseReturn API FINAL REVIEW 98/100 APPROVED（#7267→#7303）**；**Sprint 5B 核心事实链 CLOSED**；本 QA 文档为 PR #20 Finalization 收口产物；**Ready for Final Review**（PR #20 合并后改 Completed）
+> 状态：✅ 代码门禁通过（CI 全绿：`6e41d3a` PurchaseReturn API / `37f7d68` TS 修复 / `b4c2170` CTO Re-review 修复 / `4c973f7` Finalization 收口——Quality Gates + Build + Secret Scanning 全 success）；**CTO PurchaseReturn API FINAL REVIEW 98/100 APPROVED（#7303）**；**CTO Sprint 5B Final Review 94/100 APPROVED WITH DOCUMENTATION FIXES（#7363）**；**Sprint 5B 核心事实链 CLOSED**；本 QA 文档为 PR #20 Finalization 收口产物（Final Docs consistency patch 后待 CTO Final Re-check；通过后 Merge PR #20 并改 Completed）
 > 关联：ADR-0024（Goods Receipt & Inbound Boundary）、Sprint5B_China_ERP_Process_Field_Gate.md、Sprint5B_Field_Matrix.md、Sprint5B_CTO_Pending_Decisions.md、EVENTS.md v1.22、openapi.yaml（Sprint 5B 段）、docs/test-cases/PurchaseReceipt_API.md + Inspection_API.md + WarehouseReceipt_API.md + PurchaseReturn_API.md
 > 5B 核心业务链（CTO 确认 CLOSED）：**PO CONFIRMED → PurchaseReceipt RECEIVED → Inspection Completed → WarehouseReceipt POSTED → PurchaseReturn RETURNED**；全程 **Stock / InventoryMovement = 0 写入**（库存事实源未被采购模块提前污染，6A 唯一事实源）
 
@@ -117,7 +117,7 @@ Sprint 5B 进入 CTO Final Review 前必须满足：
 2. 5B 核心链 PO CONFIRMED → PurchaseReceipt RECEIVED → Inspection Completed → WarehouseReceipt POSTED → PurchaseReturn RETURNED 全链通过；
 3. CTO PurchaseReturn API FINAL REVIEW 98/100 APPROVED 已通过（Blocking 0）；
 4. 5B 全程 Stock / InventoryMovement 写入 = 0（6A 边界未污染）；
-5. CI Quality Gates + Build 全绿（@ b4c2170，run #190）；
+5. CI Quality Gates + Build 全绿（@ 4c973f7，run #191）；
 6. OpenAPI 5B 段（四模块端点 + schemas）已补齐；
 7. ADR-0024 / ROADMAP / CHANGELOG / RELEASE_NOTES / EVENTS v1.23 终态已更新；
 8. PR #20 Description Scope 已更新（设计文档 → Sprint 5B 完整实现收口）；

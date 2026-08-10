@@ -3,9 +3,9 @@
 - 状态：**Implemented（2026-08-10，Sprint 5B 完整实现 + CTO PurchaseReturn FINAL APPROVED 98/100 #7303——Sprint 5B 核心事实链 CLOSED；Schema/Migration 0023 已实现）**
 - 关联：Sprint5B_China_ERP_Process_Field_Gate.md / Sprint5B_Field_Matrix.md / Sprint5B_CTO_Pending_Decisions.md / EVENTS.md / ADR-0023（5A 已 Implemented）
 - 决策人：CIO（JINZA）提案 ｜ 审核：CTO
-- 背景：Sprint 5A 已完成 PR/PO Foundation（PR #19 合并 main）。5B 需锁定“到货 → 收货 → 验收 → 入库”业务边界，回答 GoodsReceipt 到底代表什么；**本阶段只做 Design / ADR / 文档，禁止 Schema / Migration 0023 / API**（Gate 模式延续 Sprint 4/5 纪律）
+- 背景：Sprint 5A 已完成 PR/PO Foundation（PR #19 合并 main）。5B 需锁定“到货 → 收货 → 验收 → 入库”业务边界，回答 GoodsReceipt 到底代表什么；**5B Gate 阶段曾禁止 Schema / Migration 0023 / API（仅 Design/ADR/文档）；Gate 批准后已按阶段完成实现**（Gate 模式延续 Sprint 4/5 纪律）
 
-## 核心决策（草案，CTO 倾向确认中）
+## 核心决策（Final / Implemented）
 
 ### D1：到货/收货 与 采购入库 拆为两层事实（CTO Design Review P1 Final）
 
@@ -47,7 +47,9 @@
 - **`PO Line.receivedQty` ≠ 到货毛数量**：定义为 **已被采购履约接受、可冲减 PO 未交数量的累计数量**——**当场拒收（rejectedOnReceiptQty）不计入 receivedQty**
 - 示例：PO 100 件，供应商送 100 件，当场损坏 20 件 → receivedQty 只 +80；PO 不视为 RECEIVED（供应商仍欠 20 件）
 - 后续 QC 发现问题的退货：不偷偷重写历史 Receipt；通过 `PurchaseReturn` + `disposition` 决定是否重新打开待交数量（REPLACE_REQUIRED → 重新增加履约剩余）
-- `remainingReceiveQty = quantity × (1 + 有效容差) - receivedQty`（服务端计算；容差见 D7）
+- `remainingReceiveQty = max(quantity - receivedQty, 0)`（服务端唯一计算；**tolerance 只决定 receiveCeiling，不改变正常未交数量**——CTO Sprint 5B Final Review 锁死口径：
+  `receivedQty` = 累计被采购履约接受数量；`remainingReceiveQty` = max(PO quantity - receivedQty, 0)；`receiveCeiling` = PO quantity × (1 + effectiveToleranceRate)。
+  例：PO=100、Tolerance=5%、receivedQty=100 → remainingReceiveQty=0、receiveCeiling=105，**不能显示“还欠 5 件”**；容差见 D7）
 - 全部收完（且无退货挂起）→ PO status → `RECEIVED`；否则 `PARTIALLY_RECEIVED`（事件 `PurchaseOrderPartiallyReceived` / `PurchaseOrderReceived`）
 
 ### D7：超收容差与审批（Blocking ① 修正；P2 Final）

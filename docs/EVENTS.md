@@ -1,7 +1,7 @@
 # EVENTS 领域事件注册表（Domain Events）
 
-- 版本：v1.14
-- 日期：2026-08-08
+- 版本：v1.23
+- 日期：2026-08-10
 - 维护者：CIO（JINZA）｜审核：CTO
 - 关联：[API_GUIDELINES.md](./API_GUIDELINES.md) ｜ [ARCHITECTURE_BASELINE.md](./ARCHITECTURE_BASELINE.md)
 
