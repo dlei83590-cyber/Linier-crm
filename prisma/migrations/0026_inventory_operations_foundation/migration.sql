@@ -1,5 +1,6 @@
 -- Sprint 6B：Inventory Operations 业务事实层（Schema + Migration 0026）
 -- CTO 6B Gate Re-review 98/100 APPROVED FOR SCHEMA DESIGN（#8014，2026-08-11）——8/8 PASS 后放行 Schema
+-- CTO 6B Schema Review 86/100 REQUEST CHANGES（#8112，2026-08-11）——4 Blocking + 2 Integrity 修正已落实：① direction 下沉到 AdjustmentLine ② sourceStockCountLineId UNIQUE 防双重入账 ③ Conversion UNIQUE(conversionHeaderId, lineRole) 单输入单输出 ④ 行级 uomToBaseRate/baseQuantity（删 header 单一 conversionRate）＋ Transfer/Conversion/Adjustment 终态证据 CHECK ＋ InventoryAdjustment.createdById NOT NULL（maker-checker 闭环）
 -- 设计依据：ADR-0026（Approved with Changes）、Sprint6B_Inventory_Operations_Architecture_Process_Gate.md、
 --           Sprint6B_Inventory_Operations_Field_Matrix.md、Sprint6B_CTO_Pending_Decisions.md（P1-P12 全部 Final）
 -- ⚠️ 迁移编号治理：最新 main migrations 事实源 = `0025_inventory_ledger_foundation` → 本迁移 = **0026**（不得猜测/复用/改写已进 main 的 migration）
@@ -57,6 +58,8 @@ CREATE TABLE "InventoryTransfer" (
 
     CONSTRAINT "InventoryTransfer_pkey" PRIMARY KEY ("id"),
     CONSTRAINT "InventoryTransfer_transferNo_key" UNIQUE ("transferNo"),
+    -- CTO 6B Schema Re-review Integrity ①：终态必须有执行证据——status=EXECUTED 时 movementGroupId/executedAt/executedById 全部非空（防"终态无证据"坏数据；不能证明 Ledger 一定成功，但杜绝空终态）
+    CONSTRAINT "InventoryTransfer_executed_evidence_check" CHECK ("status" <> 'EXECUTED' OR ("movementGroupId" IS NOT NULL AND "executedAt" IS NOT NULL AND "executedById" IS NOT NULL)),
     -- CTO Schema 问题②：防自调拨（同仓且同库位——含两 location 都 NULL 视为自调拨 → 拒绝；跨仓 warehouse 不同自然通过）
     CONSTRAINT "InventoryTransfer_self_transfer_check" CHECK (NOT ("sourceWarehouseId" = "destinationWarehouseId" AND "sourceLocationId" IS NOT DISTINCT FROM "destinationLocationId"))
 );
@@ -145,14 +148,13 @@ CREATE TABLE "InventoryAdjustment" (
     "adjustmentNo" TEXT NOT NULL, -- 调整单号（DocumentSequence docType=INVENTORY_ADJUSTMENT，前缀 ADJ）
     "status" "InventoryAdjustmentStatus" NOT NULL DEFAULT 'DRAFT',
     "reasonCode" TEXT NOT NULL,
-    "direction" "InventoryMovementDirection" NOT NULL, -- IN / OUT（正负方向；quantity 恒正数）
     "sourceStockCountId" TEXT, -- 来源盘点单（可空——Manual 调整无盘点来源）
     "approvedById" TEXT,
     "appliedById" TEXT,
     "appliedAt" TIMESTAMP(3) WITH TIME ZONE, -- CTO Schema 问题⑥：Ledger 成功后写入（APPLIED 才有）
     "remark" TEXT,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
-    "createdById" TEXT,
+    "createdById" TEXT NOT NULL, -- CTO 6B Schema Re-review Integrity ②：NOT NULL——maker-checker 闭环（可空会让三值逻辑失效）；系统自动创建的 Count Adjustment 必须带明确 system actor
     "updatedById" TEXT,
     "version" INTEGER NOT NULL DEFAULT 1,
     "deletedAt" TIMESTAMP(3) WITH TIME ZONE,
@@ -163,7 +165,9 @@ CREATE TABLE "InventoryAdjustment" (
     CONSTRAINT "InventoryAdjustment_adjustmentNo_key" UNIQUE ("adjustmentNo"),
     -- maker-checker 第一道防线：批准/Apply 人不得与创建人相同（service 强制 + DB CHECK 兜底；NULL 视为未审批/未 Apply）
     CONSTRAINT "InventoryAdjustment_maker_checker_approve_check" CHECK ("approvedById" IS NULL OR "approvedById" <> "createdById"),
-    CONSTRAINT "InventoryAdjustment_maker_checker_apply_check" CHECK ("appliedById" IS NULL OR "appliedById" <> "createdById")
+    CONSTRAINT "InventoryAdjustment_maker_checker_apply_check" CHECK ("appliedById" IS NULL OR "appliedById" <> "createdById"),
+    -- CTO 6B Schema Re-review Integrity ①：终态必须有执行证据——status=APPLIED 时 approvedById/appliedById/appliedAt 全部非空
+    CONSTRAINT "InventoryAdjustment_applied_evidence_check" CHECK ("status" <> 'APPLIED' OR ("approvedById" IS NOT NULL AND "appliedById" IS NOT NULL AND "appliedAt" IS NOT NULL))
 );
 
 -- ⑨ InventoryAdjustmentLine（调整行——每行 → 一笔 ADJUSTMENT Movement；Count 通过 sourceStockCountLineId 追溯，不新增 STOCK_COUNT sourceType）
@@ -175,9 +179,10 @@ CREATE TABLE "InventoryAdjustmentLine" (
     "itemId" TEXT NOT NULL,
     "batchNo" TEXT,
     "serialNo" TEXT, -- 单值（serial-managed 逐 serial 原子化）
-    "quantity" DECIMAL(18,4) NOT NULL, -- 恒正数（方向在 header）
+    "direction" "InventoryMovementDirection" NOT NULL, -- CTO 6B Schema Re-review Blocking ①：方向下沉到行——同一 Adjustment 可同时承载盘盈/盘亏差异；quantity 恒正数
+    "quantity" DECIMAL(18,4) NOT NULL, -- 恒正数（方向在行）
     "uomId" TEXT,
-    "sourceStockCountLineId" TEXT, -- 盘点行追溯（CTO #7975：Count 经此追溯，不新增 STOCK_COUNT sourceType）
+    "sourceStockCountLineId" TEXT, -- 盘点行追溯（CTO 6B Schema Re-review Blocking ②：一个 StockCountLine 最多对应一个正式 AdjustmentLine——UNIQUE 防双重入账；PG 普通 UNIQUE 允许多个 NULL，Manual 不受影响；未来纠错走 Reversal/Correction）
     "remark" TEXT,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "createdById" TEXT,
@@ -188,7 +193,9 @@ CREATE TABLE "InventoryAdjustmentLine" (
     "updatedAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "InventoryAdjustmentLine_pkey" PRIMARY KEY ("id"),
-    CONSTRAINT "InventoryAdjustmentLine_quantity_positive_check" CHECK ("quantity" > 0)
+    CONSTRAINT "InventoryAdjustmentLine_quantity_positive_check" CHECK ("quantity" > 0),
+    -- CTO 6B Schema Re-review Blocking ②：同一 StockCountLine 最多被一个正式 AdjustmentLine 结算（UNIQUE 允许多个 NULL——Manual Adjustment 不受影响）
+    CONSTRAINT "InventoryAdjustmentLine_sourceStockCountLineId_key" UNIQUE ("sourceStockCountLineId")
 );
 
 -- ⑩ InventoryConversion（转换单头——收窄为同 item Repack / UOM Conversion，CTO #7975 Blocking ③）
@@ -199,8 +206,7 @@ CREATE TABLE "InventoryConversion" (
     "conversionNo" TEXT NOT NULL, -- 转换单号（DocumentSequence docType=INVENTORY_CONVERSION，前缀 CVT）
     "status" "InventoryConversionStatus" NOT NULL DEFAULT 'DRAFT',
     "itemId" TEXT NOT NULL, -- 同一 itemId（6B 收窄：同 item Repack/UOM Conversion）
-    "baseUomId" TEXT NOT NULL, -- Inventory Base UOM（引用现有 UnitOfMeasure；P11 Final）
-    "conversionRate" DECIMAL(18,6), -- 显式换算率 snapshot（单据声明，不隐式查表）
+    "baseUomId" TEXT NOT NULL, -- Inventory Base UOM（引用现有 UnitOfMeasure；P11 Final——service Gate 验证 baseUomId == 该 Item 的 inventory/stock UOM，不允许调用方任意选 UOM 冒充库存基准）
     "movementGroupId" TEXT, -- CTO Schema 问题①：EXECUTE 时生成并冻结（CONSUME + PRODUCE 共享）；DRAFT 可空
     "executedAt" TIMESTAMP(3) WITH TIME ZONE, -- CTO Schema 问题⑥：Ledger 成功后写入（EXECUTED 才有）
     "executedById" TEXT,
@@ -214,16 +220,20 @@ CREATE TABLE "InventoryConversion" (
     "updatedAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "InventoryConversion_pkey" PRIMARY KEY ("id"),
-    CONSTRAINT "InventoryConversion_conversionNo_key" UNIQUE ("conversionNo")
+    CONSTRAINT "InventoryConversion_conversionNo_key" UNIQUE ("conversionNo"),
+    -- CTO 6B Schema Re-review Integrity ①：终态必须有执行证据——status=EXECUTED 时 movementGroupId/executedAt/executedById 全部非空
+    CONSTRAINT "InventoryConversion_executed_evidence_check" CHECK ("status" <> 'EXECUTED' OR ("movementGroupId" IS NOT NULL AND "executedAt" IS NOT NULL AND "executedById" IS NOT NULL))
 );
 
 -- ⑪ InventoryConversionLine（转换行——lineRole=CONSUME / PRODUCE；换算到 base UOM 后 ΣCONSUME 与 ΣPRODUCE 相等，P11 Final）
 CREATE TABLE "InventoryConversionLine" (
     "id" TEXT NOT NULL,
     "conversionHeaderId" TEXT NOT NULL,
-    "lineRole" "InventoryConversionLineRole" NOT NULL,
-    "quantity" DECIMAL(18,4) NOT NULL,
+    "lineRole" "InventoryConversionLineRole" NOT NULL, -- CTO 6B Schema Re-review Blocking ③：UNIQUE(conversionHeaderId, lineRole)——每张 Conversion 最多 1 CONSUME + 1 PRODUCE（P10 单输入单输出）
+    "quantity" DECIMAL(18,4) NOT NULL, -- 业务 UOM 数量
     "uomId" TEXT,
+    "uomToBaseRate" DECIMAL(18,6) NOT NULL, -- CTO 6B Schema Re-review Blocking ④：行级换算率 snapshot（业务 UOM → base UOM）——header 单一 rate 无法无歧义描述两方向各自换算
+    "baseQuantity" DECIMAL(18,4) NOT NULL, -- canonical 数量 = quantity × uomToBaseRate（P11 Final：Ledger/Projection 只记 base UOM canonical 数量；service EXECUTE 前验证 CONSUME.baseQuantity == PRODUCE.baseQuantity）
     "warehouseId" TEXT NOT NULL,
     "locationId" TEXT,
     "batchNo" TEXT, -- P5 Final：batch 默认精确继承
@@ -237,7 +247,9 @@ CREATE TABLE "InventoryConversionLine" (
     "updatedAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "InventoryConversionLine_pkey" PRIMARY KEY ("id"),
-    CONSTRAINT "InventoryConversionLine_quantity_positive_check" CHECK ("quantity" > 0)
+    CONSTRAINT "InventoryConversionLine_quantity_positive_check" CHECK ("quantity" > 0),
+    -- CTO 6B Schema Re-review Blocking ③：单输入单输出（最多 1 CONSUME + 1 PRODUCE）
+    CONSTRAINT "InventoryConversionLine_conversionHeaderId_lineRole_key" UNIQUE ("conversionHeaderId", "lineRole")
 );
 
 -- ⑫ Foreign Keys（onDelete：Header 级主数据 Restrict / 审批-执行人 SetNull / 子行 Cascade）
@@ -310,7 +322,7 @@ CREATE INDEX "InventoryAdjustment_deletedAt_idx" ON "InventoryAdjustment"("delet
 CREATE INDEX "InventoryAdjustmentLine_adjustmentHeaderId_idx" ON "InventoryAdjustmentLine"("adjustmentHeaderId");
 CREATE INDEX "InventoryAdjustmentLine_warehouseId_idx" ON "InventoryAdjustmentLine"("warehouseId");
 CREATE INDEX "InventoryAdjustmentLine_itemId_idx" ON "InventoryAdjustmentLine"("itemId");
-CREATE INDEX "InventoryAdjustmentLine_sourceStockCountLineId_idx" ON "InventoryAdjustmentLine"("sourceStockCountLineId");
+-- sourceStockCountLineId 由 UNIQUE 约束覆盖（Blocking ②），不再建普通索引
 CREATE INDEX "InventoryAdjustmentLine_deletedAt_idx" ON "InventoryAdjustmentLine"("deletedAt");
 
 CREATE INDEX "InventoryConversion_conversionNo_idx" ON "InventoryConversion"("conversionNo");

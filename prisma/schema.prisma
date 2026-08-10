@@ -5494,15 +5494,17 @@ model StockCountLine {
 }
 
 /// Sprint 6B：库存调整单头（受控库存账事实——只能经共享 Ledger Command 追加 Movement）
-/// CTO Schema 问题④ maker-checker：createdById（创建人）与 approvedById/appliedById（批准/Apply 人）结构承载，service 强制不同人
+/// CTO Schema 问题④ maker-checker：createdById（创建人）与 approvedById/appliedById（批准/Apply 人）结构承载，service 强制不同人；
+/// CTO 6B Schema Re-review Integrity ②：createdById NOT NULL——可空会让 maker-checker CHECK 三值逻辑失效，系统自动创建的 Count Adjustment 也必须有明确 system actor
 /// CTO Schema 问题⑥：状态只有在 Ledger 成功后才进入 APPLIED——不允许"业务单据终态已写、Movement 失败"
 /// reasonCode（P8 Final）：系统保留码 + 可扩展字典（不写死 enum）
+/// CTO 6B Schema Re-review Integrity ①：DB CHECK 保证 status=APPLIED 时 approvedById/appliedById/appliedAt 全部非空（终态必须有执行证据）
 model InventoryAdjustment {
   id            String   @id @default(cuid())
   adjustmentNo  String   @unique // 调整单号（DocumentSequence docType=INVENTORY_ADJUSTMENT，前缀 ADJ）
   status        InventoryAdjustmentStatus @default(DRAFT)
   reasonCode    String   // P8 Final：系统保留码（COUNT_VARIANCE/DAMAGE/LOSS/GIFT/SYSTEM_CORRECTION/MANUAL）+ 可扩展字典
-  direction     InventoryMovementDirection // IN / OUT（正负方向；quantity 恒正数）
+  // CTO 6B Schema Re-review Blocking ①：direction 下沉到 InventoryAdjustmentLine——同一 Adjustment 可原子承载盘盈+盘亏差异行（一次 Stock Count 的 +5/-3 属于同一盘点事实）；Header 不再有单一方向
   sourceStockCountId String? // 来源盘点单（可空——Manual 调整无盘点来源）
   sourceStockCount   StockCount? @relation(fields: [sourceStockCountId], references: [id], onDelete: SetNull)
   approvedById  String?
@@ -5512,7 +5514,7 @@ model InventoryAdjustment {
   appliedAt     DateTime? @db.Timestamptz(3) // CTO Schema 问题⑥：Ledger 成功后写入（APPLIED 才有）
   remark        String?
   isActive      Boolean @default(true)
-  createdById   String?
+  createdById   String // CTO 6B Schema Re-review Integrity ②：NOT NULL——maker-checker 闭环（createdById 可空会让 CHECK 三值逻辑失效）；系统自动创建的 Count Adjustment 也必须带明确 system actor
   updatedById   String?
   version       Int     @default(1)
   deletedAt     DateTime?
@@ -5540,10 +5542,11 @@ model InventoryAdjustmentLine {
   item          Item @relation(fields: [itemId], references: [id], onDelete: Restrict)
   batchNo       String?
   serialNo      String? // 单值（serial-managed 逐 serial 原子化）
-  quantity      Decimal  @db.Decimal(18, 4) // 恒正数（方向在 header）
+  direction     InventoryMovementDirection // IN / OUT（CTO 6B Schema Re-review Blocking ①：方向下沉到行——同一 Adjustment 可同时承载盘盈/盘亏；quantity 恒正数）
+  quantity      Decimal  @db.Decimal(18, 4) // 恒正数（方向在行）
   uomId         String?
   uom           UnitOfMeasure? @relation(fields: [uomId], references: [id], onDelete: SetNull)
-  sourceStockCountLineId String? // 盘点行追溯（CTO #7975：Count 经此追溯，不新增 STOCK_COUNT sourceType）
+  sourceStockCountLineId String? @unique // 盘点行追溯（CTO 6B Schema Re-review Blocking ②：一个 StockCountLine 最多对应一个正式 AdjustmentLine——防双重入账；PG 普通 UNIQUE 允许多个 NULL，Manual 不受影响；未来纠错走 Reversal/Correction）
   sourceStockCountLine   StockCountLine? @relation(fields: [sourceStockCountLineId], references: [id], onDelete: SetNull)
   remark        String?
   isActive      Boolean @default(true)
@@ -5557,8 +5560,7 @@ model InventoryAdjustmentLine {
   @@index([adjustmentHeaderId])
   @@index([warehouseId])
   @@index([itemId])
-  @@index([sourceStockCountLineId])
-  @@index([deletedAt])
+  @@index([deletedAt]) // sourceStockCountLineId 由 @unique 覆盖（Blocking ②）
 }
 
 /// Sprint 6B：库存转换单头（收窄为同 item Repack / UOM Conversion——CTO #7975 Blocking ③）
@@ -5570,9 +5572,9 @@ model InventoryConversion {
   status        InventoryConversionStatus @default(DRAFT)
   itemId        String // 同一 itemId（6B 收窄：同 item Repack/UOM Conversion）
   item          Item @relation(fields: [itemId], references: [id], onDelete: Restrict)
-  baseUomId     String // Inventory Base UOM（引用现有 UnitOfMeasure；P11 Final）
+  baseUomId     String // Inventory Base UOM（引用现有 UnitOfMeasure；P11 Final——service Gate 验证 baseUomId == 该 Item 的 inventory/stock UOM，不允许调用方任意选 UOM 冒充库存基准）
   baseUom       UnitOfMeasure? @relation("ConversionBaseUom", fields: [baseUomId], references: [id], onDelete: Restrict)
-  conversionRate Decimal? @db.Decimal(18, 6) // 显式换算率 snapshot（单据声明，不隐式查表）
+  // CTO 6B Schema Re-review Blocking ④：header 单一 conversionRate 已删除——换算 snapshot 下沉到 Line（uomToBaseRate/baseQuantity），Ledger canonicalization 只认 line 级 baseQuantity
   movementGroupId String? // CTO Schema 问题①：EXECUTE 时生成并冻结（CONSUME + PRODUCE 共享）；DRAFT 可空
   executedAt    DateTime? @db.Timestamptz(3) // CTO Schema 问题⑥：Ledger 成功后写入（EXECUTED 才有）
   executedById  String?
@@ -5600,10 +5602,12 @@ model InventoryConversionLine {
   id            String   @id @default(cuid())
   conversionHeaderId String
   conversionHeader   InventoryConversion @relation(fields: [conversionHeaderId], references: [id], onDelete: Cascade)
-  lineRole      InventoryConversionLineRole // CONSUME / PRODUCE
-  quantity      Decimal  @db.Decimal(18, 4)
+  lineRole      InventoryConversionLineRole // CONSUME / PRODUCE（CTO 6B Schema Re-review Blocking ③：UNIQUE(conversionHeaderId, lineRole)——每张 Conversion 最多 1 CONSUME + 1 PRODUCE，P10 单输入单输出）
+  quantity      Decimal  @db.Decimal(18, 4) // 业务 UOM 数量
   uomId         String?
   uom           UnitOfMeasure? @relation(fields: [uomId], references: [id], onDelete: SetNull)
+  uomToBaseRate Decimal  @db.Decimal(18, 6) // 行级换算率 snapshot（业务 UOM → base UOM；Blocking ④——header 单一 rate 无法无歧义描述两方向各自换算）
+  baseQuantity  Decimal  @db.Decimal(18, 4) // canonical 数量 = quantity × uomToBaseRate（P11 Final：Ledger/Projection 只记 base UOM canonical 数量；service EXECUTE 前验证 CONSUME.baseQuantity == PRODUCE.baseQuantity）
   warehouseId   String
   warehouse     Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
   locationId    String?
@@ -5619,6 +5623,7 @@ model InventoryConversionLine {
   updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([conversionHeaderId])
+  @@unique([conversionHeaderId, lineRole]) // Blocking ③：单输入单输出（最多 1 CONSUME + 1 PRODUCE）
   @@index([warehouseId])
   @@index([deletedAt])
 }
