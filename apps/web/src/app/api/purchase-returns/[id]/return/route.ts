@@ -339,6 +339,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           `序列号管理商品的已入库退货必须显式提交本次退货 serialNos（来源入库行 ${src.id}，禁止 fallback 全来源序列号）`,
         );
       }
+      // CTO #7574 对称 Gate：**非 serial-managed 来源禁止提交 serialNos**（审计事实一致性）
+      // 来源无 serial + 退货行提交 SN → 静默忽略会造成 PurchaseReturnLine 记录 serialNos 而
+      // InventoryMovement 却是 BULK 的事实分裂（后续查“SN 退没退”两套答案）→ 直接 409 回滚。
+      if (src.serialNos.length === 0 && line.serialNos.length > 0) {
+        throw new InventoryOutboxError(
+          ERROR_CODES.INVENTORY_SERIAL_SOURCE_MISMATCH,
+          `非序列号管理来源禁止提交 serialNos（来源入库行 ${src.id} 无序列号，本次退货只能 BULK OUT）`,
+        );
+      }
       // CTO #7563 防御：serial-managed 时每个提交的 serial 必须属于原入库行 serialNos（P9 精确 OUT）
       if (src.serialNos.length > 0) {
         const srcSerialSet = new Set(src.serialNos);

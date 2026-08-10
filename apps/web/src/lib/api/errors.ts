@@ -211,6 +211,7 @@ export const ERROR_CODES = {
   INVENTORY_SERIAL_QTY_MISMATCH: 'INVENTORY_SERIAL_QTY_MISMATCH', // serial-managed：serialNos.length != quantity（数量守恒），409
   INVENTORY_SERIAL_DUPLICATE: 'INVENTORY_SERIAL_DUPLICATE', // serialNos 内重复 serial，409
   INVENTORY_SERIAL_REQUIRED: 'INVENTORY_SERIAL_REQUIRED', // serial-managed 已入库退货必须显式提交本次退货 serialNos（禁 fallback 全来源），409
+  INVENTORY_SERIAL_SOURCE_MISMATCH: 'INVENTORY_SERIAL_SOURCE_MISMATCH', // 非 serial-managed 来源禁止提交 serialNos（来源无 serial → 只能 BULK OUT；审计事实一致性，CTO #7574），409
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
