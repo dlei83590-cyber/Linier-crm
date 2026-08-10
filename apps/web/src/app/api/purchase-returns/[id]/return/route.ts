@@ -21,7 +21,11 @@ export const dynamic = 'force-dynamic';
  *   （必须来自 **POSTED** 入库事实，SOURCE_NOT_RETURNABLE）；本 API **不得写 InventoryMovement(OUT)**（6A 唯一事实源）；
  * - **防并发超退**：`FOR UPDATE` 锁 PurchaseReturn + 涉及的真实来源行（PurchaseReceiptLine / WarehouseReceiptLine / Inspection），
  *   **锁内重算累计 RETURNED**（仅 RETURNED 单占用；本单 DRAFT 未过账不计入，不双计）→ 本单行 ≤ 来源可退余额；
- * - **disposition**：REPLACE_REQUIRED（供应商仍欠货，重开 PO 履约剩余——PO 投影回写属后续/5B 聚合域，本版仅记录处置语义）；
+ * - **来源可退余额（CTO Re-review Blocking ① 修正）**：RECEIPT_LINE = `rejectedOnReceiptQty`（现场拒收）/ INSPECTION = `rejectedQty`（质检拒收）/
+ *   WAREHOUSE_RECEIPT_LINE = 已 POSTED 入库行 `quantity`；Create 预检查与 Return Gate **同步同源**，防分叉；
+ * - **disposition（line-level；CTO Re-review Blocking ② 修正）**：REPLACE_REQUIRED（供应商仍欠货 → **同一事务内真正 reopen PO 履约**：
+ *   INSPECTION / WAREHOUSE_RECEIPT_LINE 来源 `receivedQty -= returnQty`、`remainingReceiveQty` 重开待交；**RECEIPT_LINE(rejectedOnReceiptQty)
+ *   收货时未计入 receivedQty，供应商本就欠货，不重复 reopen**；PO 原状态 RECEIVED 且发生有效 reopen → 重聚回 PARTIALLY_RECEIVED）；
  *   CREDIT_ONLY（采购数量最终减少/财务冲减，不自动重开待交）；
  * - CAS：`id + version + status=DRAFT` 同时命中才更新，成功 `version: { increment: 1 }` + returnedAt/returnedById；
  * - 幂等：已 RETURNED → 409 `PURCHASE_RETURN_ALREADY_RETURNED`；CANCELLED → 409 INVALID_STATE；
@@ -119,7 +123,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       receiptLineIds.length
         ? tx.purchaseReceiptLine.findMany({
             where: { id: { in: receiptLineIds }, deletedAt: null },
-            select: { id: true, quantity: true, purchaseReceipt: { select: { purchaseOrderId: true } } },
+            select: { id: true, rejectedOnReceiptQty: true, purchaseReceipt: { select: { purchaseOrderId: true } } },
           })
         : Promise.resolve([]),
       warehouseLineIds.length
@@ -128,6 +132,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             select: {
               id: true,
               quantity: true,
+              purchaseReceiptLine: { select: { purchaseOrderLineId: true } },
               warehouseReceipt: {
                 select: { status: true, purchaseReceipt: { select: { purchaseOrderId: true } } },
               },
@@ -137,7 +142,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       inspectionIds.length
         ? tx.inspection.findMany({
             where: { id: { in: inspectionIds }, deletedAt: null },
-            select: { id: true, result: true, qualifiedQty: true, purchaseReceiptLine: { select: { purchaseReceipt: { select: { purchaseOrderId: true } } } } },
+            select: {
+              id: true,
+              result: true,
+              rejectedQty: true,
+              purchaseReceiptLine: {
+                select: {
+                  purchaseOrderLineId: true,
+                  purchaseReceipt: { select: { purchaseOrderId: true } },
+                },
+              },
+            },
           })
         : Promise.resolve([]),
     ]);
@@ -153,7 +168,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         if (src.purchaseReceipt.purchaseOrderId !== pr.purchaseOrderId) {
           return { error: 'SOURCE_MISMATCH' as const };
         }
-        returnableQty = src.quantity;
+        returnableQty = src.rejectedOnReceiptQty;
       } else if (line.sourceRefType === 'WAREHOUSE_RECEIPT_LINE') {
         const src = wlById.get(line.sourceWarehouseReceiptLineId!);
         if (!src) return { error: 'SOURCE_INVALID' as const };
@@ -173,7 +188,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         if (src.purchaseReceiptLine.purchaseReceipt.purchaseOrderId !== pr.purchaseOrderId) {
           return { error: 'SOURCE_MISMATCH' as const };
         }
-        returnableQty = src.qualifiedQty;
+        returnableQty = src.rejectedQty;
       }
       // **防并发超退**：锁内重算累计 RETURNED（仅 RETURNED 单占用；本单 DRAFT 未过账不计入，不双计）
       const sourceId = line.sourcePurchaseReceiptLineId ?? line.sourceWarehouseReceiptLineId ?? line.sourceInspectionId!;
@@ -200,6 +215,97 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return { error: 'VERSION_CONFLICT' as const };
     }
 
+    // ⑤ PO 履约 reopen（CTO Re-review Blocking ②）：REPLACE_REQUIRED 同一事务内真正重开 PO 履约投影
+    // - RECEIPT_LINE(rejectedOnReceiptQty)：收货时未计入 receivedQty（accepted = quantity - rejectedOnReceiptQty），供应商本就欠货 → **不重复 reopen**；
+    // - INSPECTION(rejectedQty) / WAREHOUSE_RECEIPT_LINE(quantity)：已进入履约接受量 → receivedQty -= returnQty；remainingReceiveQty 重开待交；
+    // - 原始 PurchaseReceipt / Inspection / WarehouseReceipt 事实不倒改；只调整 PO 履约投影；
+    // - PO 原状态 RECEIVED 且发生有效 reopen → 重聚回 PARTIALLY_RECEIVED（防 RECEIVED + remainingReceiveQty>0 自相矛盾）；
+    // - 与 Return 状态变更同一事务。
+    const reopenByPoLine = new Map<string, Prisma.Decimal>(); // poLineId -> 累计 reopen 数量
+    for (const line of lines) {
+      if (line.disposition !== 'REPLACE_REQUIRED') continue;
+      if (line.sourceRefType === 'RECEIPT_LINE') continue; // 不重复 reopen（见上）
+      const src =
+        line.sourceRefType === 'WAREHOUSE_RECEIPT_LINE'
+          ? wlById.get(line.sourceWarehouseReceiptLineId!)
+          : insById.get(line.sourceInspectionId!);
+      const poLineId = src?.purchaseReceiptLine?.purchaseOrderLineId;
+      if (!poLineId) return { error: 'SOURCE_INVALID' as const };
+      reopenByPoLine.set(
+        poLineId,
+        (reopenByPoLine.get(poLineId) ?? new Prisma.Decimal(0)).plus(line.quantity),
+      );
+    }
+    let reopenedAny = false;
+    if (reopenByPoLine.size > 0) {
+      const poLineIds = [...reopenByPoLine.keys()].sort(); // 排序锁行防死锁（对齐 receive 先例）
+      const lockedPoLines = await tx.$queryRaw<
+        Array<{
+          id: string;
+          purchaseOrderId: string;
+          quantity: Prisma.Decimal;
+          receivedQty: Prisma.Decimal;
+        }>
+      >(
+        Prisma.sql`
+          SELECT "id", "purchaseOrderId", "quantity", "receivedQty"
+          FROM "PurchaseOrderLine"
+          WHERE "id" IN (${Prisma.join(poLineIds)}) AND "deletedAt" IS NULL
+          ORDER BY "id"
+          FOR UPDATE
+        `,
+      );
+      if (lockedPoLines.length !== poLineIds.length) {
+        return { error: 'SOURCE_INVALID' as const };
+      }
+      for (const pol of lockedPoLines) {
+        if (pol.purchaseOrderId !== pr.purchaseOrderId) {
+          return { error: 'SOURCE_MISMATCH' as const };
+        }
+        const reopenQty = reopenByPoLine.get(pol.id)!;
+        const newReceivedQty = pol.receivedQty.minus(reopenQty);
+        if (newReceivedQty.isNegative()) {
+          return { error: 'OVER_SOURCE_BALANCE' as const }; // 防御：reopen 不可超过已收量
+        }
+        const newRemaining = pol.quantity.minus(newReceivedQty); // remainingReceiveQty = max(quantity - receivedQty, 0)
+        await tx.purchaseOrderLine.update({
+          where: { id: pol.id },
+          data: {
+            receivedQty: newReceivedQty,
+            remainingReceiveQty: newRemaining.isNegative() ? new Prisma.Decimal(0) : newRemaining,
+            updatedById: actorId,
+            version: { increment: 1 },
+          },
+        });
+        reopenedAny = true;
+      }
+      // PO 状态重聚：原 RECEIVED + 有效 reopen → PARTIALLY_RECEIVED
+      if (reopenedAny) {
+        const poNow = await tx.purchaseOrder.findFirst({
+          where: { id: pr.purchaseOrderId, deletedAt: null },
+          select: { status: true },
+        });
+        if (poNow && poNow.status === 'RECEIVED') {
+          await tx.purchaseOrder.update({
+            where: { id: pr.purchaseOrderId },
+            data: { status: 'PARTIALLY_RECEIVED', updatedById: actorId },
+          });
+        }
+      }
+    }
+
+    // ⑥ line-level disposition（CTO Re-review Minor）：事件/Audit 不再只取第一行 disposition
+    const lineInfos = lines.map((l) => ({
+      lineId: l.id,
+      sourceRefType: l.sourceRefType,
+      sourceId:
+        l.sourcePurchaseReceiptLineId ?? l.sourceWarehouseReceiptLineId ?? l.sourceInspectionId!,
+      quantity: l.quantity.toString(),
+      disposition: l.disposition,
+    }));
+    const hasReplacementRequired = lines.some((l) => l.disposition === 'REPLACE_REQUIRED');
+    const hasCreditOnly = lines.some((l) => l.disposition === 'CREDIT_ONLY');
+
     return {
       ok: true as const,
       purchaseReturnId: pr.id,
@@ -207,7 +313,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       purchaseOrderId: pr.purchaseOrderId,
       supplierId: pr.supplierId,
       returnType: pr.returnType,
-      disposition: lines[0]?.disposition ?? 'CREDIT_ONLY',
+      lines: lineInfos,
+      hasReplacementRequired,
+      hasCreditOnly,
       returnedAt: returnedAt.toISOString(),
     };
   });
@@ -264,7 +372,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         purchaseOrderId: result.purchaseOrderId,
         supplierId: result.supplierId,
         returnType: result.returnType,
-        disposition: result.disposition,
+        lines: result.lines,
+        hasReplacementRequired: result.hasReplacementRequired,
+        hasCreditOnly: result.hasCreditOnly,
         returnedById: actorId,
         returnedAt: result.returnedAt,
       },
@@ -286,7 +396,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       purchaseOrderId: result.purchaseOrderId,
       supplierId: result.supplierId,
       returnType: result.returnType,
-      disposition: result.disposition,
+      lines: result.lines,
+      hasReplacementRequired: result.hasReplacementRequired,
+      hasCreditOnly: result.hasCreditOnly,
       returnedById: actorId,
       returnedAt: result.returnedAt,
     },

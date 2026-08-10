@@ -59,7 +59,9 @@ export async function GET(request: NextRequest) {
  *   （必须来自 **POSTED** 入库事实，SOURCE_NOT_RETURNABLE）；本 API **不得写 InventoryMovement(OUT)**（6A 唯一事实源）；
  * - 来源必须属于该 PO（SOURCE_MISMATCH）；quantity > 0（QUANTITY_INVALID）；
  * - 预检查 quantity ≤ 来源可退余额（OVER_SOURCE_BALANCE）——**最终防线在 return Gate（锁内重算，防并发超退）**；
- * - disposition 必填：REPLACE_REQUIRED（重开 PO 履约剩余）/ CREDIT_ONLY（不自动重开待交）；
+ * - **来源可退余额（CTO Re-review Blocking ①）**：RECEIPT_LINE = `rejectedOnReceiptQty`（现场即拒收）/ INSPECTION = `rejectedQty`（质检拒收）/
+ *   WAREHOUSE_RECEIPT_LINE = 已 POSTED 入库行 `quantity`；**Create 预检查与 Return Gate 同步同源，防分叉**；
+ * - disposition 必填：REPLACE_REQUIRED（供应商仍欠货，Return Gate 同一事务内真正 reopen PO 履约）/ CREDIT_ONLY（不自动重开待交）；
  * - 红线：**5B 禁写 Stock / InventoryMovement**（6A 唯一事实源）；已入库退货也只记录事实，不写库存 OUT；财务冲减/红字发票/AP 属 5C。
  */
 export async function POST(request: NextRequest) {
@@ -208,14 +210,14 @@ export async function POST(request: NextRequest) {
       });
 
       for (const line of data.lines) {
-        // 来源可退上限
+        // 来源可退上限（CTO Re-review Blocking ①：RECEIPT_LINE=rejectedOnReceiptQty / INSPECTION=rejectedQty / WAREHOUSE=quantity）
         let sourceReturnableQty: { gte: (n: number) => boolean };
         if (line.sourceRefType === 'RECEIPT_LINE') {
           const src = await tx.purchaseReceiptLine.findFirstOrThrow({
             where: { id: line.sourcePurchaseReceiptLineId!, deletedAt: null },
-            select: { id: true, itemId: true, uomId: true, quantity: true },
+            select: { id: true, itemId: true, uomId: true, rejectedOnReceiptQty: true },
           });
-          sourceReturnableQty = src.quantity;
+          sourceReturnableQty = src.rejectedOnReceiptQty;
         } else if (line.sourceRefType === 'WAREHOUSE_RECEIPT_LINE') {
           const src = await tx.warehouseReceiptLine.findFirstOrThrow({
             where: { id: line.sourceWarehouseReceiptLineId!, deletedAt: null },
@@ -225,9 +227,9 @@ export async function POST(request: NextRequest) {
         } else {
           const src = await tx.inspection.findFirstOrThrow({
             where: { id: line.sourceInspectionId!, deletedAt: null },
-            select: { id: true, qualifiedQty: true, purchaseReceiptLine: { select: { itemId: true, uomId: true } } },
+            select: { id: true, rejectedQty: true, purchaseReceiptLine: { select: { itemId: true, uomId: true } } },
           });
-          sourceReturnableQty = src.qualifiedQty;
+          sourceReturnableQty = src.rejectedQty;
         }
         const qty = new Prisma.Decimal(line.quantity);
         // 预检查（Create 阶段：DRAFT 单不占额度，仅与来源可退上限比较）；return Gate 才做最终累计校验

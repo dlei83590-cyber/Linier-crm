@@ -15,7 +15,15 @@ export interface PurchaseReturnEventPayload {
   purchaseOrderId: string;
   supplierId: string;
   returnType: 'REJECTED_ON_RECEIPT' | 'RETURN_AFTER_STOCK_IN' | 'QUALITY_ISSUE';
-  disposition: 'REPLACE_REQUIRED' | 'CREDIT_ONLY';
+  lines: Array<{
+    lineId: string;
+    sourceRefType: 'RECEIPT_LINE' | 'WAREHOUSE_RECEIPT_LINE' | 'INSPECTION';
+    sourceId: string;
+    quantity: string;
+    disposition: 'REPLACE_REQUIRED' | 'CREDIT_ONLY';
+  }>;
+  hasReplacementRequired: boolean;
+  hasCreditOnly: boolean;
   returnedById: string;
   returnedAt: string;
   [key: string]: unknown;
