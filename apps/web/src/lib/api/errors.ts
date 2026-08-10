@@ -212,6 +212,10 @@ export const ERROR_CODES = {
   INVENTORY_SERIAL_DUPLICATE: 'INVENTORY_SERIAL_DUPLICATE', // serialNos 内重复 serial，409
   INVENTORY_SERIAL_REQUIRED: 'INVENTORY_SERIAL_REQUIRED', // serial-managed 已入库退货必须显式提交本次退货 serialNos（禁 fallback 全来源），409
   INVENTORY_SERIAL_SOURCE_MISMATCH: 'INVENTORY_SERIAL_SOURCE_MISMATCH', // 非 serial-managed 来源禁止提交 serialNos（来源无 serial → 只能 BULK OUT；审计事实一致性，CTO #7574），409
+  // Inventory Ledger Consumer（6A Phase 2 第二步，CTO #7588）
+  INVENTORY_OUTBOX_PAYLOAD_INVALID: 'INVENTORY_OUTBOX_PAYLOAD_INVALID', // Outbox payload 缺失/类型错误（永久失败 → DEAD_LETTER），409
+  INVENTORY_SOURCE_NOT_FOUND: 'INVENTORY_SOURCE_NOT_FOUND', // resolve source：来源单据不存在或状态不符（永久失败 → DEAD_LETTER），409
+  INVENTORY_INSUFFICIENT_STOCK: 'INVENTORY_INSUFFICIENT_STOCK', // OUT 余额不足（业务失败 → retry 退避 → 超阈值 DEAD_LETTER；Movement 不写/Projection 不变/Outbox 不误标 PROCESSED），409
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
