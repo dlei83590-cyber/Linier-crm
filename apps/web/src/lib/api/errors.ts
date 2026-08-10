@@ -205,6 +205,12 @@ export const ERROR_CODES = {
   PURCHASE_RETURN_SOURCE_NOT_RETURNABLE: 'PURCHASE_RETURN_SOURCE_NOT_RETURNABLE', // WAREHOUSE_RECEIPT_LINE 来源必须来自 POSTED 入库事实（CTO #7219）
   PURCHASE_RETURN_QUANTITY_INVALID: 'PURCHASE_RETURN_QUANTITY_INVALID', // quantity <= 0
   PURCHASE_RETURN_OVER_SOURCE_BALANCE: 'PURCHASE_RETURN_OVER_SOURCE_BALANCE', // 退货数量超过来源可退余额（累计 RETURNED 防并发超退）
+
+  // Inventory Ledger Outbox Writer（6A Phase 2，CTO #7543）
+  INVENTORY_DIMENSION_INCOMPLETE: 'INVENTORY_DIMENSION_INCOMPLETE', // 库存触发点 canonical dimensions 不完整（itemId/warehouseId/quantity）——poison Outbox 防线，409
+  INVENTORY_SERIAL_QTY_MISMATCH: 'INVENTORY_SERIAL_QTY_MISMATCH', // serial-managed：serialNos.length != quantity（数量守恒），409
+  INVENTORY_SERIAL_DUPLICATE: 'INVENTORY_SERIAL_DUPLICATE', // serialNos 内重复 serial，409
+  INVENTORY_SERIAL_REQUIRED: 'INVENTORY_SERIAL_REQUIRED', // serial-managed 已入库退货必须显式提交本次退货 serialNos（禁 fallback 全来源），409
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

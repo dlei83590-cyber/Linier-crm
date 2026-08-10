@@ -11,7 +11,11 @@ import {
   computeInspectionAvailableQty,
 } from '@/lib/warehouse-receipt/helpers';
 import { publishWarehouseReceiptEvent } from '@/lib/warehouse-receipt/events';
-import { expandSourceLineAtoms, writeInventoryOutboxAtom } from '@/lib/inventory-ledger/outbox-writer';
+import {
+  InventoryOutboxError,
+  expandSourceLineAtoms,
+  writeInventoryOutboxAtom,
+} from '@/lib/inventory-ledger/outbox-writer';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,7 +44,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const meta = requestMeta(request);
   const actorId = user!.id;
 
-  const result = await prisma.$transaction(async (tx) => {
+  let result;
+  try {
+    result = await prisma.$transaction(async (tx) => {
     // ① Lock WarehouseReceipt（FOR UPDATE）
     const locked = await tx.$queryRaw<Array<{ id: string }>>(
       Prisma.sql`SELECT "id" FROM "WarehouseReceipt" WHERE "id" = ${id} AND "deletedAt" IS NULL FOR UPDATE`,
@@ -136,7 +142,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // WarehouseReceiptPosted → IN 原子 Movement（serial-managed 每 serial 一条 quantity=1；非 serial 一条 BULK）；
     // 幂等键 = sourceType|sourceId|sourceLineId|movementRole|movementAtomKey（与 InventoryMovement 五元 UNIQUE 一致）；
     // 库存链不再依赖事务后 best-effort 事件（Consumer 第二步实现）。
+    // invariant（CTO #7543）：itemId 缺失 → INVENTORY_DIMENSION_INCOMPLETE（poison Outbox 防线，整个事务回滚）
     for (const line of lines) {
+      if (!line.itemId) {
+        throw new InventoryOutboxError(
+          ERROR_CODES.INVENTORY_DIMENSION_INCOMPLETE,
+          `入库行 ${line.id} 缺少 itemId，无法生成库存 Movement（canonical dimension 不完整）`,
+        );
+      }
       const atoms = expandSourceLineAtoms({
         sourceType: 'WAREHOUSE_RECEIPT_POSTED',
         sourceId: receipt.id,
@@ -172,7 +185,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       locationId: receipt.locationId,
       postedAt: postedAt.toISOString(),
     };
-  });
+    });
+  } catch (err) {
+    if (err instanceof InventoryOutboxError) {
+      return failConflict(err.code, err.message);
+    }
+    throw err;
+  }
 
   if ('error' in result) {
     switch (result.error) {

@@ -11,7 +11,11 @@ import {
   computeSourceAvailableQty,
 } from '@/lib/purchase-return/helpers';
 import { publishPurchaseReturnEvent } from '@/lib/purchase-return/events';
-import { expandSourceLineAtoms, writeInventoryOutboxAtom } from '@/lib/inventory-ledger/outbox-writer';
+import {
+  InventoryOutboxError,
+  expandSourceLineAtoms,
+  writeInventoryOutboxAtom,
+} from '@/lib/inventory-ledger/outbox-writer';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,7 +51,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const meta = requestMeta(request);
   const actorId = user!.id;
 
-  const result = await prisma.$transaction(async (tx) => {
+  let result;
+  try {
+    result = await prisma.$transaction(async (tx) => {
     // ① Lock PurchaseReturn（FOR UPDATE）
     const locked = await tx.$queryRaw<Array<{ id: string }>>(
       Prisma.sql`SELECT "id" FROM "PurchaseReturn" WHERE "id" = ${id} AND "deletedAt" IS NULL FOR UPDATE`,
@@ -313,10 +319,37 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // warehouse/location/batch/serial 精确 OUT；serial-managed 每 serial 一条 quantity=1，非 serial 一条 BULK）；
     // 幂等键 = sourceType|sourceId|sourceLineId|movementRole|movementAtomKey（与 InventoryMovement 五元 UNIQUE 一致）；
     // 未入库退货（RECEIPT_LINE/INSPECTION）不产生库存 Movement，不写 Outbox；库存链不再依赖事务后 best-effort 事件。
+    // invariant（CTO #7543 Blocking ①/②）：
+    // - serial-managed 已入库退货必须**显式提交本次退货 serialNos**（禁止部分退货 fallback 全来源 serials）；
+    // - canonical dimensions（itemId/warehouseId/quantity>0）缺失 → 整个事务回滚，绝不让 poison Outbox 进入 PENDING。
     for (const line of lines) {
       if (line.sourceRefType !== 'WAREHOUSE_RECEIPT_LINE') continue;
       const src = wlById.get(line.sourceWarehouseReceiptLineId!);
       if (!src) continue; // 已在③校验存在，防御
+      if (!src.itemId) {
+        throw new InventoryOutboxError(
+          ERROR_CODES.INVENTORY_DIMENSION_INCOMPLETE,
+          `来源入库行 ${src.id} 缺少 itemId，无法生成库存 Movement（canonical dimension 不完整）`,
+        );
+      }
+      // Blocking ①：serial-managed 来源行必须由退货行显式提交本次退货 serialNos（锁死，CTO 建议）
+      if (src.serialNos.length > 0 && line.serialNos.length === 0) {
+        throw new InventoryOutboxError(
+          ERROR_CODES.INVENTORY_SERIAL_REQUIRED,
+          `序列号管理商品的已入库退货必须显式提交本次退货 serialNos（来源入库行 ${src.id}，禁止 fallback 全来源序列号）`,
+        );
+      }
+      // CTO #7563 防御：serial-managed 时每个提交的 serial 必须属于原入库行 serialNos（P9 精确 OUT）
+      if (src.serialNos.length > 0) {
+        const srcSerialSet = new Set(src.serialNos);
+        const invalidSerial = line.serialNos.find((sn) => !srcSerialSet.has(sn));
+        if (invalidSerial) {
+          throw new InventoryOutboxError(
+            ERROR_CODES.INVENTORY_SERIAL_REQUIRED,
+            `退货序列号 ${invalidSerial} 不属于来源入库行 ${src.id} 的序列号集合（P9 精确 OUT，禁止无关 SN）`,
+          );
+        }
+      }
       const atoms = expandSourceLineAtoms({
         sourceType: 'PURCHASE_RETURN_RETURNED',
         sourceId: pr.id,
@@ -326,7 +359,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         locationId: src.warehouseReceipt.locationId,
         itemId: src.itemId,
         batchNo: src.batchNo,
-        serialNos: line.serialNos.length > 0 ? line.serialNos : src.serialNos,
+        serialNos: src.serialNos.length > 0 ? line.serialNos : [],
         quantity: line.quantity,
         uomId: src.uomId,
         mfgDate: src.mfgDate,
@@ -367,7 +400,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       hasCreditOnly,
       returnedAt: returnedAt.toISOString(),
     };
-  });
+    });
+  } catch (err) {
+    if (err instanceof InventoryOutboxError) {
+      return failConflict(err.code, err.message);
+    }
+    throw err;
+  }
 
   if ('error' in result) {
     switch (result.error) {
