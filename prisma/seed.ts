@@ -183,6 +183,11 @@ const SEED_RESTRICTED_ACTION_PERMISSIONS: Array<{ name: string; code: string; mo
   { name: "edit purchase-return-line", code: "purchase-return-line:edit", module: "purchase-return-line" },
 ];
 
+// Sprint 6A：Inventory Ledger 受限系统权限（consume 为后台执行动作——**不进入全局 PERMISSION_ACTIONS**（consume 非通用 CRUD action）；仅 SUPER_ADMIN/ADMIN 静态授权（见 packages/shared/src/rbac/index.ts SYSTEM_PERMISSIONS）；Manager/Member/Viewer 默认无权限 → 403；seed 注册该 Permission 供权限矩阵/审计可见）
+const SEED_SYSTEM_ACTION_PERMISSIONS: Array<{ name: string; code: string; module: string }> = [
+  { name: "consume inventory-ledger", code: "inventory-ledger:consume", module: "inventory-ledger" },
+];
+
 const SEED_UNITS = [
   { code: "KG", name: "千克", symbol: "kg" },
   { code: "M", name: "米", symbol: "m" },
@@ -492,6 +497,8 @@ const SEED_DOCUMENT_SEQUENCES = [
   { code: "REC", name: "采购收货单", docType: "PURCHASE_RECEIPT", prefix: "REC", nextNo: 1, padLength: 6 },
   { code: "WHR", name: "采购入库单", docType: "WAREHOUSE_RECEIPT", prefix: "WHR", nextNo: 1, padLength: 6 },
   { code: "PRT", name: "采购退货单", docType: "PURCHASE_RETURN", prefix: "PRT", nextNo: 1, padLength: 6 },
+  // Sprint 6A：Inventory Ledger Foundation 单据序列（docType=INVENTORY_MOVEMENT 为 6A 新增，prefix MV，padLength 6；幂等 upsert——Consumer 取号依赖此序列，缺失=配置错误 RETRY，**禁止 fallback**）
+  { code: "MV", name: "库存流水", docType: "INVENTORY_MOVEMENT", prefix: "MV", nextNo: 1, padLength: 6 },
   { code: "PI", name: "形式发票", docType: "PROFORMA_INVOICE", prefix: "PI", nextNo: 1, padLength: 6 },
   { code: "CI", name: "商业发票", docType: "COMMERCIAL_INVOICE", prefix: "CI", nextNo: 1, padLength: 6 },
   // Sprint 4C：Delivery Foundation 单据序列（CTO 锁定：DELIVERY_ORDER / prefix DO / padLength 6；幂等 upsert）
@@ -750,8 +757,8 @@ async function main() {
     roleMap.set(role.code, saved.id);
   }
 
-  // Permissions (read/write + 动作级 + 4E-3 受限动作)
-  for (const permission of [...SEED_PERMISSIONS, ...SEED_ACTION_PERMISSIONS, ...SEED_RESTRICTED_ACTION_PERMISSIONS]) {
+  // Permissions (read/write + 动作级 + 4E-3 受限动作 + 6A 受限系统权限)
+  for (const permission of [...SEED_PERMISSIONS, ...SEED_ACTION_PERMISSIONS, ...SEED_RESTRICTED_ACTION_PERMISSIONS, ...SEED_SYSTEM_ACTION_PERMISSIONS]) {
     await prisma.permission.upsert({
       where: { code: permission.code },
       update: {},

@@ -1,11 +1,11 @@
-import { ALL_ACTION_PERMISSIONS, PERMISSIONS, type ROLES } from "../constants";
+import { ALL_ACTION_PERMISSIONS, PERMISSIONS, SYSTEM_PERMISSIONS, type ROLES } from "../constants";
 
 export type RoleCode = (typeof ROLES)[keyof typeof ROLES];
 export type PermissionCode = string;
 
 const ROLE_PERMISSIONS: Record<RoleCode, PermissionCode[]> = {
-  SUPER_ADMIN: [...Object.values(PERMISSIONS), ...ALL_ACTION_PERMISSIONS],
-  ADMIN: [...Object.values(PERMISSIONS), ...ALL_ACTION_PERMISSIONS],
+  SUPER_ADMIN: [...Object.values(PERMISSIONS), ...ALL_ACTION_PERMISSIONS, ...SYSTEM_PERMISSIONS],
+  ADMIN: [...Object.values(PERMISSIONS), ...ALL_ACTION_PERMISSIONS, ...SYSTEM_PERMISSIONS],
   MANAGER: [
     PERMISSIONS.USER_READ,
     PERMISSIONS.ROLE_READ,

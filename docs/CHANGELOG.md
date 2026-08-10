@@ -13,6 +13,7 @@
 - **Inventory Consumer + Ledger Command**：claim `FOR UPDATE SKIP LOCKED` + PROCESSING lease → validate payload / resolve source → 五元幂等（`ON CONFLICT DO NOTHING RETURNING`）→ 锁五维 StockProjection（IS NOT DISTINCT FROM + FOR UPDATE）→ OUT 禁负库存 → **INSERT Movement + UPSERT Projection + MARK Outbox PROCESSED 同事务** → retry 退避 / DEAD_LETTER / LEASE_LOST（lease fencing：消费前/完成时验证 `status=PROCESSING + lockedBy=workerId`）
 - **事件**：`InventoryMovementCommitted` ⏳→✅（Consumer 单事务提交后发布，**不含投影余额**——P10 Final；EVENTS v1.26）；触发端点 `POST /api/inventory-ledger/consume`（权限 `inventory-ledger:consume`）
 - **边界（不在 6A Foundation 范围）**：Transfer / Conversion / Count（盘点）/ Costing（FIFO/移动平均）/ ReservedQty（availableQty）/ 新 sourceType——后续独立阶段
+- **Release Readiness（Seed/RBAC）**：DocumentSequence seed 新增 `INVENTORY_MOVEMENT`（code=MV，prefix MV，padLength 6，幂等 upsert——Consumer 取号依赖，缺失=配置错误 RETRY 无 fallback）；`inventory-ledger:consume` 注册为**受限系统权限**（SYSTEM_PERMISSIONS——仅 SUPER_ADMIN/ADMIN 静态授权，Manager/Member/Viewer 默认 403，QA A2/A3 保持无权限）
 - **文档**：Sprint6A_QA.md、docs/test-cases/InventoryLedger_API.md、OpenAPI +1 端点/+3 schemas（Inventory Ledger consume 契约）、ADR-0025 → Implemented（Implementation Status I1-I12）、EVENTS v1.26、ROADMAP Sprint 6 → 🔄（6A ✅）
 
 ### 新增（Sprint 5B：Goods Receipt & Inbound Foundation，PR #20，待 CTO Final Review——CTO PurchaseReturn FINAL APPROVED 98/100 #7303，Sprint 5B 核心事实链 CLOSED）

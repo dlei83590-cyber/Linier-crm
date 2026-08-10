@@ -76,4 +76,4 @@
 ## 6. Release Gate
 
 - **CTO Sprint 6A Final Review 待签**：通过后 Merge PR #21 → main（归档 tag），然后新建独立下一阶段分支（Transfer/Conversion/Count/Reservation/Costing）
-- 服务器保护：OpenClaw 全程未跑本地高资源验证；所有验证事实源 = GitHub CI（Quality Gates ✅ / Build ✅ / Secret Scanning ✅，@ `0c15e84` run #205）
+- 服务器保护：OpenClaw 全程未跑本地高资源验证；所有验证事实源 = GitHub CI（Quality Gates ✅ / Build ✅ / Secret Scanning ✅，@ `abe2016` run #206）

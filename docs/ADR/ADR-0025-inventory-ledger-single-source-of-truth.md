@@ -141,6 +141,6 @@
 | I9 | lease fencing（并发安全） | 消费前/完成时验证 `status=PROCESSING + lockedBy=workerId` → LEASE_LOST；所有状态更新带 ownership 条件 |
 | I10 | InventoryMovementCommitted（P10） | `apps/web/src/lib/inventory-ledger/events.ts`：Consumer 单事务提交后发布；**不含投影余额**；暂不发布 StockProjectionChanged |
 | I11 | 触发端点 | `POST /api/inventory-ledger/consume`（权限 `inventory-ledger:consume`；limit 默认 20/上限 200；返回批次统计） |
-| I12 | CI 验证 | GitHub CI 全绿（`0c15e84` run #205：Quality Gates ✅ / Build ✅ / Secret Scanning ✅）；OpenClaw 未跑本地高资源验证（服务器保护规则） |
+| I12 | CI 验证 | GitHub CI 全绿（`abe2016` run #206：Quality Gates ✅ / Build ✅ / Secret Scanning ✅——含 Finalization 自身）；OpenClaw 未跑本地高资源验证（服务器保护规则） |
 
 > **边界（CTO #7683 明令，本 ADR 决策仍 HOLD）**：Transfer / Conversion / Count（盘点）/ Reservation（ReservedQty/availableQty）/ Costing（FIFO/移动平均）/ 新 sourceType / read model API 不在 6A Ledger Foundation 范围；后续独立阶段实现。
