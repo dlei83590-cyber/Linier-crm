@@ -1,6 +1,6 @@
 # ADR-0025：Inventory Ledger — Single Source of Truth（库存账本单一事实源决策）
 
-- 状态：**Approved with Changes（2026-08-10，CTO 6A Design Review 90/100——8 项 Design Consistency Fixes 已落实；Schema/Migration 0024 待 Re-review 后放行）**
+- 状态：**Implemented — Sprint 6A Ledger Foundation / Consumer FINAL APPROVED 99/100（2026-08-10，CTO #7683：Inventory Consumer + Ledger Command FINAL APPROVED；Migration 0025_inventory_ledger_foundation 已实现；Transactional Outbox Writer + Inventory Consumer 全部落地）**
 - 关联：Sprint6A_Inventory_Ledger_Architecture_Process_Gate.md / Sprint6A_Inventory_Field_Matrix.md / Sprint6A_CTO_Pending_Decisions.md / EVENTS.md / ADR-0024（5B 已 Implemented，Sprint 5B 核心事实链 CLOSED）
 - 决策人：CIO（JINZA）提案 ｜ 审核：CTO
 - 背景：Sprint 5B 已完成"到货 → 收货 → 质检 → 入库 → 退货"业务事实链（PR #20 合并 main，`7bd98cb`），全程 **Stock / InventoryMovement = 0 业务写入**（6A 唯一事实源未被污染）。6A 需正式建立库存数量事实源——**不是先设计"库存表"，而是先定义"库存事实怎么产生、怎么不可变、怎么被投影"**（CTO #7405 锁死）。库存是 ERP 最易出数据一致性事故的领域，必须先拍事实边界再允许 Schema。
@@ -123,3 +123,24 @@
 > **8 项 Design Consistency Fixes（CTO #7458）全部已落实**：① 幂等键 + movementRole ② serialNo 原子化（quantity=1，单值 serialNo）③ Outbox PROCESSING/lease/retry/dead-letter ④ StockProjection 同事务更新 + reconciliation ⑤ P1-P10 全部 Final ⑥ Movement 单层原子事实 + 可选 movementGroupId ⑦ 删除 costSnapshot ⑧ availableQty/reservedQty 从 canonical Projection 移除。
 >
 > **Schema Review 5 项（CTO #7469，88/100 REQUEST CHANGES）已落实**：① 幂等键升级五元（+movementAtomKey：非 serial=BULK、serial=serialNo）② StockProjection 五维数据库级唯一（PG16 `UNIQUE NULLS NOT DISTINCT`；dimensionKey 仅查询/锁键）③ `onHandQty >= 0` CHECK（负库存 DB 最后防线，同事务回滚）④ `committedAt` NOT NULL（创建即 COMMITTED）⑤ Reversal 单次冲销（reversalOfMovementId @unique）。
+
+## Implementation Status（2026-08-10，Sprint 6A Ledger Foundation —— CTO FINAL APPROVED 99/100 #7683）
+
+> 架构主线（D1–D13）与实现一致，无需重写；以下为本 ADR 决策的实现证据清单（Sprint 6A Finalization 收口，PR #21）。
+
+| # | 决策 | 实现证据 |
+| --- | --- | --- |
+| I1 | Migration `0025_inventory_ledger_foundation` | `prisma/migrations/0025_inventory_ledger_foundation/migration.sql`（InventoryMovement / StockProjection / OutboxMessage + 6 枚举 + `INVENTORY_MOVEMENT` DocumentType + 不可变触发器 + 五维 NULLS NOT DISTINCT 唯一索引 + onHandQty>=0 CHECK + serial_atom_key_check） |
+| I2 | InventoryMovement（D1/D3 SSOT） | `prisma/schema.prisma` `model InventoryMovement`：五元幂等 UNIQUE、COMMITTED 创建即生效、movementNo DocumentSequence（MV-）、不可变触发器 |
+| I3 | StockProjection（D6/P7 物化投影） | `model StockProjection`：五维 NULLS NOT DISTINCT 唯一 + dimensionKey（仅查询/锁键，**非身份**）+ onHandQty>=0 CHECK |
+| I4 | OutboxMessage（D13/P1/P8 Transactional Outbox） | `model OutboxMessage`：PENDING/PROCESSING/PROCESSED/DEAD_LETTER + lease/retry 元数据 + idempotencyKey UNIQUE |
+| I5 | Transactional Outbox Writer | `apps/web/src/lib/inventory-ledger/outbox-writer.ts` + WarehouseReceipt POST（`post/route.ts`）+ PurchaseReturn RETURN（`return/route.ts`）：业务事实 + Outbox 同事务；五元幂等键；serial 原子化/数量守恒/去重；canonical dimensions 必填；稳定 409（InventoryOutboxError） |
+| I6 | WarehouseReceipt POST → IN | POST 事务 CAS 后写 `WarehouseReceiptPosted` Outbox → Consumer 生成 InventoryMovement(IN) + Projection 增加 |
+| I7 | PurchaseReturn RETURN → OUT（P9 精确 OUT） | 仅 WAREHOUSE_RECEIPT_LINE 来源行写 `PurchaseReturned` Outbox → 按原行 warehouse/location/batch/serial 精确 OUT + 禁负库存；serial 四象限对称 Gate（REQUIRED / SOURCE_MISMATCH） |
+| I8 | Inventory Consumer + Ledger Command | `apps/web/src/lib/inventory-ledger/consumer.ts`：claim FOR UPDATE SKIP LOCKED → PROCESSING lease → validate payload / resolve source → 五元幂等（ON CONFLICT DO NOTHING RETURNING）→ 锁五维 Projection（IS NOT DISTINCT FROM + FOR UPDATE）→ OUT 禁负库存 → **INSERT Movement + UPSERT Projection + MARK Outbox PROCESSED 同事务** → retry 退避 / DEAD_LETTER / LEASE_LOST |
+| I9 | lease fencing（并发安全） | 消费前/完成时验证 `status=PROCESSING + lockedBy=workerId` → LEASE_LOST；所有状态更新带 ownership 条件 |
+| I10 | InventoryMovementCommitted（P10） | `apps/web/src/lib/inventory-ledger/events.ts`：Consumer 单事务提交后发布；**不含投影余额**；暂不发布 StockProjectionChanged |
+| I11 | 触发端点 | `POST /api/inventory-ledger/consume`（权限 `inventory-ledger:consume`；limit 默认 20/上限 200；返回批次统计） |
+| I12 | CI 验证 | GitHub CI 全绿（`0c15e84` run #205：Quality Gates ✅ / Build ✅ / Secret Scanning ✅）；OpenClaw 未跑本地高资源验证（服务器保护规则） |
+
+> **边界（CTO #7683 明令，本 ADR 决策仍 HOLD）**：Transfer / Conversion / Count（盘点）/ Reservation（ReservedQty/availableQty）/ Costing（FIFO/移动平均）/ 新 sourceType / read model API 不在 6A Ledger Foundation 范围；后续独立阶段实现。

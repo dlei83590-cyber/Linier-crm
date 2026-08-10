@@ -16,8 +16,8 @@
 | Sprint 2 | Master Data（主数据） | ✅ Closed | Release v0.2.0-alpha（2A+2B+2C） |
 | Sprint 3 | ERP Foundation（ERP 底座） | ✅ Closed | 3A Workflow Foundation ✅（v0.3.0-alpha）+ 3B Platform Capabilities ✅（v0.4.0-alpha）+ 3C Business Foundation ✅（v0.5.0-alpha，3C-1~3C-5 全部完成） |
 | Sprint 4 | Sales（销售） | ✅ | 4A Quotation Foundation ✅（PR #12）；4B Sales Order Foundation ✅（PR #13）；4C Delivery Foundation ✅（PR #14）；4D Invoice Foundation ✅（PR #15 已合并）；4E-1 Accounts Receivable ✅（PR #16 已合并）；4E-2 Receipt/Payment Allocation ✅（PR #17 已合并）；4E-3 Credit/Debit Note ✅（PR #18 已合并，CTO Final Review 99/100 APPROVE & MERGE）；**已发布 v0.6.0-alpha**（2026-08-08，annotated tag，GitHub Pre-release） |
-| Sprint 5 | Purchase（采购） | 🔄 | **5A PR+PO Foundation ✅**（PR #19 已合并）；**5B Goods Receipt & Inbound ✅**（PR #20 待 CTO Final Review：Schema/Migration 0023 / Seed+RBAC / PurchaseReceipt / Inspection / WarehouseReceipt / PurchaseReturn 四模块全链 API + PO 履约投影 reopen；QA/Test Cases/OpenAPI/EVENTS v1.23 已同步；CI 全绿 @ b4c2170）；**CTO PurchaseReturn FINAL APPROVED 98/100（#7303）——Sprint 5B 核心事实链 CLOSED**；5C Supplier Invoice / Payment 未开始 |
-| Sprint 6 | Inventory（库存） | ⬜ | Warehouse/Stock/Batch/Movement/Count/Transfer |
+| Sprint 5 | Purchase（采购） | 🔄 | **5A PR+PO Foundation ✅**（PR #19 已合并）；**5B Goods Receipt & Inbound ✅**（PR #20 已合并 main `7bd98cb`：Schema/Migration 0023 / Seed+RBAC / PurchaseReceipt / Inspection / WarehouseReceipt / PurchaseReturn 四模块全链 API + PO 履约投影 reopen；CTO PurchaseReturn FINAL APPROVED 98/100 #7303——Sprint 5B 核心事实链 CLOSED）；5C Supplier Invoice / Payment 未开始 |
+| Sprint 6 | Inventory（库存） | 🔄 | **6A Inventory Ledger Foundation ✅**（PR #21 待 Final Review：InventoryMovement SSOT + StockProjection + Transactional Outbox + Consumer，CTO FINAL APPROVED 99/100 #7683）；Transfer / Count / Conversion / Reservation / Costing 未开始 |
 | Sprint 7 | Finance（财务） | ⬜ | AR/AP/Expense/Voucher/Journal/GL/Profit/Cash Flow |
 | Sprint 8 | BI（商业智能） | ⬜ | 报表 / Dashboard / 数据分析 |
 | Sprint 9 | OA（办公协同） | ⬜ | 审批 / 消息 / 日程 / 知识库 |
@@ -179,16 +179,19 @@
 
 ---
 
-## 8. Sprint 6：Inventory（库存）⬜
+## 8. Sprint 6：Inventory（库存）🔄
 
-| 模块 | 说明 |
+**6A Inventory Ledger Foundation ✅（PR #21 待 Final Review；CTO FINAL APPROVED 99/100 #7683——Ledger Command / Inventory Consumer FINAL）**
+
+| 完成模块 | 说明 |
 | --- | --- |
-| Warehouse | 仓库 / 库位 |
-| Stock | 库存余额（物料×仓库，实时） |
-| Batch | 批次管理（批号/效期/追溯） |
-| Inventory Movement | 库存流水（出入库/调拨/调整，全追溯） |
-| Stock Count | 盘点（盘点单/差异/调整） |
-| Transfer | 调拨（仓库间转移） |
+| Inventory Movement（SSOT） | 库存流水（不可变 InventoryMovement，五元 atom 幂等；Migration 0025）——**库存数量唯一事实源** |
+| Stock Projection | 库存余额投影（五维 NULLS NOT DISTINCT 唯一；物化同事务更新，dimensionKey 仅查询/锁键） |
+| Transactional Outbox | 业务事实 + Outbox 同事务（PENDING/PROCESSING/PROCESSED/DEAD_LETTER + lease/retry） |
+| Inventory Consumer | claim SKIP LOCKED + lease fencing + 五元幂等 + 五维锁 + 禁负库存 + 同事务三件套（Movement+Projection+Outbox PROCESSED） |
+| 事件 | `InventoryMovementCommitted` ✅（EVENTS v1.26） |
+
+**未开始（HOLD）**：Transfer（调拨）/ Stock Count（盘点）/ Conversion（转换）/ Reservation（ReservedQty/availableQty）/ Costing（FIFO/移动平均）——后续独立阶段
 
 > Item 的 2C 字段（安全库存/MOQ/最小包装/采购周期）在此直接复用。
 
@@ -258,7 +261,7 @@
 | M1 | Sprint 1 完成 | Release v0.1.0-alpha ✅ |
 | M2 | Sprint 2 完成 | Release v0.2.0-alpha ✅（main 冻结） |
 | M3 | Sprint 3 完成 | Release v0.5.0-alpha ✅（3A ✅ v0.3.0-alpha；3B ✅ v0.4.0-alpha；3C ✅ v0.5.0-alpha，3C-1~3C-5 全部完成，PR #5-#11 合并） |
-| M4 | Sprint 4-6 完成 | 进销存闭环可用（Sprint 4 ✅ **v0.6.0-alpha**，2026-08-08；Sprint 5-6 待完成） |
+| M4 | Sprint 4-6 完成 | 进销存闭环可用（Sprint 4 ✅ **v0.6.0-alpha**，2026-08-08；Sprint 5 ✅ 已合并；Sprint 6 仅 **Ledger Foundation ✅**（Transfer/Count/Conversion/Reservation/Costing 未完成）——M4 未完全达成，待后续独立阶段） |
 | M5 | Sprint 7 完成 | 财务闭环可用 |
 | M6 | Sprint 8-10 完成 | 数据驱动 + 移动化 |
 

@@ -4,6 +4,17 @@
 
 ## [Unreleased] - Sprint 4A + 4B + 4C + 4D + 4E-1 + 4E-2 + 4E-3（Quotation / Sales Order / Delivery / Invoice / Accounts Receivable / Receipt & Payment Allocation / Credit Note & Debit Note Foundation，2026-08-08，PR #12-#18 已合并，未打 Tag）
 
+### 新增（Sprint 6A：Inventory Ledger Foundation，PR #21，待 CTO Final Review——CTO Inventory Consumer + Ledger Command FINAL APPROVED 99/100 #7683，6A 核心库存账闭环成立）
+
+- **库存数量唯一事实源 = InventoryMovement（SSOT，ADR-0025）**：Migration `0025_inventory_ledger_foundation`（InventoryMovement + StockProjection + OutboxMessage + 6 枚举 + `INVENTORY_MOVEMENT` DocumentType + 不可变触发器 + 五维 NULLS NOT DISTINCT 唯一索引 + onHandQty>=0 CHECK + serial_atom_key_check）；**Movement 历史不可变**（COMMITTED 后禁止 UPDATE/DELETE，纠错只能追加 Reversal/Correction）
+- **StockProjection 物化投影**：五维唯一（PG16 `UNIQUE NULLS NOT DISTINCT`，dimensionKey 仅查询/锁键非身份）+ onHandQty>=0 CHECK（负库存 DB 最后防线）
+- **Transactional Outbox（P1/P8）**：业务事实 + Outbox 同事务（WarehouseReceipt POST → `WarehouseReceiptPosted` / PurchaseReturn RETURN → `PurchaseReturned`，仅 WAREHOUSE_RECEIPT_LINE 来源行）；Outbox `PENDING/PROCESSING/PROCESSED/DEAD_LETTER` + lease/retry 元数据；保留记录不删除
+- **五元 atom 幂等**：`sourceType|sourceId|sourceLineId|movementRole|movementAtomKey`（serial-managed 每 serial 一条 quantity=1；非 serial BULK）；**serial 原子化 + 数量守恒 + 去重 + canonical dimensions 必填（itemId/warehouseId/quantity>0）**——poison Outbox 防线
+- **Inventory Consumer + Ledger Command**：claim `FOR UPDATE SKIP LOCKED` + PROCESSING lease → validate payload / resolve source → 五元幂等（`ON CONFLICT DO NOTHING RETURNING`）→ 锁五维 StockProjection（IS NOT DISTINCT FROM + FOR UPDATE）→ OUT 禁负库存 → **INSERT Movement + UPSERT Projection + MARK Outbox PROCESSED 同事务** → retry 退避 / DEAD_LETTER / LEASE_LOST（lease fencing：消费前/完成时验证 `status=PROCESSING + lockedBy=workerId`）
+- **事件**：`InventoryMovementCommitted` ⏳→✅（Consumer 单事务提交后发布，**不含投影余额**——P10 Final；EVENTS v1.26）；触发端点 `POST /api/inventory-ledger/consume`（权限 `inventory-ledger:consume`）
+- **边界（不在 6A Foundation 范围）**：Transfer / Conversion / Count（盘点）/ Costing（FIFO/移动平均）/ ReservedQty（availableQty）/ 新 sourceType——后续独立阶段
+- **文档**：Sprint6A_QA.md、docs/test-cases/InventoryLedger_API.md、OpenAPI +1 端点/+3 schemas（Inventory Ledger consume 契约）、ADR-0025 → Implemented（Implementation Status I1-I12）、EVENTS v1.26、ROADMAP Sprint 6 → 🔄（6A ✅）
+
 ### 新增（Sprint 5B：Goods Receipt & Inbound Foundation，PR #20，待 CTO Final Review——CTO PurchaseReturn FINAL APPROVED 98/100 #7303，Sprint 5B 核心事实链 CLOSED）
 
 - **收货/入库拆两层事实（ADR-0024 D1）**：`PurchaseReceipt`（到货/收货事实，只保留收货现场事实 quantity/visibleDamageQty/rejectedOnReceiptQty/remark；更新 PO Line 收货投影）+ `WarehouseReceipt`（采购入库事实，仓库/库位/批次/序列号/效期；**库存追溯信息 canonical capture point P6**；驱动 6A InventoryMovement(IN) 的业务事实）
