@@ -5,7 +5,7 @@
 - 维护者：CIO（JINZA）｜审核：CTO
 - 关联：Sprint6A_Inventory_Ledger_Architecture_Process_Gate.md / ADR-0025（Approved with Changes）/ Sprint6A_CTO_Pending_Decisions.md / EVENTS.md / Sprint5B_Field_Matrix.md（5B：WarehouseReceipt 已采集批次/序列号/效期）
 
-> **铁律（CTO #7405/#7458）**：本矩阵是**字段草案**，不是 Schema。**业务模块不得直接创建 InventoryMovement**——必须通过 Inventory Ledger command 层以受支持 `sourceType + sourceId + sourceLineId + movementRole` 生成。**一行 `InventoryMovement` = 一个不可变库存原子事实**（单层模型，无 Header/Line 两层；多笔编组用 `movementGroupId`）。字段命名在 Schema Gate 批准后再定稿。
+> **铁律（CTO #7405/#7458）**：本矩阵是**字段草案**，不是 Schema。**业务模块不得直接创建 InventoryMovement**——必须通过 Inventory Ledger command 层以受支持 `sourceType + sourceId + sourceLineId + movementRole + movementAtomKey` 生成。**一行 `InventoryMovement` = 一个不可变库存原子事实**（单层模型，无 Header/Line 两层；多笔编组用 `movementGroupId`）。字段命名在 Schema Gate 批准后再定稿。
 
 ---
 
@@ -19,12 +19,13 @@
 | sourceId | 来源单据 id | string（FK 语义，不硬 FK——多业务表） | 如 WarehouseReceipt.id / PurchaseReturn.id |
 | sourceLineId | 来源行 id | string | 如 WarehouseReceiptLine.id / PurchaseReturnLine.id |
 | **movementRole** | 来源行内的角色 | enum（`IN / OUT / SOURCE_OUT / DESTINATION_IN / CONSUME / PRODUCE / ADJUSTMENT / REVERSAL / CORRECTION`） | **CTO #7458 Blocking ①**：一个 source line 可合法产生多笔 Movement（Transfer 同行 → SOURCE_OUT+DESTINATION_IN；Conversion → CONSUME+PRODUCE） |
-| **idempotencyKey** | 幂等键（唯一） | string，**DB UNIQUE**（sourceType + sourceId + sourceLineId + movementRole） | 防重复生成；**Reversal/Correction 拥有自己的 source/action identity，不与原 Movement 共用幂等身份** |
+| **movementAtomKey** | 原子子键（**CTO #7469 Blocking ① 新增**） | string，**DB UNIQUE 组成部分** | **非 serial = `BULK`；serial = `serialNo`**——serial-managed 每 serial 一条独立 Movement 时，五元幂等键 `sourceType+sourceId+sourceLineId+movementRole+movementAtomKey` 才不撞 UNIQUE；未来 Transfer/Conversion 多原子同 role 也用 movementAtomKey 区分（不直接把 serialNo 塞进唯一约束，更通用） |
+| **idempotencyKey** | 幂等键（唯一） | string，**DB UNIQUE**（sourceType + sourceId + sourceLineId + movementRole + movementAtomKey） | 防重复生成；**Reversal/Correction 拥有自己的 source/action identity，不与原 Movement 共用幂等身份** |
 | movementGroupId | 编组 id（可空） | string | **CTO #7458**：Transfer/Conversion 多笔 Movement 编组（替代 Header/Line 两层） |
 | direction | 方向 | enum `IN / OUT` | 库存增减方向 |
 | status | 状态 | **`COMMITTED`（创建即 COMMITTED，P2 Final；无 PENDING）** | **COMMITTED = 生效点（库存账落定）**；COMMITTED 后不可变 |
 | movementType | 类型 | enum `INBOUND / OUTBOUND / TRANSFER_OUT / TRANSFER_IN / CONSUME / PRODUCE / ADJUSTMENT / REVERSAL / CORRECTION` | 细分业务语义（Transfer/Conversion/Count 规则见 ADR D8-D10） |
-| reversalOfMovementId | 冲销引用 | FK → InventoryMovement（可空） | **纠错只能追加**：REVERSAL 引用原 Movement |
+| reversalOfMovementId | 冲销引用 | FK → InventoryMovement（可空，**DB UNIQUE——CTO #7469 Minor ②**） | **纠错只能追加**：REVERSAL 引用原 Movement；**一笔 Movement 最多被完整冲销一次**（单次语义；未来部分/多次冲销须先明确数量 ceiling 再放开） |
 | correctionOfMovementId | 修正引用 | FK → InventoryMovement（可空） | CORRECTION 引用原 Movement |
 | warehouseId | 仓库 | FK → Warehouse（5B 已建最小主数据） | 维度键之一 |
 | locationId | 库位 | FK → Location（可空） | 维度键之一 |
@@ -51,7 +52,8 @@
 | 字段（草案） | 语义 | 说明 |
 | --- | --- | --- |
 | id | 主键 | |
-| warehouseId + locationId + itemId + batchNo + serialNo | **维度键** | 共同决定一条库存投影（D6） |
+| warehouseId + locationId + itemId + batchNo + serialNo | **维度键** | 共同决定一条库存投影（D6）；**数据库级唯一（PG16 `UNIQUE NULLS NOT DISTINCT` 五维约束，CTO #7469 Blocking ②）** |
+| dimensionKey | 查询/锁键（**非唯一防线**） | string NOT NULL（CHECK 非空） | command 层生成、NULL 归一为占位符；**唯一性由五维 DB 约束直接表达**，不依赖手工字符串 |
 | **onHandQty** | 在手数量 | = Σ IN - Σ OUT（COMMITTED Movement 聚合）；**与 Movement 同事务 UPSERT 更新**（P7 Final） |
 | lastMovementAt | 最后变动时间 | 投影维护（聚合时更新） |
 | version | 乐观锁 | 投影并发读改写防抖 |
@@ -85,7 +87,7 @@
 | eventType | 事件类型 | `WarehouseReceiptPosted` / `PurchaseReturned` / 未来各业务事件 |
 | aggregateType / aggregateId | 聚合标识 | 如 WarehouseReceipt / PurchaseReturn |
 | payload | 事件载荷 | JSON（对齐 EVENTS.md 载荷；**不含库存余额**） |
-| idempotencyKey | 幂等键 | = sourceType + sourceId + sourceLineId + movementRole（与 Movement 幂等键一致） |
+| idempotencyKey | 幂等键 | = sourceType + sourceId + sourceLineId + movementRole + movementAtomKey（与 Movement 五元幂等键一致，CTO #7469） |
 | status | 状态 | **`PENDING / PROCESSING / PROCESSED / DEAD_LETTER`**（CTO #7458 Blocking ③：语义 = 库存消费成功才确认完成，不混"投递/消费/投影"） |
 | attemptCount | 尝试次数 | 失败重试 |
 | nextAttemptAt | 下次尝试时间 | retry 调度 |
@@ -101,13 +103,13 @@
 
 ## 5. 字段矩阵红线（CTO #7458 落实后）
 
-1. **业务模块不得直接创建 InventoryMovement**（必须走 Inventory Ledger command 层 + 受支持 sourceType/sourceId/sourceLineId/movementRole）；
-2. **Stock / OnHandQty 只能是投影**，不能直接写入；投影与 Movement 同事务更新（P7 Final）；
-3. **COMMITTED Movement 不可修改、不可删除**（纠错 = 追加 Reversal / Correction；Reversal/Correction 独立幂等身份）；
-4. **幂等键 = sourceType + sourceId + sourceLineId + movementRole（DB UNIQUE）**；
+1. **业务模块不得直接创建 InventoryMovement**（必须走 Inventory Ledger command 层 + 受支持 sourceType/sourceId/sourceLineId/movementRole/movementAtomKey）；
+2. **Stock / OnHandQty 只能是投影**，不能直接写入；投影与 Movement 同事务更新（P7 Final）；**负库存 DB CHECK（onHandQty >= 0）为最后防线**；
+3. **COMMITTED Movement 不可修改、不可删除**（纠错 = 追加 Reversal / Correction；Reversal/Correction 独立幂等身份；**一笔 Movement 最多被完整冲销一次**）；
+4. **幂等键 = sourceType + sourceId + sourceLineId + movementRole + movementAtomKey（DB UNIQUE）**；
 5. **批次/序列号不重建**（canonical = 5B WarehouseReceipt）；serial-managed 原子化（每 serial 独立 Movement、quantity=1、serialNo 单值）；
 6. **ReservedQty / availableQty / reservedQty 不进 6A**（P3 Final）；
 7. **Costing（含 costSnapshot）不进入 6A**（P4 Final）；
-8. **禁止负库存**（P6 Final：OUT 前 onHandQty >= outQty）；
+8. **禁止负库存**（P6 Final：OUT 前 command 层锁行 onHandQty >= outQty + DB CHECK onHandQty >= 0）；
 9. **Movement 单层原子事实 + 可选 movementGroupId**（无 Header/Line 两层）；
-10. 本矩阵为**字段草案**，Schema/Migration 0024 在 CTO 6A Gate Re-review 通过后才允许（且只建 Ledger + Projection + Outbox）。
+10. 本矩阵为**字段草案**，Schema/Migration 0025 待 CTO 6A Schema Re-review（#7469 5 项落实）通过后定稿；API/Consumer 仍 HOLD。

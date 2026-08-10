@@ -41,8 +41,8 @@
 | **唯一事实源** | `InventoryMovement` = 库存数量的**唯一业务事实**。任何库存数量变化都必须是一笔（或一组）InventoryMovement |
 | **单层原子事实** | **一行 `InventoryMovement` = 一个不可变库存原子事实**（不做 Header/Line 两层）。未来 Transfer/Conversion 需要多笔编组时增加 `movementGroupId`，而不是建 Header/Line 两层模型（CTO #7458 拍板） |
 | **投影非事实** | `Stock` / `OnHandQty` **只能是投影**（由 Movement 聚合而来），不能成为独立业务事实、不能直接写入 |
-| **业务模块禁直写（CTO 红线）** | **业务模块不得直接创建 InventoryMovement**。必须通过 **Inventory Ledger service / command 层**，以受支持的 `sourceType + sourceId + sourceLineId + movementRole` 生成 Movement。否则 Purchase / Sales / Transfer / Count / Conversion 会各自写库存表，事实源再次分裂 |
-| **幂等（CTO #7458 Blocking ① 修正）** | canonical 幂等键 = **`sourceType + sourceId + sourceLineId + movementRole`**（DB UNIQUE）。一个 source line 可合法产生多笔 Movement（Transfer 同行 → SOURCE_OUT + DESTINATION_IN；Conversion 同来源 → CONSUME + PRODUCE），因此必须加 `movementRole` 区分；**Reversal/Correction 拥有自己的 source/action identity，不得与原 Movement 共用幂等身份** |
+| **业务模块禁直写（CTO 红线）** | **业务模块不得直接创建 InventoryMovement**。必须通过 **Inventory Ledger service / command 层**，以受支持的 `sourceType + sourceId + sourceLineId + movementRole + movementAtomKey` 生成 Movement。否则 Purchase / Sales / Transfer / Count / Conversion 会各自写库存表，事实源再次分裂 |
+| **幂等（CTO #7458 + #7469 Blocking ① 修正）** | canonical 幂等键 = **`sourceType + sourceId + sourceLineId + movementRole + movementAtomKey`**（DB UNIQUE）。一个 source line 可合法产生多笔原子 Movement（Transfer 同行 → SOURCE_OUT + DESTINATION_IN；Conversion 同来源 → CONSUME + PRODUCE；**serial-managed 每 serial 一条**），因此必须加 `movementRole` + **`movementAtomKey`**（非 serial = BULK、serial = serialNo）区分；**Reversal/Correction 拥有自己的 source/action identity，不得与原 Movement 共用幂等身份** |
 | **历史不可变** | Movement 一旦 COMMITTED：**不可修改、不可删除**；纠错只能**追加 Reversal / Correction Movement** |
 | **库存维度** | Warehouse + Location + Item + Batch/Serial **共同决定库存维度** |
 
@@ -57,7 +57,7 @@
 | `WAREHOUSE_RECEIPT_POSTED` | `WarehouseReceiptPosted`（status=POSTED） | `IN` | **IN** | 入库过账即入库事实生效点（D10）；逐行生成（sourceLineId = WarehouseReceiptLine.id）；**已入库数量进入库存账** |
 | `PURCHASE_RETURN_RETURNED`（**仅 WAREHOUSE_RECEIPT_LINE 来源行**） | `PurchaseReturned`（disposition 任意） | `OUT` | **OUT** | 已入库退货 → 库存减少；逐行（sourceLineId = PurchaseReturnLine.id）；**P9：按原 WarehouseReceiptLine 的 warehouse/location/batch/serial 精确 OUT**（不得 FIFO/任意批次替代） |
 | `PURCHASE_RETURN_RETURNED`（RECEIPT_LINE / INSPECTION 来源行） | `PurchaseReturned` | — | **无 Movement** | **未入库退货不产生库存 Movement**（从未入库，无库存可减）；只记录退货事实 |
-| 未来：SALES / SALES_RETURN / TRANSFER / CONVERSION / STOCK_COUNT / ADJUSTMENT | 各业务事实（后续 Sprint） | SOURCE_OUT / DESTINATION_IN / CONSUME / PRODUCE / ADJUSTMENT 等 | IN/OUT/双边 | 必须同样走 Inventory Ledger command 层 + `sourceType+sourceId+sourceLineId+movementRole` 幂等键 |
+| 未来：SALES / SALES_RETURN / TRANSFER / CONVERSION / STOCK_COUNT / ADJUSTMENT | 各业务事实（后续 Sprint） | SOURCE_OUT / DESTINATION_IN / CONSUME / PRODUCE / ADJUSTMENT 等 | IN/OUT/双边 | 必须同样走 Inventory Ledger command 层 + `sourceType+sourceId+sourceLineId+movementRole+movementAtomKey` 幂等键 |
 
 > **红线**：来源映射表是 6A 的契约。新增业务来源必须先扩展此表并经 CTO 批准，**不允许业务模块绕过映射自行建 Movement**。
 
@@ -71,7 +71,7 @@
 | **创建即 COMMITTED（P2 Final）** | **6A 第一版不需要 PENDING Movement**——创建即 COMMITTED（幂等键校验通过 → status=COMMITTED + committedAt/ById）；**需要暂存的是业务单据，不是 Ledger** |
 | 不可变 | COMMITTED 后：**禁止 UPDATE / DELETE**（数据库层约束 + API 层无此能力） |
 | 纠错 | 只能**追加**：`REVERSAL`（冲销原 Movement，方向相反、引用 reversalOfMovementId）或 `CORRECTION`（修正）；**Reversal/Correction 拥有自己的 source/action identity，不与原 Movement 共用幂等身份** |
-| 幂等 | 重复消费同一事件 → 幂等键（`sourceType+sourceId+sourceLineId+movementRole`）命中 → 跳过（不重复生成） |
+| 幂等 | 重复消费同一事件 → 幂等键（`sourceType+sourceId+sourceLineId+movementRole+movementAtomKey`）命中 → 跳过（不重复生成） |
 | 编组 | 未来 Transfer/Conversion 多笔 Movement 用 **`movementGroupId`** 编组（单层模型，无 Header/Line） |
 
 > **对齐 5B 纪律**：只有 COMMITTED 才发布 `InventoryMovementCommitted`（P10 Final 保留；**不发布** `InventoryStockProjectionChanged`——避免把投影变成业务事实）。
@@ -189,6 +189,6 @@ Inventory consumer（独立事务）
 ## 11. CTO Design Review 后动作
 
 1. CTO 6A Design Review（#7458）已拍板 P1-P10 全部 Final（见 Sprint6A_CTO_Pending_Decisions.md）；ADR-0025 → **Approved with Changes**
-2. **Re-review 核 8 项 Design Consistency Fixes**（幂等键+movementRole / serialNo 原子化 / Outbox 状态机 / Projection 同事务+reconciliation / P1-P10 Final / Movement 单层+movementGroupId / 删 costSnapshot / 删 availableQty+reservedQty）
+2. **Re-review 核 8 项 Design Consistency Fixes**（幂等键+movementRole / serialNo 原子化 / Outbox 状态机 / Projection 同事务+reconciliation / P1-P10 Final / Movement 单层+movementGroupId / 删 costSnapshot / 删 availableQty+reservedQty）；**Schema Review 5 项（#7469）**：+movementAtomKey 五元幂等键 / StockProjection 五维 DB 唯一（NULLS NOT DISTINCT）/ onHandQty>=0 CHECK / committedAt NOT NULL / Reversal 单次冲销
 3. 全部 PASS 后才放行 **6A Schema / Migration 0024**（只建 InventoryMovement + StockProjection + Outbox；**不允许 Transfer/Conversion/Count/Costing/ReservedQty 越界**）
 4. 实现阶段仍走 commit → push → GitHub CI（禁止本地高资源验证）

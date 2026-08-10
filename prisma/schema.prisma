@@ -5160,6 +5160,8 @@ enum OutboxStatus {
 /// 库存数量唯一事实源（单层原子事实；**一行 = 一个不可变库存原子事实**，无 Header/Line 两层——CTO #7458）
 /// 历史不可变（D5）：COMMITTED 后禁止 UPDATE / DELETE（数据库层约束 + API 层无此能力）；纠错只能追加 Reversal/Correction
 /// P7 Final：Movement 与 StockProjection 同事务更新；Reconciliation 对账 SUM(COMMITTED Movement) vs onHandQty
+/// CTO #7469 Schema Review Blocking ①：幂等 identity = sourceType+sourceId+sourceLineId+movementRole+**movementAtomKey**
+/// （一个 source line 可合法产生多笔原子 Movement——serial-managed 每 serial 一条；movementAtomKey 非 serial = "BULK"、serial = serialNo）
 model InventoryMovement {
   id             String   @id @default(cuid())
   movementNo     String   @unique // 流水号（DocumentSequence docType=INVENTORY_MOVEMENT，前缀 MV-）
@@ -5167,11 +5169,12 @@ model InventoryMovement {
   sourceId       String // 来源单据 id（如 WarehouseReceipt.id / PurchaseReturn.id）
   sourceLineId   String // 来源行 id（如 WarehouseReceiptLine.id / PurchaseReturnLine.id）
   movementRole   InventoryMovementRole // CTO #7458：幂等键组成部分
+  movementAtomKey String @default("BULK") // CTO #7469 Blocking ①：原子子键（非 serial = "BULK"；serial = serialNo；未来 Transfer/Conversion 多原子同 role 区分）
   movementGroupId String? // 编组（Transfer/Conversion 多笔 Movement，可选；替代 Header/Line 两层）
   direction      InventoryMovementDirection
   status         InventoryMovementStatus @default(COMMITTED) // P2 Final：创建即 COMMITTED
   movementType   InventoryMovementType
-  reversalOfMovementId String?
+  reversalOfMovementId String? @unique // Minor ②：一笔 Movement 最多被完整冲销一次（单次 Reversal 语义，CTO #7469）
   reversalOf     InventoryMovement? @relation("MovementReversal", fields: [reversalOfMovementId], references: [id], onDelete: Restrict)
   reversedBy     InventoryMovement[] @relation("MovementReversal")
   correctionOfMovementId String?
@@ -5192,7 +5195,7 @@ model InventoryMovement {
   uom            UnitOfMeasure? @relation(fields: [uomId], references: [id], onDelete: Restrict)
   referenceNo    String? // 业务单据号（冗余可读）
   remark         String?
-  committedAt    DateTime? @db.Timestamptz(3) // 创建即 COMMITTED 的生效点
+  committedAt    DateTime @default(now()) @db.Timestamptz(3) // Minor ①：创建即 COMMITTED，NOT NULL（生效点必有时间戳）
   committedById  String?
   committedBy    User? @relation("InventoryMovementCommittedBy", fields: [committedById], references: [id], onDelete: SetNull)
   createdById    String?
@@ -5200,9 +5203,9 @@ model InventoryMovement {
   createdAt      DateTime @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime @updatedAt @db.Timestamptz(3)
 
-  // 四元幂等唯一（CTO #7458 Blocking ① 修正）：sourceType+sourceId+sourceLineId+movementRole
+  // 五元幂等唯一（CTO #7458 + #7469）：sourceType+sourceId+sourceLineId+movementRole+movementAtomKey
   // Reversal/Correction 拥有自己的 source/action identity（sourceType=REVERSAL/CORRECTION），不与原 Movement 共用
-  @@unique([sourceType, sourceId, sourceLineId, movementRole])
+  @@unique([sourceType, sourceId, sourceLineId, movementRole, movementAtomKey])
   @@index([movementGroupId])
   @@index([warehouseId])
   @@index([locationId])
@@ -5210,13 +5213,14 @@ model InventoryMovement {
   @@index([batchNo])
   @@index([serialNo])
   @@index([committedAt])
-  @@index([reversalOfMovementId])
   @@index([correctionOfMovementId])
 }
 
 /// 物化库存投影（**不是事实**；P7 Final：与 Movement 同事务 UPSERT + reconciliation）
 /// P3 Final：无 availableQty / reservedQty（ReservedQty 不进入 6A）
-/// P6 Final：禁止负库存——command 层锁本行后判断 onHandQty >= outQty，不足稳定拒绝
+/// P6 Final：禁止负库存——command 层锁本行后判断 onHandQty >= outQty（DB 层 CHECK onHandQty >= 0 兜底，CTO #7469 Blocking ③）
+/// CTO #7469 Blocking ②：库存维度唯一性**由数据库直接表达**（PG 16 `UNIQUE NULLS NOT DISTINCT` 五维约束，见 Migration 0025）——
+/// dimensionKey 仅作查询/锁键，**不承担唯一防线**（禁止空字符串与 NULL 混淆，CHECK dimensionKey <> ''）
 model StockProjection {
   id           String   @id @default(cuid())
   warehouseId  String
@@ -5227,9 +5231,7 @@ model StockProjection {
   item         Item @relation(fields: [itemId], references: [id], onDelete: Restrict)
   batchNo      String?
   serialNo     String?
-  // null-normalized 维度唯一键（CTO #7446 Schema Review 重点）：locationId/batchNo/serialNo 可空时，
-  // 普通 composite unique 不会把 NULL 当同一维度 → 用 dimensionKey 非空列（command 层生成，NULL 归一为占位符）DB UNIQUE
-  dimensionKey String   @unique
+  dimensionKey String // 查询/锁键（command 层生成，NULL 归一为占位符）；**非唯一防线**（CTO #7469 Blocking ②）
   onHandQty    Decimal  @default(0) @db.Decimal(18, 4) // = Σ IN - Σ OUT（COMMITTED Movement 聚合；与 Movement 同事务 UPSERT）
   lastMovementAt DateTime? @db.Timestamptz(3)
   version      Int      @default(1) // 乐观锁（command 层锁行判断负库存）
@@ -5239,6 +5241,7 @@ model StockProjection {
   @@index([warehouseId])
   @@index([itemId])
   @@index([serialNo])
+  @@index([dimensionKey])
 }
 
 /// 平台级持久 Transactional Outbox（P1/P8 Final：业务事实 + Outbox 同事务落库 → Inventory consumer 幂等消费）
@@ -5250,7 +5253,7 @@ model OutboxMessage {
   aggregateType String? // 如 WarehouseReceipt / PurchaseReturn
   aggregateId   String
   payload       Json? // 事件载荷（对齐 EVENTS.md；不含库存余额）
-  idempotencyKey String  @unique // = sourceType|sourceId|sourceLineId|movementRole（与 Movement 幂等键一致）
+  idempotencyKey String  @unique // = sourceType|sourceId|sourceLineId|movementRole|movementAtomKey（与 Movement 五元幂等键一致，CTO #7469）
   status        OutboxStatus @default(PENDING)
   attemptCount  Int       @default(0)
   nextAttemptAt DateTime? @db.Timestamptz(3)

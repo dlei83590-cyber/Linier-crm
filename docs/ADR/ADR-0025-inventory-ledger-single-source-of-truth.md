@@ -17,7 +17,7 @@
 ### D2：业务模块不得直接创建 InventoryMovement（CTO 红线）
 
 - **业务模块不得直接创建 InventoryMovement**
-- 必须通过 **Inventory Ledger service / command 层**，以受支持的 `sourceType + sourceId + sourceLineId + movementRole` 生成 Movement
+- 必须通过 **Inventory Ledger service / command 层**，以受支持的 `sourceType + sourceId + sourceLineId + movementRole + movementAtomKey` 生成 Movement
 - 否则 Purchase / Sales / Transfer / Count / Conversion 会各自写库存表，事实源再次分裂
 - 来源映射表（D3）是契约；新增业务来源必须先扩展映射并经 CTO 批准
 
@@ -30,24 +30,27 @@
 | `PURCHASE_RETURN_RETURNED`（RECEIPT_LINE / INSPECTION 来源行） | `PurchaseReturned` | — | **无 Movement** | **未入库退货不产生库存 Movement**（从未入库，无库存可减） |
 | 未来：SALES / SALES_RETURN / TRANSFER / CONVERSION / STOCK_COUNT / ADJUSTMENT | 各业务事实（后续 Sprint） | SOURCE_OUT / DESTINATION_IN / CONSUME / PRODUCE / ADJUSTMENT | IN/OUT/双边 | 同样走 command 层 + 幂等键 |
 
-### D4：幂等（Idempotency，CTO #7458 Blocking ① 修正）
+### D4：幂等（Idempotency，CTO #7458 Blocking ① + #7469 Blocking ① 修正）
 
-- **canonical 幂等键 = `sourceType + sourceId + sourceLineId + movementRole`**（数据库唯一约束）
-- 一个 source line 可合法产生**多笔 Movement**（Transfer 同行 → SOURCE_OUT + DESTINATION_IN；Conversion 同来源 → CONSUME + PRODUCE），因此必须加 `movementRole` 区分
-- **Reversal / Correction 拥有自己的 source/action identity，不得与原 Movement 共用幂等身份**
+- **canonical 幂等键 = `sourceType + sourceId + sourceLineId + movementRole + movementAtomKey`**（数据库唯一约束）
+- 一个 source line 可合法产生**多笔原子 Movement**：Transfer 同行 → SOURCE_OUT + DESTINATION_IN；Conversion 同来源 → CONSUME + PRODUCE；**serial-managed 每 serial 一条独立 Movement**
+- **`movementAtomKey`（CTO #7469 新增）**：原子子键——**非 serial Movement = `BULK`；serial Movement = `serialNo`**（未来 Transfer/Conversion 多原子同 role 区分也用 movementAtomKey，不直接把 serialNo 塞进唯一约束——更通用的 Ledger 语义）
+- **Reversal / Correction 拥有自己的 source/action identity（sourceType=REVERSAL/CORRECTION），不与原 Movement 共用幂等身份**
 - 同一业务来源重复生成（事件重放 / 重复调用）→ 幂等键命中 → 跳过（不重复建 Movement）
 - 幂等是 Inventory consumer 的硬要求（库存不能重复入账）
 
 ### D5：历史不可变（Immutability）
 
-- Movement 一旦 **COMMITTED：不可修改、不可删除**（数据库层约束 + API 层无此能力）
+- Movement 一旦 **COMMITTED：不可修改、不可删除**（数据库层约束 trigger + API 层无此能力）
 - 纠错只能**追加**：`REVERSAL`（冲销原 Movement，方向相反、引用 reversalOfMovementId）或 `CORRECTION`（修正）
+- **Reversal 单次冲销语义（CTO #7469 Minor ② 锁定）**：`reversalOfMovementId` **@unique（DB UNIQUE）**——**一笔 Movement 最多被完整冲销一次**；若未来需要部分/多次冲销，必须先在 ADR 明确数量 ceiling（`Σ reversal.quantity <= original.quantity`）再放开约束
 - 对齐 5B 纪律：只有 COMMITTED 才发布 `InventoryMovementCommitted`
 
 ### D6：库存维度（Inventory Dimension）
 
 - **Warehouse + Location + Item + Batch/Serial 共同决定库存维度**
 - 维度键 = (warehouseId, locationId, itemId, batchNo, serialNo)
+- **数据库级 nullable-normalized 唯一（CTO #7469 Blocking ②）**：PG16 `UNIQUE NULLS NOT DISTINCT` 五维约束直接落库（nullable 中 NULL 视为同一维度）；**`dimensionKey` 仅作查询/锁键，不承担唯一防线**（并加 CHECK `dimensionKey <> ''` 禁空串与 NULL 混淆）
 - Stock Projection 按维度键聚合 Movement
 
 ### D7：批次/序列号账本（Batch/Serial Ledger，CTO #7458 Blocking ② 修正）
@@ -95,7 +98,7 @@
           ↓
   Inventory consumer（独立事务）
     ├─ 读取 Outbox 待处理记录（PROCESSING 租约）
-    ├─ 幂等检查（sourceType+sourceId+sourceLineId+movementRole）
+    ├─ 幂等检查（sourceType+sourceId+sourceLineId+movementRole+movementAtomKey）
     └─ 单事务：INSERT Movement(COMMITTED) + UPSERT StockProjection + MARK Outbox PROCESSED
   ```
 - **Outbox 状态机（P8 Final，Blocking ③ 修正）**：`PENDING → PROCESSING → PROCESSED`；失败 `PROCESSING → PENDING(retry)` 或超阈值 → `DEAD_LETTER`；带 `attemptCount / nextAttemptAt / lockedAt / lockedBy / lastError / processedAt`；**处理成功不删除 Outbox（保留审计）**；平台级持久 Outbox
@@ -118,3 +121,5 @@
 | P10 | 6A 事件命名 | `InventoryMovementCommitted` 保留；**暂不发布** `InventoryStockProjectionChanged`（避免把投影变成业务事实） | ✅ Final |
 
 > **8 项 Design Consistency Fixes（CTO #7458）全部已落实**：① 幂等键 + movementRole ② serialNo 原子化（quantity=1，单值 serialNo）③ Outbox PROCESSING/lease/retry/dead-letter ④ StockProjection 同事务更新 + reconciliation ⑤ P1-P10 全部 Final ⑥ Movement 单层原子事实 + 可选 movementGroupId ⑦ 删除 costSnapshot ⑧ availableQty/reservedQty 从 canonical Projection 移除。
+>
+> **Schema Review 5 项（CTO #7469，88/100 REQUEST CHANGES）已落实**：① 幂等键升级五元（+movementAtomKey：非 serial=BULK、serial=serialNo）② StockProjection 五维数据库级唯一（PG16 `UNIQUE NULLS NOT DISTINCT`；dimensionKey 仅查询/锁键）③ `onHandQty >= 0` CHECK（负库存 DB 最后防线，同事务回滚）④ `committedAt` NOT NULL（创建即 COMMITTED）⑤ Reversal 单次冲销（reversalOfMovementId @unique）。

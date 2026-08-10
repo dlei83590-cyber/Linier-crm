@@ -83,6 +83,6 @@ Inventory consumer（独立事务）
 | P9 | 已入库退货 OUT 规则 | **按原 WarehouseReceiptLine 的 warehouse/location/batch/serial 精确 OUT**；不得 FIFO/任意批次替代 | ✅ Final |
 | P10 | 6A 事件命名 | `InventoryMovementCommitted` 保留；**暂不发布** `InventoryStockProjectionChanged` | ✅ Final |
 
-> **CTO 红线（本 Gate 直接锁定，不待拍板）**：业务模块不得直接创建 InventoryMovement——必须通过 Inventory Ledger service / command 层，以受支持的 `sourceType + sourceId + sourceLineId + movementRole` 生成 Movement。否则 Purchase、Sales、Transfer、Count、Conversion 会各自写库存表，事实源再次分裂。
+> **CTO 红线（本 Gate 直接锁定，不待拍板）**：业务模块不得直接创建 InventoryMovement——必须通过 Inventory Ledger service / command 层，以受支持的 `sourceType + sourceId + sourceLineId + movementRole + movementAtomKey` 生成 Movement（**CTO #7469 Schema Review：幂等键升级五元**——serial-managed 每 serial 一条 Movement 时四元键会撞 UNIQUE，movementAtomKey 非 serial=BULK、serial=serialNo）。否则 Purchase、Sales、Transfer、Count、Conversion 会各自写库存表，事实源再次分裂。
 >
 > **8 项 Design Consistency Fixes（CTO #7458）**：① 幂等键 + movementRole ② serialNo 原子化（quantity=1，单值 serialNo）③ Outbox PROCESSING/lease/retry/dead-letter ④ StockProjection 同事务更新 + reconciliation ⑤ P1-P10 全部 Final ⑥ Movement 单层原子事实 + 可选 movementGroupId ⑦ 删除 costSnapshot ⑧ availableQty/reservedQty 从 canonical Projection 移除。**Re-review 只核这 8 项。**

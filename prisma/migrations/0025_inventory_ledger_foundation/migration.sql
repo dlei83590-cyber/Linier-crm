@@ -1,5 +1,10 @@
 -- Sprint 6A：Inventory Ledger Foundation（库存账本——Schema + Migration 0025）
--- CTO 6A Gate Re-review 97/100 APPROVED FOR SCHEMA DESIGN（#7446，2026-08-10）：8/8 Design Gates PASS，Schema 放行，API/Consumer 仍 HOLD
+-- CTO 6A Schema Review 88/100 REQUEST CHANGES（#7469，2026-08-10）落实 5 项：
+--   Blocking ① 幂等 identity + movementAtomKey（五元：sourceType+sourceId+sourceLineId+movementRole+movementAtomKey；serial=serialNo，非 serial=BULK）
+--   Blocking ② StockProjection 五维数据库级 nullable-normalized 唯一（PG16 UNIQUE NULLS NOT DISTINCT；dimensionKey 仅查询/锁键，非唯一防线；禁空串与 NULL 混淆）
+--   Blocking ③ StockProjection.onHandQty >= 0 CHECK（负库存 DB 最后防线，与 Movement+Outbox 同事务回滚）
+--   Minor ① InventoryMovement.committedAt NOT NULL（创建即 COMMITTED）
+--   Minor ② Reversal 单次冲销语义（reversalOfMovementId @unique：一笔 Movement 最多被完整冲销一次）
 -- ⚠️ 迁移编号治理：**不用 0024**（5B Inspection 已使用 `0024_inspection_line_unique`）；6A 从 main migrations 事实源下一个可用编号 = 0025
 -- 红线：仅 CREATE TYPE / CREATE TABLE / CREATE INDEX / ADD CONSTRAINT / ALTER TYPE ... ADD VALUE
 -- 禁止 DROP/RENAME/TRUNCATE/改旧字段类型/重建旧表；0024 冻结为批准基线，不重写
@@ -39,6 +44,7 @@ CREATE TABLE "InventoryMovement" (
     "sourceId" TEXT NOT NULL,
     "sourceLineId" TEXT NOT NULL,
     "movementRole" "InventoryMovementRole" NOT NULL,
+    "movementAtomKey" TEXT NOT NULL DEFAULT 'BULK', -- CTO #7469 Blocking ①：原子子键（非 serial=BULK；serial=serialNo；未来 Transfer/Conversion 多原子同 role 区分）
     "movementGroupId" TEXT,
     "direction" "InventoryMovementDirection" NOT NULL,
     "status" "InventoryMovementStatus" NOT NULL DEFAULT 'COMMITTED',
@@ -56,7 +62,7 @@ CREATE TABLE "InventoryMovement" (
     "uomId" TEXT,
     "referenceNo" TEXT,
     "remark" TEXT,
-    "committedAt" TIMESTAMP(3) WITH TIME ZONE,
+    "committedAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP, -- Minor ①：创建即 COMMITTED，NOT NULL
     "committedById" TEXT,
     "createdById" TEXT,
     "updatedById" TEXT,
@@ -64,8 +70,9 @@ CREATE TABLE "InventoryMovement" (
     "updatedAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "InventoryMovement_pkey" PRIMARY KEY ("id"),
-    -- CTO #7458 Blocking ①：四元幂等唯一键（一个 source line 可合法产生多笔 Movement，靠 movementRole 区分；对齐 Prisma 默认约束名防 migrate diff 漂移）
-    CONSTRAINT "InventoryMovement_sourceType_sourceId_sourceLineId_movementRole_key" UNIQUE ("sourceType", "sourceId", "sourceLineId", "movementRole"),
+    -- CTO #7458 Blocking ① + #7469 Blocking ①：五元幂等唯一键（一个 source line 可合法产生多笔 Movement：
+    -- serial-managed 每 serial 一条（movementAtomKey=serialNo）；非 serial 用 BULK；对齐 Prisma 默认约束名防 migrate diff 漂移）
+    CONSTRAINT "InventoryMovement_sourceType_sourceId_sourceLineId_movementRole_movementAtomKey_key" UNIQUE ("sourceType", "sourceId", "sourceLineId", "movementRole", "movementAtomKey"),
     -- CTO #7458 Blocking ②：serial-managed 原子化（serialNo 非空 ⇒ quantity 必须 = 1）；quantity 恒 > 0（方向承载正负语义）
     CONSTRAINT "InventoryMovement_quantity_positive_check" CHECK ("quantity" > 0),
     CONSTRAINT "InventoryMovement_serial_quantity_check" CHECK ("serialNo" IS NULL OR "quantity" = 1)
@@ -82,6 +89,7 @@ ALTER TABLE "InventoryMovement" ADD CONSTRAINT "InventoryMovement_committedById_
 
 -- Indexes
 CREATE UNIQUE INDEX "InventoryMovement_movementNo_key" ON "InventoryMovement"("movementNo");
+CREATE UNIQUE INDEX "InventoryMovement_reversalOfMovementId_key" ON "InventoryMovement"("reversalOfMovementId"); -- Minor ②：一笔 Movement 最多被完整冲销一次
 CREATE INDEX "InventoryMovement_movementGroupId_idx" ON "InventoryMovement"("movementGroupId");
 CREATE INDEX "InventoryMovement_warehouseId_idx" ON "InventoryMovement"("warehouseId");
 CREATE INDEX "InventoryMovement_locationId_idx" ON "InventoryMovement"("locationId");
@@ -89,7 +97,6 @@ CREATE INDEX "InventoryMovement_itemId_idx" ON "InventoryMovement"("itemId");
 CREATE INDEX "InventoryMovement_batchNo_idx" ON "InventoryMovement"("batchNo");
 CREATE INDEX "InventoryMovement_serialNo_idx" ON "InventoryMovement"("serialNo");
 CREATE INDEX "InventoryMovement_committedAt_idx" ON "InventoryMovement"("committedAt");
-CREATE INDEX "InventoryMovement_reversalOfMovementId_idx" ON "InventoryMovement"("reversalOfMovementId");
 CREATE INDEX "InventoryMovement_correctionOfMovementId_idx" ON "InventoryMovement"("correctionOfMovementId");
 
 -- 历史不可变（D5）：COMMITTED 后禁止 UPDATE/DELETE（数据库层约束；API 层无此能力；纠错只能追加 Reversal/Correction）
@@ -112,8 +119,7 @@ CREATE TABLE "StockProjection" (
     "itemId" TEXT NOT NULL,
     "batchNo" TEXT,
     "serialNo" TEXT,
-    -- null-normalized 维度唯一键（CTO #7446 Schema Review 重点）：locationId/batchNo/serialNo 可空时，
-    -- 普通 composite unique 不会把 NULL 当成同一库存维度 → dimensionKey 非空列（command 层生成，NULL 归一为占位符）
+    -- 查询/锁键（command 层生成，NULL 归一为占位符）；**非唯一防线**（CTO #7469 Blocking ②：唯一性由下方五维 NULLS NOT DISTINCT 约束直接表达）
     "dimensionKey" TEXT NOT NULL,
     "onHandQty" DECIMAL(18,4) NOT NULL DEFAULT 0,
     "lastMovementAt" TIMESTAMP(3) WITH TIME ZONE,
@@ -122,7 +128,10 @@ CREATE TABLE "StockProjection" (
     "updatedAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "StockProjection_pkey" PRIMARY KEY ("id"),
-    CONSTRAINT "StockProjection_dimensionKey_key" UNIQUE ("dimensionKey")
+    -- CTO #7469 Blocking ③：负库存 DB 最后防线（Movement+Projection+Outbox 同事务：CHECK 失败 → 整个事务回滚）
+    CONSTRAINT "StockProjection_onHandQty_nonnegative_check" CHECK ("onHandQty" >= 0),
+    -- CTO #7469 Blocking ②：dimensionKey 禁止空字符串（与 NULL 归一混淆防线）
+    CONSTRAINT "StockProjection_dimensionKey_not_empty_check" CHECK ("dimensionKey" <> '')
 );
 
 -- Foreign Keys（onDelete Restrict：主数据删除受投影约束）
@@ -131,9 +140,13 @@ ALTER TABLE "StockProjection" ADD CONSTRAINT "StockProjection_locationId_warehou
 ALTER TABLE "StockProjection" ADD CONSTRAINT "StockProjection_itemId_fkey" FOREIGN KEY ("itemId") REFERENCES "Item"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- Indexes
+-- CTO #7469 Blocking ②：库存维度唯一性由数据库直接表达（PG16 UNIQUE NULLS NOT DISTINCT——nullable 五维中 NULL 视为同一维度；
+-- 不能用普通 composite unique：PG 默认 NULLS DISTINCT 会把 NULL 当成互不相同的维度）
+CREATE UNIQUE INDEX "StockProjection_dimension_unique" ON "StockProjection" ("warehouseId", "locationId", "itemId", "batchNo", "serialNo") NULLS NOT DISTINCT;
 CREATE INDEX "StockProjection_warehouseId_idx" ON "StockProjection"("warehouseId");
 CREATE INDEX "StockProjection_itemId_idx" ON "StockProjection"("itemId");
 CREATE INDEX "StockProjection_serialNo_idx" ON "StockProjection"("serialNo");
+CREATE INDEX "StockProjection_dimensionKey_idx" ON "StockProjection"("dimensionKey");
 
 -- ⑤ OutboxMessage（平台级持久 Transactional Outbox；P8 Final：PENDING → PROCESSING → PROCESSED；失败 retry / DEAD_LETTER；成功不删除保留审计）
 CREATE TABLE "OutboxMessage" (
@@ -142,7 +155,7 @@ CREATE TABLE "OutboxMessage" (
     "aggregateType" TEXT,
     "aggregateId" TEXT NOT NULL,
     "payload" JSONB,
-    "idempotencyKey" TEXT NOT NULL,
+    "idempotencyKey" TEXT NOT NULL, -- = sourceType|sourceId|sourceLineId|movementRole|movementAtomKey（与 Movement 五元幂等键一致，CTO #7469）
     "status" "OutboxStatus" NOT NULL DEFAULT 'PENDING',
     "attemptCount" INTEGER NOT NULL DEFAULT 0,
     "nextAttemptAt" TIMESTAMP(3) WITH TIME ZONE,
