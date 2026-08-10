@@ -11,6 +11,7 @@ import {
   computeInspectionAvailableQty,
 } from '@/lib/warehouse-receipt/helpers';
 import { publishWarehouseReceiptEvent } from '@/lib/warehouse-receipt/events';
+import { expandSourceLineAtoms, writeInventoryOutboxAtom } from '@/lib/inventory-ledger/outbox-writer';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,7 +73,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const lines = await tx.warehouseReceiptLine.findMany({
       where: { warehouseReceiptId: id, deletedAt: null },
       orderBy: { createdAt: 'asc' },
-      select: { id: true, purchaseReceiptLineId: true, inspectionId: true, quantity: true },
+      select: {
+        id: true,
+        purchaseReceiptLineId: true,
+        inspectionId: true,
+        quantity: true,
+        itemId: true,
+        uomId: true,
+        batchNo: true,
+        serialNos: true,
+        mfgDate: true,
+        expDate: true,
+      },
     });
     if (lines.length === 0) {
       return { error: 'NO_LINES' as const };
@@ -118,6 +130,37 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     });
     if (cas.count !== 1) {
       return { error: 'VERSION_CONFLICT' as const };
+    }
+
+    // ⑤ Outbox Writer（6A Phase 2 第一步，CTO #7508）：业务事实 + Outbox **同事务**——
+    // WarehouseReceiptPosted → IN 原子 Movement（serial-managed 每 serial 一条 quantity=1；非 serial 一条 BULK）；
+    // 幂等键 = sourceType|sourceId|sourceLineId|movementRole|movementAtomKey（与 InventoryMovement 五元 UNIQUE 一致）；
+    // 库存链不再依赖事务后 best-effort 事件（Consumer 第二步实现）。
+    for (const line of lines) {
+      const atoms = expandSourceLineAtoms({
+        sourceType: 'WAREHOUSE_RECEIPT_POSTED',
+        sourceId: receipt.id,
+        sourceLineId: line.id,
+        movementRole: 'IN',
+        warehouseId: receipt.warehouseId,
+        locationId: receipt.locationId,
+        itemId: line.itemId,
+        batchNo: line.batchNo,
+        serialNos: line.serialNos,
+        quantity: line.quantity,
+        uomId: line.uomId,
+        mfgDate: line.mfgDate,
+        expDate: line.expDate,
+        eventType: 'WarehouseReceiptPosted',
+        aggregateType: 'WarehouseReceipt',
+        aggregateId: receipt.id,
+        referenceNo: receipt.code,
+        actorId,
+        occurredAt: postedAt.toISOString(),
+      });
+      for (const atom of atoms) {
+        await writeInventoryOutboxAtom(tx, atom);
+      }
     }
 
     return {

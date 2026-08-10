@@ -11,6 +11,7 @@ import {
   computeSourceAvailableQty,
 } from '@/lib/purchase-return/helpers';
 import { publishPurchaseReturnEvent } from '@/lib/purchase-return/events';
+import { expandSourceLineAtoms, writeInventoryOutboxAtom } from '@/lib/inventory-ledger/outbox-writer';
 
 export const dynamic = 'force-dynamic';
 
@@ -88,6 +89,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         quantity: true,
         disposition: true,
         returnReason: true,
+        batchNo: true,
+        serialNos: true,
       },
     });
     if (lines.length === 0) {
@@ -132,9 +135,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             select: {
               id: true,
               quantity: true,
+              itemId: true,
+              uomId: true,
+              batchNo: true,
+              serialNos: true,
+              mfgDate: true,
+              expDate: true,
               purchaseReceiptLine: { select: { purchaseOrderLineId: true } },
               warehouseReceipt: {
-                select: { status: true, purchaseReceipt: { select: { purchaseOrderId: true } } },
+                select: {
+                  status: true,
+                  warehouseId: true,
+                  locationId: true,
+                  purchaseReceipt: { select: { purchaseOrderId: true } },
+                },
               },
             },
           })
@@ -294,7 +308,42 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
     }
 
-    // ⑥ line-level disposition（CTO Re-review Minor）：事件/Audit 不再只取第一行 disposition
+    // ⑥ Outbox Writer（6A Phase 2 第一步，CTO #7508）：业务事实 + Outbox **同事务**——
+    // 仅 `WAREHOUSE_RECEIPT_LINE` 来源行 → OUT 原子 Movement（P9：按原 WarehouseReceiptLine 的
+    // warehouse/location/batch/serial 精确 OUT；serial-managed 每 serial 一条 quantity=1，非 serial 一条 BULK）；
+    // 幂等键 = sourceType|sourceId|sourceLineId|movementRole|movementAtomKey（与 InventoryMovement 五元 UNIQUE 一致）；
+    // 未入库退货（RECEIPT_LINE/INSPECTION）不产生库存 Movement，不写 Outbox；库存链不再依赖事务后 best-effort 事件。
+    for (const line of lines) {
+      if (line.sourceRefType !== 'WAREHOUSE_RECEIPT_LINE') continue;
+      const src = wlById.get(line.sourceWarehouseReceiptLineId!);
+      if (!src) continue; // 已在③校验存在，防御
+      const atoms = expandSourceLineAtoms({
+        sourceType: 'PURCHASE_RETURN_RETURNED',
+        sourceId: pr.id,
+        sourceLineId: line.id,
+        movementRole: 'OUT',
+        warehouseId: src.warehouseReceipt.warehouseId,
+        locationId: src.warehouseReceipt.locationId,
+        itemId: src.itemId,
+        batchNo: src.batchNo,
+        serialNos: line.serialNos.length > 0 ? line.serialNos : src.serialNos,
+        quantity: line.quantity,
+        uomId: src.uomId,
+        mfgDate: src.mfgDate,
+        expDate: src.expDate,
+        eventType: 'PurchaseReturned',
+        aggregateType: 'PurchaseReturn',
+        aggregateId: pr.id,
+        referenceNo: pr.code,
+        actorId,
+        occurredAt: returnedAt.toISOString(),
+      });
+      for (const atom of atoms) {
+        await writeInventoryOutboxAtom(tx, atom);
+      }
+    }
+
+    // ⑦ line-level disposition（CTO Re-review Minor）：事件/Audit 不再只取第一行 disposition
     const lineInfos = lines.map((l) => ({
       lineId: l.id,
       sourceRefType: l.sourceRefType,
