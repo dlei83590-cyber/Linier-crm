@@ -95,7 +95,8 @@ function parseAtomPayload(payload: unknown): {
   }
   const role = p.movementRole;
   if (role !== 'IN' && role !== 'OUT') return { ok: false, error: `未知 movementRole: ${String(role)}` };
-  const need = (v: unknown, name: string): string | null => (typeof v === 'string' && v.length > 0 ? v : null);
+  const need = (v: unknown, _name: string): string | null =>
+    typeof v === 'string' && v.length > 0 ? v : null;
   const sourceId = need(p.sourceId, 'sourceId');
   const sourceLineId = need(p.sourceLineId, 'sourceLineId');
   const movementAtomKey = need(p.movementAtomKey, 'movementAtomKey');

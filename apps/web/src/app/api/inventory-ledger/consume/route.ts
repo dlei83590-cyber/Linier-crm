@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server';
-import { authenticate, requirePermission, requestMeta } from '@/lib/api-helpers';
+import { authenticate, requirePermission } from '@/lib/api-helpers';
 import { ok, failValidation } from '@/lib/api/response';
 import { requestLog } from '@/lib/api/logger';
 import { runInventoryConsumer } from '@/lib/inventory-ledger/consumer';
@@ -19,7 +19,6 @@ export async function POST(request: NextRequest) {
   const denied = requirePermission(user, 'inventory-ledger:consume');
   if (denied) return denied;
   requestLog(request, user?.id, 'inventory-ledger.consume');
-  const meta = requestMeta(request);
 
   const body = await request.json().catch(() => null);
   const limitRaw = typeof body === 'object' && body !== null ? (body as { limit?: unknown }).limit : undefined;
