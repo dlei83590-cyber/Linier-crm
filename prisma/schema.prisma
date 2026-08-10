@@ -5606,8 +5606,8 @@ model InventoryConversionLine {
   quantity      Decimal  @db.Decimal(18, 4) // 业务 UOM 数量
   uomId         String?
   uom           UnitOfMeasure? @relation(fields: [uomId], references: [id], onDelete: SetNull)
-  uomToBaseRate Decimal  @db.Decimal(18, 6) // 行级换算率 snapshot（业务 UOM → base UOM；Blocking ④——header 单一 rate 无法无歧义描述两方向各自换算）
-  baseQuantity  Decimal  @db.Decimal(18, 4) // canonical 数量 = quantity × uomToBaseRate（P11 Final：Ledger/Projection 只记 base UOM canonical 数量；service EXECUTE 前验证 CONSUME.baseQuantity == PRODUCE.baseQuantity）
+  uomToBaseRate Decimal  @db.Decimal(18, 6) // 行级换算率 snapshot（业务 UOM → base UOM；Blocking ④——header 单一 rate 无法无歧义描述两方向各自换算；DB CHECK uomToBaseRate > 0）
+  baseQuantity  Decimal  @db.Decimal(18, 4) // canonical 数量 = quantity × uomToBaseRate（P11 Final：Ledger/Projection 只记 base UOM canonical 数量；service EXECUTE 前验证 CONSUME.baseQuantity == PRODUCE.baseQuantity；DB CHECK baseQuantity > 0）
   warehouseId   String
   warehouse     Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
   locationId    String?

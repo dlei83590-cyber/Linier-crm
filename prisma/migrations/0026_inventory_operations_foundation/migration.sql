@@ -248,6 +248,9 @@ CREATE TABLE "InventoryConversionLine" (
 
     CONSTRAINT "InventoryConversionLine_pkey" PRIMARY KEY ("id"),
     CONSTRAINT "InventoryConversionLine_quantity_positive_check" CHECK ("quantity" > 0),
+    -- CTO 6B Schema Re-review Minor Hardening ①：canonical 字段必须为正——rate/baseQuantity ≤ 0 无合法业务含义，DB 直接拒绝；不做 DB 强算 baseQuantity = quantity × rate（Decimal 精度/舍入由 service 统一控制）
+    CONSTRAINT "InventoryConversionLine_uomToBaseRate_positive_check" CHECK ("uomToBaseRate" > 0),
+    CONSTRAINT "InventoryConversionLine_baseQuantity_positive_check" CHECK ("baseQuantity" > 0),
     -- CTO 6B Schema Re-review Blocking ③：单输入单输出（最多 1 CONSUME + 1 PRODUCE）
     CONSTRAINT "InventoryConversionLine_conversionHeaderId_lineRole_key" UNIQUE ("conversionHeaderId", "lineRole")
 );
