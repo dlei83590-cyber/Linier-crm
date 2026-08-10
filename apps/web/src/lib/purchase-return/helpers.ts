@@ -36,24 +36,23 @@ export async function computeSourceReturnedQty(
   sourceId: string,
   excludePurchaseReturnId?: string,
 ): Promise<Prisma.Decimal> {
-  const base = {
+  const where: Prisma.PurchaseReturnLineWhereInput = {
     deletedAt: null,
     ...(excludePurchaseReturnId
       ? { purchaseReturnId: { not: excludePurchaseReturnId } }
       : {}),
     purchaseReturn: { deletedAt: null, status: 'RETURNED' },
-  };
-  const where =
-    sourceRefType === 'RECEIPT_LINE'
-      ? { ...base, sourcePurchaseReceiptLineId: sourceId }
+    ...(sourceRefType === 'RECEIPT_LINE'
+      ? { sourcePurchaseReceiptLineId: sourceId }
       : sourceRefType === 'WAREHOUSE_RECEIPT_LINE'
-        ? { ...base, sourceWarehouseReceiptLineId: sourceId }
-        : { ...base, sourceInspectionId: sourceId };
+        ? { sourceWarehouseReceiptLineId: sourceId }
+        : { sourceInspectionId: sourceId }),
+  };
   const agg = await tx.purchaseReturnLine.aggregate({
     where,
     _sum: { quantity: true },
   });
-  return agg._sum.quantity ?? new Prisma.Decimal(0);
+  return agg._sum?.quantity ?? new Prisma.Decimal(0);
 }
 
 /** 可退余额 = 来源可退数量 - 已 RETURNED 占用（CTO #7219：退货数量不得超过来源可退余额） */
