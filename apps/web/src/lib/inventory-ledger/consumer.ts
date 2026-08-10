@@ -173,21 +173,26 @@ async function resolveSource(
   return { ok: true };
 }
 
-/** DocumentSequence 原子取号（docType=INVENTORY_MOVEMENT，前缀 MV，位数 6） */
+/** DocumentSequence 原子取号（docType=INVENTORY_MOVEMENT，前缀 MV，位数 6）
+ * CTO #7667 Minor：**禁止 fallback `MV000001`**——DocumentSequence 缺失 = 配置错误，直接抛错
+ * （外层 catch → RETRY 退避；运维建好 sequence 后自然恢复），绝不生成常量 1 二次撞 movementNo UNIQUE。
+ */
 export async function nextInventoryMovementNo(tx: Prisma.TransactionClient): Promise<string> {
   const seq = await tx.documentSequence.findFirst({
     where: { docType: 'INVENTORY_MOVEMENT', isActive: true, deletedAt: null },
   });
-  const prefix = seq?.prefix ?? 'MV';
-  const padLength = seq?.padLength ?? 6;
-  if (seq) {
-    const updated = await tx.documentSequence.update({
-      where: { id: seq.id },
-      data: { nextNo: { increment: 1 } },
-    });
-    return `${prefix}${String(updated.nextNo - 1).padStart(padLength, '0')}`;
+  if (!seq) {
+    throw new Error(
+      'InventoryMovement DocumentSequence 缺失（docType=INVENTORY_MOVEMENT）：Consumer 配置错误，需先 Seed sequence 才能生成 movementNo',
+    );
   }
-  return `${prefix}${String(1).padStart(padLength, '0')}`;
+  const prefix = seq.prefix ?? 'MV';
+  const padLength = seq.padLength ?? 6;
+  const updated = await tx.documentSequence.update({
+    where: { id: seq.id },
+    data: { nextNo: { increment: 1 } },
+  });
+  return `${prefix}${String(updated.nextNo - 1).padStart(padLength, '0')}`;
 }
 
 /** 五维维度 → dimensionKey（**仅查询/锁键辅助，非库存身份**——CTO #7469/#7588） */
@@ -219,10 +224,13 @@ async function lockOrCreateProjection(
   dims: { warehouseId: string; locationId: string | null; itemId: string; batchNo: string | null; serialNo: string | null },
 ): Promise<{ id: string; onHandQty: Prisma.Decimal; version: number }> {
   // 原子创建（冲突无事发生）：INSERT ... ON CONFLICT (五维) DO NOTHING（PG16 NULLS NOT DISTINCT 唯一索引为 arbiter）
+  // **CTO #7667 Blocking ①**：raw SQL 绕过 Prisma，`@default(cuid())` 不再自动生成——必须显式生成并写 `id`
+  // （Migration 0025 `"id" TEXT NOT NULL` 无 DB DEFAULT，缺 id 首笔新维度会直接 NOT NULL 失败）
+  const projectionId = crypto.randomUUID();
   await tx.$executeRaw(
     Prisma.sql`INSERT INTO "StockProjection"
-        ("warehouseId", "locationId", "itemId", "batchNo", "serialNo", "dimensionKey")
-      VALUES (${dims.warehouseId}, ${dims.locationId}, ${dims.itemId}, ${dims.batchNo}, ${dims.serialNo}, ${buildDimensionKey(dims)})
+        ("id", "warehouseId", "locationId", "itemId", "batchNo", "serialNo", "dimensionKey")
+      VALUES (${projectionId}, ${dims.warehouseId}, ${dims.locationId}, ${dims.itemId}, ${dims.batchNo}, ${dims.serialNo}, ${buildDimensionKey(dims)})
       ON CONFLICT ("warehouseId", "locationId", "itemId", "batchNo", "serialNo") DO NOTHING`,
   );
   // 锁行（无论刚创建还是已存在，都能锁到同一五维行——同维度多 OUT 串行防负库存）
@@ -350,13 +358,17 @@ export async function consumeOutboxMessage(
 
     // Blocking ③：Movement INSERT 用 PG 原子冲突语义——ON CONFLICT (五元) DO NOTHING RETURNING id，
     // 不制造 SQL error 再同事务恢复（P2002 catch 后事务已 aborted，不可恢复）
+    // **CTO #7667 Blocking ②**：raw SQL 绕过 Prisma，`@default(cuid())` 不再自动生成——必须显式生成并写 `id`
+    // （Migration 0025 `"id" TEXT NOT NULL` 无 DB DEFAULT；冲突未插入时 candidate id 无副作用）
+    const movementIdCandidate = crypto.randomUUID();
     const inserted = await tx.$queryRaw<Array<{ id: string }>>(
       Prisma.sql`INSERT INTO "InventoryMovement"
-        ("movementNo", "sourceType", "sourceId", "sourceLineId", "movementRole", "movementAtomKey",
+        ("id", "movementNo", "sourceType", "sourceId", "sourceLineId", "movementRole", "movementAtomKey",
          "direction", "status", "movementType",
          "warehouseId", "locationId", "itemId", "batchNo", "serialNo",
          "mfgDate", "expDate", "quantity", "uomId", "referenceNo", "committedById", "committedAt", "remark")
       VALUES (
+        ${movementIdCandidate},
         ${movementNo},
         ${atom.sourceType}::"InventoryMovementSourceType",
         ${atom.sourceId},
