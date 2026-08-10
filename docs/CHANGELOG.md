@@ -4,7 +4,21 @@
 
 ## [Unreleased] - Sprint 4A + 4B + 4C + 4D + 4E-1 + 4E-2 + 4E-3（Quotation / Sales Order / Delivery / Invoice / Accounts Receivable / Receipt & Payment Allocation / Credit Note & Debit Note Foundation，2026-08-08，PR #12-#18 已合并，未打 Tag）
 
-### 新增（Sprint 5A：Purchase Requisition & Purchase Order Foundation，PR #19，待 CTO Final Review——CTO #6575 方案 A 重定义完整范围）
+### 新增（Sprint 5B：Goods Receipt & Inbound Foundation，PR #20，待 CTO Final Review——CTO PurchaseReturn FINAL APPROVED 98/100 #7303，Sprint 5B 核心事实链 CLOSED）
+
+- **收货/入库拆两层事实（ADR-0024 D1）**：`PurchaseReceipt`（到货/收货事实，只保留收货现场事实 quantity/visibleDamageQty/rejectedOnReceiptQty/remark；更新 PO Line 收货投影）+ `WarehouseReceipt`（采购入库事实，仓库/库位/批次/序列号/效期；**库存追溯信息 canonical capture point P6**；驱动 6A InventoryMovement(IN) 的业务事实）
+- **只有 CONFIRMED PO 才是收货合法来源（D2/D9）**：`CONFIRMED / PARTIALLY_RECEIVED` 可收；**RECEIVED 禁普通新增收货**（终止 Gate，追加需走 Reopen/Amendment/Over-Receipt Exception）；无 Direct GR
+- **库存数量唯一事实源 = InventoryMovement（D3，6A）**：**5B 全程 0 写 Stock/InventoryMovement**（红线 D12）；WarehouseReceipt **D10：Created ≠ Posted，只有 Posted 才发布 WarehouseReceiptPosted 并触发 6A InventoryMovement(IN)**
+- **质检唯一事实（D8）**：`Inspection` 独立模型（SKIP/SPOT/FULL）；inspectableQty = quantity - rejectedOnReceiptQty；**qualifiedQty + rejectedQty = inspectableQty（= 强制）**；SKIP 免检服务端强制 QUALIFIED（**不绕过 Inspection 记录**）；一次 Inspection 即最终结果（DB unique）；result 服务端推导
+- **退货 = 独立 PurchaseReturn（D5/P5）**：非负 GR；**三来源 exactly-one FK + API 强制匹配**（RECEIPT_LINE / INSPECTION = 未入库退货不碰库存；WAREHOUSE_RECEIPT_LINE = 已入库退货必须来自 POSTED 入库事实，**不写 InventoryMovement(OUT)**）；**来源可退余额（CTO Re-review Blocking ①）**：RECEIPT_LINE=rejectedOnReceiptQty / INSPECTION=rejectedQty / WAREHOUSE_RECEIPT_LINE=POSTED 入库行 quantity（Create 预检查与 Return Gate 同源防分叉）；**Return Gate 锁真实来源 + 锁内重算累计 RETURNED（防并发超退）**；disposition 必填
+- **REPLACE_REQUIRED 真正 reopen PO 履约（CTO Re-review Blocking ②）**：Return 事务内锁 PurchaseOrderLine，INSPECTION/WAREHOUSE 来源 `receivedQty -= returnQty`、`remainingReceiveQty` 重开待交；**RECEIPT_LINE 收货时未计入 receivedQty 不重复 reopen**；PO 原状态 RECEIVED + 有效 reopen → 重聚回 PARTIALLY_RECEIVED；原始事实不倒改
+- **PO Line 收货投影（D6/P7）**：`receivedQty_new = receivedQty_old + (quantity - rejectedOnReceiptQty)`（现场拒收不计入）；remainingReceiveQty = max(quantity - receivedQty, 0) 服务端唯一计算（tolerance 只用于 receive ceiling）；PO 聚合状态 RECEIVED / PARTIALLY_RECEIVED
+- **超收容差（D7/P2）**：System Default 0%；超容差 → 409 OVER_RECEIPT（不默认 5%）
+- **事件（EVENTS.md v1.23 终态）**：`PurchaseReceiptReceived / InspectionCompleted / WarehouseReceiptPosted / PurchaseReturned / PurchaseOrderPartiallyReceived / PurchaseOrderReceived` 全部 ✅；**PurchaseReturned 载荷 line-level disposition**（lines[] + hasReplacementRequired/hasCreditOnly，弃第一行单值冒充整单）；事件均事务后发布、**不含库存余额**；DRAFT 创建/编辑不发领域事件
+- **Schema/Migration 0023（纯增量）**：四模块模型 + 枚举（PurchaseReceiptStatus / InspectionMode / InspectionResult / WarehouseReceiptStatus / PurchaseReturnStatus / PurchaseReturnType / PurchaseReturnDisposition 等）
+- **文档**：OpenAPI +13 端点/+40 schemas（Sprint 5B 四模块全生命周期 + 错误码；D9/D10/来源可退余额/reopen 语义/line-level disposition 全部写清）；QA/Test Cases（PurchaseReceipt_API.md + Inspection_API.md + WarehouseReceipt_API.md + PurchaseReturn_API.md + Sprint5B_QA.md）；ADR-0024 → Implemented；ROADMAP Sprint 5 🔄（5B ✅）；EVENTS v1.21→v1.23
+
+### 新增（Sprint 5A：Purchase Requisition & Purchase Order Foundation，PR #19，已合并——CTO #6575 方案 A 重定义完整范围）
 
 - **采购领域事实源（设计拍板③/⑤）**：`PurchaseRequisition` = 需求事实源（**无金额字段**，只表达要什么/多少/何时/为何）；`PurchaseOrder` = 对供应商的采购承诺事实源（金额服务端 Decimal 聚合，禁客户端直传头金额）；PR→PO Convert 是复制投影、不修改 PR 事实；Supplier 主数据复用（Sprint 3C-1）不新建
 - **PO 生命周期锁死（拍板③）**：`DRAFT → SUBMITTED → APPROVED → CONFIRMED → PARTIALLY_RECEIVED → RECEIVED`；`DRAFT → CANCELLED`；**APPROVED ≠ CONFIRMED**（审批通过 = 公司内部同意采购；显式 `POST /confirm` = 正式形成对供应商的采购承诺；**只有 CONFIRMED PO 才是 5B Goods Receipt 唯一合法来源**——代码/OpenAPI/QA/文档四处一致）

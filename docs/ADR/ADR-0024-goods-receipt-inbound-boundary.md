@@ -1,6 +1,6 @@
 # ADR-0024：Goods Receipt & Inbound Boundary（收货与入库边界决策）
 
-- 状态：**Approved with Changes（2026-08-09，CTO Design Review 94/100——4 项 Blocking Design Changes 已落实；Schema/Migration 0023 待实现放行）**
+- 状态：**Implemented（2026-08-10，Sprint 5B 完整实现 + CTO PurchaseReturn FINAL APPROVED 98/100 #7303——Sprint 5B 核心事实链 CLOSED；Schema/Migration 0023 已实现）**
 - 关联：Sprint5B_China_ERP_Process_Field_Gate.md / Sprint5B_Field_Matrix.md / Sprint5B_CTO_Pending_Decisions.md / EVENTS.md / ADR-0023（5A 已 Implemented）
 - 决策人：CIO（JINZA）提案 ｜ 审核：CTO
 - 背景：Sprint 5A 已完成 PR/PO Foundation（PR #19 合并 main）。5B 需锁定“到货 → 收货 → 验收 → 入库”业务边界，回答 GoodsReceipt 到底代表什么；**本阶段只做 Design / ADR / 文档，禁止 Schema / Migration 0023 / API**（Gate 模式延续 Sprint 4/5 纪律）
@@ -26,7 +26,7 @@
 
 - **红线（CTO #6680 锁死）**：5B 可以定义"应产生库存动作"的业务事实（WarehouseReceipt），但不得直接把库存余额当事实写入（`stock.qty += x` 禁止）
 - 真正库存数量变化必须由 Sprint 6A 的 `InventoryMovement` 统一承载；Stock = Movement 余额投影
-- WarehouseReceipt 落库后发布事件（如 `WarehouseReceiptCreated`），6A 消费生成 InventoryMovement(IN)（衔接方式实现阶段定）
+- WarehouseReceipt 落库后发布事件（`WarehouseReceiptPosted`——D10：只有 Posted 才发布并触发 6A InventoryMovement(IN)；已实现，见 EVENTS.md 2.3.9），6A 消费生成 InventoryMovement(IN)（衔接方式实现阶段定）
 
 ### D4：直送不进入仓库库存
 
