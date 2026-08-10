@@ -11,6 +11,11 @@ import {
   computeSourceAvailableQty,
 } from '@/lib/purchase-return/helpers';
 import { publishPurchaseReturnEvent } from '@/lib/purchase-return/events';
+import {
+  InventoryOutboxError,
+  expandSourceLineAtoms,
+  writeInventoryOutboxAtom,
+} from '@/lib/inventory-ledger/outbox-writer';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,7 +51,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const meta = requestMeta(request);
   const actorId = user!.id;
 
-  const result = await prisma.$transaction(async (tx) => {
+  let result;
+  try {
+    result = await prisma.$transaction(async (tx) => {
     // ① Lock PurchaseReturn（FOR UPDATE）
     const locked = await tx.$queryRaw<Array<{ id: string }>>(
       Prisma.sql`SELECT "id" FROM "PurchaseReturn" WHERE "id" = ${id} AND "deletedAt" IS NULL FOR UPDATE`,
@@ -88,6 +95,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         quantity: true,
         disposition: true,
         returnReason: true,
+        batchNo: true,
+        serialNos: true,
       },
     });
     if (lines.length === 0) {
@@ -132,9 +141,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             select: {
               id: true,
               quantity: true,
+              itemId: true,
+              uomId: true,
+              batchNo: true,
+              serialNos: true,
+              mfgDate: true,
+              expDate: true,
               purchaseReceiptLine: { select: { purchaseOrderLineId: true } },
               warehouseReceipt: {
-                select: { status: true, purchaseReceipt: { select: { purchaseOrderId: true } } },
+                select: {
+                  status: true,
+                  warehouseId: true,
+                  locationId: true,
+                  purchaseReceipt: { select: { purchaseOrderId: true } },
+                },
               },
             },
           })
@@ -294,7 +314,78 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
     }
 
-    // ⑥ line-level disposition（CTO Re-review Minor）：事件/Audit 不再只取第一行 disposition
+    // ⑥ Outbox Writer（6A Phase 2 第一步，CTO #7508）：业务事实 + Outbox **同事务**——
+    // 仅 `WAREHOUSE_RECEIPT_LINE` 来源行 → OUT 原子 Movement（P9：按原 WarehouseReceiptLine 的
+    // warehouse/location/batch/serial 精确 OUT；serial-managed 每 serial 一条 quantity=1，非 serial 一条 BULK）；
+    // 幂等键 = sourceType|sourceId|sourceLineId|movementRole|movementAtomKey（与 InventoryMovement 五元 UNIQUE 一致）；
+    // 未入库退货（RECEIPT_LINE/INSPECTION）不产生库存 Movement，不写 Outbox；库存链不再依赖事务后 best-effort 事件。
+    // invariant（CTO #7543 Blocking ①/②）：
+    // - serial-managed 已入库退货必须**显式提交本次退货 serialNos**（禁止部分退货 fallback 全来源 serials）；
+    // - canonical dimensions（itemId/warehouseId/quantity>0）缺失 → 整个事务回滚，绝不让 poison Outbox 进入 PENDING。
+    for (const line of lines) {
+      if (line.sourceRefType !== 'WAREHOUSE_RECEIPT_LINE') continue;
+      const src = wlById.get(line.sourceWarehouseReceiptLineId!);
+      if (!src) continue; // 已在③校验存在，防御
+      if (!src.itemId) {
+        throw new InventoryOutboxError(
+          ERROR_CODES.INVENTORY_DIMENSION_INCOMPLETE,
+          `来源入库行 ${src.id} 缺少 itemId，无法生成库存 Movement（canonical dimension 不完整）`,
+        );
+      }
+      // Blocking ①：serial-managed 来源行必须由退货行显式提交本次退货 serialNos（锁死，CTO 建议）
+      if (src.serialNos.length > 0 && line.serialNos.length === 0) {
+        throw new InventoryOutboxError(
+          ERROR_CODES.INVENTORY_SERIAL_REQUIRED,
+          `序列号管理商品的已入库退货必须显式提交本次退货 serialNos（来源入库行 ${src.id}，禁止 fallback 全来源序列号）`,
+        );
+      }
+      // CTO #7574 对称 Gate：**非 serial-managed 来源禁止提交 serialNos**（审计事实一致性）
+      // 来源无 serial + 退货行提交 SN → 静默忽略会造成 PurchaseReturnLine 记录 serialNos 而
+      // InventoryMovement 却是 BULK 的事实分裂（后续查“SN 退没退”两套答案）→ 直接 409 回滚。
+      if (src.serialNos.length === 0 && line.serialNos.length > 0) {
+        throw new InventoryOutboxError(
+          ERROR_CODES.INVENTORY_SERIAL_SOURCE_MISMATCH,
+          `非序列号管理来源禁止提交 serialNos（来源入库行 ${src.id} 无序列号，本次退货只能 BULK OUT）`,
+        );
+      }
+      // CTO #7563 防御：serial-managed 时每个提交的 serial 必须属于原入库行 serialNos（P9 精确 OUT）
+      if (src.serialNos.length > 0) {
+        const srcSerialSet = new Set(src.serialNos);
+        const invalidSerial = line.serialNos.find((sn) => !srcSerialSet.has(sn));
+        if (invalidSerial) {
+          throw new InventoryOutboxError(
+            ERROR_CODES.INVENTORY_SERIAL_REQUIRED,
+            `退货序列号 ${invalidSerial} 不属于来源入库行 ${src.id} 的序列号集合（P9 精确 OUT，禁止无关 SN）`,
+          );
+        }
+      }
+      const atoms = expandSourceLineAtoms({
+        sourceType: 'PURCHASE_RETURN_RETURNED',
+        sourceId: pr.id,
+        sourceLineId: line.id,
+        movementRole: 'OUT',
+        warehouseId: src.warehouseReceipt.warehouseId,
+        locationId: src.warehouseReceipt.locationId,
+        itemId: src.itemId,
+        batchNo: src.batchNo,
+        serialNos: src.serialNos.length > 0 ? line.serialNos : [],
+        quantity: line.quantity,
+        uomId: src.uomId,
+        mfgDate: src.mfgDate,
+        expDate: src.expDate,
+        eventType: 'PurchaseReturned',
+        aggregateType: 'PurchaseReturn',
+        aggregateId: pr.id,
+        referenceNo: pr.code,
+        actorId,
+        occurredAt: returnedAt.toISOString(),
+      });
+      for (const atom of atoms) {
+        await writeInventoryOutboxAtom(tx, atom);
+      }
+    }
+
+    // ⑦ line-level disposition（CTO Re-review Minor）：事件/Audit 不再只取第一行 disposition
     const lineInfos = lines.map((l) => ({
       lineId: l.id,
       sourceRefType: l.sourceRefType,
@@ -318,7 +409,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       hasCreditOnly,
       returnedAt: returnedAt.toISOString(),
     };
-  });
+    });
+  } catch (err) {
+    if (err instanceof InventoryOutboxError) {
+      return failConflict(err.code, err.message);
+    }
+    throw err;
+  }
 
   if ('error' in result) {
     switch (result.error) {

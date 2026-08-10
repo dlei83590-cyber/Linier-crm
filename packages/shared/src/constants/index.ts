@@ -165,5 +165,10 @@ export const ALL_ACTION_PERMISSIONS: string[] = PERMISSION_MODULES.flatMap((m) =
   PERMISSION_ACTIONS.map((a) => actionPermission(m, a)),
 );
 
+/** 受限系统权限（Sprint 6A：inventory-ledger:consume 为后台执行动作——**不进入全局 PERMISSION_ACTIONS/PERMISSION_MODULES**（consume 非通用 CRUD action）；仅 SUPER_ADMIN/ADMIN 静态授权，seed 同步注册（见 prisma/seed.ts SEED_SYSTEM_ACTION_PERMISSIONS）；Manager/Member/Viewer 默认无权限 → 403） */
+export const SYSTEM_PERMISSIONS = [
+  "inventory-ledger:consume",
+] as const;
+
 export const DEFAULT_PAGE_SIZE = 20;
 export const MAX_PAGE_SIZE = 100;

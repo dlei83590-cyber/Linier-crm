@@ -184,6 +184,7 @@ enum DocumentType {
   PURCHASE_RECEIPT // 采购收货单 REC（Sprint 5B 新增）
   WAREHOUSE_RECEIPT // 采购入库单 WHR（Sprint 5B 新增）
   PURCHASE_RETURN // 采购退货单 PRT（Sprint 5B 新增）
+  INVENTORY_MOVEMENT // 库存流水 MV（Sprint 6A 新增）
 }
 
 /// Platform user account. Identity and credential record.
@@ -203,6 +204,7 @@ model User {
   inspectedInspections Inspection[] // 5B：检验（inspectedById 方向，质检员）
   postedWarehouseReceipts WarehouseReceipt[] @relation("WarehouseReceiptPostedBy") // 5B：入库单（postedById 方向，过账人 D10）
   returnedPurchaseReturns PurchaseReturn[] // 5B：退货单（returnedById 方向，经办人）
+  committedInventoryMovements InventoryMovement[] @relation("InventoryMovementCommittedBy") // 6A：库存流水（committedById 方向）
   createdAt    DateTime    @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime    @updatedAt @db.Timestamptz(3)
 
@@ -333,6 +335,7 @@ model UnitOfMeasure {
   purchaseReceiptLines PurchaseReceiptLine[] // 5B：收货行（PurchaseReceiptLine.uom 方向）
   warehouseReceiptLines WarehouseReceiptLine[] // 5B：入库行（WarehouseReceiptLine.uom 方向）
   purchaseReturnLines PurchaseReturnLine[] // 5B：退货行（PurchaseReturnLine.uom 方向）
+  inventoryMovements InventoryMovement[] // 6A：库存流水（InventoryMovement.uom 方向）
   createdAt     DateTime @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 
@@ -417,6 +420,8 @@ model Item {
   purchaseReceiptLines PurchaseReceiptLine[] // 5B：收货行（PurchaseReceiptLine.item 方向）
   warehouseReceiptLines WarehouseReceiptLine[] // 5B：入库行（WarehouseReceiptLine.item 方向）
   purchaseReturnLines PurchaseReturnLine[] // 5B：退货行（PurchaseReturnLine.item 方向）
+  inventoryMovements InventoryMovement[] // 6A：库存流水（InventoryMovement.item 方向）
+  stockProjections StockProjection[] // 6A：库存投影（StockProjection.item 方向）
   createdAt     DateTime        @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime        @updatedAt @db.Timestamptz(3)
 
@@ -4819,6 +4824,8 @@ model Warehouse {
   locations WarehouseLocation[]
   purchaseReceipts PurchaseReceipt[] // 到货地点方向（PurchaseReceipt.warehouseId）
   warehouseReceipts WarehouseReceipt[] // 入库仓库方向（WarehouseReceipt.warehouseId）
+  inventoryMovements InventoryMovement[] // 6A：库存流水（InventoryMovement.warehouse 方向）
+  stockProjections StockProjection[] // 6A：库存投影（StockProjection.warehouse 方向）
 
   @@index([code])
   @@index([deletedAt])
@@ -4840,6 +4847,8 @@ model WarehouseLocation {
   updatedAt  DateTime @updatedAt @db.Timestamptz(3)
 
   warehouseReceipts WarehouseReceipt[] // 入库单库位方向（WarehouseReceipt.locationId，可空）
+  inventoryMovements InventoryMovement[] // 6A：库存流水（InventoryMovement.location 方向）
+  stockProjections StockProjection[] // 6A：库存投影（StockProjection.location 方向）
 
   @@unique([warehouseId, code])
   @@unique([id, warehouseId]) // 支持 WarehouseReceipt 组合 FK（Minor ②：location 必须属于同一 warehouse）
@@ -5084,4 +5093,179 @@ model PurchaseReturnLine {
   @@index([sourceInspectionId])
   @@index([itemId])
   @@index([deletedAt])
+}
+
+// ============================================================================
+// Sprint 6A — Inventory Ledger（库存数量唯一事实源，CTO 6A Gate Re-review 97/100 APPROVED FOR SCHEMA DESIGN #7446）
+// 红线：InventoryMovement = 库存数量唯一业务事实；Stock/OnHandQty 只能投影；业务模块不得直接创建 Movement
+// （必须走 Inventory Ledger command 层，sourceType+sourceId+sourceLineId+movementRole+movementAtomKey 五元幂等键）
+// P1-P10 Final：Outbox / 创建即 COMMITTED / ReservedQty 不进 / Costing 不进（无 costSnapshot）/
+// 只建 Ledger+Projection+Outbox（Transfer/Conversion/Count 只锁规则）/ 禁负库存 / 物化同事务+reconciliation /
+// 平台级持久 Outbox / 精确 OUT / InventoryMovementCommitted 保留
+// ============================================================================
+
+/// 库存流水状态（P2 Final：创建即 COMMITTED；6A 第一版无 PENDING——需要暂存的是业务单据，不是 Ledger）
+enum InventoryMovementStatus {
+  COMMITTED
+}
+
+/// 业务来源类型（5B 两个来源 + 纠错身份；新增来源须 CTO 批准 + ALTER TYPE ADD VALUE）
+enum InventoryMovementSourceType {
+  WAREHOUSE_RECEIPT_POSTED // WarehouseReceiptPosted（status=POSTED）→ IN
+  PURCHASE_RETURN_RETURNED // PurchaseReturned（仅 WAREHOUSE_RECEIPT_LINE 来源行）→ OUT；未入库退货无 Movement
+  REVERSAL // 纠错：冲销（拥有自己的 source/action identity，不与原 Movement 共用幂等身份）
+  CORRECTION // 纠错：修正（同上）
+}
+
+/// 来源行内角色（CTO #7458 Blocking ①：一个 source line 可合法产生多笔 Movement，用 movementRole 区分）
+enum InventoryMovementRole {
+  IN
+  OUT
+  SOURCE_OUT // Transfer 成对：SOURCE OUT（未来）
+  DESTINATION_IN // Transfer 成对：DESTINATION IN（未来）
+  CONSUME // Conversion Consume（未来）
+  PRODUCE // Conversion Produce（未来）
+  ADJUSTMENT // Stock Count 盘盈/盘亏 / 调整（未来）
+  REVERSAL
+  CORRECTION
+}
+
+/// 库存增减方向
+enum InventoryMovementDirection {
+  IN
+  OUT
+}
+
+/// 库存流水细分类型
+enum InventoryMovementType {
+  INBOUND
+  OUTBOUND
+  TRANSFER_OUT // 未来
+  TRANSFER_IN // 未来
+  CONSUME // 未来
+  PRODUCE // 未来
+  ADJUSTMENT // 未来
+  REVERSAL
+  CORRECTION
+}
+
+/// Outbox 状态（P8 Final：语义 = 库存消费成功才确认完成；不混"投递/消费/投影"）
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
+  DEAD_LETTER
+}
+
+/// 库存数量唯一事实源（单层原子事实；**一行 = 一个不可变库存原子事实**，无 Header/Line 两层——CTO #7458）
+/// 历史不可变（D5）：COMMITTED 后禁止 UPDATE / DELETE（数据库层约束 + API 层无此能力）；纠错只能追加 Reversal/Correction
+/// P7 Final：Movement 与 StockProjection 同事务更新；Reconciliation 对账 SUM(COMMITTED Movement) vs onHandQty
+/// CTO #7469 Schema Review Blocking ①：幂等 identity = sourceType+sourceId+sourceLineId+movementRole+**movementAtomKey**
+/// （一个 source line 可合法产生多笔原子 Movement——serial-managed 每 serial 一条；movementAtomKey 非 serial = "BULK"、serial = serialNo）
+model InventoryMovement {
+  id             String   @id @default(cuid())
+  movementNo     String   @unique // 流水号（DocumentSequence docType=INVENTORY_MOVEMENT，前缀 MV-）
+  sourceType     InventoryMovementSourceType
+  sourceId       String // 来源单据 id（如 WarehouseReceipt.id / PurchaseReturn.id）
+  sourceLineId   String // 来源行 id（如 WarehouseReceiptLine.id / PurchaseReturnLine.id）
+  movementRole   InventoryMovementRole // CTO #7458：幂等键组成部分
+  movementAtomKey String @default("BULK") // CTO #7469 Blocking ①：原子子键（非 serial = "BULK"；serial = serialNo；未来 Transfer/Conversion 多原子同 role 区分）
+  // DB invariant（CTO #7495 Final Re-check）：serialNo 非空 ⇒ movementAtomKey 必须 = serialNo（CHECK "InventoryMovement_serial_atom_key_check"）
+  // 不做“serialNo IS NULL → movementAtomKey = BULK”——未来非 serial 的 Transfer/Conversion 可能需要多个 atom key
+  movementGroupId String? // 编组（Transfer/Conversion 多笔 Movement，可选；替代 Header/Line 两层）
+  direction      InventoryMovementDirection
+  status         InventoryMovementStatus @default(COMMITTED) // P2 Final：创建即 COMMITTED
+  movementType   InventoryMovementType
+  reversalOfMovementId String? @unique // Minor ②：一笔 Movement 最多被完整冲销一次（单次 Reversal 语义，CTO #7469）
+  reversalOf     InventoryMovement? @relation("MovementReversal", fields: [reversalOfMovementId], references: [id], onDelete: Restrict)
+  reversedBy     InventoryMovement[] @relation("MovementReversal")
+  correctionOfMovementId String?
+  correctionOf   InventoryMovement? @relation("MovementCorrection", fields: [correctionOfMovementId], references: [id], onDelete: Restrict)
+  correctedBy    InventoryMovement[] @relation("MovementCorrection")
+  warehouseId    String
+  warehouse      Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  locationId     String?
+  location       WarehouseLocation? @relation(fields: [locationId, warehouseId], references: [id, warehouseId], onDelete: Restrict) // 组合 FK：location 必须属于同一 warehouse
+  itemId         String
+  item           Item @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  batchNo        String? // 继承 5B WarehouseReceipt（P6 Final），不重建
+  serialNo       String? // 单值（serial-managed 原子化：每 serial 独立 Movement、quantity=1；CTO #7458 Blocking ②）
+  mfgDate        DateTime? @db.Timestamptz(3) // 继承 5B
+  expDate        DateTime? @db.Timestamptz(3) // 继承 5B
+  quantity       Decimal  @db.Decimal(18, 4) // IN/OUT 均为正数（方向承载正负语义）；serial-managed 必须 = 1（CHECK）
+  uomId          String?
+  uom            UnitOfMeasure? @relation(fields: [uomId], references: [id], onDelete: Restrict)
+  referenceNo    String? // 业务单据号（冗余可读）
+  remark         String?
+  committedAt    DateTime @default(now()) @db.Timestamptz(3) // Minor ①：创建即 COMMITTED，NOT NULL（生效点必有时间戳）
+  committedById  String?
+  committedBy    User? @relation("InventoryMovementCommittedBy", fields: [committedById], references: [id], onDelete: SetNull)
+  createdById    String?
+  updatedById    String?
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  // 五元幂等唯一（CTO #7458 + #7469）：sourceType+sourceId+sourceLineId+movementRole+movementAtomKey
+  // Reversal/Correction 拥有自己的 source/action identity（sourceType=REVERSAL/CORRECTION），不与原 Movement 共用
+  @@unique([sourceType, sourceId, sourceLineId, movementRole, movementAtomKey])
+  @@index([movementGroupId])
+  @@index([warehouseId])
+  @@index([locationId])
+  @@index([itemId])
+  @@index([batchNo])
+  @@index([serialNo])
+  @@index([committedAt])
+  @@index([correctionOfMovementId])
+}
+
+/// 物化库存投影（**不是事实**；P7 Final：与 Movement 同事务 UPSERT + reconciliation）
+/// P3 Final：无 availableQty / reservedQty（ReservedQty 不进入 6A）
+/// P6 Final：禁止负库存——command 层锁本行后判断 onHandQty >= outQty（DB 层 CHECK onHandQty >= 0 兜底，CTO #7469 Blocking ③）
+/// CTO #7469 Blocking ②：库存维度唯一性**由数据库直接表达**（PG 16 `UNIQUE NULLS NOT DISTINCT` 五维约束，见 Migration 0025）——
+/// dimensionKey 仅作查询/锁键，**不承担唯一防线**（禁止空字符串与 NULL 混淆，CHECK dimensionKey <> ''）
+model StockProjection {
+  id           String   @id @default(cuid())
+  warehouseId  String
+  warehouse    Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  locationId   String?
+  location     WarehouseLocation? @relation(fields: [locationId, warehouseId], references: [id, warehouseId], onDelete: Restrict) // 组合 FK 同属
+  itemId       String
+  item         Item @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  batchNo      String?
+  serialNo     String?
+  dimensionKey String // 查询/锁键（command 层生成，NULL 归一为占位符）；**非唯一防线**（CTO #7469 Blocking ②）
+  onHandQty    Decimal  @default(0) @db.Decimal(18, 4) // = Σ IN - Σ OUT（COMMITTED Movement 聚合；与 Movement 同事务 UPSERT）
+  lastMovementAt DateTime? @db.Timestamptz(3)
+  version      Int      @default(1) // 乐观锁（command 层锁行判断负库存）
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([warehouseId])
+  @@index([itemId])
+  @@index([serialNo])
+  @@index([dimensionKey])
+}
+
+/// 平台级持久 Transactional Outbox（P1/P8 Final：业务事实 + Outbox 同事务落库 → Inventory consumer 幂等消费）
+/// P8 Final：PENDING → PROCESSING → PROCESSED；失败 PROCESSING → PENDING(retry) 或超阈值 → DEAD_LETTER；
+/// 带 lease/retry 元数据；**处理成功不删除（保留审计记录）**
+model OutboxMessage {
+  id            String    @id @default(cuid())
+  eventType     String // WarehouseReceiptPosted / PurchaseReturned / InventoryMovementCommitted / 未来各业务事件
+  aggregateType String? // 如 WarehouseReceipt / PurchaseReturn
+  aggregateId   String
+  payload       Json? // 事件载荷（对齐 EVENTS.md；不含库存余额）
+  idempotencyKey String  @unique // = sourceType|sourceId|sourceLineId|movementRole|movementAtomKey（与 Movement 五元幂等键一致，CTO #7469）
+  status        OutboxStatus @default(PENDING)
+  attemptCount  Int       @default(0)
+  nextAttemptAt DateTime? @db.Timestamptz(3)
+  lockedAt      DateTime? @db.Timestamptz(3) // lease
+  lockedBy      String? // lease
+  lastError     String?
+  processedAt   DateTime? @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@index([status, nextAttemptAt]) // 消费扫描 + retry 调度
+  @@index([createdAt])
 }

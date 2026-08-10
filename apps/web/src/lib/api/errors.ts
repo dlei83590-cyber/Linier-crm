@@ -205,6 +205,17 @@ export const ERROR_CODES = {
   PURCHASE_RETURN_SOURCE_NOT_RETURNABLE: 'PURCHASE_RETURN_SOURCE_NOT_RETURNABLE', // WAREHOUSE_RECEIPT_LINE 来源必须来自 POSTED 入库事实（CTO #7219）
   PURCHASE_RETURN_QUANTITY_INVALID: 'PURCHASE_RETURN_QUANTITY_INVALID', // quantity <= 0
   PURCHASE_RETURN_OVER_SOURCE_BALANCE: 'PURCHASE_RETURN_OVER_SOURCE_BALANCE', // 退货数量超过来源可退余额（累计 RETURNED 防并发超退）
+
+  // Inventory Ledger Outbox Writer（6A Phase 2，CTO #7543）
+  INVENTORY_DIMENSION_INCOMPLETE: 'INVENTORY_DIMENSION_INCOMPLETE', // 库存触发点 canonical dimensions 不完整（itemId/warehouseId/quantity）——poison Outbox 防线，409
+  INVENTORY_SERIAL_QTY_MISMATCH: 'INVENTORY_SERIAL_QTY_MISMATCH', // serial-managed：serialNos.length != quantity（数量守恒），409
+  INVENTORY_SERIAL_DUPLICATE: 'INVENTORY_SERIAL_DUPLICATE', // serialNos 内重复 serial，409
+  INVENTORY_SERIAL_REQUIRED: 'INVENTORY_SERIAL_REQUIRED', // serial-managed 已入库退货必须显式提交本次退货 serialNos（禁 fallback 全来源），409
+  INVENTORY_SERIAL_SOURCE_MISMATCH: 'INVENTORY_SERIAL_SOURCE_MISMATCH', // 非 serial-managed 来源禁止提交 serialNos（来源无 serial → 只能 BULK OUT；审计事实一致性，CTO #7574），409
+  // Inventory Ledger Consumer（6A Phase 2 第二步，CTO #7588）
+  INVENTORY_OUTBOX_PAYLOAD_INVALID: 'INVENTORY_OUTBOX_PAYLOAD_INVALID', // Outbox payload 缺失/类型错误（永久失败 → DEAD_LETTER），409
+  INVENTORY_SOURCE_NOT_FOUND: 'INVENTORY_SOURCE_NOT_FOUND', // resolve source：来源单据不存在或状态不符（永久失败 → DEAD_LETTER），409
+  INVENTORY_INSUFFICIENT_STOCK: 'INVENTORY_INSUFFICIENT_STOCK', // OUT 余额不足（业务失败 → retry 退避 → 超阈值 DEAD_LETTER；Movement 不写/Projection 不变/Outbox 不误标 PROCESSED），409
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

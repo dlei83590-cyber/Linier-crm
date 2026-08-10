@@ -1,6 +1,19 @@
 # Release Notes
 
-## Sprint 5B — Goods Receipt & Inbound Foundation（2026-08-10，PR #20 待 CTO Final Review——CTO PurchaseReturn FINAL APPROVED 98/100 #7303，Sprint 5B 核心事实链 CLOSED）
+## Sprint 6A — Inventory Ledger Foundation（2026-08-10，PR #21 待 CTO Final Review——CTO Inventory Consumer + Ledger Command FINAL APPROVED 99/100 #7683，6A 核心库存账闭环成立）
+
+> **业务价值：** 库存数量从此有了**唯一的账本事实源**——入库、退货不再只是单据流转，而是真正形成可追溯、不可篡改的库存流水和实时库存余额。
+
+### 业务可感知能力
+
+- **采购入库后库存正式增加**：入库单过账（Posted）后，库存按仓库/库位/物料/批次/序列号自动入账，无需人工登记库存；同一笔入库不会重复入账（系统幂等）
+- **已入库采购退货后库存正式减少**：退货完成后按原入库的仓库/库位/批次/序列号精确扣减库存；库存不足时拒绝扣减（不会出现负库存）
+- **批次/序列号可追溯**：序列号管理的物料按每个序列号单独记账，每一件都能追溯到来源单据
+- **可靠性保障**：库存流水一旦入账不可修改（只能冲销/更正）；异常消费会自动重试并保留失败记录（不会静默丢失库存变动）
+
+> **边界说明：** 本阶段只完成**库存账本 Foundation**（库存流水 + 库存余额投影 + 可靠消费）。**不包含**调拨、盘点、转换、预留库存（ReservedQty）和成本核算（FIFO/移动平均）——这些将在后续独立阶段实现。
+
+## Sprint 5B — Goods Receipt & Inbound Foundation（2026-08-10，PR #20 已合并 main `7bd98cb`——CTO PurchaseReturn FINAL APPROVED 98/100 #7303，Sprint 5B 核心事实链 CLOSED）
 
 > **业务价值：** 采购从“下单即结束”走向完整履约链——到货收货 → 质检 → 入库 → 退货，每个环节都是独立可审计的业务事实；库存数量事实源（InventoryMovement）保持纯净，未被采购模块提前污染。
 
