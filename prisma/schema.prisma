@@ -5449,6 +5449,7 @@ model StockCount {
   updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 
   lines StockCountLine[]
+  adjustments InventoryAdjustment[] // 6B：来源盘点单方向（InventoryAdjustment.sourceStockCountId，可空——Manual 调整无盘点来源）
 
   @@index([countNo])
   @@index([status])
