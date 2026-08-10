@@ -48,7 +48,7 @@ export const INVENTORY_CONSUMER_ERRORS = {
 /** 单条 Outbox 消费结果（批处理统计用） */
 export interface ConsumeOutboxResult {
   outboxId: string;
-  outcome: 'PROCESSED' | 'ALREADY_PROCESSED' | 'RETRY' | 'DEAD_LETTER';
+  outcome: 'PROCESSED' | 'ALREADY_PROCESSED' | 'RETRY' | 'DEAD_LETTER' | 'LEASE_LOST';
   movementId?: string;
   movementNo?: string;
   error?: string;
@@ -59,6 +59,7 @@ export interface ConsumeBatchResult {
   processed: number;
   retried: number;
   deadLettered: number;
+  leaseLost: number;
   results: ConsumeOutboxResult[];
 }
 
@@ -118,6 +119,9 @@ function parseAtomPayload(payload: unknown): {
   if (serialNo && movementAtomKey !== serialNo) {
     return { ok: false, error: `serial 原子身份不一致：movementAtomKey(${movementAtomKey}) != serialNo(${serialNo})` };
   }
+  // 注意（CTO #7644 顺手修）：非 serial → movementAtomKey === 'BULK' 是**当前两种 consumer source 的规则**
+  // （WAREHOUSE_RECEIPT_POSTED / PURCHASE_RETURN_RETURNED，Writer 原子化时非 serial 即 BULK）；
+  // **不是全局 Ledger invariant**——6A Schema 已允许未来非 serial Transfer/Conversion 使用多个 atom key。
   if (!serialNo && movementAtomKey !== 'BULK') {
     return { ok: false, error: `非 serial 原子 movementAtomKey 必须为 BULK（当前 ${movementAtomKey}）` };
   }
@@ -205,12 +209,23 @@ export function buildDimensionKey(dims: {
 
 /**
  * 锁五维 StockProjection 行（**FOR UPDATE；NULL 用 IS NOT DISTINCT FROM 匹配**——五维 NULLS NOT DISTINCT 语义）；
- * 不存在则创建（onHandQty=0）。返回锁定行（含 onHandQty/version）。并发创建由五维唯一索引兜底 → P2002 重查。
+ * 不存在则**原子创建**（CTO #7644 Blocking ②）：`INSERT ... ON CONFLICT (五维) DO NOTHING` 后再 `SELECT ... FOR UPDATE`。
+ * 注意：**不能**用 Prisma create + catch P2002 后同事务重查——PG unique violation 会把当前事务打进
+ * aborted state，catch JS 异常不能恢复数据库事务；ON CONFLICT DO NOTHING 不产生 SQL error，事务保持可用。
+ * 身份基于**真正五维 NULLS NOT DISTINCT 唯一索引**（StockProjection_dimension_unique），不退回 dimensionKey。
  */
 async function lockOrCreateProjection(
   tx: Prisma.TransactionClient,
   dims: { warehouseId: string; locationId: string | null; itemId: string; batchNo: string | null; serialNo: string | null },
 ): Promise<{ id: string; onHandQty: Prisma.Decimal; version: number }> {
+  // 原子创建（冲突无事发生）：INSERT ... ON CONFLICT (五维) DO NOTHING（PG16 NULLS NOT DISTINCT 唯一索引为 arbiter）
+  await tx.$executeRaw(
+    Prisma.sql`INSERT INTO "StockProjection"
+        ("warehouseId", "locationId", "itemId", "batchNo", "serialNo", "dimensionKey")
+      VALUES (${dims.warehouseId}, ${dims.locationId}, ${dims.itemId}, ${dims.batchNo}, ${dims.serialNo}, ${buildDimensionKey(dims)})
+      ON CONFLICT ("warehouseId", "locationId", "itemId", "batchNo", "serialNo") DO NOTHING`,
+  );
+  // 锁行（无论刚创建还是已存在，都能锁到同一五维行——同维度多 OUT 串行防负库存）
   const rows = await tx.$queryRaw<Array<{ id: string; onHandQty: Prisma.Decimal; version: number }>>(
     Prisma.sql`SELECT "id", "onHandQty", "version" FROM "StockProjection"
       WHERE "warehouseId" = ${dims.warehouseId}
@@ -220,42 +235,13 @@ async function lockOrCreateProjection(
         AND "serialNo" IS NOT DISTINCT FROM ${dims.serialNo}
       FOR UPDATE`,
   );
-  if (rows.length > 0) {
-    return { id: rows[0].id, onHandQty: new Prisma.Decimal(rows[0].onHandQty.toString()), version: rows[0].version };
+  if (rows.length === 0) {
+    // 理论上不可达（INSERT 后必有行）；防御性错误，事务回滚
+    throw new Error(
+      `StockProjection 五维行创建后不可达：${dims.warehouseId}/${dims.locationId ?? '-'}/${dims.itemId}/${dims.batchNo ?? '-'}/${dims.serialNo ?? '-'}`,
+    );
   }
-  // 不存在 → 创建（五维唯一索引兜底；并发插入 P2002 → 重查并锁）
-  try {
-    const created = await tx.stockProjection.create({
-      data: {
-        warehouseId: dims.warehouseId,
-        locationId: dims.locationId,
-        itemId: dims.itemId,
-        batchNo: dims.batchNo,
-        serialNo: dims.serialNo,
-        dimensionKey: buildDimensionKey(dims),
-        onHandQty: new Prisma.Decimal(0),
-        version: 1,
-      },
-      select: { id: true, onHandQty: true, version: true },
-    });
-    return { id: created.id, onHandQty: new Prisma.Decimal(0), version: created.version };
-  } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      const again = await tx.$queryRaw<Array<{ id: string; onHandQty: Prisma.Decimal; version: number }>>(
-        Prisma.sql`SELECT "id", "onHandQty", "version" FROM "StockProjection"
-          WHERE "warehouseId" = ${dims.warehouseId}
-            AND "locationId" IS NOT DISTINCT FROM ${dims.locationId}
-            AND "itemId" = ${dims.itemId}
-            AND "batchNo" IS NOT DISTINCT FROM ${dims.batchNo}
-            AND "serialNo" IS NOT DISTINCT FROM ${dims.serialNo}
-          FOR UPDATE`,
-      );
-      if (again.length > 0) {
-        return { id: again[0].id, onHandQty: new Prisma.Decimal(again[0].onHandQty.toString()), version: again[0].version };
-      }
-    }
-    throw err;
-  }
+  return { id: rows[0].id, onHandQty: new Prisma.Decimal(rows[0].onHandQty.toString()), version: rows[0].version };
 }
 
 /** 五元幂等预检：同五元 Movement 已存在 → 幂等重放（直接标 PROCESSED，不重复入账） */
@@ -283,46 +269,63 @@ async function findExistingMovement(
 
 /**
  * 处理单条 Outbox（**单事务**：Movement + Projection + Outbox PROCESSED 同事务）。
- * - 幂等：五元预检 → INSERT 时 P2002 兜底（防 lease 超时/重试双入账）；
+ * - lease fencing（CTO #7644 Blocking ①）：事务开始先验证 Outbox 仍由本 worker 持有
+ *   （status=PROCESSING AND lockedBy=workerId，FOR UPDATE 锁行）；不满足 → LEASE_LOST，
+ *   旧 worker 禁止继续业务处理（防 lease 回收后新旧 worker 并发穿透）；
+ * - 幂等：五元预检（快路径）→ INSERT ... ON CONFLICT DO NOTHING RETURNING（原子冲突语义，不制造 SQL error）；
  * - 锁五维 Projection（FOR UPDATE）→ OUT 检查 onHandQty >= quantity；
- * - 成功：INSERT Movement(COMMITTED) + UPSERT Projection + MARK Outbox PROCESSED；
+ * - 成功：INSERT Movement(COMMITTED) + UPSERT Projection + MARK Outbox PROCESSED（均带 ownership 条件）；
  * - 业务失败（库存不足）→ 抛 InventoryInsufficientStockError（外层转 RETRY/DEAD_LETTER）。
  */
 export async function consumeOutboxMessage(
   outboxId: string,
+  workerId: string,
   eventType: string,
   payload: unknown,
 ): Promise<ConsumeOutboxResult> {
   return prisma.$transaction(async (tx) => {
+    // Blocking ① lease fencing：事务开始验证 ownership 并锁 Outbox 行（防 lease 回收后旧 worker 继续处理）
+    const owned = await tx.$queryRaw<Array<{ id: string }>>(
+      Prisma.sql`SELECT "id" FROM "OutboxMessage"
+        WHERE "id" = ${outboxId} AND "status" = 'PROCESSING' AND "lockedBy" = ${workerId}
+        FOR UPDATE`,
+    );
+    if (owned.length === 0) {
+      return { outboxId, outcome: 'LEASE_LOST' as const };
+    }
+
     const parsed = parseAtomPayload(payload);
     if (!parsed.ok) {
-      // 永久失败：payload 非法 → DEAD_LETTER
-      await tx.outboxMessage.update({
-        where: { id: outboxId },
+      // 永久失败：payload 非法 → DEAD_LETTER（带 ownership 条件）
+      const upd = await tx.outboxMessage.updateMany({
+        where: { id: outboxId, status: 'PROCESSING', lockedBy: workerId },
         data: { status: 'DEAD_LETTER', lastError: `payload 非法: ${parsed.error}`, processedAt: new Date() },
       });
-      return { outboxId, outcome: 'DEAD_LETTER', error: parsed.error };
+      if (upd.count !== 1) return { outboxId, outcome: 'LEASE_LOST' as const };
+      return { outboxId, outcome: 'DEAD_LETTER' as const, error: parsed.error };
     }
     const atom = parsed.atom;
 
-    // resolve source（永久失败 → DEAD_LETTER）
+    // resolve source（永久失败 → DEAD_LETTER；带 ownership 条件）
     const src = await resolveSource(tx, atom.sourceType, atom.sourceId);
     if (!src.ok) {
-      await tx.outboxMessage.update({
-        where: { id: outboxId },
+      const upd = await tx.outboxMessage.updateMany({
+        where: { id: outboxId, status: 'PROCESSING', lockedBy: workerId },
         data: { status: 'DEAD_LETTER', lastError: src.error, processedAt: new Date() },
       });
-      return { outboxId, outcome: 'DEAD_LETTER', error: src.error };
+      if (upd.count !== 1) return { outboxId, outcome: 'LEASE_LOST' as const };
+      return { outboxId, outcome: 'DEAD_LETTER' as const, error: src.error };
     }
 
-    // 五元幂等：预检（快路径）——已存在 → 直接标 PROCESSED（幂等重放）
+    // 五元幂等：预检（快路径）——已存在 → 直接标 PROCESSED（幂等重放；带 ownership 条件）
     const existing = await findExistingMovement(tx, atom);
     if (existing) {
-      await tx.outboxMessage.update({
-        where: { id: outboxId },
+      const upd = await tx.outboxMessage.updateMany({
+        where: { id: outboxId, status: 'PROCESSING', lockedBy: workerId },
         data: { status: 'PROCESSED', processedAt: new Date(), lastError: null },
       });
-      return { outboxId, outcome: 'ALREADY_PROCESSED', movementId: existing.id, movementNo: existing.movementNo };
+      if (upd.count !== 1) return { outboxId, outcome: 'LEASE_LOST' as const };
+      return { outboxId, outcome: 'ALREADY_PROCESSED' as const, movementId: existing.id, movementNo: existing.movementNo };
     }
 
     // 锁五维 StockProjection（FOR UPDATE；**不用 dimensionKey 当身份**）
@@ -345,50 +348,57 @@ export async function consumeOutboxMessage(
     // movementNo 取号（同事务原子 increment）
     const movementNo = await nextInventoryMovementNo(tx);
 
-    // INSERT InventoryMovement(COMMITTED)（五元 UNIQUE 兜底幂等）
+    // Blocking ③：Movement INSERT 用 PG 原子冲突语义——ON CONFLICT (五元) DO NOTHING RETURNING id，
+    // 不制造 SQL error 再同事务恢复（P2002 catch 后事务已 aborted，不可恢复）
+    const inserted = await tx.$queryRaw<Array<{ id: string }>>(
+      Prisma.sql`INSERT INTO "InventoryMovement"
+        ("movementNo", "sourceType", "sourceId", "sourceLineId", "movementRole", "movementAtomKey",
+         "direction", "status", "movementType",
+         "warehouseId", "locationId", "itemId", "batchNo", "serialNo",
+         "mfgDate", "expDate", "quantity", "uomId", "referenceNo", "committedById", "committedAt", "remark")
+      VALUES (
+        ${movementNo},
+        ${atom.sourceType}::"InventoryMovementSourceType",
+        ${atom.sourceId},
+        ${atom.sourceLineId},
+        ${atom.movementRole}::"InventoryMovementRole",
+        ${atom.movementAtomKey},
+        ${atom.movementRole === 'IN' ? 'IN' : 'OUT'}::"InventoryMovementDirection",
+        'COMMITTED'::"InventoryMovementStatus",
+        ${atom.movementRole === 'IN' ? 'INBOUND' : 'OUTBOUND'}::"InventoryMovementType",
+        ${atom.warehouseId},
+        ${atom.locationId},
+        ${atom.itemId},
+        ${atom.batchNo},
+        ${atom.serialNo},
+        ${atom.mfgDate},
+        ${atom.expDate},
+        ${atom.quantity},
+        ${atom.uomId},
+        ${atom.referenceNo},
+        ${atom.actorId},
+        ${atom.occurredAt ? new Date(atom.occurredAt) : new Date()},
+        ${`Outbox ${eventType}`}
+      )
+      ON CONFLICT ("sourceType", "sourceId", "sourceLineId", "movementRole", "movementAtomKey") DO NOTHING
+      RETURNING "id"`,
+    );
+
     let movementId: string;
-    try {
-      const mv = await tx.inventoryMovement.create({
-        data: {
-          movementNo,
-          sourceType: atom.sourceType,
-          sourceId: atom.sourceId,
-          sourceLineId: atom.sourceLineId,
-          movementRole: atom.movementRole,
-          movementAtomKey: atom.movementAtomKey,
-          direction: atom.movementRole === 'IN' ? 'IN' : 'OUT',
-          status: 'COMMITTED',
-          movementType: atom.movementRole === 'IN' ? 'INBOUND' : 'OUTBOUND',
-          warehouseId: atom.warehouseId,
-          locationId: atom.locationId,
-          itemId: atom.itemId,
-          batchNo: atom.batchNo,
-          serialNo: atom.serialNo,
-          mfgDate: atom.mfgDate,
-          expDate: atom.expDate,
-          quantity: atom.quantity,
-          uomId: atom.uomId,
-          referenceNo: atom.referenceNo,
-          committedById: atom.actorId,
-          committedAt: atom.occurredAt ? new Date(atom.occurredAt) : new Date(),
-          remark: `Outbox ${eventType}`,
-        },
-        select: { id: true },
-      });
-      movementId = mv.id;
-    } catch (err) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        // 幂等兜底：并发/重试下五元键已存在 → 视为已处理，直接标 PROCESSED
-        const dup = await findExistingMovement(tx, atom);
-        if (dup) {
-          await tx.outboxMessage.update({
-            where: { id: outboxId },
-            data: { status: 'PROCESSED', processedAt: new Date(), lastError: null },
-          });
-          return { outboxId, outcome: 'ALREADY_PROCESSED', movementId: dup.id, movementNo: dup.movementNo };
-        }
+    if (inserted.length === 1) {
+      movementId = inserted[0].id;
+    } else {
+      // 幂等兜底：五元已存在（并发/重试）→ 查既有 Movement → 标 PROCESSED（带 ownership 条件）
+      const dup = await findExistingMovement(tx, atom);
+      if (!dup) {
+        throw new Error(`Movement ON CONFLICT DO NOTHING 未插入且五元预检未命中（不可达）：${outboxId}`);
       }
-      throw err;
+      const upd = await tx.outboxMessage.updateMany({
+        where: { id: outboxId, status: 'PROCESSING', lockedBy: workerId },
+        data: { status: 'PROCESSED', processedAt: new Date(), lastError: null },
+      });
+      if (upd.count !== 1) return { outboxId, outcome: 'LEASE_LOST' as const };
+      return { outboxId, outcome: 'ALREADY_PROCESSED' as const, movementId: dup.id, movementNo: dup.movementNo };
     }
 
     // UPSERT StockProjection（同事务：onHandQty += signedQty；version 乐观锁）
@@ -402,13 +412,14 @@ export async function consumeOutboxMessage(
       },
     });
 
-    // MARK Outbox PROCESSED（同事务——三件套原子提交）
-    await tx.outboxMessage.update({
-      where: { id: outboxId },
+    // MARK Outbox PROCESSED（同事务——三件套原子提交；带 ownership 条件）
+    const upd = await tx.outboxMessage.updateMany({
+      where: { id: outboxId, status: 'PROCESSING', lockedBy: workerId },
       data: { status: 'PROCESSED', processedAt: new Date(), lastError: null },
     });
+    if (upd.count !== 1) return { outboxId, outcome: 'LEASE_LOST' as const };
 
-    return { outboxId, outcome: 'PROCESSED', movementId, movementNo };
+    return { outboxId, outcome: 'PROCESSED' as const, movementId, movementNo };
   });
 }
 
@@ -420,29 +431,37 @@ export class InventoryInsufficientStockError extends Error {
   }
 }
 
-/** Outbox 回 PENDING + 指数退避（瞬时/业务失败重试）；attemptCount 超阈值 → DEAD_LETTER（永久失败） */
+/**
+ * Outbox 回 PENDING + 指数退避（瞬时/业务失败重试）；attemptCount 超阈值 → DEAD_LETTER（永久失败）。
+ * **带 ownership 条件（CTO #7644 Blocking ①）**：仅当前 worker（status=PROCESSING AND lockedBy=workerId）
+ * 能回滚/终结 lease；若 lease 已被回收（count≠1）→ LEASE_LOST，旧 worker 禁止改状态。
+ */
 async function markOutboxRetryOrDead(
   tx: Prisma.TransactionClient,
   outboxId: string,
+  workerId: string,
   error: string,
   attemptCount: number,
-): Promise<'RETRY' | 'DEAD_LETTER'> {
+): Promise<'RETRY' | 'DEAD_LETTER' | 'LEASE_LOST'> {
+  const ownership = { id: outboxId, status: 'PROCESSING' as const, lockedBy: workerId };
   if (attemptCount >= OUTBOX_MAX_ATTEMPTS) {
-    await tx.outboxMessage.update({
-      where: { id: outboxId },
+    const upd = await tx.outboxMessage.updateMany({
+      where: ownership,
       data: { status: 'DEAD_LETTER', lastError: error, processedAt: new Date() },
     });
+    if (upd.count !== 1) return 'LEASE_LOST';
     return 'DEAD_LETTER';
   }
   const backoffSeconds = Math.min(OUTBOX_RETRY_BASE_SECONDS * 2 ** (attemptCount - 1), OUTBOX_RETRY_CAP_SECONDS);
-  await tx.outboxMessage.update({
-    where: { id: outboxId },
+  const upd = await tx.outboxMessage.updateMany({
+    where: ownership,
     data: {
       status: 'PENDING',
       lastError: error,
       nextAttemptAt: new Date(Date.now() + backoffSeconds * 1000),
     },
   });
+  if (upd.count !== 1) return 'LEASE_LOST';
   return 'RETRY';
 }
 
@@ -490,13 +509,15 @@ export async function consumePendingOutboxBatch(limit: number = OUTBOX_BATCH_SIZ
   const results: ConsumeOutboxResult[] = [];
   for (const row of claimed) {
     try {
-      const r = await consumeOutboxMessage(row.id, row.eventType, row.payload);
+      // workerId 传入单条消费（CTO #7644 Blocking ① fencing）：事务内验证 status=PROCESSING AND lockedBy=workerId
+      const r = await consumeOutboxMessage(row.id, workerId, row.eventType, row.payload);
       results.push(r);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      // 业务失败（库存不足）→ retry/DEAD_LETTER；其他（瞬时技术失败）→ 同样回 PENDING 退避
+      // 业务失败（库存不足）→ retry/DEAD_LETTER；其他（瞬时技术失败）→ 同样回 PENDING 退避；
+      // 失败路径同样带 ownership 条件（仅 owner 能回滚 lease；已被回收 → LEASE_LOST）
       const outcome = await prisma.$transaction((tx) =>
-        markOutboxRetryOrDead(tx, row.id, msg, row.attemptCount),
+        markOutboxRetryOrDead(tx, row.id, workerId, msg, row.attemptCount),
       );
       results.push({ outboxId: row.id, outcome, error: msg });
     }
@@ -506,6 +527,7 @@ export async function consumePendingOutboxBatch(limit: number = OUTBOX_BATCH_SIZ
     processed: results.filter((r) => r.outcome === 'PROCESSED' || r.outcome === 'ALREADY_PROCESSED').length,
     retried: results.filter((r) => r.outcome === 'RETRY').length,
     deadLettered: results.filter((r) => r.outcome === 'DEAD_LETTER').length,
+    leaseLost: results.filter((r) => r.outcome === 'LEASE_LOST').length,
     results,
   };
 }
