@@ -634,3 +634,173 @@ export const purchaseOrderConvertSchema = z.object({
     )
     .optional(),
 });
+
+/** Sprint 5B：PurchaseReceipt（采购收货事实）schema（CTO Phase 2 Review 98/100 APPROVED 后开发）
+ * 设计依据：ADR-0024 + Sprint5B Field Matrix §1 + CTO #6923 Receive 8 条硬规则：
+ * - quantity = **物理到货毛数量**（>0）；0 <= rejectedOnReceiptQty <= quantity（规则④）；
+ *   **acceptedReceiptQty = quantity - rejectedOnReceiptQty**（服务端计算，客户端只提交毛数量与现场拒收）；
+ * - receivedQty / remainingReceiveQty **禁止客户端提交**（服务端唯一回写，规则⑦）；
+ * - fulfillmentType **不在此层**——以 PO Line 已确认的 fulfillmentType 为准（规则③，禁静默改）；
+ * - warehouseId 可空（仅 WAREHOUSE 收货场景使用；DIRECT_PROJECT 不要求，规则③）。
+ */
+
+/** PurchaseReceipt 行（客户端提交：purchaseOrderLineId + 物理到货毛数量 + 现场拒收/可见损坏 + 直送执行补充） */
+export const purchaseReceiptLineCreateSchema = z
+  .object({
+    purchaseOrderLineId: z.string().min(1), // 溯源 PO Line（行级溯源；服务端校验属于同一 PO——规则②）
+    quantity: z.coerce.number().positive(), // 物理到货毛数量 > 0（规则④）
+    visibleDamageQty: z.coerce.number().nonnegative().default(0), // 收货现场可见损坏
+    rejectedOnReceiptQty: z.coerce.number().nonnegative().default(0), // 现场即拒收（不计入 receivedQty）
+    // 直送执行补充（P4 Final：PO Line 已声明 DIRECT_PROJECT；此处记录实际执行结果；receivedBy/receivedAt 用 Header）
+    deliveryAddress: z.string().max(500).optional(),
+    receiver: z.string().max(200).optional(),
+    proof: z.string().max(500).optional(),
+    remark: z.string().max(500).optional(),
+  })
+  .refine((v) => v.rejectedOnReceiptQty <= v.quantity, {
+    message: 'rejectedOnReceiptQty 不能超过物理到货毛数量 quantity',
+    path: ['rejectedOnReceiptQty'],
+  });
+
+/** PurchaseReceipt 创建（DRAFT；普通收货不走审批——P1b Final；warehouseId 可空：仅 WAREHOUSE 场景） */
+export const purchaseReceiptCreateSchema = z.object({
+  purchaseOrderId: z.string().min(1),
+  warehouseId: z.string().min(1).optional(), // 公司仓库到货地点（仅 WAREHOUSE 收货场景；DIRECT_PROJECT 不要求）
+  remark: z.string().max(500).optional(),
+  lines: z.array(purchaseReceiptLineCreateSchema).min(1, '至少需要一行'),
+});
+
+/** PurchaseReceipt 更新（仅 DRAFT；version 乐观锁；行整体替换；receivedQty/remainingReceiveQty 禁客户端提交） */
+export const purchaseReceiptUpdateSchema = z.object({
+  version: z.number().int().positive(),
+  warehouseId: z.string().min(1).nullable().optional(),
+  remark: z.string().max(500).nullable().optional(),
+  lines: z.array(purchaseReceiptLineCreateSchema).min(1).optional(),
+});
+
+/** Sprint 5B - Inspection（质检唯一事实源，CTO #7045 97/100 APPROVED 后开发）
+ * - 创建：绑定已 RECEIVED 的 PurchaseReceiptLine + 检验模式（SKIP/SPOT/FULL）；
+ * - 数量在 complete 时定稿（SPOT/FULL 必提交 qualifiedQty/rejectedQty，服务端校验 = inspectableQty）；
+ * - SKIP 免检：complete 时服务端强制 QUALIFIED + qualifiedQty=inspectableQty + rejectedQty=0（不绕开 Inspection 记录）；
+ * - result 服务端推导（客户端不得传）；inspectableQty = quantity - rejectedOnReceiptQty（不含现场拒收）。
+ */
+
+/** Inspection 创建 */
+export const inspectionCreateSchema = z.object({
+  purchaseReceiptLineId: z.string().min(1),
+  inspectionMode: z.enum(['SKIP', 'SPOT', 'FULL']),
+  remark: z.string().max(500).optional(),
+});
+
+/** Inspection 更新（仅 PENDING；version 乐观锁；只允许改 inspectionMode/remark——数量在 complete 时定稿） */
+export const inspectionUpdateSchema = z.object({
+  version: z.number().int().positive(),
+  inspectionMode: z.enum(['SKIP', 'SPOT', 'FULL']).optional(),
+  remark: z.string().max(500).nullable().optional(),
+});
+
+/** Inspection 完成（真 Gate；SPOT/FULL 必须提交 qualifiedQty+rejectedQty，服务端校验 = inspectableQty；SKIP 免检服务端强制，数量忽略） */
+export const inspectionCompleteSchema = z.object({
+  version: z.number().int().positive(),
+  qualifiedQty: z.coerce.number().nonnegative().optional(),
+  rejectedQty: z.coerce.number().nonnegative().optional(),
+});
+
+/** Sprint 5B - WarehouseReceipt（采购入库事实，CTO Inspection API Final 98/100 APPROVED #7135 后开发；D10：Created ≠ Posted，只有 POSTED 才触发 6A InventoryMovement(IN)）
+ * - 入库行只能消费**已完成且 qualifiedQty > 0** 的 Inspection（组合 FK [inspectionId, purchaseReceiptLineId] 保证 Inspection 属于同一收货行）；
+ * - quantity <= 可入库余额（qualifiedQty - 已占用），累计入库不得超过 Inspection 可入库余额；
+ * - DIRECT_PROJECT（直送）禁入库（P4）；Warehouse-Location 必须同属；
+ * - POST 幂等（ALREADY_POSTED → 409）；DRAFT 创建/编辑不发领域事件（只有 POST 发 WarehouseReceiptPosted）；
+ * - 红线：5B 禁写 Stock/InventoryMovement（6A 唯一事实源）。
+ */
+
+/** 入库行（客户端提交：溯源收货行 + 已完成 Inspection + 数量 + P6 批次/序列号/效期采集） */
+export const warehouseReceiptLineCreateSchema = z.object({
+  purchaseReceiptLineId: z.string().min(1), // 溯源收货行（组合 FK 约束 Inspection 属于同一收货行）
+  inspectionId: z.string().min(1), // 质量结论（必须已完成且 qualifiedQty > 0）
+  quantity: z.coerce.number().positive(), // 入库数量（> 0；≤ 可入库余额，服务端校验）
+  // P6 Final：批次/序列号/效期 canonical capture point = 入库层采集
+  batchNo: z.string().max(100).optional(),
+  serialNos: z.array(z.string().max(100)).optional(),
+  mfgDate: z.string().max(50).optional(), // 生产日期（ISO 日期字符串，服务端转 Date）
+  expDate: z.string().max(50).optional(), // 有效期至（ISO 日期字符串，服务端转 Date）
+  remark: z.string().max(500).optional(),
+});
+
+/** 入库单创建（DRAFT；仓库必填；location 若提供必须属于同一 warehouse） */
+export const warehouseReceiptCreateSchema = z.object({
+  purchaseReceiptId: z.string().min(1),
+  warehouseId: z.string().min(1),
+  locationId: z.string().min(1).optional(),
+  remark: z.string().max(500).optional(),
+  lines: z.array(warehouseReceiptLineCreateSchema).min(1, '至少需要一行'),
+});
+
+/** 入库单更新（仅 DRAFT；version 乐观锁；行整体替换；warehouseId 模型必填不可清空、locationId 可空——组合 FK 同属校验） */
+export const warehouseReceiptUpdateSchema = z.object({
+  version: z.number().int().positive(),
+  warehouseId: z.string().min(1).optional(), // 模型必填非空 String：不可置 null
+  locationId: z.string().min(1).nullable().optional(),
+  remark: z.string().max(500).nullable().optional(),
+  lines: z.array(warehouseReceiptLineCreateSchema).min(1).optional(),
+});
+
+/** 入库过账（真 Gate：DRAFT → POSTED；version 乐观锁 + 幂等 ALREADY_POSTED） */
+export const warehouseReceiptPostSchema = z.object({
+  version: z.number().int().positive(),
+});
+
+/** Sprint 5B - PurchaseReturn（采购退货独立事实，CTO WarehouseReceipt Final Re-review 98/100 APPROVED #7219 后开发；P5 Final：非负 GR + 必须有真实来源 + disposition）
+ * - 三来源（exactly-one FK + API 强制匹配）：RECEIPT_LINE / WAREHOUSE_RECEIPT_LINE / INSPECTION；
+ *   RECEIPT_LINE / INSPECTION = 未入库退货（不碰库存）；WAREHOUSE_RECEIPT_LINE = 已入库退货（必须来自 POSTED 入库事实，**不得写 InventoryMovement(OUT)**）；
+ * - quantity > 0 且 ≤ 来源可退余额（Return Gate 锁内重算累计 RETURNED，防并发超退）；
+ * - disposition：REPLACE_REQUIRED（重开 PO 履约剩余）/ CREDIT_ONLY（不自动重开待交）；returnReason 必填；
+ * - RETURN 事务锁 + CAS + Audit + PurchaseReturned 事务后事件；DRAFT 创建/编辑不发领域事件；
+ * - 红线：5B 禁写 Stock/InventoryMovement（6A 唯一事实源）。
+ */
+
+/** 退货行（客户端提交：来源引用三选一 + 数量 + 处置 + 原因） */
+export const purchaseReturnLineCreateSchema = z
+  .object({
+    sourceRefType: z.enum(['RECEIPT_LINE', 'WAREHOUSE_RECEIPT_LINE', 'INSPECTION']),
+    sourcePurchaseReceiptLineId: z.string().min(1).optional(),
+    sourceWarehouseReceiptLineId: z.string().min(1).optional(),
+    sourceInspectionId: z.string().min(1).optional(),
+    quantity: z.coerce.number().positive(), // 退货数量（> 0；≤ 来源可退余额，服务端校验）
+    disposition: z.enum(['REPLACE_REQUIRED', 'CREDIT_ONLY']), // 必填（P5 Final / Blocking ②）
+    returnReason: z.string().min(1).max(500), // 退货原因必填
+    batchNo: z.string().max(100).optional(), // 已入库退货批次追溯（可空）
+    serialNos: z.array(z.string().max(100)).optional(),
+    remark: z.string().max(500).optional(),
+  })
+  .refine(
+    (v) =>
+      (v.sourceRefType === 'RECEIPT_LINE' && !!v.sourcePurchaseReceiptLineId) ||
+      (v.sourceRefType === 'WAREHOUSE_RECEIPT_LINE' && !!v.sourceWarehouseReceiptLineId) ||
+      (v.sourceRefType === 'INSPECTION' && !!v.sourceInspectionId),
+    {
+      message: 'sourceRefType 必须与对应来源 FK 匹配（exactly-one 非空）',
+      path: ['sourceRefType'],
+    },
+  );
+
+/** 退货单创建（DRAFT；来源必须属于该 PO） */
+export const purchaseReturnCreateSchema = z.object({
+  purchaseOrderId: z.string().min(1),
+  returnType: z.enum(['REJECTED_ON_RECEIPT', 'RETURN_AFTER_STOCK_IN', 'QUALITY_ISSUE']),
+  remark: z.string().max(500).optional(),
+  lines: z.array(purchaseReturnLineCreateSchema).min(1, '至少需要一行'),
+});
+
+/** 退货单更新（仅 DRAFT；version 乐观锁；行整体替换；来源/数量重新校验） */
+export const purchaseReturnUpdateSchema = z.object({
+  version: z.number().int().positive(),
+  returnType: z.enum(['REJECTED_ON_RECEIPT', 'RETURN_AFTER_STOCK_IN', 'QUALITY_ISSUE']).optional(),
+  remark: z.string().max(500).nullable().optional(),
+  lines: z.array(purchaseReturnLineCreateSchema).min(1).optional(),
+});
+
+/** 退货完成（真 Gate：DRAFT → RETURNED；version 乐观锁 + 幂等 ALREADY_RETURNED） */
+export const purchaseReturnReturnSchema = z.object({
+  version: z.number().int().positive(),
+});

@@ -181,6 +181,9 @@ enum DocumentType {
   JOURNAL // 日记账
   CONTRACT // 合同
   PROJECT // 项目
+  PURCHASE_RECEIPT // 采购收货单 REC（Sprint 5B 新增）
+  WAREHOUSE_RECEIPT // 采购入库单 WHR（Sprint 5B 新增）
+  PURCHASE_RETURN // 采购退货单 PRT（Sprint 5B 新增）
 }
 
 /// Platform user account. Identity and credential record.
@@ -196,6 +199,10 @@ model User {
   auditLogs    AuditLog[]
   purchaseRequisitions PurchaseRequisition[] // 5A：采购申请（requesterId 方向）
   purchaseOrders PurchaseOrder[] // 5A：采购订单（purchaserId 方向，采购员；CTO Phase 4B 指令）
+  receivedPurchaseReceipts PurchaseReceipt[] // 5B：收货单（receivedById 方向，收货员）
+  inspectedInspections Inspection[] // 5B：检验（inspectedById 方向，质检员）
+  postedWarehouseReceipts WarehouseReceipt[] @relation("WarehouseReceiptPostedBy") // 5B：入库单（postedById 方向，过账人 D10）
+  returnedPurchaseReturns PurchaseReturn[] // 5B：退货单（returnedById 方向，经办人）
   createdAt    DateTime    @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime    @updatedAt @db.Timestamptz(3)
 
@@ -323,6 +330,9 @@ model UnitOfMeasure {
   creditDebitNoteLines CreditDebitNoteLine[] // 4E-3：调整单明细（CreditDebitNoteLine.uom 方向）
   purchaseRequisitionLines PurchaseRequisitionLine[] // 5A：采购申请行（PurchaseRequisitionLine.uom 方向）
   purchaseOrderLines PurchaseOrderLine[] // 5A：采购订单行（PurchaseOrderLine.uom 方向）
+  purchaseReceiptLines PurchaseReceiptLine[] // 5B：收货行（PurchaseReceiptLine.uom 方向）
+  warehouseReceiptLines WarehouseReceiptLine[] // 5B：入库行（WarehouseReceiptLine.uom 方向）
+  purchaseReturnLines PurchaseReturnLine[] // 5B：退货行（PurchaseReturnLine.uom 方向）
   createdAt     DateTime @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 
@@ -404,6 +414,9 @@ model Item {
   creditDebitNoteLines CreditDebitNoteLine[] // 4E-3：调整单明细（CreditDebitNoteLine.item 方向）
   purchaseRequisitionLines PurchaseRequisitionLine[] // 5A：采购申请行（PurchaseRequisitionLine.item 方向）
   purchaseOrderLines PurchaseOrderLine[] // 5A：采购订单行（PurchaseOrderLine.item 方向）
+  purchaseReceiptLines PurchaseReceiptLine[] // 5B：收货行（PurchaseReceiptLine.item 方向）
+  warehouseReceiptLines WarehouseReceiptLine[] // 5B：入库行（WarehouseReceiptLine.item 方向）
+  purchaseReturnLines PurchaseReturnLine[] // 5B：退货行（PurchaseReturnLine.item 方向）
   createdAt     DateTime        @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime        @updatedAt @db.Timestamptz(3)
 
@@ -1117,6 +1130,7 @@ model Project {
   tags               ProjectTag[]
   quotations         Quotation[]
   salesOrders         SalesOrder[]
+  purchaseOrderLines  PurchaseOrderLine[] // 5B：直送 PO 行（PurchaseOrderLine.project 方向，P4 Final）
   isActive           Boolean             @default(true)
   createdById        String?
   updatedById        String?
@@ -2824,6 +2838,8 @@ model Supplier {
   certificates  SupplierCertificate[]
   settlements   SupplierSettlement[]
   purchaseOrders PurchaseOrder[] // 5A：采购订单（PurchaseOrder.supplierId 方向）
+  purchaseReceipts PurchaseReceipt[] // 5B：收货单（PurchaseReceipt.supplierId 方向，快照自 PO）
+  purchaseReturns PurchaseReturn[] // 5B：退货单（PurchaseReturn.supplierId 方向，快照自 PO）
   isActive      Boolean  @default(true)
   createdById   String?
   updatedById   String?
@@ -4592,6 +4608,8 @@ model PurchaseOrder {
   lines     PurchaseOrderLine[]
   revisions PurchaseOrderRevision[]
   snapshots PurchaseOrderSnapshot[]
+  purchaseReceipts PurchaseReceipt[] // 5B：收货单（PurchaseReceipt.purchaseOrderId 方向）
+  purchaseReturns PurchaseReturn[] // 5B：退货单（PurchaseReturn.purchaseOrderId 方向）
 
   @@index([code])
   @@index([supplierId])
@@ -4633,6 +4651,13 @@ model PurchaseOrderLine {
   // 收货投影（5B GR 聚合回写，只读；**5A 禁止客户端修改，5B 才是唯一回写方**——拍板调整③）
   receivedQty  Decimal  @default(0) @db.Decimal(18, 4) // 已收货量（5B 累计）
   remainingReceiveQty Decimal @db.Decimal(18, 4) // 剩余可收量 = quantity - receivedQty（创建时服务端初始化=quantity）
+  // 履约类型（P4 Final：PO Line 预先声明；Confirm PO 时明确入仓还是直送）
+  fulfillmentType PurchaseOrderFulfillmentType @default(WAREHOUSE)
+  projectId String? // 直送项目（DIRECT_PROJECT 必填，预声明）
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  // 超收容差 override（P2 Final：System Default = 0%；PO Line 可配置；null = 按 Supplier/Item/System 配置回退）
+  overReceiptToleranceRate Decimal? @db.Decimal(8, 6) // Minor ①：0.050000 = 5%（rate 单位，非百分数整数；Schema/API/OpenAPI/QA 唯一单位定义）
+  purchaseReceiptLines PurchaseReceiptLine[] // 5B：收货行（PurchaseReceiptLine.purchaseOrderLineId 方向）
   // 统一审计字段
   isActive    Boolean  @default(true)
   createdById String?
@@ -4649,6 +4674,7 @@ model PurchaseOrderLine {
   @@index([sourcePurchaseRequisitionLineId])
   @@index([itemId])
   @@index([sourcePartnerPriceId])
+  @@index([projectId])
   @@index([deletedAt])
 }
 
@@ -4700,5 +4726,362 @@ model PurchaseOrderSnapshot {
 
   @@unique([purchaseOrderId, snapshotType, revisionNo])
   @@index([purchaseOrderId])
+  @@index([deletedAt])
+}
+
+// ============================================================
+// Sprint 5B：采购收货与入库（Goods Receipt Inbound）
+// 事实链：PO CONFIRMED → PurchaseReceipt（到货/收货现场事实）→ Inspection（QC 唯一事实源）
+//        → WarehouseReceipt（采购入库事实）→ 6A InventoryMovement(IN)（库存唯一事实源）
+// 红线：5B 永不直接写库存余额；Stock/InventoryMovement/InventoryBalance 属 6A；
+//       Supplier Invoice/AP/三单匹配 属 5C；直送（DIRECT_PROJECT）不入库、无 InventoryMovement(IN)
+// 设计依据：ADR-0024（Approved with Changes）、Sprint5B Field Matrix / Gate / Pending Decisions（P1-P10 Final）
+// ============================================================
+
+/// 履约类型（P4 Final：PO Line 预先声明；Confirm PO 时明确入仓还是直送）
+enum PurchaseOrderFulfillmentType {
+  WAREHOUSE // 采购入仓
+  DIRECT_PROJECT // 供应商直送项目现场（不入库、无 InventoryMovement(IN)）
+}
+
+/// 收货单状态（P1b Final：普通收货是事实记录，不走审批；超收/特殊退货才走 Workflow）
+enum PurchaseReceiptStatus {
+  DRAFT
+  RECEIVED
+  CANCELLED
+}
+
+/// 检验模式（P3 Final：SKIP/SPOT/FULL；免检 = SKIP + QUALIFIED，不绕过 Inspection）
+enum InspectionMode {
+  SKIP
+  SPOT
+  FULL
+}
+
+/// 检验结论（P3 Final）
+enum InspectionResult {
+  QUALIFIED
+  PARTIAL
+  REJECTED
+  PENDING // 待检 = 未获得入库资格
+}
+
+/// 入库单状态（D10：Created ≠ Posted；只有 POSTED 才触发 6A InventoryMovement(IN)）
+enum WarehouseReceiptStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
+/// 退货类型（P5 Final）
+enum PurchaseReturnType {
+  REJECTED_ON_RECEIPT // 收货拒收
+  RETURN_AFTER_STOCK_IN // 入库后退货
+  QUALITY_ISSUE // 质量问题
+}
+
+/// 退货单状态（P1b Final：普通退货不审批；特殊退货走 Workflow）
+enum PurchaseReturnStatus {
+  DRAFT
+  RETURNED
+  CANCELLED
+}
+
+/// 退货来源引用类型（P5 Final：必须有来源）
+enum PurchaseReturnSourceType {
+  RECEIPT_LINE
+  WAREHOUSE_RECEIPT_LINE
+  INSPECTION
+}
+
+/// 退货履约处置（P5 Final / Blocking ②：防止 PO/退货/AP 互相打架）
+enum PurchaseReturnDisposition {
+  REPLACE_REQUIRED // 供应商仍欠货，重新增加履约剩余待交数量
+  CREDIT_ONLY // 采购数量最终减少/财务冲减，PO 不一定重新待收
+}
+
+/// 仓库（5B 建最小主数据，P8 Final；库存能力扩展属 6A）
+model Warehouse {
+  id       String   @id @default(cuid())
+  code     String   @unique // 仓库编码
+  name     String // 仓库名称
+  type     String? // 仓库类型
+  address  String?
+  remark   String?
+  isActive Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version  Int      @default(1)
+  deletedAt DateTime?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  locations WarehouseLocation[]
+  purchaseReceipts PurchaseReceipt[] // 到货地点方向（PurchaseReceipt.warehouseId）
+  warehouseReceipts WarehouseReceipt[] // 入库仓库方向（WarehouseReceipt.warehouseId）
+
+  @@index([code])
+  @@index([deletedAt])
+}
+
+/// 库位（5B 建最小主数据，P8 Final）
+model WarehouseLocation {
+  id         String   @id @default(cuid())
+  warehouseId String
+  warehouse  Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  code       String // 库位编码
+  name       String
+  isActive   Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version    Int      @default(1)
+  deletedAt  DateTime?
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+
+  warehouseReceipts WarehouseReceipt[] // 入库单库位方向（WarehouseReceipt.locationId，可空）
+
+  @@unique([warehouseId, code])
+  @@unique([id, warehouseId]) // 支持 WarehouseReceipt 组合 FK（Minor ②：location 必须属于同一 warehouse）
+  @@index([warehouseId])
+  @@index([deletedAt])
+}
+
+/// 收货单（到货/收货现场事实；Blocking ③：只保留现场事实，不承载 QC）
+model PurchaseReceipt {
+  id       String   @id @default(cuid())
+  code     String   @unique // 收货单号（DocumentSequence docType=PURCHASE_RECEIPT，前缀 REC/GRN-）
+  purchaseOrderId String
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  supplierId String // 供应商快照自 PO（不单独校验）
+  supplier  Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  warehouseId String? // 公司仓库到货地点，仅 WAREHOUSE 收货场景使用（Blocking ①：DIRECT_PROJECT 直送不使用 warehouse）
+  warehouse Warehouse? @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  status   PurchaseReceiptStatus @default(DRAFT)
+  receivedAt DateTime? @db.Timestamptz(3)
+  receivedById String?
+  receivedBy User? @relation(fields: [receivedById], references: [id], onDelete: SetNull)
+  remark   String?
+  isActive Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version  Int      @default(1)
+  deletedAt DateTime?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  lines PurchaseReceiptLine[]
+  warehouseReceipts WarehouseReceipt[]
+
+  @@index([code])
+  @@index([purchaseOrderId])
+  @@index([supplierId])
+  @@index([warehouseId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+/// 收货行（Blocking ③：只保留收货现场事实；质量判定统一归 Inspection）
+model PurchaseReceiptLine {
+  id       String   @id @default(cuid())
+  purchaseReceiptId String
+  purchaseReceipt PurchaseReceipt @relation(fields: [purchaseReceiptId], references: [id], onDelete: Cascade)
+  purchaseOrderLineId String // 行级溯源
+  purchaseOrderLine PurchaseOrderLine @relation(fields: [purchaseOrderLineId], references: [id], onDelete: Restrict)
+  lineNo   Int      @default(10)
+  itemId   String?
+  item     Item?    @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  quantity Decimal  @db.Decimal(18, 4) // 物理到货数量（arrivedQty；可 <、=、> PO 订购量，超收见容差）
+  uomId    String?
+  uom      UnitOfMeasure? @relation(fields: [uomId], references: [id], onDelete: SetNull)
+  visibleDamageQty Decimal @default(0) @db.Decimal(18, 4) // 收货现场可见损坏
+  rejectedOnReceiptQty Decimal @default(0) @db.Decimal(18, 4) // 现场即拒收（不计入 PO receivedQty）
+  // 直送执行补充（P4 Final：PO Line 已声明 DIRECT_PROJECT；此处只记录实际执行结果）
+  deliveryAddress String? // 直送地址 / site
+  receiver String? // 现场接收人
+  proof    String? // 签收证明 / attachment reference
+  remark   String?
+  isActive Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version  Int      @default(1)
+  deletedAt DateTime?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  inspections Inspection[]
+  warehouseReceiptLines WarehouseReceiptLine[]
+  purchaseReturnLines PurchaseReturnLine[] // 反向：退货行来源（Blocking ③）
+
+  @@unique([purchaseReceiptId, lineNo])
+  @@index([purchaseReceiptId])
+  @@index([purchaseOrderLineId])
+  @@index([itemId])
+  @@index([deletedAt])
+}
+
+/// 检验（QC 唯一事实源，Blocking ③ / P3 Final；免检 = SKIP + QUALIFIED，不绕过 Inspection）
+model Inspection {
+  id       String   @id @default(cuid())
+  purchaseReceiptLineId String @unique // CTO #7115 Blocking：一个 PurchaseReceiptLine 只有一个最终 Inspection（业务不变量落数据库，并发 Create 由 DB unique 拒绝）
+  purchaseReceiptLine PurchaseReceiptLine @relation(fields: [purchaseReceiptLineId], references: [id], onDelete: Cascade)
+  inspectionMode InspectionMode // SKIP/SPOT/FULL
+  result   InspectionResult @default(PENDING)
+  qualifiedQty Decimal @default(0) @db.Decimal(18, 4) // 合格数量（合格入库 ceiling）
+  rejectedQty Decimal @default(0) @db.Decimal(18, 4) // 拒收数量（→ PurchaseReturn）
+  inspectedById String?
+  inspectedBy User? @relation(fields: [inspectedById], references: [id], onDelete: SetNull)
+  inspectedAt DateTime? @db.Timestamptz(3)
+  remark   String?
+  warehouseReceiptLines WarehouseReceiptLine[] // 反向：入库行引用（Blocking ②）
+  purchaseReturnLines PurchaseReturnLine[] // 反向：退货行来源（Blocking ③）
+  isActive Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version  Int      @default(1)
+  deletedAt DateTime?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([id, purchaseReceiptLineId]) // Schema Integrity B①：支持 WarehouseReceiptLine 组合 FK（Inspection 必须属于同一收货行）
+  @@index([purchaseReceiptLineId])
+  @@index([inspectedById])
+  @@index([deletedAt])
+}
+
+/// 入库单（采购入库事实；D10：Created ≠ Posted，只有 POSTED 才触发 6A InventoryMovement(IN)）
+model WarehouseReceipt {
+  id       String   @id @default(cuid())
+  code     String   @unique // 入库单号（DocumentSequence docType=WAREHOUSE_RECEIPT，前缀 IN/WHR-）
+  purchaseReceiptId String
+  purchaseReceipt PurchaseReceipt @relation(fields: [purchaseReceiptId], references: [id], onDelete: Restrict)
+  warehouseId String // 入库仓库（必填）
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  locationId String? // 库位（可空；Minor ②：组合 FK 保证 location 属于同一 warehouse）
+  location  WarehouseLocation? @relation(fields: [locationId, warehouseId], references: [id, warehouseId], onDelete: Restrict) // Schema Integrity B②：组合 FK 用 Restrict（SET NULL 会尝试置空 NOT NULL warehouseId）
+  status   WarehouseReceiptStatus @default(DRAFT)
+  postedAt DateTime? @db.Timestamptz(3) // 过账时间（D10：Created ≠ Posted，只有 POSTED 触发 InventoryMovement(IN)）
+  postedById String?
+  postedBy User? @relation("WarehouseReceiptPostedBy", fields: [postedById], references: [id], onDelete: SetNull)
+  remark   String?
+  isActive Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version  Int      @default(1)
+  deletedAt DateTime?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  lines WarehouseReceiptLine[]
+
+  @@index([code])
+  @@index([purchaseReceiptId])
+  @@index([warehouseId])
+  @@index([locationId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+/// 入库行（P6 Final：批次/序列号/效期 canonical capture point = 入库层采集）
+model WarehouseReceiptLine {
+  id       String   @id @default(cuid())
+  warehouseReceiptId String
+  warehouseReceipt WarehouseReceipt @relation(fields: [warehouseReceiptId], references: [id], onDelete: Cascade)
+  purchaseReceiptLineId String // 溯源收货行
+  purchaseReceiptLine PurchaseReceiptLine @relation(fields: [purchaseReceiptLineId], references: [id], onDelete: Restrict)
+  inspectionId String // 质量结论引用（Blocking ②：入库必须来自已完成、具有合格数量的 Inspection；累计 posted qty ≤ qualifiedQty；Schema Integrity B①：组合 FK 保证 Inspection 属于同一收货行）
+  inspection Inspection @relation(fields: [inspectionId, purchaseReceiptLineId], references: [id, purchaseReceiptLineId], onDelete: Restrict)
+  itemId   String?
+  item     Item?    @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  quantity Decimal  @db.Decimal(18, 4) // 入库数量（≤ 合格数量，逐层 ceiling）
+  uomId    String?
+  uom      UnitOfMeasure? @relation(fields: [uomId], references: [id], onDelete: SetNull)
+  batchNo  String? // 批次号（P6 Final）
+  serialNos String[] @default([]) // 序列号列表（P6 Final）
+  mfgDate  DateTime? @db.Date // 生产日期（P6 Final）
+  expDate  DateTime? @db.Date // 有效期至（P6 Final）
+  remark   String?
+  purchaseReturnLines PurchaseReturnLine[] // 反向：退货行来源（Blocking ③）
+  isActive Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version  Int      @default(1)
+  deletedAt DateTime?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([warehouseReceiptId])
+  @@index([purchaseReceiptLineId])
+  @@index([inspectionId])
+  @@index([itemId])
+  @@index([deletedAt])
+}
+
+/// 退货单（采购退货独立事实，P5 Final：非负 GR；必须有来源 + disposition）
+model PurchaseReturn {
+  id       String   @id @default(cuid())
+  code     String   @unique // 退货单号（DocumentSequence docType=PURCHASE_RETURN，前缀 PRT-）
+  purchaseOrderId String
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  supplierId String // 供应商快照自 PO
+  supplier  Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  returnType PurchaseReturnType // REJECTED_ON_RECEIPT / RETURN_AFTER_STOCK_IN / QUALITY_ISSUE
+  status   PurchaseReturnStatus @default(DRAFT)
+  returnedAt DateTime? @db.Timestamptz(3)
+  returnedById String?
+  returnedBy User? @relation(fields: [returnedById], references: [id], onDelete: SetNull)
+  remark   String?
+  isActive Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version  Int      @default(1)
+  deletedAt DateTime?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  lines PurchaseReturnLine[]
+
+  @@index([code])
+  @@index([purchaseOrderId])
+  @@index([supplierId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+/// 退货行（P5 Final：必须有来源——三个真实 FK 之一非空且与 sourceRefType 匹配，exactly-one 由 API+QA 强制；disposition 必填）
+model PurchaseReturnLine {
+  id       String   @id @default(cuid())
+  purchaseReturnId String
+  purchaseReturn PurchaseReturn @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
+  sourceRefType PurchaseReturnSourceType // RECEIPT_LINE / WAREHOUSE_RECEIPT_LINE / INSPECTION（业务类型，与 exactly-one FK 匹配）
+  sourcePurchaseReceiptLineId String? // Blocking ③：三个真实 FK 之一，exactly-one 非空且与 sourceRefType 匹配（API+QA 强制）
+  sourcePurchaseReceiptLine PurchaseReceiptLine? @relation(fields: [sourcePurchaseReceiptLineId], references: [id], onDelete: Restrict) // Schema Integrity B②：来源已成为退货事实则不得物理删除
+  sourceWarehouseReceiptLineId String?
+  sourceWarehouseReceiptLine WarehouseReceiptLine? @relation(fields: [sourceWarehouseReceiptLineId], references: [id], onDelete: Restrict)
+  sourceInspectionId String?
+  sourceInspection Inspection? @relation(fields: [sourceInspectionId], references: [id], onDelete: Restrict)
+  itemId   String?
+  item     Item?    @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  quantity Decimal  @db.Decimal(18, 4) // 退货数量（> 0，≤ 可退数量防超退）
+  uomId    String?
+  uom      UnitOfMeasure? @relation(fields: [uomId], references: [id], onDelete: SetNull)
+  batchNo  String? // 批次（已入库退货追溯，可空）
+  serialNos String[] @default([]) // 序列号（已入库退货追溯，可空）
+  disposition PurchaseReturnDisposition // REPLACE_REQUIRED / CREDIT_ONLY（必填）
+  returnReason String // 退货原因（必填）
+  remark   String?
+  isActive Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version  Int      @default(1)
+  deletedAt DateTime?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([purchaseReturnId])
+  @@index([sourcePurchaseReceiptLineId])
+  @@index([sourceWarehouseReceiptLineId])
+  @@index([sourceInspectionId])
+  @@index([itemId])
   @@index([deletedAt])
 }

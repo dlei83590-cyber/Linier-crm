@@ -121,6 +121,12 @@ const SEED_ACTION_MODULES = [
   // Sprint 5A：Purchase Requisition & Purchase Order Foundation 模块（动作映射：create→purchase-requisition:create / purchase-order:create（创建即取号）；submit→purchase-requisition:edit / purchase-order:edit（复用统一 RBAC，**不新造 submit/confirm 权限体系**——CTO 拍板：Workflow Approval 权限与 PO Confirm 业务动作不是同一事实概念，领域代码不得把 APPROVED 当作自动 CONFIRMED）；approve→purchase-requisition:approve / purchase-order:approve；cancel DRAFT→purchase-requisition:close / purchase-order:close；line 仅 view/edit、revision/snapshot 只读 view——见 SEED_RESTRICTED_ACTION_PERMISSIONS）
   "purchase-requisition",
   "purchase-order",
+  // Sprint 5B：Goods Receipt Inbound 模块（动作映射：create→warehouse:create / purchase-receipt:create（创建即取号）/ inspection:create / warehouse-receipt:create / purchase-return:create；普通收货/退货不走审批（P1b Final），超收/特殊退货走 Workflow（复用统一 RBAC，不新造 submit 体系——对齐 5A 拍板）；approve→purchase-receipt:approve / purchase-return:approve（超收/特殊退货审批）；cancel DRAFT→*:close；warehouse-location 与各 line 仅 view/edit——见 SEED_RESTRICTED_ACTION_PERMISSIONS）
+  "warehouse",
+  "purchase-receipt",
+  "inspection",
+  "warehouse-receipt",
+  "purchase-return",
   // Sprint 3A：平台底座模块
   "workflow-definition",
   "workflow-step",
@@ -166,6 +172,15 @@ const SEED_RESTRICTED_ACTION_PERMISSIONS: Array<{ name: string; code: string; mo
   { name: "edit purchase-order-line", code: "purchase-order-line:edit", module: "purchase-order-line" },
   { name: "view purchase-order-revision", code: "purchase-order-revision:view", module: "purchase-order-revision" },
   { name: "view purchase-order-snapshot", code: "purchase-order-snapshot:view", module: "purchase-order-snapshot" },
+  // Sprint 5B：Goods Receipt Inbound 子资源（warehouse-location 由 Warehouse 驱动；各 line 由单据驱动，客户端不直接改行——对齐 5A line 模式）
+  { name: "view warehouse-location", code: "warehouse-location:view", module: "warehouse-location" },
+  { name: "edit warehouse-location", code: "warehouse-location:edit", module: "warehouse-location" },
+  { name: "view purchase-receipt-line", code: "purchase-receipt-line:view", module: "purchase-receipt-line" },
+  { name: "edit purchase-receipt-line", code: "purchase-receipt-line:edit", module: "purchase-receipt-line" },
+  { name: "view warehouse-receipt-line", code: "warehouse-receipt-line:view", module: "warehouse-receipt-line" },
+  { name: "edit warehouse-receipt-line", code: "warehouse-receipt-line:edit", module: "warehouse-receipt-line" },
+  { name: "view purchase-return-line", code: "purchase-return-line:view", module: "purchase-return-line" },
+  { name: "edit purchase-return-line", code: "purchase-return-line:edit", module: "purchase-return-line" },
 ];
 
 const SEED_UNITS = [
@@ -473,6 +488,10 @@ const SEED_DOCUMENT_SEQUENCES = [
   { code: "PO", name: "采购订单", docType: "PURCHASE_ORDER", prefix: "PO", nextNo: 1, padLength: 6 },
   // Sprint 5A：Purchase Requisition 单据序列（docType=PURCHASE_REQUISITION 为 5A 新增，prefix PR，padLength 6；幂等 upsert——仅补 PR，PO 序列复用上方已有，**禁止重复 seed**）
   { code: "PR", name: "采购申请", docType: "PURCHASE_REQUISITION", prefix: "PR", nextNo: 1, padLength: 6 },
+  // Sprint 5B：Goods Receipt Inbound 单据序列（docType=PURCHASE_RECEIPT / WAREHOUSE_RECEIPT / PURCHASE_RETURN 为 5B 新增，prefix REC / WHR / PRT，padLength 6；幂等 upsert——创建即取号，P10 Final 命名）
+  { code: "REC", name: "采购收货单", docType: "PURCHASE_RECEIPT", prefix: "REC", nextNo: 1, padLength: 6 },
+  { code: "WHR", name: "采购入库单", docType: "WAREHOUSE_RECEIPT", prefix: "WHR", nextNo: 1, padLength: 6 },
+  { code: "PRT", name: "采购退货单", docType: "PURCHASE_RETURN", prefix: "PRT", nextNo: 1, padLength: 6 },
   { code: "PI", name: "形式发票", docType: "PROFORMA_INVOICE", prefix: "PI", nextNo: 1, padLength: 6 },
   { code: "CI", name: "商业发票", docType: "COMMERCIAL_INVOICE", prefix: "CI", nextNo: 1, padLength: 6 },
   // Sprint 4C：Delivery Foundation 单据序列（CTO 锁定：DELIVERY_ORDER / prefix DO / padLength 6；幂等 upsert）

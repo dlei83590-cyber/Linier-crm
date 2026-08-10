@@ -16,7 +16,7 @@
 | Sprint 2 | Master Data（主数据） | ✅ Closed | Release v0.2.0-alpha（2A+2B+2C） |
 | Sprint 3 | ERP Foundation（ERP 底座） | ✅ Closed | 3A Workflow Foundation ✅（v0.3.0-alpha）+ 3B Platform Capabilities ✅（v0.4.0-alpha）+ 3C Business Foundation ✅（v0.5.0-alpha，3C-1~3C-5 全部完成） |
 | Sprint 4 | Sales（销售） | ✅ | 4A Quotation Foundation ✅（PR #12）；4B Sales Order Foundation ✅（PR #13）；4C Delivery Foundation ✅（PR #14）；4D Invoice Foundation ✅（PR #15 已合并）；4E-1 Accounts Receivable ✅（PR #16 已合并）；4E-2 Receipt/Payment Allocation ✅（PR #17 已合并）；4E-3 Credit/Debit Note ✅（PR #18 已合并，CTO Final Review 99/100 APPROVE & MERGE）；**已发布 v0.6.0-alpha**（2026-08-08，annotated tag，GitHub Pre-release） |
-| Sprint 5 | Purchase（采购） | 🔄 | **5A PR+PO Foundation ✅**（PR #19 待 CTO Final Review：Schema/Migration 0021+0022 / Seed+RBAC / PR API / PO API（Create/Convert/Query/PATCH/Submit/Confirm/Cancel）/ Workflow 接入；QA/Test Cases/OpenAPI/EVENTS v1.17 已同步；CI 全绿）；5B GRN / 5C Supplier Invoice / Payment 未开始（待 China ERP Process & Field Gate） |
+| Sprint 5 | Purchase（采购） | 🔄 | **5A PR+PO Foundation ✅**（PR #19 已合并）；**5B Goods Receipt & Inbound ✅**（PR #20 待 CTO Final Review：Schema/Migration 0023 / Seed+RBAC / PurchaseReceipt / Inspection / WarehouseReceipt / PurchaseReturn 四模块全链 API + PO 履约投影 reopen；QA/Test Cases/OpenAPI/EVENTS v1.23 已同步；CI 全绿 @ b4c2170）；**CTO PurchaseReturn FINAL APPROVED 98/100（#7303）——Sprint 5B 核心事实链 CLOSED**；5C Supplier Invoice / Payment 未开始 |
 | Sprint 6 | Inventory（库存） | ⬜ | Warehouse/Stock/Batch/Movement/Count/Transfer |
 | Sprint 7 | Finance（财务） | ⬜ | AR/AP/Expense/Voucher/Journal/GL/Profit/Cash Flow |
 | Sprint 8 | BI（商业智能） | ⬜ | 报表 / Dashboard / 数据分析 |
@@ -160,7 +160,7 @@
 
 ---
 
-## 7. Sprint 5：Purchase（采购）🔄（5A 完成，5B/5C 未开始）
+## 7. Sprint 5：Purchase（采购）🔄（5A ✅ 已合并，5B ✅ 待 Final Review，5C 未开始）
 
 ### 5A — Purchase Requisition & Purchase Order Foundation ✅（PR #19，2026-08-09）
 
@@ -173,7 +173,7 @@
 | 溯源 | sourceType=REQUISITION\|DIRECT；行级 sourcePurchaseRequisitionLineId（REQUISITION 必填三条件校验 / DIRECT 禁止） | ✅ 完成 |
 | 采购员/部门 | PO Header +purchaserId/departmentId（Migration 0022；中国采购分析与报表维度） | ✅ 完成 |
 | Snapshot/Revision | PO Snapshot 唯一约束 [purchaseOrderId, snapshotType, revisionNo]（多轮审批不冲突）；CONFIRMED Snapshot + Revision 留痕 | ✅ 完成 |
-| GRN | 收货单（GRN，入库触发库存） | ⬜ 未开始（5B；需先过 China ERP Process & Field Gate） |
+| GRN | 收货单（GRN，入库触发库存） | ✅ 完成（5B：PurchaseReceipt 到货/收货事实 + Inspection 质检唯一事实 + WarehouseReceipt 入库事实（D10：Created ≠ Posted，只有 Posted 才触发 6A InventoryMovement(IN)）+ PurchaseReturn 退货独立事实；**5B 全程 0 写 Stock/InventoryMovement**（6A 唯一事实源）） |
 | Supplier Invoice | 供应商发票（应付挂账） | ⬜ 未开始（5C；区分 Supplier Invoice Fact / 中国增值税发票 Tax Invoice；已收未票→暂估应付→到票→三单匹配→进项税→AP） |
 | Payment | 付款（核销应付） | ⬜ 未开始（7B） |
 
