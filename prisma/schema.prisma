@@ -189,6 +189,7 @@ enum DocumentType {
   STOCK_COUNT // 盘点单 CNT（Sprint 6B 新增）
   INVENTORY_ADJUSTMENT // 库存调整单 ADJ（Sprint 6B 新增）
   INVENTORY_CONVERSION // 库存转换单 CVT（Sprint 6B 新增，同 item Repack / UOM Conversion）
+  SUPPLIER_INVOICE // 供应商发票 SINV（Sprint 5C-1 新增；DocumentSequence docType=SUPPLIER_INVOICE，创建即取号 P1 Final，缺失 fail closed）
 }
 
 /// Platform user account. Identity and credential record.
@@ -215,6 +216,8 @@ model User {
   approvedAdjustments InventoryAdjustment[] @relation("AdjustmentApprovedBy") // 6B：调整单审批人（InventoryAdjustment.approvedById 方向）
   appliedAdjustments InventoryAdjustment[] @relation("AdjustmentAppliedBy") // 6B：调整单 Apply 人（InventoryAdjustment.appliedById 方向）
   executedConversions InventoryConversion[] @relation("ConversionExecutedBy") // 6B：转换单执行人（InventoryConversion.executedById 方向）
+  postedSupplierInvoices SupplierInvoice[] @relation("SupplierInvoicePostedBy") // 5C-1：供应商发票过账人（SupplierInvoice.postedById 方向）
+  ranMatchRuns SupplierInvoiceMatchRun[] // 5C-1：匹配 Run 执行人（SupplierInvoiceMatchRun.runById 方向）
   createdAt    DateTime    @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime    @updatedAt @db.Timestamptz(3)
 
@@ -4681,6 +4684,8 @@ model PurchaseOrderLine {
   // 超收容差 override（P2 Final：System Default = 0%；PO Line 可配置；null = 按 Supplier/Item/System 配置回退）
   overReceiptToleranceRate Decimal? @db.Decimal(8, 6) // Minor ①：0.050000 = 5%（rate 单位，非百分数整数；Schema/API/OpenAPI/QA 唯一单位定义）
   purchaseReceiptLines PurchaseReceiptLine[] // 5B：收货行（PurchaseReceiptLine.purchaseOrderLineId 方向）
+  supplierInvoiceLines SupplierInvoiceLine[] // 5C-1：供应商发票行（SupplierInvoiceLine.purchaseOrderLineId 方向，RECEIPT_BASED 溯源）
+  supplierInvoiceMatchLines SupplierInvoiceMatchLine[] // 5C-1：匹配 Run 行（SupplierInvoiceMatchLine.purchaseOrderLineId 方向）
   // 统一审计字段
   isActive    Boolean  @default(true)
   createdById String?
@@ -5039,6 +5044,9 @@ model WarehouseReceiptLine {
   expDate  DateTime? @db.Date // 有效期至（P6 Final）
   remark   String?
   purchaseReturnLines PurchaseReturnLine[] // 反向：退货行来源（Blocking ③）
+  supplierInvoiceLines SupplierInvoiceLine[] // 5C-1：供应商发票行（SupplierInvoiceLine.warehouseReceiptLineId 方向，POSTED WHR 溯源）
+  supplierInvoiceMatchLines SupplierInvoiceMatchLine[] // 5C-1：匹配 Run 行（SupplierInvoiceMatchLine.warehouseReceiptLineId 方向）
+  grirAccruals GrirRecord[] // 5C-1：GRIR accrual 源（WHR Posted → ACCRUAL）
   isActive Boolean  @default(true)
   createdById String?
   updatedById String?
@@ -5095,6 +5103,7 @@ model PurchaseReturnLine {
   sourcePurchaseReceiptLine PurchaseReceiptLine? @relation(fields: [sourcePurchaseReceiptLineId], references: [id], onDelete: Restrict) // Schema Integrity B②：来源已成为退货事实则不得物理删除
   sourceWarehouseReceiptLineId String?
   sourceWarehouseReceiptLine WarehouseReceiptLine? @relation(fields: [sourceWarehouseReceiptLineId], references: [id], onDelete: Restrict)
+  grirReversals GrirRecord[] // 5C-1：GRIR reversal 源（WHR-based PurchaseReturned → REVERSAL）
   sourceInspectionId String?
   sourceInspection Inspection? @relation(fields: [sourceInspectionId], references: [id], onDelete: Restrict)
   itemId   String?
@@ -5626,4 +5635,288 @@ model InventoryConversionLine {
   @@unique([conversionHeaderId, lineRole]) // Blocking ③：单输入单输出（最多 1 CONSUME + 1 PRODUCE）
   @@index([warehouseId])
   @@index([deletedAt])
+}
+
+// ============================================================================
+// Sprint 5C-1：Supplier Invoice / MatchRun / GRIR / AP Liability-OpenItem Foundation
+//（CTO 5C Gate Final Re-review #8925 99/100 FINAL APPROVED——4 Blocking 全 CLOSED，
+//  P1-P12 FINAL，Migration 0027 HOLD 正式解除（仅 5C-1）；暂不开始 API）
+// 事实链：PO Commitment → Receipt Fact → Warehouse/Inventory Fact → Supplier Invoice
+//        → 3-Way Match → AP Liability → Payment（Payment 属 5C-2）
+// 8 个 Schema 不变量（CTO #8925）：
+// ① 首版只能 RECEIPT_BASED：PO Line + POSTED WarehouseReceiptLine 双溯源（Line 双必填 FK）
+// ② 供应商发票号重复录入 DB 最终防线：UNIQUE(supplierId, supplierInvoiceNo)（不全局误锁）
+// ③ MatchRun revision DB 唯一识别：UNIQUE(supplierInvoiceId, revision)；MatchRun/MatchLine
+//    具备 DB immutable trigger（Migration 0027 落，对齐 0025 Movement 不可变）
+// ④ approvedMatchRunId/revision 必须属于当前 SupplierInvoice（组合 FK：
+//    SupplierInvoice(approvedMatchRunId, id) → MatchRun(id, supplierInvoiceId)，
+//    对齐 5B Inspection 组合 FK 先例——DB 层禁止引用另一张发票的 MatchRun）
+// ⑤ GRIR accrual / return reversal / invoice consume 三类源 identity 分别 DB 幂等唯一
+// ⑥ AP Liability = Fact（POSTED 生成、不可变），OpenItem = Projection（openAmount 只读投影）
+// ⑦ vatRecoverable=false ⇒ nonRecoverableTaxAmount = taxAmount（DB CHECK）；
+//    recoverable=true ⇒ nonRecoverableTaxAmount = 0（同一税额不双计）
+// ⑧ POSTED 终态 evidence：postedAt + postedById + approvedMatchRunId/revision 全非空
+//    （DB CHECK）；APPROVED ≠ POSTED（状态机枚举分离）
+// 红线：不建 GL / 不写库存成本层（Costing HOLD）/ 无 CN-DN / 无 Payment / 无 5C-2
+// ============================================================================
+
+/// 供应商发票单据状态（P3 Final 两维之一：documentStatus 截止 POSTED/CANCELLED）
+enum SupplierInvoiceDocumentStatus {
+  DRAFT
+  SUBMITTED
+  MATCHED
+  APPROVED
+  POSTED // 终态：生成 AP Liability Fact + consume GRIR；APPROVED ≠ POSTED（不变量⑧）
+  CANCELLED
+}
+
+/// 结算状态（P3 Final 两维之二：独立维度，由 Payment Allocation 驱动——5C-2；不污染 documentStatus）
+enum SupplierInvoiceSettlementStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+}
+
+/// 三单匹配行级结果（当前投影；历史走 immutable MatchRun）
+enum SupplierInvoiceMatchResult {
+  MATCHED
+  VARIANCE
+  PENDING
+}
+
+/// 匹配差异处置（触发 Workflow 审批条件）
+enum SupplierInvoiceMatchDisposition {
+  ACCEPT
+  REJECT
+  HOLD
+  CREATE_CN_DN // 5C-2 实现
+}
+
+/// GRIR 生命周期类型（Blocking ①：Accrual / Reversal / Consume 三类源身份各自幂等）
+enum GrirType {
+  ACCRUAL // 来源：WarehouseReceiptLine（WHR Posted 时按 PO 快照单价 × 入库量）
+  REVERSAL // 来源：WarehouseReceipt-based PurchaseReturnLine（只有已 POSTED WHR 来源退货才冲减）
+  CONSUME // 来源：SupplierInvoiceLine（POSTED 时 consume remaining GRIR + 生成 AP Liability Fact）
+}
+
+/// 供应商发票（5C-1 核心事实：PO + WarehouseReceipt-based stock procurement，RECEIPT_BASED 首版唯一）
+model SupplierInvoice {
+  id       String   @id @default(cuid())
+  invoiceNo String  @unique // 发票单号（DocumentSequence docType=SUPPLIER_INVOICE，前缀 SINV；创建即取号 P1 Final，缺失 fail closed）
+  supplierInvoiceNo String // 供应商发票号（供应商侧唯一标识；不变量②：与 supplierId 组合唯一——不全局误锁不同供应商相同号码）
+  supplierId String
+  supplier  Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  invoiceDate DateTime @db.Date
+  receivedDate DateTime @db.Date
+  currency  String   @default("CNY") // 币种（对齐现有模型模式：无 Currency 主数据表，用 String ISO 码）
+  exchangeRate Decimal @default(1) @db.Decimal(18, 6) // 创建时快照 FX（P2 Final）；人工覆盖需受限权限 + audit
+  // 两维状态（P3 Final）
+  documentStatus SupplierInvoiceDocumentStatus @default(DRAFT)
+  settlementStatus SupplierInvoiceSettlementStatus @default(UNPAID)
+  // 金额（服务端 Decimal 聚合，禁客户端直传头金额；对齐 5A PO 金额事实）
+  grossAmount Decimal @db.Decimal(18, 2) // 含税总额 = Σ 行
+  netAmount   Decimal @db.Decimal(18, 2) // 不含税总额 = Σ 行净额
+  taxAmount   Decimal @db.Decimal(18, 2) // 税额合计 = gross - net
+  // 匹配（当前投影 + 审批引用；不变量③④）
+  currentMatchRunId String? // 当前匹配 Run 引用（当前投影，历史走 immutable MatchRun）
+  approvedMatchRunId String? // 审批引用 immutable MatchRun（Approval references MatchRun，不 mutates MatchRun——#8901）
+  approvedMatchRevision Int? // 审批引用 revision（冗余存证；与 approvedMatchRunId 同属当前发票，组合 FK 保证）
+  // POSTED 终态证据（不变量⑧：POSTED ⇒ 全非空；APPROVED ≠ POSTED）
+  postedAt DateTime? @db.Timestamptz(3)
+  postedById String?
+  postedBy  User? @relation("SupplierInvoicePostedBy", fields: [postedById], references: [id], onDelete: SetNull)
+  paymentDueDate DateTime? @db.Date // 账期（对齐 4E-1 dueDate，方向相反）
+  remark    String?
+  isActive  Boolean @default(true)
+  createdById String?
+  updatedById String?
+  version   Int     @default(1) // CAS 乐观锁
+  deletedAt DateTime?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  lines SupplierInvoiceLine[]
+  matchRuns SupplierInvoiceMatchRun[]
+  grirRecords GrirRecord[]
+  apLiabilityFact ApLiabilityFact?
+
+  @@unique([supplierId, supplierInvoiceNo]) // 不变量②：供应商发票号唯一（组合，不全局误锁）
+  @@index([invoiceNo])
+  @@index([supplierId])
+  @@index([documentStatus])
+  @@index([deletedAt])
+}
+
+/// 供应商发票行（RECEIPT_BASED 首版唯一——不变量①：PO Line + POSTED WHR Line 双溯源必填）
+model SupplierInvoiceLine {
+  id       String   @id @default(cuid())
+  supplierInvoiceId String
+  supplierInvoice SupplierInvoice @relation(fields: [supplierInvoiceId], references: [id], onDelete: Cascade)
+  purchaseOrderLineId String // 溯源 PO Line（承诺；必填——不变量①）
+  purchaseOrderLine PurchaseOrderLine @relation(fields: [purchaseOrderLineId], references: [id], onDelete: Restrict)
+  warehouseReceiptLineId String // 溯源入库行（数量匹配基准；必填且必须来自已 POSTED WHR——不变量①）
+  warehouseReceiptLine WarehouseReceiptLine @relation(fields: [warehouseReceiptLineId], references: [id], onDelete: Restrict)
+  itemId    String?
+  item      Item?    @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  lineNo    Int      @default(10)
+  quantity  Decimal  @db.Decimal(18, 4) // 开票数量（> 0）
+  unitPrice Decimal  @db.Decimal(18, 6) // 单价（与 PO 快照单价比对）
+  netAmount Decimal  @db.Decimal(18, 2) // 行净额 = quantity × unitPrice（服务端）
+  taxRate   Decimal  @db.Decimal(18, 4) // 税率快照（开票时点冻结）
+  taxAmount Decimal  @db.Decimal(18, 2) // 行税额 = netAmount × taxRate（服务端）
+  // P9 Final（CTO #8901）：不可抵扣税 = 财务事实（不写库存成本层，Costing HOLD）
+  vatRecoverable Boolean @default(true) // recoverable=true → 税额进 Input VAT component
+  nonRecoverableTaxAmount Decimal @default(0) @db.Decimal(18, 2) // recoverable=false → = taxAmount（expense-or-capitalizable component 财务事实）
+  // 匹配（当前投影；历史走 immutable MatchRun——不变量③）
+  currentMatchStatus SupplierInvoiceMatchResult @default(PENDING)
+  currentMatchRunId String?
+  matchedQty Decimal @default(0) @db.Decimal(18, 4) // = min(invoiceQty, 可用入库量)；超过已收数量部分不可入 AP（红线）
+  varianceQty Decimal @default(0) @db.Decimal(18, 4)
+  variancePrice Decimal @default(0) @db.Decimal(18, 6)
+  varianceTax Decimal @default(0) @db.Decimal(18, 2)
+  remark    String?
+  isActive  Boolean @default(true)
+  createdById String?
+  updatedById String?
+  version   Int     @default(1)
+  deletedAt DateTime?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  matchLines SupplierInvoiceMatchLine[]
+  grirRecords GrirRecord[]
+
+  @@unique([supplierInvoiceId, lineNo])
+  @@index([supplierInvoiceId])
+  @@index([purchaseOrderLineId])
+  @@index([warehouseReceiptLineId])
+  @@index([itemId])
+  @@index([deletedAt])
+}
+
+/// 匹配 Run 头（immutable Match Snapshot——Blocking ②：自创建后禁止业务字段 UPDATE/DELETE；
+/// 审批事实引用此 Run（approvedMatchRunId/revision 存 SupplierInvoice），不 mutates MatchRun）
+model SupplierInvoiceMatchRun {
+  id       String   @id @default(cuid())
+  supplierInvoiceId String
+  supplierInvoice SupplierInvoice @relation(fields: [supplierInvoiceId], references: [id], onDelete: Cascade)
+  runNo     Int      @default(1) // 每发票递增 1,2,3…
+  revision  Int      @default(1) // 不可变快照标识（审批引用；重新匹配 → 追加新 Run revision+1）
+  runAt     DateTime @default(now()) @db.Timestamptz(3)
+  runById   String?
+  runBy     User?    @relation(fields: [runById], references: [id], onDelete: SetNull)
+  result    SupplierInvoiceMatchResult // 头级结果 MATCHED / VARIANCE
+  disposition SupplierInvoiceMatchDisposition @default(HOLD) // 触发 Workflow 审批条件
+  createdById String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  lines SupplierInvoiceMatchLine[]
+
+  @@unique([supplierInvoiceId, revision]) // 不变量③：invoice + revision 唯一识别
+  @@unique([id, supplierInvoiceId]) // 不变量④：支持 SupplierInvoice(approvedMatchRunId, id) 组合 FK 引用（必须属于同一发票）
+  @@index([supplierInvoiceId])
+}
+
+/// 匹配 Run 行（immutable Match Snapshot 行；审批引用 Run 级，行级不可变）
+model SupplierInvoiceMatchLine {
+  id       String   @id @default(cuid())
+  matchRunId String
+  matchRun  SupplierInvoiceMatchRun @relation(fields: [matchRunId], references: [id], onDelete: Cascade)
+  supplierInvoiceLineId String
+  supplierInvoiceLine SupplierInvoiceLine @relation(fields: [supplierInvoiceLineId], references: [id], onDelete: Restrict)
+  purchaseOrderLineId String // 快照引用（匹配时点 PO Line）
+  purchaseOrderLine PurchaseOrderLine @relation(fields: [purchaseOrderLineId], references: [id], onDelete: Restrict)
+  warehouseReceiptLineId String // 快照引用（匹配时点 WHR Line）
+  warehouseReceiptLine WarehouseReceiptLine @relation(fields: [warehouseReceiptLineId], references: [id], onDelete: Restrict)
+  poQty     Decimal  @db.Decimal(18, 4)
+  receiptQty Decimal @db.Decimal(18, 4)
+  invoiceQty Decimal @db.Decimal(18, 4)
+  poUnitPrice Decimal @db.Decimal(18, 6)
+  invoiceUnitPrice Decimal @db.Decimal(18, 6)
+  qtyVariance Decimal @db.Decimal(18, 4)
+  priceVariance Decimal @db.Decimal(18, 6)
+  taxVariance Decimal @db.Decimal(18, 2)
+  result    SupplierInvoiceMatchResult
+  disposition SupplierInvoiceMatchDisposition
+  createdById String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([matchRunId])
+  @@index([supplierInvoiceLineId])
+  @@unique([matchRunId, supplierInvoiceLineId]) // 一行发票行每次匹配一条 Run 行
+}
+
+/// GRIR（暂估应付事实——Blocking ① 完整生命周期：Accrual / Reversal / Consume）
+/// 不变量⑤：三类源 identity 分别 DB 幂等唯一（防重复冲回，对齐 6A 五元幂等纪律）
+model GrirRecord {
+  id       String   @id @default(cuid())
+  grirType GrirType
+  supplierInvoiceId String? // consume 时关联发票（可空：accrual/reversal 时无发票）
+  supplierInvoice SupplierInvoice? @relation(fields: [supplierInvoiceId], references: [id], onDelete: Restrict)
+  supplierInvoiceLineId String? // consume 源（POSTED 时）
+  supplierInvoiceLine SupplierInvoiceLine? @relation(fields: [supplierInvoiceLineId], references: [id], onDelete: Restrict)
+  warehouseReceiptLineId String? // accrual 源（WHR Posted 时）
+  warehouseReceiptLine WarehouseReceiptLine? @relation(fields: [warehouseReceiptLineId], references: [id], onDelete: Restrict)
+  purchaseReturnLineId String? // reversal 源（WHR-based PurchaseReturned 时；未入库退货不产生 reversal）
+  purchaseReturnLine PurchaseReturnLine? @relation(fields: [purchaseReturnLineId], references: [id], onDelete: Restrict)
+  baseAmount Decimal @db.Decimal(18, 2) // 不含税暂估净额（P9 Final：GRIR baseAmount = 不含税；进项税只在合规发票进入时确认）
+  quantity  Decimal  @db.Decimal(18, 4) // 暂估数量
+  unitPrice Decimal  @db.Decimal(18, 6) // PO 快照单价（暂估基准）
+  taxRate   Decimal  @db.Decimal(18, 4) // 税率快照（normalize 用）
+  // 源幂等身份（不变量⑤：accrual/reversal/consume 各自唯一，防重复冲回）
+  sourceKey String // 服务端生成的幂等键："{grirType}:{sourceType}:{sourceLineId}"
+  remark    String?
+  createdById String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([sourceKey]) // 不变量⑤ DB 幂等最终防线（accrual/reversal/consume 三类源身份唯一）
+  @@index([grirType])
+  @@index([supplierInvoiceId])
+  @@index([warehouseReceiptLineId])
+  @@index([purchaseReturnLineId])
+  @@index([supplierInvoiceLineId])
+}
+
+/// AP Liability Fact（应付债务事实——Blocking ③：POSTED 生成、不可变；OpenItem 是投影）
+model ApLiabilityFact {
+  id       String   @id @default(cuid())
+  supplierInvoiceId String @unique // 一票一 Liability Fact（POSTED 时生成）
+  supplierInvoice SupplierInvoice @relation(fields: [supplierInvoiceId], references: [id], onDelete: Restrict)
+  supplierId String
+  supplier  Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  currency  String   @default("CNY") // 币种（对齐现有模型模式：无 Currency 主数据表，用 String ISO 码）
+  // 金额事实（不变量⑥：Liability 是事实，OpenItem 是投影——本表无 openAmount 可改字段）
+  grossAmount Decimal @db.Decimal(18, 2) // AP 总债务 = net + total tax（不因 recoverability 改变）
+  netAmount   Decimal @db.Decimal(18, 2)
+  inputVatAmount Decimal @db.Decimal(18, 2) // recoverable=true 部分（Input VAT component）
+  nonRecoverableTaxAmount Decimal @db.Decimal(18, 2) // recoverable=false 部分（expense-or-capitalizable component 财务事实；不写库存成本层）
+  dueDate   DateTime? @db.Date
+  createdById String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  openItem ApOpenItem?
+
+  @@index([supplierId])
+  @@index([currency])
+}
+
+/// AP Open Item（materialized projection / read model——Blocking ③：openAmount 不是财务事实源；
+/// Reconciliation：openAmount = Liability + CN/DN - Allocations（5C-2 才有 CN/DN/Allocation）
+/// 本表只读投影，金额由服务端 reconciliation 计算，禁止直接 UPDATE openAmount）
+model ApOpenItem {
+  id       String   @id @default(cuid())
+  apLiabilityFactId String @unique
+  apLiabilityFact ApLiabilityFact @relation(fields: [apLiabilityFactId], references: [id], onDelete: Cascade)
+  supplierId String
+  currency  String   @default("CNY") // 币种
+  // 投影字段（服务端计算，不手改——不变量⑥）
+  openAmount Decimal @db.Decimal(18, 2) // = Liability + CN/DN - Allocations（5C-1 阶段 = grossAmount 初始投影）
+  settlementStatus SupplierInvoiceSettlementStatus @default(UNPAID)
+  dueDate   DateTime? @db.Date
+  version   Int      @default(1) // 投影刷新 CAS（reconciliation 服务端更新）
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([supplierId])
+  @@index([settlementStatus])
 }
