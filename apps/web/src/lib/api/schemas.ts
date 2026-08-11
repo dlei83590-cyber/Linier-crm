@@ -969,3 +969,56 @@ export const inventoryAdjustmentApplySchema = z.object({
 export const inventoryAdjustmentCancelSchema = z.object({
   version: z.number().int().positive(),
 });
+
+// ============================================================================
+// Sprint 6B-4 - Inventory Conversion（同 item Repack / UOM Conversion，CTO #8658 授权）
+// 设计依据：Architecture Process Gate §6 + Field Matrix v0.5 §4 + ADR-0026 + P10/P11 Final
+// - 状态机：DRAFT → SUBMITTED → EXECUTED / CANCELLED（Conversion 无审批状态——同 item 计量事实，不发明审批流）
+// - 同一 itemId（首版禁止 BOM/组装/拆解/多物料）；一张 Conversion 最多 1 CONSUME + 1 PRODUCE（UNIQUE(headerId, lineRole)）
+// - **baseQuantity 不由客户端提交**：服务端 canonical 计算 baseQuantity = quantity × uomToBaseRate（Decimal 精度统一），
+//   不信任客户端；EXECUTE 前验证 CONSUME.baseQuantity == PRODUCE.baseQuantity（守恒，P11）
+// - batch 精确继承（CONSUME batch → PRODUCE batch 同值）；serial 不允许（首版不支持 serial 重生成）
+// - EXECUTE：CONSUME + PRODUCE 同一稳定 movementGroupId，经 Shared executeLedgerAtoms 同事务原子提交
+// ============================================================================
+
+/** 转换行（CONSUME/PRODUCE 各一条；quantity + uomToBaseRate 由客户端提交，**baseQuantity 服务端计算**） */
+export const inventoryConversionLineCreateSchema = z.object({
+  lineRole: z.enum(['CONSUME', 'PRODUCE']),
+  quantity: z.coerce.number().positive(), // 业务 UOM 数量（> 0）
+  uomId: z.string().min(1), // 业务 UOM
+  uomToBaseRate: z.coerce.number().positive(), // 行级换算率 snapshot（业务 UOM → base UOM，> 0；DB CHECK 兜底）
+  warehouseId: z.string().min(1),
+  locationId: z.string().min(1).nullable().optional(),
+  batchNo: z.string().max(100).nullable().optional(), // P5 Final：batch 精确继承（CONSUME batch → PRODUCE batch 同值）
+  remark: z.string().max(500).optional(),
+});
+
+/** 转换单创建（DRAFT；创建即取号 CVT；baseUomId 必须 == Item 的 stock UOM——service Gate） */
+export const inventoryConversionCreateSchema = z.object({
+  itemId: z.string().min(1), // 同一 itemId（首版 Repack/UOM Conversion，禁止多物料）
+  baseUomId: z.string().min(1), // Inventory Base UOM（service Gate 验证 == Item.stockUomId）
+  remark: z.string().max(500).optional(),
+  lines: z.array(inventoryConversionLineCreateSchema).length(2, '必须恰好 1 CONSUME + 1 PRODUCE'),
+});
+
+/** 转换单更新（仅 DRAFT；version 乐观锁；行整体替换） */
+export const inventoryConversionUpdateSchema = z.object({
+  version: z.number().int().positive(),
+  remark: z.string().max(500).nullable().optional(),
+  lines: z.array(inventoryConversionLineCreateSchema).length(2).optional(),
+});
+
+/** 转换提交（真 Gate：DRAFT → SUBMITTED；version 乐观锁；Conversion 无审批状态，提交即确认） */
+export const inventoryConversionSubmitSchema = z.object({
+  version: z.number().int().positive(),
+});
+
+/** 转换执行（真 Gate：SUBMITTED → EXECUTED；version 乐观锁 + 幂等 ALREADY_EXECUTED；Shared LedgerCommand 双 atom 同事务） */
+export const inventoryConversionExecuteSchema = z.object({
+  version: z.number().int().positive(),
+});
+
+/** 转换取消（DRAFT/SUBMITTED → CANCELLED；version 乐观锁；EXECUTED 禁——纠错走 Reversal） */
+export const inventoryConversionCancelSchema = z.object({
+  version: z.number().int().positive(),
+});

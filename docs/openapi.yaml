@@ -76,6 +76,8 @@ tags:
   # Sprint 6B-3 — Stock Count & Inventory Adjustment（盘点 + 调整事实链，CTO #8471 授权）
   - name: Stock Counts
   - name: Inventory Adjustments
+  # Sprint 6B-4 — Inventory Conversion / Repack（同 item 转换，CTO #8658 授权）
+  - name: Inventory Conversions
 
 paths:
   # ==========================================================================
@@ -11432,6 +11434,265 @@ paths:
         "409":
           description: Conflict（已 APPLIED / 已取消 / 版本冲突）
 
+  # ==========================================================================
+  # Sprint 6B-4 — Inventory Conversion / Repack（同 item 转换，CTO #8658 授权）
+  # 首版边界（CTO 锁死）：同一 itemId Repack / UOM Conversion；一张 Conversion 最多 1 CONSUME + 1 PRODUCE；
+  # baseQuantity 服务端 canonical 计算（不信任客户端）；CONSUME.baseQuantity == PRODUCE.baseQuantity 才 Execute；
+  # 禁止 BOM/组装/拆解/多物料；batch 精确继承；serial 不允许重新生成。
+  # ==========================================================================
+  /api/inventory-conversions:
+    get:
+      tags: [Inventory Conversions]
+      summary: List inventory conversions (分页 + conversionNo/itemId/status 过滤)
+      operationId: listInventoryConversions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: conversionNo
+          in: query
+          schema: { type: string }
+        - name: itemId
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryConversionListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Inventory Conversions]
+      summary: Create inventory conversion (DRAFT; 创建即取号 CVT; 红线 DRAFT 不落账)
+      description: |
+        创建转换单（DRAFT；**创建即取号 CVT**）。**首版边界（CTO 锁死）**：同一 itemId Repack/UOM Conversion；
+        恰好 1 CONSUME + 1 PRODUCE（UNIQUE(conversionHeaderId, lineRole) 兜底）；baseUomId 必须 == 该 Item 的
+        库存单位（stockUomId，P11 Final Gate）；**baseQuantity 由服务端 canonical 计算**（quantity × uomToBaseRate，
+        Decimal 精度统一，不信任客户端）；batch 精确继承（CONSUME batch → PRODUCE batch 同值）；serial 不允许。
+        **红线：DRAFT 不落账**（不创建 Movement / 不更新 Projection——只有 Execute 经 Shared Core）。
+        权限：inventory-conversion:create。CVT Sequence 缺失 = 部署配置错误（fail closed，500）。
+      operationId: createInventoryConversion
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryConversionCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryConversionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          description: Sequence 缺失（部署配置错误）等
+  /api/inventory-conversions/{id}:
+    get:
+      tags: [Inventory Conversions]
+      summary: Get inventory conversion detail (Header + Item + BaseUom + Lines)
+      operationId: getInventoryConversion
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryConversionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Inventory Conversions]
+      summary: Update inventory conversion (仅 DRAFT; CAS version; 行整体替换可选; itemId/baseUomId 不可编辑)
+      operationId: updateInventoryConversion
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryConversionUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryConversionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（仅 DRAFT / 版本冲突）
+  /api/inventory-conversions/{id}/submit:
+    post:
+      tags: [Inventory Conversions]
+      summary: Submit inventory conversion (DRAFT → SUBMITTED; 提交确认，无审批状态机)
+      description: |
+        提交转换单（DRAFT → SUBMITTED）。**Conversion 无审批状态机（DRAFT/SUBMITTED/EXECUTED/CANCELLED）**——
+        同 item Repack/UOM 计量事实，不发明审批流；submit 只是提交确认。守恒/换算率/batch 继承前置校验。
+        **红线：SUBMITTED ≠ EXECUTED**——submit 绝不自动落账，只有显式 execute 才经 Shared LedgerCommand
+        双 atom（CONSUME + PRODUCE 同一 movementGroupId）同事务落账。权限：inventory-conversion:edit。
+      operationId: submitInventoryConversion
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryConversionVersionRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryConversionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（仅 DRAFT / 版本冲突）
+  /api/inventory-conversions/{id}/execute:
+    post:
+      tags: [Inventory Conversions]
+      summary: Execute inventory conversion (SUBMITTED → EXECUTED; Shared LedgerCommand 双 atom CONSUME+PRODUCE 同事务)
+      description: |
+        执行转换单（**SUBMITTED → EXECUTED，CTO 6B-4 最高风险点**）。四条锁死（CTO #8658）：
+        ① **baseQuantity 由服务端 canonical 计算**（quantity × uomToBaseRate，Decimal 精度统一）——不信任客户端；
+        ② **CONSUME.baseQuantity == PRODUCE.baseQuantity 才允许 Execute**（守恒，P11）；
+        ③ **首版必须 same item**（header.itemId 单一，行无 itemId——禁止 BOM/组装/拆解/多物料）；
+        ④ **Batch 精确继承、serial 不允许重新生成**（CONSUME batch → PRODUCE batch 同值；serialNo=null）。
+        事务：FOR UPDATE 锁单 → 仅 SUBMITTED → 复核执行态事实 → 生成/复用非空 movementGroupId（**稳定业务事实**，
+        已有值复用——CTO Transfer Blocking ② 教训）→ buildConversionAtoms（CONSUME OUT + PRODUCE IN，同一 group）→
+        executeLedgerAtoms(tx, atoms) 同一 caller tx 全有或全无 → 单据 EXECUTED + 证据 + CAS version+1 → 事件
+        InventoryConversionExecuted（事务提交后 best-effort，不含余额）。五元幂等 sourceType=CONVERSION/
+        sourceId/sourceLineId/movementRole=CONSUME|PRODUCE/movementAtomKey=BULK。**权限：inventory-conversion:edit**。
+        幂等：已 EXECUTED → 409 ALREADY_EXECUTED。
+      operationId: executeInventoryConversion
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryConversionVersionRequest"
+      responses:
+        "200":
+          description: Executed（含 atomResults）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryConversionExecuteResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（仅 SUBMITTED / 已 EXECUTED / 库存不足 / 幂等冲突 / 版本冲突）
+  /api/inventory-conversions/{id}/cancel:
+    post:
+      tags: [Inventory Conversions]
+      summary: Cancel inventory conversion (DRAFT/SUBMITTED → CANCELLED; EXECUTED 禁)
+      description: |
+        取消转换单（DRAFT/SUBMITTED → CANCELLED；**EXECUTED 禁**——已落账，纠错未来走 Reversal/Correction，
+        不允许 Cancel 回滚库存）。取消不触碰库存账。权限：inventory-conversion:close。
+      operationId: cancelInventoryConversion
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryConversionVersionRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryConversionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（已 EXECUTED / 已取消 / 版本冲突）
+
 components:
   securitySchemes:
     bearerAuth:
@@ -18131,6 +18392,138 @@ components:
           required: [adjustment, atomResults]
           properties:
             adjustment: { $ref: "#/components/schemas/InventoryAdjustment" }
+            atomResults:
+              type: array
+              description: executeLedgerAtoms 结果（每 atom inserted/movementNo）
+              items:
+                type: object
+                properties:
+                  inserted: { type: boolean, description: true=新入账 / false=五元幂等重放 }
+                  movementNo: { type: string, description: 入账流水号 MV-xxxxxx }
+
+    # ==========================================================================
+    # Sprint 6B-4 — Inventory Conversion / Repack components（CTO #8658 授权）
+    # ==========================================================================
+    InventoryConversionLineCreate:
+      type: object
+      required: [lineRole, quantity, uomId, uomToBaseRate, warehouseId]
+      description: 转换行（CONSUME/PRODUCE 各一条；**baseQuantity 由服务端 canonical 计算，客户端不提交**）
+      properties:
+        lineRole: { type: string, enum: [CONSUME, PRODUCE] }
+        quantity: { type: number, exclusiveMinimum: 0, description: 业务 UOM 数量（> 0） }
+        uomId: { type: string, description: 业务 UOM }
+        uomToBaseRate: { type: number, exclusiveMinimum: 0, description: 行级换算率 snapshot（业务 UOM → base UOM，> 0） }
+        warehouseId: { type: string, minLength: 1 }
+        locationId: { type: [string, "null"] }
+        batchNo: { type: [string, "null"], maxLength: 100, description: P5 Final：batch 精确继承（CONSUME → PRODUCE 同值） }
+        remark: { type: string, maxLength: 500 }
+
+    InventoryConversionCreate:
+      type: object
+      required: [itemId, baseUomId, lines]
+      description: 创建转换单（DRAFT；创建即取号 CVT；baseUomId 必须 == Item.stockUomId；恰好 1 CONSUME + 1 PRODUCE）
+      properties:
+        itemId: { type: string, minLength: 1, description: 同一 itemId（首版 Repack/UOM Conversion，禁止多物料） }
+        baseUomId: { type: string, minLength: 1, description: Inventory Base UOM（service Gate 验证 == Item.stockUomId） }
+        remark: { type: string, maxLength: 500 }
+        lines:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items: { $ref: "#/components/schemas/InventoryConversionLineCreate" }
+
+    InventoryConversionUpdate:
+      type: object
+      required: [version]
+      description: 更新转换单（仅 DRAFT；CAS version；行整体替换可选；itemId/baseUomId 不可编辑）
+      properties:
+        version: { type: integer, minimum: 1 }
+        remark: { type: [string, "null"], maxLength: 500 }
+        lines:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items: { $ref: "#/components/schemas/InventoryConversionLineCreate" }
+
+    InventoryConversionVersionRequest:
+      type: object
+      required: [version]
+      description: 通用 version 乐观锁请求（submit/execute/cancel）
+      properties:
+        version: { type: integer, minimum: 1 }
+
+    InventoryConversion:
+      type: object
+      description: 库存转换单（同 item Repack / UOM Conversion——CONSUME + PRODUCE 同一 movementGroupId 原子落账）
+      properties:
+        id: { type: string }
+        conversionNo: { type: string, description: 转换单号（CVT-xxxxxx） }
+        status: { type: string, enum: [DRAFT, SUBMITTED, EXECUTED, CANCELLED] }
+        itemId: { type: string }
+        baseUomId: { type: string }
+        movementGroupId: { type: [string, "null"], description: EXECUTE 时生成/复用并冻结（CONSUME+PRODUCE 共享） }
+        executedById: { type: [string, "null"] }
+        executedAt: { type: [string, "null"], format: date-time }
+        version: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    InventoryConversionLine:
+      type: object
+      description: 转换行（lineRole=CONSUME/PRODUCE；uomToBaseRate 行级 snapshot；baseQuantity canonical 服务端计算）
+      properties:
+        id: { type: string }
+        conversionHeaderId: { type: string }
+        lineRole: { type: string, enum: [CONSUME, PRODUCE] }
+        quantity: { type: string, description: 业务 UOM 数量（Decimal 字符串） }
+        uomId: { type: [string, "null"] }
+        uomToBaseRate: { type: string, description: 行级换算率（Decimal 字符串，> 0） }
+        baseQuantity: { type: string, description: canonical 数量 = quantity × uomToBaseRate（Decimal 字符串，服务端计算） }
+        warehouseId: { type: string }
+        locationId: { type: [string, "null"] }
+        batchNo: { type: [string, "null"] }
+
+    InventoryConversionResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            conversion:
+              type: object
+              properties:
+                id: { type: string }
+                conversionNo: { type: string }
+                status: { type: string }
+                itemId: { type: string }
+                baseUomId: { type: string }
+                lines: { type: array, items: { $ref: "#/components/schemas/InventoryConversionLine" } }
+
+    InventoryConversionListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            total: { type: integer }
+            page: { type: integer }
+            pageSize: { type: integer }
+            items: { type: array, items: { $ref: "#/components/schemas/InventoryConversion" } }
+
+    InventoryConversionExecuteResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          required: [conversion, atomResults]
+          properties:
+            conversion: { $ref: "#/components/schemas/InventoryConversion" }
             atomResults:
               type: array
               description: executeLedgerAtoms 结果（每 atom inserted/movementNo）

@@ -133,6 +133,8 @@ const SEED_ACTION_MODULES = [
   "stock-count",
   // Sprint 6B-3：Inventory Adjustment 调整模块（动作映射：create→inventory-adjustment:create（创建即取号）；submit→inventory-adjustment:edit；approve→inventory-adjustment:approve（Workflow 审批）；apply→**inventory-adjustment:apply 受限系统权限**（P8/P9 Final：仅 SUPER_ADMIN/ADMIN，见 SEED_SYSTEM_ACTION_PERMISSIONS）；cancel→inventory-adjustment:close；line 仅 view/edit）
   "inventory-adjustment",
+  // Sprint 6B-4：Inventory Conversion 转换模块（动作映射：create→inventory-conversion:create（创建即取号 CVT）；submit→inventory-conversion:edit；execute→inventory-conversion:edit（对齐 5B post→:edit 先例）；cancel→inventory-conversion:close；line 仅 view/edit——见 SEED_RESTRICTED_ACTION_PERMISSIONS；**Conversion 状态机无 APPROVED（DRAFT/SUBMITTED/EXECUTED/CANCELLED——同 item Repack/UOM 计量事实，不发明审批流）**）
+  "inventory-conversion",
   // Sprint 3A：平台底座模块
   "workflow-definition",
   "workflow-step",
@@ -196,6 +198,9 @@ const SEED_RESTRICTED_ACTION_PERMISSIONS: Array<{ name: string; code: string; mo
   // Sprint 6B-3：Inventory Adjustment 子资源（line 受限 view/edit——调整行由调整单驱动；对齐 5A/5B line 模式）
   { name: "view inventory-adjustment-line", code: "inventory-adjustment-line:view", module: "inventory-adjustment-line" },
   { name: "edit inventory-adjustment-line", code: "inventory-adjustment-line:edit", module: "inventory-adjustment-line" },
+  // Sprint 6B-4：Inventory Conversion 子资源（line 受限 view/edit——转换行由转换单驱动；对齐 5A/5B line 模式）
+  { name: "view inventory-conversion-line", code: "inventory-conversion-line:view", module: "inventory-conversion-line" },
+  { name: "edit inventory-conversion-line", code: "inventory-conversion-line:edit", module: "inventory-conversion-line" },
 ];
 
 // Sprint 6A：Inventory Ledger 受限系统权限（consume 为后台执行动作——**不进入全局 PERMISSION_ACTIONS**（consume 非通用 CRUD action）；仅 SUPER_ADMIN/ADMIN 静态授权（见 packages/shared/src/rbac/index.ts SYSTEM_PERMISSIONS）；Manager/Member/Viewer 默认无权限 → 403；seed 注册该 Permission 供权限矩阵/审计可见）
@@ -521,6 +526,8 @@ const SEED_DOCUMENT_SEQUENCES = [
   // Sprint 6B-3：Stock Count / Inventory Adjustment 单据序列（docType=STOCK_COUNT 前缀 CNT、docType=INVENTORY_ADJUSTMENT 前缀 ADJ，padLength 6；幂等 upsert——创建即取号，**Sequence 缺失 fail closed，禁止 fallback 临时编号**）
   { code: "CNT", name: "盘点单", docType: "STOCK_COUNT", prefix: "CNT", nextNo: 1, padLength: 6 },
   { code: "ADJ", name: "库存调整单", docType: "INVENTORY_ADJUSTMENT", prefix: "ADJ", nextNo: 1, padLength: 6 },
+  // Sprint 6B-4：Inventory Conversion 单据序列（docType=INVENTORY_CONVERSION 前缀 CVT，padLength 6；幂等 upsert——创建即取号，**Sequence 缺失 fail closed，禁止 fallback 临时编号**）
+  { code: "CVT", name: "库存转换单", docType: "INVENTORY_CONVERSION", prefix: "CVT", nextNo: 1, padLength: 6 },
   { code: "PI", name: "形式发票", docType: "PROFORMA_INVOICE", prefix: "PI", nextNo: 1, padLength: 6 },
   { code: "CI", name: "商业发票", docType: "COMMERCIAL_INVOICE", prefix: "CI", nextNo: 1, padLength: 6 },
   // Sprint 4C：Delivery Foundation 单据序列（CTO 锁定：DELIVERY_ORDER / prefix DO / padLength 6；幂等 upsert）

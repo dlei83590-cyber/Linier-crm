@@ -199,3 +199,97 @@ Sprint 6B-3 Count+Adjustment Vertical Slice 进入 CTO Count+Adjustment Review �
 7. OpenAPI Sprint 6B-3 段（端点 + components）已补齐；
 8. EVENTS.md v1.28 载荷对齐（InventoryCountCompleted / InventoryAdjustmentApplied 已注册，无需扩事件）；
 9. Conversion/Reservation/Costing 零实现（HOLD 保持）。
+
+---
+
+# Sprint 6B-4 QA — Inventory Conversion / Repack Vertical Slice（同 item 转换）
+
+> Sprint：6B（Inventory Operations）| 模块：Inventory Conversion——同 item Repack / UOM Conversion（CONSUME + PRODUCE 同一 movementGroupId 原子落账）| PR：#22（feature/sprint6b-inventory-operations）
+> 日期：2026-08-11
+> 状态：⏳ 待 CTO Conversion Review（Phase 6B-4，CTO #8658 授权；Reservation/Costing 继续 HOLD）
+> 关联：ADR-0026（FINAL APPROVED）、Architecture Process Gate §6、Field Matrix v0.5 §4、Sprint6B_CTO_Pending_Decisions.md（P10/P11 Final）、EVENTS.md v1.28（InventoryConversionExecuted）、docs/test-cases/Conversion_API.md、openapi.yaml（Sprint 6B-4 段）
+> 6B-4 核心事实链：**Conversion DRAFT（CVT 创建即取号）→ 恰好 1 CONSUME + 1 PRODUCE（UNIQUE(headerId, lineRole)）→ baseQuantity 服务端 canonical 计算（quantity × uomToBaseRate，Decimal 精度统一）→ submit（DRAFT→SUBMITTED，无审批状态机）→ execute（同事务：锁单 → 校验守恒 → 生成/复用 movementGroupId → Shared LedgerCommand 双 atom CONSUME+PRODUCE → 单据 EXECUTED + 证据）→ InventoryConversionExecuted（事务提交后 best-effort，不含余额）**
+> **四条锁死（CTO #8658）**：① baseQuantity 服务端 canonical 计算，不信任客户端；② CONSUME.baseQuantity == PRODUCE.baseQuantity 才 Execute；③ 首版 same item（禁止 BOM/组装/拆解/多物料）；④ batch 精确继承、serial 不允许重新生成。
+
+## 1. 交付范围
+
+### 1.1 代码（均在 `apps/web/src/**`）
+| 分组 | 文件/端点 | 说明 |
+| --- | --- | --- |
+| Seed/RBAC | `prisma/seed.ts` + `packages/shared/src/constants/index.ts` | `inventory-conversion` 动作权限 + `inventory-conversion-line` view/edit 受限权限 + CVT DocumentSequence（INVENTORY_CONVERSION，prefix CVT，padLength 6，创建即取号，缺失 fail closed） |
+| 领域函数 | `apps/web/src/lib/inventory-conversion/helpers.ts` | `nextConversionNo`（CVT 原子取号 fail closed）+ `computeBaseQuantity`（**服务端 canonical：quantity × uomToBaseRate，toDecimalPlaces(4) ROUND_HALF_UP，禁止 number 中间转换**）+ `buildConversionAtoms`（CONSUME OUT + PRODUCE IN 双 atom，同一 movementGroupId，quantity=baseQuantity canonical）+ `conversionLineDedupeKey` |
+| 事件 | `apps/web/src/lib/inventory-conversion/events.ts` | `InventoryConversionExecuted`（EVENTS v1.28 已注册；载荷含行级 uomToBaseRate + canonical baseQuantity，**不含投影余额**） |
+| API | `apps/web/src/app/api/inventory-conversions/route.ts` | GET 列表 + POST 创建（DRAFT；CVT 取号；baseUomId==Item.stockUomId Gate；**baseQuantity 服务端计算**；batch 继承校验；红线 DRAFT 不落账） |
+| API | `apps/web/src/app/api/inventory-conversions/[id]/route.ts` | GET 详情 + PATCH 更新（仅 DRAFT；CAS；行整体替换；itemId/baseUomId 不可编辑；baseQuantity 重新服务端计算） |
+| API | `apps/web/src/app/api/inventory-conversions/[id]/submit/route.ts` | DRAFT → SUBMITTED（无审批状态机，提交确认；守恒/换算率/batch 前置校验；**红线 SUBMITTED ≠ EXECUTED**） |
+| API | `apps/web/src/app/api/inventory-conversions/[id]/execute/route.ts` | **核心**：SUBMITTED → EXECUTED；FOR UPDATE 锁单 → 四条锁死校验 → 生成/复用 movementGroupId → executeLedgerAtoms（同一 caller tx，全有或全无）→ 单据 EXECUTED + 证据 → 事件 |
+| API | `apps/web/src/app/api/inventory-conversions/[id]/cancel/route.ts` | DRAFT/SUBMITTED → CANCELLED；EXECUTED 禁（纠错走 Reversal） |
+| OpenAPI | `docs/openapi.yaml` | Sprint 6B-4 段：/api/inventory-conversions（list/create/get/patch/submit/execute/cancel）+ components（InventoryConversionCreate/Update/Line/Response/List/Execute） |
+
+### 1.2 RBAC（权限码，动作级，零新造）
+- `inventory-conversion:view`（list/get）｜ `inventory-conversion:create`（创建）｜ `inventory-conversion:edit`（PATCH/submit/execute）｜ `inventory-conversion:close`（cancel）
+- `inventory-conversion-line:view/edit`（受限，行由单据驱动）
+
+### 1.3 Domain Events（EVENTS.md v1.28）
+- `InventoryConversionExecuted` ⏳ → **✅ implemented**（execute 事务提交后 best-effort 发布；载荷 conversionId/conversionNo/itemId/baseUomId/movementGroupId/lines[行级 uomToBaseRate + baseQuantity]/executedById/executedAt）
+- DRAFT 创建/编辑/提交/取消**不发领域事件**（仅 AuditLog），对齐 5B/6B-2/6B-3 惯例
+
+## 2. 业务事实边界核验（CTO Gate）
+
+| # | 边界 | 实现 | 核验 |
+| --- | --- | --- | --- |
+| B1 | 同一 itemId（P10/P11 收窄） | header.itemId 单一；**行无 itemId 字段**（结构上禁止多物料）；首版 Repack/UOM Conversion | ✅ |
+| B2 | 单输入单输出（Blocking ③） | UNIQUE(conversionHeaderId, lineRole)（DB）+ 恰好 1 CONSUME + 1 PRODUCE（service） | ✅ |
+| B3 | baseUomId == Item.stockUomId（P11 Gate） | create/update/execute 三层校验（不允许任意 UOM 冒充库存基准） | ✅ |
+| B4 | **baseQuantity 服务端 canonical（锁死①）** | schema 不收 baseQuantity；`computeBaseQuantity`（quantity × uomToBaseRate，toDecimalPlaces(4)）；**不信任客户端** | ✅ |
+| B5 | **守恒（锁死②，P11）** | execute + submit 双重校验 `CONSUME.baseQuantity == PRODUCE.baseQuantity` → 不一致 400 BASE_QTY_MISMATCH | ✅ |
+| B6 | **same item / 禁 BOM（锁死③）** | header.itemId 单一 + 行无 itemId + Movement itemId 统一 = conversion.itemId | ✅ |
+| B7 | **batch 精确继承（锁死④，P5）** | create/update/execute 校验 CONSUME batch == PRODUCE batch（首版不拆批不换批） | ✅ |
+| B8 | **serial 不允许（锁死④，P5）** | ConversionLine 无 serialNo 字段；atom serialNo=null | ✅ |
+| B9 | 状态机（无审批） | DRAFT → SUBMITTED → EXECUTED / CANCELLED；**SUBMITTED ≠ EXECUTED**；计量事实不发明审批流 | ✅ |
+| B10 | 终态证据（Integrity ①） | EXECUTED ⇒ movementGroupId/executedAt/executedById 全非空（同事务写入 + Migration 0026 CHECK 兜底） | ✅ |
+| B11 | movementGroupId 稳定（Blocking ② 教训） | `conversion.movementGroupId ?? crypto.randomUUID()`（已有值复用，无值首次生成并冻结；CONSUME+PRODUCE 共享） | ✅ |
+| B12 | Cancel 边界 | DRAFT/SUBMITTED 可取消；EXECUTED 禁（纠错走 Reversal/Correction） | ✅ |
+
+## 3. 核心不变量（CTO 6B-4 Execute 三不变量）
+
+| # | 不变量 | 实现证据 |
+| --- | --- | --- |
+| I1 | Conversion 只能经 Shared LedgerCommand 追加 Movement（0 直写） | execute/route.ts：只调用 `executeLedgerAtoms(tx, atoms)`；grep 审计 0 直写 InventoryMovement/StockProjection |
+| I2 | 单据 EXECUTED + CONSUME + PRODUCE Movement + 双 Projection 同一 caller transaction 全有或全无 | 全部在 `prisma.$transaction` 内：executeLedgerAtoms(tx, atoms) → CAS updateMany(status=EXECUTED + 证据 + version+1)；任何失败抛错 → 事务回滚，Conversion 保持 SUBMITTED |
+| I3 | 重试通过 Shared Core identity+immutable-fact 幂等；禁止自实现扣增 | 只调用 `executeLedgerAtoms`；InventoryInsufficientStockError / InventoryLedgerIdempotencyConflictError 上抛 → 409；五元幂等 sourceType=CONVERSION/sourceId/sourceLineId/movementRole=CONSUME|PRODUCE/movementAtomKey=BULK；**movementGroupId 稳定（复用已有值）** |
+
+## 4. 并发与回滚（Concurrency & Rollback）
+
+| # | 场景 | 预期 |
+| --- | --- | --- |
+| R1 | 重复 execute（同版本） | 第二次 409 ALREADY_EXECUTED（幂等拒绝） |
+| R2 | 并发 execute / cancel 同单 | FOR UPDATE 串行；CAS version+status 原子条件，败者 409 VERSION_CONFLICT / INVALID_STATE |
+| R3 | 源库存不足（CONSUME OUT） | InventoryInsufficientStockError → 409 INVENTORY_INSUFFICIENT_STOCK；事务回滚，单据保持 SUBMITTED，Movement/Projection 0 落账 |
+| R4 | CONSUME 成功但 PRODUCE 故障 | executeLedgerAtoms 同 tx 顺序执行，PRODUCE 抛错 → 整事务 0 落账（**无 CONSUME 残留**） |
+| R5 | 幂等 immutable-fact conflict | 同五元 identity 但 fact 不同 → InventoryLedgerIdempotencyConflictError → 409；绝不静默重放 |
+| R6 | 守恒破坏（并发后值漂移） | execute 时重校验 CONSUME.baseQuantity == PRODUCE.baseQuantity → 400 BASE_QTY_MISMATCH |
+| R7 | batch 继承破坏 | CONSUME batch != PRODUCE batch → 400 BATCH_MISMATCH |
+| R8 | movementGroupId 并发复用 | 已有值复用（重试/恢复）；无值首次生成并冻结——重试不随机重造 |
+
+## 5. 已知限制（Known Limitations）
+
+1. 事件总线未落地（既有债务）：InventoryConversionExecuted 以 AuditLog 留痕，发布失败不阻断（事务已提交）；
+2. **Reservation / ReservedQty / AvailableQty / Costing / FIFO / Moving Average 继续 HOLD**（CTO #8658 明令）；
+3. Conversion Reversal / Correction（纠错）本轮不实现——EXECUTED 后纠错走未来 Reversal slice（REVERSAL role 已预留）；
+4. serial-managed Repack 场景首版不支持（serial 不重新生成——P5 Final；serial 场景后续阶段）；
+5. 多物料 N×M Transformation（装配/拆解/工艺转换）→ 未来 Manufacturing / Transformation Gate（P10 收窄）。
+
+## 6. Release Gate
+
+Sprint 6B-4 Conversion Vertical Slice 进入 CTO Conversion Review 前必须满足：
+
+1. docs/test-cases/Conversion_API.md 全部核验，无 Blocking；
+2. Conversion 核心链 DRAFT → SUBMITTED → EXECUTED 全链通过（含守恒/batch/幂等/并发场景）；
+3. Execute 三不变量（I1/I2/I3）代码证据 + 并发/回滚场景（R1-R8）核验；
+4. **四条锁死核验**：baseQuantity 服务端 canonical（grep：schema 不收、computeBaseQuantity 唯一入口）、守恒、same item、batch 继承 + serial 禁；
+5. **Conversion API 全程 0 直写** InventoryMovement / StockProjection（grep 代码审计）；
+6. CI Quality Gates + Build 全绿（GitHub Actions run 待出）；
+7. OpenAPI Sprint 6B-4 段（端点 + components）已补齐；
+8. EVENTS.md v1.28 载荷对齐（InventoryConversionExecuted 已注册，无需扩事件）；
+9. Reservation/Costing 零实现（HOLD 保持）。
