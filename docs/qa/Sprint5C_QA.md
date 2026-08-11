@@ -1,0 +1,58 @@
+# Sprint 5C QA — Supplier Invoice Foundation（5C-1A Vertical Slice）
+
+> Sprint：5C-1A（Supplier Invoice Foundation）| 模块：Supplier Invoice——RECEIPT_BASED 首版（PO Line + POSTED WHR Line 双溯源）+ SINV 创建即取号 + 三次来源链验证 + DRAFT→SUBMITTED | 分支：feature/sprint5c-supplier-invoice-ap（PR #23）
+> 日期：2026-08-11
+> 状态：⏳ 待 CTO 5C-1A API Review（CTO #9048 Schema FINAL APPROVED + #9083 API 指令授权；5C-1B Match / 5C-1C POST-GRIR-AP 继续 HOLD）
+> 关联：ADR-0027（APPROVED）、Sprint5C_Supplier_Invoice_Three_Way_Match_AP_Gate.md、Sprint5C_Field_Matrix.md、P1-P12 Final、EVENTS.md v1.31（SupplierInvoiceCreated 注册位保持 ⏳）、docs/test-cases/SupplierInvoice_API.md、openapi.yaml（Sprint 5C-1A 段）
+> 5C-1A 事实链：**SupplierInvoice DRAFT（SINV 创建即取号，P1）→ Create/PATCH 两次来源链验证 → Submit（DRAFT→SUBMITTED，第三次来源链验证；**SUBMITTED ≠ POSTED**，不生成 MatchRun/GRIR/ApLiabilityFact）**
+> 四条 API 红线（CTO #9048 锁死）：① Create/Match/POST 都必须重新验证 WHR header = POSTED + WHR Line ↔ PO Line ↔ Item ↔ Supplier 来源链一致；② POST 锁内重验 approved MatchRun snapshot（5C-1C）；③ POSTED + GRIR CONSUME + ApLiabilityFact + ApOpenItem 同一事务（5C-1C）；④ 禁止 UPDATE immutable MatchRun/GRIR/ApLiabilityFact（5C-1B/1C）。
+
+## 1. 交付范围
+
+### 1.1 代码（均在 `apps/web/src/**` + seed/constants）
+| 分组 | 文件/端点 | 说明 |
+| --- | --- | --- |
+| Seed/RBAC | `prisma/seed.ts` + `packages/shared/src/constants/index.ts` | `supplier-invoice` 动作权限（view/create/edit/close）+ `supplier-invoice-line` view/edit 受限权限 + **SINV DocumentSequence**（SUPPLIER_INVOICE，prefix SINV，padLength 6，创建即取号 fail closed） |
+| 领域函数 | `apps/web/src/lib/supplier-invoice/helpers.ts` | `nextSupplierInvoiceNo`（SINV 原子取号，**Sequence 缺失 fail closed**）+ `verifyReceiptBasedSourceChain`（**RECEIPT_BASED 三重 Gate：WHR POSTED + WHR Line↔PO Line↔Item↔Supplier 来源链一致 + 数量≤已入库**）+ `computeSupplierInvoiceLineAmounts`/`aggregateSupplierInvoiceTotals`（**金额服务端 Decimal，禁客户端直传**）+ `supplierInvoiceLineDedupeKey` |
+| API | `apps/web/src/app/api/supplier-invoices/route.ts` | GET 列表（分页 + invoiceNo/supplierId/documentStatus/dateFrom/dateTo 过滤）+ POST 创建（DRAFT；SINV 取号；**第一次来源链验证**；重复发票号 API 409 + DB 组合 UNIQUE 双防线） |
+| API | `apps/web/src/app/api/supplier-invoices/[id]/route.ts` | GET 详情 + PATCH 更新（仅 DRAFT；CAS version；**第二次来源链验证 + 行替换同事务**；金额服务端重算；supplierId/supplierInvoiceNo/currency/exchangeRate 不可编辑） |
+| API | `apps/web/src/app/api/supplier-invoices/[id]/submit/route.ts` | DRAFT → SUBMITTED（**第三次来源链验证**，状态迁移前重验；**不创建 MatchRun/GRIR/ApLiabilityFact，不写 POSTED evidence**；仅 AuditLog） |
+| OpenAPI | `docs/openapi.yaml` | Sprint 5C-1A 段：/api/supplier-invoices（list/create/get/patch/submit）+ components（SupplierInvoiceCreate/Update/Line/VersionRequest/Response/List） |
+
+### 1.2 RBAC（权限码，动作级，零新造）
+- `supplier-invoice:view`（list/get）｜ `supplier-invoice:create`（创建）｜ `supplier-invoice:edit`（PATCH/submit）｜ `supplier-invoice:close`（cancel，5C-1A 未开放取消端点——HOLD）
+- `supplier-invoice-line:view / edit`（受限，行由发票驱动）
+
+### 1.3 Domain Events（EVENTS.md v1.31）
+- **5C-1A 阶段不发领域事件**：`SupplierInvoiceCreated` 注册位保持 ⏳——严格沿用既有口径（DRAFT 创建/编辑/提交仅 AuditLog，对齐 6B：只有终态动作才发领域事件；5C-1A 只到 SUBMITTED，无终态动作）
+- `SupplierInvoiceMatched/Posted/Cancelled` + `GrirAccrued/GrirReversed` 仍 HOLD（5C-1B/1C）；5C-2 事件继续 HOLD
+
+## 2. 边界与红线（5C-1A 锁死）
+
+| # | 边界 | 实现 |
+| --- | --- | --- |
+| B1 | **RECEIPT_BASED 三重 Gate（红线 ①）**：Create/PATCH/Submit 三次都重新验证 WHR header=POSTED + WHR Line↔PO Line↔Item↔Supplier 来源链一致 + 数量 ≤ 已入库 | `verifyReceiptBasedSourceChain(tx, ...)` 在三个路由各调用一次（Create 第一次 / PATCH 第二次 / Submit 状态迁移前第三次） |
+| B2 | **金额不可由客户端篡改**：Create/PATCH 都不信客户端头金额/行金额 | schema 不收金额；行 netAmount=quantity×unitPrice（2dp）、taxAmount=netAmount×taxRate/100（2dp）、nonRecoverableTaxAmount=vatRecoverable?0:taxAmount；头 net/tax/gross 服务端聚合（Decimal，禁 number 中间转换） |
+| B3 | **Submit 只允许 DRAFT→SUBMITTED** | 不得提前创建 MatchRun/GRIR/ApLiabilityFact；不写 postedAt/postedById（POSTED evidence 属 5C-1C） |
+| B4 | **重复供应商发票号**：API 稳定 409 + DB 组合 UNIQUE 最终防线 | 创建前 findFirst 预检 → 409 SUPPLIER_INVOICE_DUPLICATE_NUMBER；P2002 catch → 同 409（@@unique([supplierId, supplierInvoiceNo])） |
+| B5 | **PATCH 仅 DRAFT + CAS** | id+version+documentStatus=DRAFT 同时命中；supplierId/supplierInvoiceNo/currency/exchangeRate 不可编辑（schema 不收） |
+| B6 | **SINV Sequence fail closed** | 缺失 → 500 SUPPLIER_INVOICE_SEQUENCE_MISSING，禁 fallback 临时编号 |
+| B7 | 5C-1A 不触碰 MatchRun/GRIR/ApLiabilityFact/ApOpenItem | 全部 5C-1B/1C；不写 InventoryMovement/StockProjection；不建 GL；5C-2/CN-DN/Payment 继续 HOLD |
+| B8 | 事件严格沿用既有口径 | 5C-1A DRAFT/SUBMITTED 仅 AuditLog；不造新领域事件 |
+
+## 3. QA 测试段（详见 docs/test-cases/SupplierInvoice_API.md）
+
+| 段 | 覆盖 |
+| --- | --- |
+| A 权限 | supplier-invoice:view/create/edit 403 + line 受限权限 |
+| B 创建 | SINV 取号 / DRAFT 状态 / 金额服务端 / 重复发票号 409 / 双溯源必填 |
+| C 来源链 Gate | WHR 非 POSTED 400 / PO-WHR-Item-Supplier 链不一致 400 / 数量超已入库 400 |
+| D 更新 | 仅 DRAFT / CAS 版本冲突 / 行替换第二次 Gate / 金额重算 / 不可编辑字段 |
+| E 提交 | DRAFT→SUBMITTED / 第三次 Gate / SUBMITTED≠POSTED（无 AP/GRIR/MatchRun） |
+| F 失败路径 | Sequence 缺失 500 / P2002 兜底 409 |
+| G 静态核验 | 0 直写 InventoryMovement/StockProjection / 三次来源链 / 金额服务端 / submit 不建 AP |
+
+## 4. 后续阶段（HOLD）
+- 5C-1B：Immutable 3-Way Match（MatchRun 创建 / revision 并发 / current projection / Workflow approval 引用 immutable matchRunId/revision）
+- 5C-1C：POST 最终 Gate / consume GRIR / ApLiabilityFact / ApOpenItem 初始 Projection / maker-checker（红线 ②③④ 在此落地）
+- 5C-2：Supplier CN/DN + Payment Allocation（独立 Gate）；GL / Costing / Reservation 继续 HOLD

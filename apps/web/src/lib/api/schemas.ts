@@ -1022,3 +1022,46 @@ export const inventoryConversionExecuteSchema = z.object({
 export const inventoryConversionCancelSchema = z.object({
   version: z.number().int().positive(),
 });
+
+// ============================================================================
+// Sprint 5C-1A — Supplier Invoice Foundation（RECEIPT_BASED 首版；CTO #9048 FINAL APPROVED）
+// ============================================================================
+
+/** 供应商发票行（创建/更新共用；双溯源必填——PO Line + POSTED WHR Line；**不收金额**——服务端计算） */
+export const supplierInvoiceLineSchema = z.object({
+  purchaseOrderLineId: z.string().min(1), // 溯源 PO Line（不变量① 承诺来源）
+  warehouseReceiptLineId: z.string().min(1), // 溯源入库行（不变量① 数量匹配基准；必须来自 POSTED WHR——红线 1）
+  quantity: z.coerce.number().positive(), // 开票数量（> 0；≤ 已入库数量——红线 1）
+  unitPrice: z.coerce.number().positive(), // 单价（与 PO 快照单价比对；> 0）
+  taxRate: z.coerce.number().min(0).max(100), // 税率快照（0-100 百分比；DB CHECK 兜底）
+  vatRecoverable: z.boolean().default(true), // P9 Final：recoverable=true → Input VAT；false → nonRecoverableTaxAmount
+  remark: z.string().max(500).optional(),
+});
+
+/** 供应商发票创建（DRAFT；创建即取号 SINV——P1 Final；**不收头金额**——服务端聚合） */
+export const supplierInvoiceCreateSchema = z.object({
+  supplierId: z.string().min(1),
+  supplierInvoiceNo: z.string().min(1).max(100), // 供应商发票号（供应商侧唯一标识；不变量② 组合唯一）
+  invoiceDate: z.string().min(1), // ISO date（YYYY-MM-DD）
+  receivedDate: z.string().min(1), // ISO date（YYYY-MM-DD）
+  currency: z.string().max(10).default('CNY'), // 币种（对齐现有模式：String ISO 码）
+  exchangeRate: z.coerce.number().positive().default(1), // 创建时快照 FX（P2 Final）
+  paymentDueDate: z.string().optional(), // 账期（可空）
+  remark: z.string().max(500).optional(),
+  lines: z.array(supplierInvoiceLineSchema).min(1, '至少一条有效行'),
+});
+
+/** 供应商发票更新（仅 DRAFT；version 乐观锁；行整体替换；supplierId/supplierInvoiceNo/currency/exchangeRate 不可改） */
+export const supplierInvoiceUpdateSchema = z.object({
+  version: z.number().int().positive(),
+  invoiceDate: z.string().optional(),
+  receivedDate: z.string().optional(),
+  paymentDueDate: z.string().nullable().optional(),
+  remark: z.string().max(500).nullable().optional(),
+  lines: z.array(supplierInvoiceLineSchema).min(1).optional(),
+});
+
+/** 供应商发票提交（真 Gate：DRAFT → SUBMITTED；version 乐观锁；**SUBMITTED ≠ POSTED**——submit 不生成 AP/GRIR） */
+export const supplierInvoiceSubmitSchema = z.object({
+  version: z.number().int().positive(),
+});
