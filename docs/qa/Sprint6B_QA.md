@@ -1,0 +1,414 @@
+# Sprint 6B QA — Inventory Transfer Vertical Slice（调拨 Vertical Slice）
+
+> Sprint：6B（Inventory Operations）| 模块：Inventory Transfer——业务事实层（Create/Update/Submit/Cancel/Execute）+ 共享 InventoryLedgerCommand 双 atom 落账（SOURCE_OUT + DESTINATION_IN，同一 movementGroupId）| PR：#22（feature/sprint6b-inventory-operations）
+> 日期：2026-08-11
+> 状态：⏳ 待 CTO Inventory Transfer Review（Phase 6B-2，CTO #8233 授权；Count/Adjustment/Conversion 继续 HOLD）
+> 关联：ADR-0026（FINAL APPROVED）、Sprint6B_Inventory_Operations_Architecture_Process_Gate.md §3、Sprint6B_Inventory_Operations_Field_Matrix.md v0.5 §1、Sprint6B_CTO_Pending_Decisions.md（P2/P3/P5 Final）、EVENTS.md v1.28（InventoryTransferExecuted）、docs/test-cases/InventoryTransfer_API.md、openapi.yaml（Sprint 6B-2 段）
+> 6B-2 核心事实链：**Transfer DRAFT（TRF 创建即取号）→ Submit（审批走既有 Workflow Policy；未命中 → APPROVED 投影）→ Execute（同事务：锁单 → 生成 movementGroupId → Shared LedgerCommand 双 atom SOURCE_OUT + DESTINATION_IN → 单据 EXECUTED + executedAt/ById）→ InventoryTransferExecuted（事务提交后 best-effort，不含库存余额）**
+
+## 1. 交付范围
+
+### 1.1 代码（均在 `apps/web/src/**`）
+| 分组 | 文件/端点 | 说明 |
+| --- | --- | --- |
+| Seed/RBAC | `prisma/seed.ts` + `packages/shared/src/constants/index.ts` | `inventory-transfer` 动作权限（view/create/edit/delete/approve/audit/export/import/assign/close）+ `inventory-transfer-line` view/edit 受限权限 + TRF DocumentSequence（INVENTORY_TRANSFER，prefix TRF，padLength 6，创建即取号） |
+| 领域函数 | `apps/web/src/lib/inventory-transfer/helpers.ts` | `nextTransferNo`（TRF 原子取号）+ `buildTransferAtoms`（SOURCE_OUT + DESTINATION_IN 双 atom，同一 movementGroupId；serial-managed 每 serial 一对 quantity=1；非 serial 一对 BULK；batch/mfg/exp 原样继承）+ `transferLineDedupeKey` |
+| 事件 | `apps/web/src/lib/inventory-transfer/events.ts` | `InventoryTransferExecuted`（EVENTS v1.28 已注册；载荷不含投影余额） |
+| Workflow 集成 | `apps/web/src/lib/inventory-transfer/workflow-sync.ts` | `maybeTriggerInventoryTransferApproval`（module=INVENTORY_TRANSFER 策略命中 → 创建/复用 WorkflowInstance 单实例+多轮重提；未命中 → 不触发不阻塞）+ `syncInventoryTransferApproval`（COMPLETED → APPROVED + approvedById；REJECTED → DRAFT 重提；**红线 APPROVED ≠ EXECUTED**） |
+| API | `apps/web/src/app/api/inventory-transfers/route.ts` | GET 列表（分页 + transferNo/source/dest/status 过滤）+ POST 创建（DRAFT；TRF 取号；自调拨防护；DRAFT 不落账） |
+| API | `apps/web/src/app/api/inventory-transfers/[id]/route.ts` | GET 详情 + PATCH 更新（仅 DRAFT；CAS version；行全量替换） |
+| API | `apps/web/src/app/api/inventory-transfers/[id]/submit/route.ts` | DRAFT → SUBMITTED + maybeTriggerApproval；未命中策略 → 直接 APPROVED 投影（对齐 PO submit） |
+| API | `apps/web/src/app/api/inventory-transfers/[id]/cancel/route.ts` | DRAFT/APPROVED → CANCELLED；SUBMITTED 需先 Withdraw；EXECUTED 禁止（纠错走 Reversal） |
+| API | `apps/web/src/app/api/inventory-transfers/[id]/execute/route.ts` | **核心**：APPROVED → EXECUTED；FOR UPDATE 锁单 → 校验执行态事实 → 生成 movementGroupId → `executeLedgerAtoms(tx, atoms)`（同一 caller tx，全有或全无）→ 单据 EXECUTED + 证据（同事务）→ 事务提交后发 InventoryTransferExecuted |
+| Workflow 回写 | `apps/web/src/app/api/workflows/instances/[id]/actions/route.ts` | businessType === 'inventory-transfer' → syncInventoryTransferApproval（COMPLETED/REJECTED） |
+| OpenAPI | `docs/openapi.yaml` | Sprint 6B-2 段：/api/inventory-transfers（list/create/get/patch/submit/cancel/execute）+ components（InventoryTransferCreate/Update/Response/List/Submit/Execute） |
+
+### 1.2 RBAC（权限码，动作级，零新造）
+- `inventory-transfer:view`（list/get）｜ `inventory-transfer:create`（创建）｜ `inventory-transfer:edit`（PATCH/submit/execute）｜ `inventory-transfer:close`（cancel）｜ `inventory-transfer:approve`（Workflow 审批动作沿用 workflow-instance:approve，Transfer 侧不新增）
+- `inventory-transfer-line:view / edit`（受限，行由单据驱动）
+
+### 1.3 Domain Events（EVENTS.md v1.28）
+- `InventoryTransferExecuted` ⏳ → **✅ implemented**（Execute 事务提交后 best-effort 发布；载荷 transferId/transferNo/movementGroupId/源目标仓库位/lines/executedById/executedAt，**不含库存余额**——P10 Final）
+- DRAFT 创建/编辑/提交/取消**不发领域事件**（仅 AuditLog），对齐 5B 惯例
+
+## 2. 业务事实边界核验（CTO Gate）
+
+| # | 边界 | 实现 | 核验 |
+| --- | --- | --- | --- |
+| B1 | Transfer = 双边原子事实（D2） | Execute 构造 SOURCE_OUT + DESTINATION_IN 双 atom，同一 movementGroupId，同一 caller tx | ✅ |
+| B2 | 全有或全无（CTO #7895） | executeLedgerAtoms 任一失败 → 整事务回滚，单据保持 APPROVED（不提前写 EXECUTED） | ✅ |
+| B3 | 同一 movementGroupId | Execute 锁单后**复用已有值或首次生成**（`transfer.movementGroupId ?? crypto.randomUUID()`）并冻结；**禁止每次 attempt 随机重造**（CTO Transfer Review Blocking ②：同五元 identity 不同 group fact → Shared Core 判幂等 conflict）；Create/Submit/Approve 阶段不生成（Schema 可空，EXECUTE 后必有） | ✅ |
+| B4 | 六A 红线：不经 Ledger Command 直写 | Transfer API **绝不直接 INSERT InventoryMovement / UPDATE StockProjection**——只调用 `executeLedgerAtoms`（grep 审计） | ✅ |
+| B5 | 幂等重试走 Shared Core | 五元 identity（sourceType=TRANSFER/sourceId/sourceLineId/role/atomKey）+ immutable-fact equality；重复 execute → 409 ALREADY_EXECUTED；Core 幂等防并发重放 | ✅ |
+| B6 | serial-managed 守恒 | serialNos.length == quantity 且整数、去重；双边**完全相同 serial 集合**（每 serial 一对） | ✅ |
+| B7 | batch/mfg/exp 精确继承（P5） | buildTransferAtoms 原样复制 SOURCE→DESTINATION；首版禁止换批 | ✅ |
+| B8 | 自调拨防护（P3） | 同仓同库位（含都 NULL）→ 409 SELF_TRANSFER（Create/Update/Submit/Execute 四层复核 + DB CHECK 兜底） | ✅ |
+| B9 | 状态机（P2） | DRAFT → SUBMITTED → APPROVED → EXECUTED / CANCELLED；**APPROVED ≠ EXECUTED** | ✅ |
+| B10 | Cancel 边界 | DRAFT/APPROVED 可 Cancel；SUBMITTED 需先 Withdraw；EXECUTED 禁止（纠错走整组 Reversal） | ✅ |
+| B11 | 审批走既有 Workflow Policy | maybeTriggerApproval（module=INVENTORY_TRANSFER）；未命中 → 直接 APPROVED 投影（对齐 PO submit，不发明第二套审批规则） | ✅ |
+| B12 | 终态证据（Integrity ①） | EXECUTED ⇒ movementGroupId/executedAt/executedById 全非空（同事务写入 + Migration 0026 CHECK 兜底） | ✅ |
+
+## 3. 核心不变量（CTO 6B-2 Execute 三不变量）
+
+| # | 不变量 | 实现证据 |
+| --- | --- | --- |
+| I1 | SOURCE_OUT + DESTINATION_IN 共用同一非空 movementGroupId | execute/route.ts：`const movementGroupId = transfer.movementGroupId ?? crypto.randomUUID()`（已有值复用，无值首次生成）→ buildTransferAtoms 全部 atom 携带 → 单据 movementGroupId 同值落库 |
+| I2 | 单据 EXECUTED + 两笔 Movement + 两侧 Projection 同一 caller transaction 全有或全无 | 全部在 `prisma.$transaction` 内：executeLedgerAtoms(tx, atoms) → CAS updateMany(status=EXECUTED + 证据 + version+1)；任何失败抛错 → 事务回滚 |
+| I3 | 重试通过 Shared Core identity+immutable-fact 幂等；禁止自实现扣增 | 只调用 `executeLedgerAtoms`；InventoryInsufficientStockError / InventoryLedgerIdempotencyConflictError 上抛 → 409；无任何自行 INSERT Movement/UPDATE Projection 代码 |
+
+## 4. 并发与回滚（Concurrency & Rollback）
+
+| # | 场景 | 预期 |
+| --- | --- | --- |
+| R1 | 重复 execute（同版本） | 第二次 409 ALREADY_EXECUTED（幂等拒绝） |
+| R2 | 并发 execute / cancel 同单 | FOR UPDATE 串行；CAS version+status 原子条件，败者 409 VERSION_CONFLICT / INVALID_STATE |
+| R3 | 源库存不足（execute） | InventoryInsufficientStockError → 409 INVENTORY_INSUFFICIENT_STOCK；事务回滚，单据保持 APPROVED，Movement/Projection 0 落账 |
+| R4 | SOURCE_OUT 成功但 DESTINATION_IN 故障 | executeLedgerAtoms 同 tx 顺序执行，第二个抛错 → 整事务 0 落账（**无 SOURCE_OUT 残留**） |
+| R5 | 幂等 immutable-fact conflict | 同五元 identity 但 fact 不同 → InventoryLedgerIdempotencyConflictError → 409；绝不静默重放 |
+| R6 | serial 双边一致性 | serial-managed 行每 serial 恰好一对（SOURCE_OUT X + DESTINATION_IN X）；数量守恒校验在 Create/Execute 双层 |
+| R7 | 自调拨并发 | 同仓同库位请求 → 409 SELF_TRANSFER（Create 即拒） |
+
+## 5. 已知限制（Known Limitations）
+
+1. 事件总线未落地（既有债务）：InventoryTransferExecuted 以 AuditLog 留痕，发布失败不阻断（事务已提交）；
+2. **Count / Adjustment / Conversion 继续 HOLD**（CTO 6B-2 明令，本轮不实现 ADJ/CNT/CVT，也不扩 Reservation/Costing）；
+3. Transfer Reversal（整组冲销）本轮不实现——EXECUTED 后纠错走未来 Reversal slice（REVERSAL role 已预留，CTO #7975 Blocking ④ 已锁设计）；
+4. 跨仓/同仓审批差异由 Workflow Policy 配置驱动（P2 Final：跨仓默认需审、同仓策略配置，不硬编码）——未配置策略时 submit 直接 APPROVED。
+
+## 6. Release Gate
+
+Sprint 6B-2 Transfer Vertical Slice 进入 CTO Inventory Transfer Review 前必须满足：
+
+1. A-I（docs/test-cases/InventoryTransfer_API.md）全部核验，无 Blocking；
+2. Transfer 核心链 DRAFT → SUBMITTED → APPROVED → EXECUTED 全链通过（含未命中策略直接 APPROVED 分支）；
+3. Execute 三不变量（I1/I2/I3）代码证据 + 并发/回滚场景（R1-R7）核验；
+4. **Transfer API 全程 0 直写** InventoryMovement / StockProjection（grep 代码审计）；
+5. CI Quality Gates + Build 全绿（GitHub Actions run 待出）；
+6. OpenAPI Sprint 6B-2 段（端点 + components）已补齐；
+7. EVENTS.md v1.28 载荷对齐（InventoryTransferExecuted 已注册，无需扩事件）；
+8. Count/Adjustment/Conversion 零实现（HOLD 保持）。
+
+---
+
+# Sprint 6B-3 QA — Stock Count + Inventory Adjustment Vertical Slice（盘点 + 调整事实链）
+
+> Sprint：6B（Inventory Operations）| 模块：Stock Count（实盘事实）+ Inventory Adjustment（受控库存账事实）——事实链：**StockCount → per-line snapshot → variance → InventoryAdjustment → Shared LedgerCommand ADJUSTMENT Movement** | PR：#22（feature/sprint6b-inventory-operations）
+> 日期：2026-08-11
+> 状态：⏳ 待 CTO Count+Adjustment Review（Phase 6B-3，CTO #8471 授权；Conversion/Reservation/Costing 继续 HOLD）
+> 关联：ADR-0026（FINAL APPROVED）、Architecture Process Gate §4/§5、Field Matrix v0.5 §2/§3、Sprint6B_CTO_Pending_Decisions.md（P6/P7/P8/P9 Final）、EVENTS.md v1.28（InventoryCountCompleted / InventoryAdjustmentApplied）、docs/test-cases/StockCount_Adjustment_API.md、openapi.yaml（Sprint 6B-3 段）
+> 6B-3 核心事实链：**StockCount DRAFT（CNT 创建即取号）→ 录入盘点行（per-line atomic snapshot：同事务读五维 StockProjection → bookQtyAtCount/countedAt/ledgerWatermark；varianceQty=countedQty-bookQtyAtCount）→ complete（锁定；非零差异自动生成 COUNT_VARIANCE Adjustment DRAFT）→ Adjustment submit（Workflow 审批；未命中→APPROVED 投影）→ apply（同事务：锁单 → maker-checker → executeLedgerAtoms 逐行 ADJUSTMENT Movement → 单据 APPLIED + 证据）→ InventoryAdjustmentApplied（事务提交后 best-effort）**
+> **红线（CTO 6B-3 锁死）**：① StockCount **永不直接修改 StockProjection**——只有 Adjustment Apply 才允许调用 Shared LedgerCommand；② `sourceStockCountLineId @unique` 确保一条盘点差异只能正式结算一次（防双重入账）；③ Manual Adjustment 继续 maker-checker（创建人 ≠ 批准/Apply 人，DB CHECK 兜底）；④ 所有非零 Count variance 的 System Default 仍需审批；⑤ Adjustment 路由 **0 直写** InventoryMovement/StockProjection。
+
+## 1. 交付范围
+
+### 1.1 代码（均在 `apps/web/src/**`）
+| 分组 | 文件/端点 | 说明 |
+| --- | --- | --- |
+| Seed/RBAC | `prisma/seed.ts` + `packages/shared/src/constants/index.ts` | `stock-count` / `inventory-adjustment` 动作权限 + `stock-count-line` / `inventory-adjustment-line` view/edit 受限权限 + **`inventory-adjustment:apply` 受限系统权限**（SYSTEM_PERMISSIONS，仅 SUPER_ADMIN/ADMIN——P8/P9 Final）+ CNT（STOCK_COUNT）/ ADJ（INVENTORY_ADJUSTMENT）DocumentSequence（创建即取号，缺失 fail closed） |
+| 领域函数 | `apps/web/src/lib/stock-count/helpers.ts` | `nextCountNo`（CNT 原子取号 fail closed）+ `countLineDedupeKey`（五维去重）+ `readProjectionSnapshot`（同事务读五维 StockProjection → bookQtyAtCount/ledgerWatermark）+ `computeVarianceQty`（countedQty - bookQtyAtCount，无动态补偿公式） |
+| 领域函数 | `apps/web/src/lib/inventory-adjustment/helpers.ts` | `nextAdjustmentNo`（ADJ 原子取号 fail closed）+ `adjustmentLineDedupeKey` + `buildAdjustmentAtoms`（每行一笔 ADJUSTMENT Movement：sourceType=ADJUSTMENT/sourceId/sourceLineId/movementRole=ADJUSTMENT/movementAtomKey=BULK 或 serialNo；movementGroupId=adjustment.id 稳定；direction 行级 IN/OUT；quantity 恒正） |
+| 事件 | `apps/web/src/lib/stock-count/events.ts` | `InventoryCountCompleted`（EVENTS v1.28 已注册；载荷含 variance 明细，**不含投影余额**） |
+| 事件 | `apps/web/src/lib/inventory-adjustment/events.ts` | `InventoryAdjustmentApplied`（EVENTS v1.28 已注册；载荷含行级 direction + sourceStockCountLineId） |
+| Workflow 集成 | `apps/web/src/lib/inventory-adjustment/workflow-sync.ts` | `maybeTriggerInventoryAdjustmentApproval`（module=INVENTORY_ADJUSTMENT，单实例+多轮重提）+ `syncInventoryAdjustmentApproval`（COMPLETED→APPROVED+approvedById / REJECTED→DRAFT；**红线 APPROVED≠APPLIED**） |
+| API | `apps/web/src/app/api/stock-counts/route.ts` | GET 列表 + POST 创建（DRAFT；CNT 取号；**红线 DRAFT 不落账**） |
+| API | `apps/web/src/app/api/stock-counts/[id]/route.ts` | GET 详情 + PATCH 更新 header（仅 DRAFT；CAS） |
+| API | `apps/web/src/app/api/stock-counts/[id]/lines/route.ts` | POST 录入盘点行（**per-line atomic snapshot 核心**：同事务读五维 Projection → varianceQty 服务端计算；五维唯一；首次录入自动转 COUNTING） |
+| API | `apps/web/src/app/api/stock-counts/[id]/complete/route.ts` | **事实链核心**：COUNTING → COMPLETED/ADJUSTED；非零差异自动生成 COUNT_VARIANCE Adjustment（DRAFT，仍需审批）→ ADJUSTED；零差异 → COMPLETED |
+| API | `apps/web/src/app/api/stock-counts/[id]/cancel/route.ts` | DRAFT/COUNTING → CANCELLED（COMPLETED/ADJUSTED 禁） |
+| API | `apps/web/src/app/api/inventory-adjustments/route.ts` | GET 列表 + POST 创建（DRAFT；ADJ 取号；Manual 或引用 Count 差异；Minor Hardening ② 来源一致性） |
+| API | `apps/web/src/app/api/inventory-adjustments/[id]/route.ts` | GET 详情 + PATCH 更新（仅 DRAFT；CAS；行全量替换） |
+| API | `apps/web/src/app/api/inventory-adjustments/[id]/submit/route.ts` | DRAFT → SUBMITTED + maybeTriggerApproval；未命中策略 → 直接 APPROVED 投影（maker-checker：提交人=创建人时 approvedById 留空，Apply 时补录） |
+| API | `apps/web/src/app/api/inventory-adjustments/[id]/apply/route.ts` | **核心**：APPROVED → APPLIED；FOR UPDATE 锁单 → maker-checker（apply 人 ≠ 创建人）→ executeLedgerAtoms（同一 caller tx，全有或全无）→ 单据 APPLIED + 证据（approvedById/appliedById/appliedAt 全非空） |
+| API | `apps/web/src/app/api/inventory-adjustments/[id]/cancel/route.ts` | DRAFT/SUBMITTED/APPROVED → CANCELLED；APPLIED 禁（纠错走 Reversal） |
+| Workflow 回写 | `apps/web/src/app/api/workflows/instances/[id]/actions/route.ts` | businessType === 'inventory-adjustment' → syncInventoryAdjustmentApproval |
+| OpenAPI | `docs/openapi.yaml` | Sprint 6B-3 段：/api/stock-counts（list/create/get/patch/lines/complete/cancel）+ /api/inventory-adjustments（list/create/get/patch/submit/apply/cancel）+ components |
+
+### 1.2 RBAC（权限码，动作级，零新造）
+- `stock-count:view`（list/get）｜ `stock-count:create`（创建）｜ `stock-count:edit`（PATCH/lines/complete）｜ `stock-count:close`（cancel）
+- `inventory-adjustment:view`（list/get）｜ `inventory-adjustment:create`（创建）｜ `inventory-adjustment:edit`（PATCH/submit）｜ `inventory-adjustment:close`（cancel）｜ `inventory-adjustment:approve`（Workflow 审批沿用 workflow-instance:approve）｜ **`inventory-adjustment:apply`（受限系统权限，仅 SUPER_ADMIN/ADMIN——P8/P9 Final）**
+- `stock-count-line:view/edit`、`inventory-adjustment-line:view/edit`（受限，行由单据驱动）
+
+### 1.3 Domain Events（EVENTS.md v1.28）
+- `InventoryCountCompleted` ⏳ → **✅ implemented**（complete 事务提交后 best-effort 发布；载荷 countId/countNo/freezeStrategy/lines[countedQty/bookQtyAtCount/varianceQty]/countedById/completedAt，**不含投影余额**）
+- `InventoryAdjustmentApplied` ⏳ → **✅ implemented**（apply 事务提交后 best-effort 发布；载荷 adjustmentId/adjustmentNo/reasonCode/sourceStockCountId/lines[行级 direction + sourceStockCountLineId]/appliedById/appliedAt）
+- DRAFT 创建/编辑/提交/取消**不发领域事件**（仅 AuditLog），对齐 5B/6B-2 惯例
+
+## 2. 业务事实边界核验（CTO Gate）
+
+| # | 边界 | 实现 | 核验 |
+| --- | --- | --- | --- |
+| B1 | Count = 实盘事实 ≠ 库存账事实 | StockCount 永不产生 Movement/更新 Projection——只有 Adjustment Apply 经 Shared LedgerCommand 落账（grep 审计） | ✅ |
+| B2 | per-line atomic snapshot（P6） | lines 录入同事务读五维 StockProjection → bookQtyAtCount/countedAt/ledgerWatermark；varianceQty = countedQty - bookQtyAtCount（无动态补偿公式） | ✅ |
+| B3 | watermark 仅审计（Blocking ②） | ledgerWatermark 记录 lastMovementAt，不参与 variance 算法、不作并发时序主键 | ✅ |
+| B4 | 五维唯一（Schema 问题③） | 同一 Count 内五维唯一（API 去重 + DB UNIQUE NULLS NOT DISTINCT 兜底） | ✅ |
+| B5 | 差异处理（§4.2） | 零差异 → 不生成 Movement；非零差异 → 自动生成 COUNT_VARIANCE Adjustment（正差异=IN 补账，负差异=OUT 冲减，quantity=|variance|） | ✅ |
+| B6 | 一条盘点差异只能结算一次（Blocking ②） | sourceStockCountLineId @unique（DB UNIQUE 允许多个 NULL，Manual 不受影响）；重复引用 → 409 SOURCE_LINE_ALREADY_SETTLED | ✅ |
+| B7 | Count Adjustment 仍需审批（P7） | complete 自动生成的 Adjustment 为 DRAFT，走 submit → 审批 → apply；绝不自动 APPLIED | ✅ |
+| B8 | maker-checker（P9 + Integrity ②） | createdById NOT NULL；approvedById/appliedById ≠ createdById（DB CHECK×2 + service 校验）；apply 人=创建人 → 409 MAKER_CHECKER | ✅ |
+| B9 | 终态证据（Integrity ①） | APPLIED ⇒ approvedById/appliedById/appliedAt 全非空（同事务写入 + Migration 0026 CHECK 兜底） | ✅ |
+| B10 | 来源一致性（Minor Hardening ②） | 非空 sourceStockCountId ⇒ 每个非空 sourceStockCountLineId 必须属于该盘点单（service Gate 事务内校验） | ✅ |
+| B11 | 状态机 | Count：DRAFT → COUNTING → COMPLETED → ADJUSTED / CANCELLED；Adjustment：DRAFT → SUBMITTED → APPROVED → APPLIED / CANCELLED；**APPROVED ≠ APPLIED** | ✅ |
+| B12 | Cancel 边界 | Count：COMPLETED/ADJUSTED 禁取消；Adjustment：APPLIED 禁取消（纠错走 Reversal/Correction，不允许 Cancel 回滚库存） | ✅ |
+| B13 | 审批走既有 Workflow Policy | maybeTriggerApproval（module=INVENTORY_ADJUSTMENT）；未命中 → 直接 APPROVED 投影（不发明第二套审批规则） | ✅ |
+| B14 | **Complete 锁定并冻结全部盘点行（CTO Review Blocking ①）** | complete 事务内 header FOR UPDATE 锁单 → 读全部 StockCountLine → 每行四字段冻结校验（countedQty/bookQtyAtCount/countedAt/varianceQty 全非空）→ variance 一致性确认（以行录入固化值为准，绝不重读 StockProjection/重算）→ Complete 后禁新增/删除/重新计数/修改（lines route 状态门禁：COMPLETED/ADJUSTED 后录入被拒） | ✅ |
+| B15 | **variance 属 Count 时点事实（Blocking ① 核心）** | AdjustmentLine 创建时复制冻结的 variance fact（direction=冻结值正负、quantity=\|冻结值\|）；Adjustment Create/Apply **只读 adjustment.lines 冻结值，绝不重读当前 StockProjection 计算差异**（grep 审计：complete/create/apply 零 `readProjectionSnapshot` 调用） | ✅ |
+| B16 | **Complete 并发幂等（CTO Review Blocking ②）** | 同一 StockCount 的 Complete 被 header FOR UPDATE 串行化；锁后重判终态：已 COMPLETED → 稳定幂等响应（返回既有 count）；已 ADJUSTED 且已有对应 Count Adjustment（`sourceStockCountId` 唯一）→ 返回既有事实不重新创建；CANCELLED → 拒绝；合法 counting 状态才继续；Count 状态 + Adjustment Header + Lines 同一 DB transaction（全有或全无，无孤立 Header） | ✅ |
+
+## 3. 核心不变量（CTO 6B-3 Apply 三不变量）
+
+| # | 不变量 | 实现证据 |
+| --- | --- | --- |
+| I1 | Adjustment 只能经 Shared LedgerCommand 追加 ADJUSTMENT Movement | apply/route.ts：只调用 `executeLedgerAtoms(tx, atoms)`；**0 直写** InventoryMovement/StockProjection（grep 审计） |
+| I2 | 单据 APPLIED + 每行 ADJUSTMENT Movement + 五维 Projection 同一 caller transaction 全有或全无 | 全部在 `prisma.$transaction` 内：executeLedgerAtoms(tx, atoms) → CAS updateMany(status=APPLIED + 证据 + version+1)；任何失败抛错 → 事务回滚，Adjustment 保持 APPROVED |
+| I3 | 重试通过 Shared Core identity+immutable-fact 幂等；禁止自实现扣增 | 只调用 `executeLedgerAtoms`；InventoryInsufficientStockError / InventoryLedgerIdempotencyConflictError 上抛 → 409；五元幂等 sourceType=ADJUSTMENT/sourceId/sourceLineId/movementRole=ADJUSTMENT/movementAtomKey=BULK 或 serialNo；**movementGroupId=adjustment.id 稳定业务事实（重试复用，不随机重造——CTO Transfer Blocking ② 教训沿用）** |
+
+## 4. 并发与回滚（Concurrency & Rollback）
+
+| # | 场景 | 预期 |
+| --- | --- | --- |
+| R1 | 重复 apply（同版本） | 第二次 409 ALREADY_APPLIED（幂等拒绝） |
+| R2 | 并发 apply / cancel 同单 | FOR UPDATE 串行；CAS version+status 原子条件，败者 409 VERSION_CONFLICT / INVALID_STATE |
+| R3 | 源库存不足（OUT 方向） | InventoryInsufficientStockError → 409 INVENTORY_INSUFFICIENT_STOCK；事务回滚，单据保持 APPROVED，Movement/Projection 0 落账 |
+| R4 | 多行 Adjustment 中途失败 | executeLedgerAtoms 同 tx 顺序执行，某行抛错 → 整事务 0 落账（**无部分行残留**） |
+| R5 | 幂等 immutable-fact conflict | 同五元 identity 但 fact 不同 → InventoryLedgerIdempotencyConflictError → 409；绝不静默重放 |
+| R6 | Count complete 重复（终态幂等） | 已 COMPLETED/ADJUSTED 再 complete | **200 幂等返回既有事实**（已 COMPLETED → 返回既有 count；已 ADJUSTED → 返回既有 count + 既有 Count Adjustment，`sourceStockCountId` 唯一）；**不重复创建 Adjustment、不重复发事件** |
+| R7 | sourceStockCountLineId 并发占用 | UNIQUE 冲突 → 409 SOURCE_LINE_ALREADY_SETTLED（一条盘点差异只能正式结算一次） |
+| R8 | maker-checker 并发 | apply 人=创建人 → 409 MAKER_CHECKER（service 校验 + DB CHECK 兜底） |
+| R9 | **并发 Complete 串行（Blocking ②）** | A、B 同时 complete 同一 Count | header FOR UPDATE 串行化：只有一个进入创建路径（Count→终态 + Adjustment 创建）；另一个锁后读到终态 → **幂等返回既有事实**；不产生重复/孤立 Adjustment、无 500/P2002、Count 与 Adjustment 状态一致 |
+| R10 | **Complete 原子性（Blocking ②）** | Count 状态变化 + Adjustment Header + Lines 同事务；中途 unique/DB 失败 | **整事务回滚，不留孤立 Adjustment Header**；Count 保持原状态 |
+| R11 | **事件一次性（Blocking ② 事件侧）** | 首次真实 complete 后幂等重放 | `if (!result.idempotent)` 门控：InventoryCountCompleted **只在首次真实 Complete 发布一次**；幂等重放不重复发布 |
+
+## 5. 已知限制（Known Limitations）
+
+1. 事件总线未落地（既有债务）：InventoryCountCompleted / InventoryAdjustmentApplied 以 AuditLog 留痕，发布失败不阻断（事务已提交）；
+2. **Conversion / Reservation / Costing 继续 HOLD**（CTO 6B-3 明令，本轮不实现 CVT，也不扩 Reservation/Costing）；
+3. Adjustment Reversal / Correction（纠错）本轮不实现——APPLIED 后纠错走未来 Reversal slice（REVERSAL/CORRECTION role 已预留）；
+4. reasonCode 为 String（系统保留码 + 可扩展字典），未做字典表强约束（P8 Final：不把所有原因永久写死 enum）；
+5. serial-managed Adjustment 逐 serial 原子化（每行 serialNo 单值 + quantity 恒正），未做多 serial 批量行的自动展开（客户端按 serial 拆行）。
+
+## 6. Release Gate
+
+Sprint 6B-3 Count+Adjustment Vertical Slice 进入 CTO Count+Adjustment Review 前必须满足：
+
+1. docs/test-cases/StockCount_Adjustment_API.md 全部核验，无 Blocking；
+2. Count 核心链 DRAFT → COUNTING → COMPLETED/ADJUSTED 全链通过（含零差异直接 COMPLETED 分支 + 非零差异自动生成 Adjustment）；
+3. Adjustment 核心链 DRAFT → SUBMITTED → APPROVED → APPLIED 全链通过（含未命中策略直接 APPROVED 分支 + maker-checker）；
+4. Apply 三不变量（I1/I2/I3）代码证据 + 并发/回滚场景（R1-R8）核验；
+5. **Count/Adjustment API 全程 0 直写** InventoryMovement / StockProjection（grep 代码审计）；
+6. CI Quality Gates + Build 全绿（GitHub Actions run 待出）；
+7. OpenAPI Sprint 6B-3 段（端点 + components）已补齐；
+8. EVENTS.md v1.28 载荷对齐（InventoryCountCompleted / InventoryAdjustmentApplied 已注册，无需扩事件）；
+9. Conversion/Reservation/Costing 零实现（HOLD 保持）。
+
+---
+
+# Sprint 6B-4 QA — Inventory Conversion / Repack Vertical Slice（同 item 转换）
+
+> Sprint：6B（Inventory Operations）| 模块：Inventory Conversion——同 item Repack / UOM Conversion（CONSUME + PRODUCE 同一 movementGroupId 原子落账）| PR：#22（feature/sprint6b-inventory-operations）
+> 日期：2026-08-11
+> 状态：⏳ 待 CTO Conversion Review（Phase 6B-4，CTO #8658 授权；Reservation/Costing 继续 HOLD）
+> 关联：ADR-0026（FINAL APPROVED）、Architecture Process Gate §6、Field Matrix v0.5 §4、Sprint6B_CTO_Pending_Decisions.md（P10/P11 Final）、EVENTS.md v1.28（InventoryConversionExecuted）、docs/test-cases/Conversion_API.md、openapi.yaml（Sprint 6B-4 段）
+> 6B-4 核心事实链：**Conversion DRAFT（CVT 创建即取号）→ 恰好 1 CONSUME + 1 PRODUCE（UNIQUE(headerId, lineRole)）→ baseQuantity 服务端 canonical 计算（quantity × uomToBaseRate，Decimal 精度统一）→ submit（DRAFT→SUBMITTED，无审批状态机）→ execute（同事务：锁单 → 校验守恒 → 生成/复用 movementGroupId → Shared LedgerCommand 双 atom CONSUME+PRODUCE → 单据 EXECUTED + 证据）→ InventoryConversionExecuted（事务提交后 best-effort，不含余额）**
+> **四条锁死（CTO #8658）**：① baseQuantity 服务端 canonical 计算，不信任客户端；② CONSUME.baseQuantity == PRODUCE.baseQuantity 才 Execute；③ 首版 same item（禁止 BOM/组装/拆解/多物料）；④ batch 精确继承、serial 不允许重新生成。
+
+## 1. 交付范围
+
+### 1.1 代码（均在 `apps/web/src/**`）
+| 分组 | 文件/端点 | 说明 |
+| --- | --- | --- |
+| Seed/RBAC | `prisma/seed.ts` + `packages/shared/src/constants/index.ts` | `inventory-conversion` 动作权限 + `inventory-conversion-line` view/edit 受限权限 + CVT DocumentSequence（INVENTORY_CONVERSION，prefix CVT，padLength 6，创建即取号，缺失 fail closed） |
+| 领域函数 | `apps/web/src/lib/inventory-conversion/helpers.ts` | `nextConversionNo`（CVT 原子取号 fail closed）+ `computeBaseQuantity`（**服务端 canonical：quantity × uomToBaseRate，toDecimalPlaces(4) ROUND_HALF_UP，禁止 number 中间转换**）+ `buildConversionAtoms`（CONSUME OUT + PRODUCE IN 双 atom，同一 movementGroupId，quantity=baseQuantity canonical）+ `conversionLineDedupeKey` |
+| 事件 | `apps/web/src/lib/inventory-conversion/events.ts` | `InventoryConversionExecuted`（EVENTS v1.28 已注册；载荷含行级 uomToBaseRate + canonical baseQuantity，**不含投影余额**） |
+| API | `apps/web/src/app/api/inventory-conversions/route.ts` | GET 列表 + POST 创建（DRAFT；CVT 取号；baseUomId==Item.stockUomId Gate；**baseQuantity 服务端计算**；batch 继承校验；红线 DRAFT 不落账） |
+| API | `apps/web/src/app/api/inventory-conversions/[id]/route.ts` | GET 详情 + PATCH 更新（仅 DRAFT；CAS；行整体替换；itemId/baseUomId 不可编辑；baseQuantity 重新服务端计算） |
+| API | `apps/web/src/app/api/inventory-conversions/[id]/submit/route.ts` | DRAFT → SUBMITTED（无审批状态机，提交确认；守恒/换算率/batch 前置校验；**红线 SUBMITTED ≠ EXECUTED**） |
+| API | `apps/web/src/app/api/inventory-conversions/[id]/execute/route.ts` | **核心**：SUBMITTED → EXECUTED；FOR UPDATE 锁单 → 四条锁死校验 → 生成/复用 movementGroupId → executeLedgerAtoms（同一 caller tx，全有或全无）→ 单据 EXECUTED + 证据 → 事件 |
+| API | `apps/web/src/app/api/inventory-conversions/[id]/cancel/route.ts` | DRAFT/SUBMITTED → CANCELLED；EXECUTED 禁（纠错走 Reversal） |
+| OpenAPI | `docs/openapi.yaml` | Sprint 6B-4 段：/api/inventory-conversions（list/create/get/patch/submit/execute/cancel）+ components（InventoryConversionCreate/Update/Line/Response/List/Execute） |
+
+### 1.2 RBAC（权限码，动作级，零新造）
+- `inventory-conversion:view`（list/get）｜ `inventory-conversion:create`（创建）｜ `inventory-conversion:edit`（PATCH/submit/execute）｜ `inventory-conversion:close`（cancel）
+- `inventory-conversion-line:view/edit`（受限，行由单据驱动）
+
+### 1.3 Domain Events（EVENTS.md v1.28）
+- `InventoryConversionExecuted` ⏳ → **✅ implemented**（execute 事务提交后 best-effort 发布；载荷 conversionId/conversionNo/itemId/baseUomId/movementGroupId/lines[行级 uomToBaseRate + baseQuantity]/executedById/executedAt）
+- DRAFT 创建/编辑/提交/取消**不发领域事件**（仅 AuditLog），对齐 5B/6B-2/6B-3 惯例
+
+## 2. 业务事实边界核验（CTO Gate）
+
+| # | 边界 | 实现 | 核验 |
+| --- | --- | --- | --- |
+| B1 | 同一 itemId（P10/P11 收窄） | header.itemId 单一；**行无 itemId 字段**（结构上禁止多物料）；首版 Repack/UOM Conversion | ✅ |
+| B2 | 单输入单输出（Blocking ③） | UNIQUE(conversionHeaderId, lineRole)（DB）+ 恰好 1 CONSUME + 1 PRODUCE（service） | ✅ |
+| B3 | baseUomId == Item.stockUomId（P11 Gate） | create/update/execute 三层校验（不允许任意 UOM 冒充库存基准） | ✅ |
+| B4 | **baseQuantity 服务端 canonical（锁死①）** | schema 不收 baseQuantity；`computeBaseQuantity`（quantity × uomToBaseRate，toDecimalPlaces(4)）；**不信任客户端** | ✅ |
+| B5 | **守恒（锁死②，P11）** | execute + submit 双重校验 `CONSUME.baseQuantity == PRODUCE.baseQuantity` → 不一致 400 BASE_QTY_MISMATCH | ✅ |
+| B6 | **same item / 禁 BOM（锁死③）** | header.itemId 单一 + 行无 itemId + Movement itemId 统一 = conversion.itemId | ✅ |
+| B7 | **batch 精确继承（锁死④，P5）** | create/update/execute 校验 CONSUME batch == PRODUCE batch（首版不拆批不换批） | ✅ |
+| B8 | **serial 不允许（锁死④，P5）** | ConversionLine 无 serialNo 字段；atom serialNo=null | ✅ |
+| B9 | 状态机（无审批） | DRAFT → SUBMITTED → EXECUTED / CANCELLED；**SUBMITTED ≠ EXECUTED**；计量事实不发明审批流 | ✅ |
+| B10 | 终态证据（Integrity ①） | EXECUTED ⇒ movementGroupId/executedAt/executedById 全非空（同事务写入 + Migration 0026 CHECK 兜底） | ✅ |
+| B11 | movementGroupId 稳定（Blocking ② 教训） | `conversion.movementGroupId ?? crypto.randomUUID()`（已有值复用，无值首次生成并冻结；CONSUME+PRODUCE 共享） | ✅ |
+| B12 | Cancel 边界 | DRAFT/SUBMITTED 可取消；EXECUTED 禁（纠错走 Reversal/Correction） | ✅ |
+
+## 3. 核心不变量（CTO 6B-4 Execute 三不变量）
+
+| # | 不变量 | 实现证据 |
+| --- | --- | --- |
+| I1 | Conversion 只能经 Shared LedgerCommand 追加 Movement（0 直写） | execute/route.ts：只调用 `executeLedgerAtoms(tx, atoms)`；grep 审计 0 直写 InventoryMovement/StockProjection |
+| I2 | 单据 EXECUTED + CONSUME + PRODUCE Movement + 双 Projection 同一 caller transaction 全有或全无 | 全部在 `prisma.$transaction` 内：executeLedgerAtoms(tx, atoms) → CAS updateMany(status=EXECUTED + 证据 + version+1)；任何失败抛错 → 事务回滚，Conversion 保持 SUBMITTED |
+| I3 | 重试通过 Shared Core identity+immutable-fact 幂等；禁止自实现扣增 | 只调用 `executeLedgerAtoms`；InventoryInsufficientStockError / InventoryLedgerIdempotencyConflictError 上抛 → 409；五元幂等 sourceType=CONVERSION/sourceId/sourceLineId/movementRole=CONSUME|PRODUCE/movementAtomKey=BULK；**movementGroupId 稳定（复用已有值）** |
+
+## 4. 并发与回滚（Concurrency & Rollback）
+
+| # | 场景 | 预期 |
+| --- | --- | --- |
+| R1 | 重复 execute（同版本） | 第二次 409 ALREADY_EXECUTED（幂等拒绝） |
+| R2 | 并发 execute / cancel 同单 | FOR UPDATE 串行；CAS version+status 原子条件，败者 409 VERSION_CONFLICT / INVALID_STATE |
+| R3 | 源库存不足（CONSUME OUT） | InventoryInsufficientStockError → 409 INVENTORY_INSUFFICIENT_STOCK；事务回滚，单据保持 SUBMITTED，Movement/Projection 0 落账 |
+| R4 | CONSUME 成功但 PRODUCE 故障 | executeLedgerAtoms 同 tx 顺序执行，PRODUCE 抛错 → 整事务 0 落账（**无 CONSUME 残留**） |
+| R5 | 幂等 immutable-fact conflict | 同五元 identity 但 fact 不同 → InventoryLedgerIdempotencyConflictError → 409；绝不静默重放 |
+| R6 | 守恒破坏（并发后值漂移） | execute 时重校验 CONSUME.baseQuantity == PRODUCE.baseQuantity → 400 BASE_QTY_MISMATCH |
+| R7 | batch 继承破坏 | CONSUME batch != PRODUCE batch → 400 BATCH_MISMATCH |
+| R8 | movementGroupId 并发复用 | 已有值复用（重试/恢复）；无值首次生成并冻结——重试不随机重造 |
+
+## 5. 已知限制（Known Limitations）
+
+1. 事件总线未落地（既有债务）：InventoryConversionExecuted 以 AuditLog 留痕，发布失败不阻断（事务已提交）；
+2. **Reservation / ReservedQty / AvailableQty / Costing / FIFO / Moving Average 继续 HOLD**（CTO #8658 明令）；
+3. Conversion Reversal / Correction（纠错）本轮不实现——EXECUTED 后纠错走未来 Reversal slice（REVERSAL role 已预留）；
+4. serial-managed Repack 场景首版不支持（serial 不重新生成——P5 Final；serial 场景后续阶段）；
+5. 多物料 N×M Transformation（装配/拆解/工艺转换）→ 未来 Manufacturing / Transformation Gate（P10 收窄）。
+
+## 6. Release Gate
+
+Sprint 6B-4 Conversion Vertical Slice 进入 CTO Conversion Review 前必须满足：
+
+1. docs/test-cases/Conversion_API.md 全部核验，无 Blocking；
+2. Conversion 核心链 DRAFT → SUBMITTED → EXECUTED 全链通过（含守恒/batch/幂等/并发场景）；
+3. Execute 三不变量（I1/I2/I3）代码证据 + 并发/回滚场景（R1-R8）核验；
+4. **四条锁死核验**：baseQuantity 服务端 canonical（grep：schema 不收、computeBaseQuantity 唯一入口）、守恒、same item、batch 继承 + serial 禁；
+5. **Conversion API 全程 0 直写** InventoryMovement / StockProjection（grep 代码审计）；
+6. CI Quality Gates + Build 全绿（GitHub Actions run 待出）；
+7. OpenAPI Sprint 6B-4 段（端点 + components）已补齐；
+8. EVENTS.md v1.28 载荷对齐（InventoryConversionExecuted 已注册，无需扩事件）；
+9. Reservation/Costing 零实现（HOLD 保持）。
+
+---
+
+# Sprint 6B-4.1 — CTO Conversion Review（#8706）2 Required Hardening Fixes 修复记录
+
+> CTO Conversion Review 结论：**96/100 — APPROVED WITH 2 REQUIRED HARDENING FIXES**（Blocking ① + Blocking ②）。
+> 其余 Gate 全 PASS：Same-item structural enforcement / 1 CONSUME+1 PRODUCE / Batch inheritance / Serial boundary /
+> Caller-owned transaction / Shared Core 零改动 / Stable movementGroupId / CVT sequence fail-closed / Scope governance。
+> CTO 原则：**Create validation 不能替代 posting/execution-time validation。最终产生 InventoryMovement 的边界必须自行证明事实成立。**
+> 指令范围：只改 Execute canonical validation + 对应错误码 + QA/Test Cases/OpenAPI 错误契约；不改 Shared Core、不改 Schema/Migration 0026、
+> 不引入 Workflow、不开始 Finalization。Reservation / Costing 继续 HOLD。
+
+## Blocking ① — Execute 必须重新验证 canonical baseQuantity ✅
+
+**问题**：原 execute 只做守恒复核（`CONSUME.baseQuantity == PRODUCE.baseQuantity`）。"两边相等"不足以证明库存事实正确——
+错误数据 `9 == 9` 也守恒，但如果 canonical 应为 `10`，仍是错误库存事实。
+
+**修复**（`[id]/execute/route.ts` ⑤，在守恒校验之前）：
+```ts
+for (const l of conversion.lines) {
+  const expectedBaseQty = computeBaseQuantity(l.quantity, l.uomToBaseRate); // ROUND_HALF_UP(quantity × rate, 4)
+  if (!l.baseQuantity.equals(expectedBaseQty)) {
+    return { ... error: 'BASE_QTY_INVALID', status: 400, ... }; // INVENTORY_CONVERSION_BASE_QTY_INVALID（新错误码）
+  }
+}
+// 之后才执行守恒校验（⑧）
+```
+- 两个独立不变量，顺序执行：**① 每行 canonical correctness**（stored === 重算值）→ **② 两行 conservation**（CONSUME === PRODUCE）
+- 错误码：`INVENTORY_CONVERSION_BASE_QTY_INVALID`（errors.ts 新增，400，稳定业务错误）
+- 任何一行 stored baseQuantity 与 `computeBaseQuantity`（`toDecimalPlaces(4, ROUND_HALF_UP)`）重算结果不同 → fail closed，**不进入 Shared Core、单据保持 SUBMITTED**
+
+## Blocking ② — Execute 时重新验证 baseUomId == Item.stockUomId ✅
+
+**问题**：Create 已做 baseUomId Gate，但最终 Execute 同样必须 fail closed（Item 的 stockUomId 可能事后被改/缺失）。
+
+**修复**（`[id]/execute/route.ts` ⑥，锁单后、调 Shared Core 前）：
+```ts
+const item = await tx.item.findFirst({ where: { id: conversion.itemId, deletedAt: null } });
+if (!item) return { ... error: 'ITEM_INVALID', status: 400, ... };
+if (!item.stockUomId || item.stockUomId !== conversion.baseUomId) {
+  return { ... error: 'BASE_UOM_INVALID', status: 400, ... }; // 缺 stockUomId / 不一致均拒绝
+}
+```
+- Item 缺 `stockUomId` → 拒绝（`!item.stockUomId` fail closed）；`baseUomId != item.stockUomId` → 拒绝（400 BASE_UOM_INVALID）
+- 两行 canonical quantity 均以该 base UOM 解释（atom `uomId=conversion.baseUomId`、`quantity=baseQuantity`）
+- 校验位于 `executeLedgerAtoms` 调用之前 → 失败绝不产生 InventoryMovement
+
+## 测试覆盖（docs/test-cases/Conversion_API.md E13-E18 + H7-H8）
+
+| 用例 | 场景 | 预期 |
+| --- | --- | --- |
+| E13 | **stored baseQuantity 被污染但两边仍相等**（都改成 9，canonical 应为 10） | 400 `INVENTORY_CONVERSION_BASE_QTY_INVALID`（9==9 也守恒，但 canonical 错误仍拒绝） |
+| E14 | **quantity/rate 与 stored baseQuantity 不一致** | 400 BASE_QTY_INVALID（stored != 重算值） |
+| E15 | **baseUomId != Item.stockUomId**（提交后 stockUomId 被改） | 400 BASE_UOM_INVALID（Execute 时点 Gate） |
+| E16 | **Item stockUomId 缺失** | 400 BASE_UOM_INVALID（`!item.stockUomId` fail closed） |
+| E17 | canonical 两行均正确且 baseQuantity 相等 | 200 EXECUTED（正路径） |
+| E18 | 上述失败全部证明 document 保持非 EXECUTED、Movement/Projection 0 变化 | 同事务回滚，单据保持 SUBMITTED |
+
+## 范围红线（CTO #8706 复核点）
+
+- Shared Core `ledger-command.ts` **零改动** ✅
+- Schema / Migration 0026 **零改动**（新错误码只落 errors.ts + route codeMap）✅
+- 未引入 Workflow、未开始 Finalization、未动 Reservation/Costing（HOLD 保持）✅
+- execute 头注释 + 事务顺序注释同步更新（Blocking ①/② 标注）
+
+---
+
+# Sprint 6B Finalization — 总收口（CTO #8726：Conversion 99/100 FINAL APPROVED，Phase 6B-4 CLOSED，四块全部 FINAL）
+
+> 阶段：Sprint 6B Finalization Gate（CTO #8726 指令：**不新增业务能力**，只做 QA/Test Cases 总收口 + OpenAPI 完整一致性 + EVENTS 终态 + ADR-0026 Implementation Status + ROADMAP/CHANGELOG/RELEASE_NOTES + PR #22 Scope 重定义 + 全局红线扫描）。
+> 状态：⏳ Finalization 文档完成，commit/push/CI 后 STOP → CTO Sprint 6B Final Review → 通过后才允许 Merge PR #22。
+
+## 1. Sprint 6B 四块 Vertical Slice FINAL 状态矩阵
+
+| 模块 | Phase | 最终 commit | CTO Review | 状态 |
+| --- | --- | --- | --- | --- |
+| Shared InventoryLedgerCommand Core | 6B-1 | `624b996`（Core 2 Blocking 修复） | #8233 98/100 FINAL APPROVED | ✅ CLOSED |
+| Inventory Transfer | 6B-2 | `842c00d`（2 Blocking 修复） | #8471 98/100 FINAL APPROVED | ✅ CLOSED |
+| Stock Count | 6B-3 | `31059bc`（2 Blocking 修复） | #8658 98/100 FINAL APPROVED | ✅ CLOSED |
+| Inventory Adjustment | 6B-3 | `31059bc` | #8658 98/100 FINAL APPROVED | ✅ CLOSED |
+| Inventory Conversion / Repack | 6B-4 | `f54b300`（2 Hardening Fixes） | #8726 99/100 FINAL APPROVED | ✅ CLOSED |
+
+**六 A SSOT 统一性**：四类库存变化均服从 **Business Fact → Shared InventoryLedgerCommand → immutable InventoryMovement → StockProjection**，无第二套库存写入路径（CTO #8726 确认）。
+
+## 2. 全局红线扫描（Finalization 强制项）
+
+| # | 红线 | 结果 |
+| --- | --- | --- |
+| R1 | **0 个业务 route 直接写 InventoryMovement / StockProjection** | ✅ 全仓 grep：`inventoryMovement.create/update/delete`、`stockProjection.create/update/upsert/delete` 在 `apps/web/src/app/api/**/route.ts` **零命中**；四模块只经 `executeLedgerAtoms` |
+| R2 | **Reservation / ReservedQty / AvailableQty 未进入 6B** | ✅ 零 reservation API 目录；无 ReservedQty/availableQty 库存投影引用 |
+| R3 | **Costing / FIFO / Moving Average 未进入 6B** | ✅ 零 costing/fifo API；`InventoryMovementType` 枚举 TRANSFER_OUT/TRANSFER_IN/CONSUME/PRODUCE/ADJUSTMENT 仍标"未来"（本轮以 direction OUT/IN + movementRole 表达） |
+| R4 | **sourceType 集合收敛** | ✅ 仅 6A/6B 五类 + REVERSAL/CORRECTION（预留）：WAREHOUSE_RECEIPT_POSTED / PURCHASE_RETURN_RETURNED / TRANSFER / ADJUSTMENT / CONVERSION；**无 STOCK_COUNT sourceType**（CTO #8471 红线保持） |
+| R5 | **终态证据 CHECK 完整性** | ✅ Migration 0026：EXECUTED ⇒ movementGroupId/executedAt/executedById；APPLIED ⇒ approvedById/appliedById/appliedAt；maker-checker CHECK×2（approvedById/appliedById ≠ createdById） |
+| R6 | **Sequence fail closed** | ✅ TRF/CNT/ADJ/CVT 四序列缺失均抛专用配置错误（500），零 fallback 临时编号 |
+
+## 3. 文档总收口清单
+
+| 文档 | 状态 |
+| --- | --- |
+| docs/EVENTS.md | ✅ v1.29：4 个 6B 业务事件 ⏳→✅（InventoryTransferExecuted / InventoryCountCompleted / InventoryAdjustmentApplied / InventoryConversionExecuted） |
+| docs/ADR/ADR-0026 | ✅ v0.5 **Implemented** + Implementation Status I1-I11（对齐 ADR-0025 模式） |
+| docs/ROADMAP.md | ✅ Sprint 6 状态行 + §8 段：6A ✅ + 6B 四块 ✅（PR #22 待 Final Review） |
+| docs/CHANGELOG.md | ✅ Unreleased 新增 Sprint 6B 段（四模块 + Shared Core + 事件 + 边界） |
+| docs/RELEASE_NOTES.md | ✅ 新增 Sprint 6B 段（业务可感知能力 + 边界说明） |
+| docs/openapi.yaml | ✅ Sprint 6B 段完整：4 tags × 5 endpoints（transfers/stock-counts/inventory-adjustments/inventory-conversions 各 list+create/get+patch/submit/execute|apply|complete/cancel）+ components（每模块 Create/Update/Line/Response/List + 终态响应） |
+| docs/qa/Sprint6B_QA.md | ✅ 本文件：6B-1（Core）/6B-2（Transfer）/6B-3（Count+Adjustment）/6B-4（Conversion）/6B-4.1（2 Hardening Fixes）/Finalization 六段 |
+| docs/test-cases/ | ✅ 三份终检：InventoryTransfer_API.md（A-H）/ StockCount_Adjustment_API.md（A-K）/ Conversion_API.md（A-H，含 E13-E18/H7-H8） |
+
+## 4. Release Gate（CTO Sprint 6B Final Review 前必须满足）
+
+1. 四块 Vertical Slice 全部 FINAL APPROVED（#8471/#8658/#8726），Blocking 0 ✅
+2. 全局红线扫描 R1-R6 全 PASS ✅
+3. EVENTS 终态（v1.29）+ ADR-0026 Implemented（I1-I11）+ ROADMAP/CHANGELOG/RELEASE_NOTES 同步 ✅
+4. OpenAPI 完整一致性（4 tags × 5 endpoints + components）✅
+5. PR #22 Scope 重定义完成（Design First → 完整实现 + Finalization）✅
+6. CI 全绿（run #230 @ f54b300 为 Finalization 前基线；Finalization commit 待 run）
+7. **Reservation / Costing / FIFO / Moving Average 零实现（HOLD 保持）** ✅
+8. Shared Core 零改动（四块全链）✅
+9. Migration 0026 未进 main（0026 直接修不建 0027）；PR #22 通过 CTO Final Review 后才允许 Merge

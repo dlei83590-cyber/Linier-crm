@@ -13,6 +13,20 @@
 
 > **边界说明：** 本阶段只完成**库存账本 Foundation**（库存流水 + 库存余额投影 + 可靠消费）。**不包含**调拨、盘点、转换、预留库存（ReservedQty）和成本核算（FIFO/移动平均）——这些将在后续独立阶段实现。
 
+## Sprint 6B — Inventory Operations（2026-08-11，PR #22 待 CTO Sprint 6B Final Review——Transfer/Stock Count/Adjustment/Conversion 四块 Vertical Slice 全部 FINAL APPROVED，Sprint 6B Finalization 完成）
+
+> **业务价值：** 库存从“只能被动记账”走向**主动运营**——仓库间调拨、实地盘点、盘盈盘亏调整、包装/计量单位转换，全部经同一个库存账本（Shared InventoryLedgerCommand）原子落账，库存余额永远可解释、可追溯。
+
+### 业务可感知能力
+
+- **调拨（Transfer）**：跨仓库/库位转移库存，出库与入库**同一笔事务双边落账**（不会出现“扣了没进”）；同仓同库位自调拨被拒绝；批次/序列号按单精确继承
+- **盘点（Stock Count）**：按盘点单录入实盘数量，系统在录入时点**冻结账面数**；完成盘点时只确认差异，**绝不直接改库存账**——差异事实与库存流水完全分离，盘点历史可审计
+- **盘盈盘亏调整（Inventory Adjustment）**：盘点差异自动生成调整单；人工调整必须有原因；**提交人与执行人不能是同一人**（maker-checker）；同一盘点行的差异不会被重复入账
+- **转换/Repack（Conversion）**：同一种物料的包装/计量单位转换（如 10 箱 → 100 个），数量守恒由系统强制（消耗 = 产出）；**不信任前端算好的数量**，系统用换算率重新计算并校验；批次精确继承、序列号不重新生成
+- **全程同一账本**：调拨、调整、转换的库存变动全部经**共享 Ledger Command** 落账（与 6A 入库/退货同一套幂等机制），**没有任何业务代码直接写库存流水/余额**——全局红线扫描 0 直写
+
+> **边界说明：** 本阶段**不包含**预留库存（ReservedQty/availableQty）和成本核算（FIFO/移动平均）——CTO 明令继续 HOLD；调拨/转换/盘点的纠错（Reversal/Correction）与序列号级 Repack 留给未来独立 Gate。
+
 ## Sprint 5B — Goods Receipt & Inbound Foundation（2026-08-10，PR #20 已合并 main `7bd98cb`——CTO PurchaseReturn FINAL APPROVED 98/100 #7303，Sprint 5B 核心事实链 CLOSED）
 
 > **业务价值：** 采购从“下单即结束”走向完整履约链——到货收货 → 质检 → 入库 → 退货，每个环节都是独立可审计的业务事实；库存数量事实源（InventoryMovement）保持纯净，未被采购模块提前污染。

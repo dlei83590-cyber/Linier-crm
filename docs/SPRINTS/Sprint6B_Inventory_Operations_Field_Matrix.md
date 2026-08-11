@@ -1,0 +1,159 @@
+# Sprint 6B：Inventory Operations Field Matrix（库存作业字段矩阵）
+
+- 版本：v0.5（CTO 6B Schema Re-review #8116 97/100 FINAL APPROVED——6 组不变量全部 PASS；2 Minor Hardening：① Conversion `uomToBaseRate > 0` / `baseQuantity > 0` DB CHECK（Decimal 精度/舍入仍由 service 统一控制，DB 不强算 baseQuantity=quantity×rate）② Count Adjustment header/line 来源一致性（`sourceStockCountId` 与各非空 `sourceStockCountLineId` 必须同属一个 StockCount）锁定为 service Gate 事务内校验（进 QA，不建复杂 composite FK）；Migration 0026 FINAL APPROVED；Shared InventoryLedgerCommand Core APPROVED TO START；API/Workflow/Seed/RBAC 仍 HOLD）
+- 日期：2026-08-11
+- 维护者：CIO（JINZA）｜审核：CTO
+- 关联：Sprint6B_Inventory_Operations_Architecture_Process_Gate.md / ADR-0026（FINAL APPROVED）/ Sprint6B_CTO_Pending_Decisions.md / Sprint6A_Inventory_Field_Matrix.md（6A：InventoryMovement / StockProjection / OutboxMessage 已实现）/ EVENTS.md（v1.28）
+
+> **⚠️ 铁律（CTO #7895 锁死）**：本矩阵是**字段草案（Design Only / Not Schema）**——不是 Schema，不建任何表。**业务 API 不得直接创建 InventoryMovement / 修改 StockProjection**——所有库存变化必须经 Ledger Command（同步）或 Transactional Outbox + Consumer（异步），复用 6A 已固化的 `writeInventoryOutboxAtom` / `consumeOutboxMessage` 模式。字段命名在 Schema Gate 批准后再定稿。
+
+---
+
+## 1. Transfer（调拨）—— 业务事实草案
+
+### 1.1 TransferHeader（调拨单头）
+
+| 字段（草案）                                   | 语义                    | 类型/约束草案                                               | 备注                                                                                                                                                                                   |
+| ---------------------------------------------- | ----------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id                                             | 主键                    | UUID                                                        |                                                                                                                                                                                        |
+| transferNo                                     | 调拨单号                | DocumentSequence（前缀 TRF / TR，P2 Final）                 | 创建即取号（沿用 5B+ 惯例）                                                                                                                                                            |
+| status                                         | 状态                    | enum（DRAFT / SUBMITTED / APPROVED / EXECUTED / CANCELLED） | P2 Final：独立 Transfer Document；审批走既有 Workflow Policy（跨仓默认需审批，同仓免审由策略配置，不硬编码）                                                                           |
+| transferType                                   | 调拨类型                | enum（INTER_WAREHOUSE / INTRA_WAREHOUSE）                   | P3 Final：跨仓与同仓库位移动统一模型                                                                                                                                                   |
+| sourceWarehouseId / sourceLocationId           | 源仓/源库位             | FK（可空 location）                                         |                                                                                                                                                                                        |
+| destinationWarehouseId / destinationLocationId | 目标仓/目标库位         | FK（可空 location）                                         |                                                                                                                                                                                        |
+| movementGroupId                                | 编组 id（**双边共享**） | string                                                      | **CTO #7895 强制**：SOURCE_OUT + DESTINATION_IN 同一 movementGroupId                                                                                                                   |
+| approvedById                                   | 授权人                  | FK → User                                                   |                                                                                                                                                                                        |
+| executedAt / executedById                      | 执行时点/人             | date-time / FK → User                                       | 双边 Movement 同事务落定时写入                                                                                                                                                         |
+| remark                                         | 备注                    | string(500)                                                 |                                                                                                                                                                                        |
+| createdById / updatedById                      | 审计                    | FK → User                                                   |                                                                                                                                                                                        |
+| **终态证据 CHECK**                             | 完整性约束              | DB CHECK                                                    | **CTO 6B Schema Review Integrity ①**：`status <> 'EXECUTED' OR (movementGroupId/executedAt/executedById 全部非空)`——防"终态无执行证据"坏数据（不能证明 Ledger 一定成功，但杜绝空终态） |
+
+### 1.2 TransferLine（调拨单行）
+
+| 字段（草案）          | 语义                       | 备注                                                                                               |
+| --------------------- | -------------------------- | -------------------------------------------------------------------------------------------------- |
+| id / transferHeaderId | 主键 / 头 FK               |                                                                                                    |
+| itemId / uomId        | 物料 / 单位                | 继承来源                                                                                           |
+| quantity              | 调拨数量                   | Decimal(18,4)，> 0                                                                                 |
+| batchNo               | 批次（可空）               | P5 Final：batch 精确继承，首版不拆批不换批                                                         |
+| serialNos             | 序列号组（serial-managed） | **每 serial 一对 Movement**（SOURCE_OUT serialNo=X + DESTINATION_IN serialNo=X），精确继承不重生成 |
+| mfgDate / expDate     | 生产日期/有效期（可空）    | 继承                                                                                               |
+| sourceLineId          | 来源引用（可选）           | 追溯                                                                                               |
+
+---
+
+## 2. Stock Count（盘点）—— 实盘事实草案
+
+### 2.1 StockCountHeader（盘点单头）
+
+| 字段（草案）              | 语义                            | 备注                                                                                                                                                              |
+| ------------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id / countNo              | 主键 / 盘点单号                 | DocumentSequence（前缀 CNT / SC）                                                                                                                                 |
+| status                    | 状态                            | enum（DRAFT / COUNTING / COMPLETED / ADJUSTED / CANCELLED）                                                                                                       |
+| countBasisAt              | 盘点基准时点                    | P6 Final：per-line snapshot 时点（行级录入时取）                                                                                                                  |
+| freezeStrategy            | 冻结策略                        | **P6 Final：DYNAMIC（不冻结业务）**——per-line atomic snapshot，非 header 级 creation snapshot                                                                     |
+| ledgerWatermark           | 账本水位（**仅审计/重放证据**） | **CTO #7975 Blocking ②**：movementNo 只是可读编号，**不作为并发时序主键**；不参与 variance 算法；未来严格 replay 需单独设计 monotonic ledgerSeq（不复用 MV 编号） |
+| countedById / completedAt | 盘点人 / 完成时点               |                                                                                                                                                                   |
+| createdById / updatedById | 审计                            |                                                                                                                                                                   |
+
+### 2.2 StockCountLine（盘点明细行）
+
+| 字段（草案）                                           | 语义                                                 | 备注                                                                                                                                                                  |
+| ------------------------------------------------------ | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id / countHeaderId                                     | 主键 / 头 FK                                         |                                                                                                                                                                       |
+| warehouseId / locationId / itemId / batchNo / serialNo | 盘点维度（五维）                                     | 与 6A Projection 维度一致                                                                                                                                             |
+| countedQty                                             | 实盘数（录入）                                       | 业务事实                                                                                                                                                              |
+| bookQtyAtCount                                         | 账面数（**录入时同事务读取该五维 StockProjection**） | **CTO #7975 Blocking ①**：per-line atomic snapshot——不再用 header 级创建时快照，也不做动态补偿公式                                                                    |
+| countedAt                                              | 盘点录入时点                                         | 同事务写入                                                                                                                                                            |
+| ledgerWatermark                                        | 账本水位（仅审计/重放证据）                          | **CTO #7975 Blocking ②**：movementNo 只是可读编号，**不作为并发时序主键**，不参与 variance 算法                                                                       |
+| varianceQty                                            | 差异（服务端计算）                                   | **varianceQty 取 countedQty 减 bookQtyAtCount**——盘点期间正常 Movement 同时改变物理与账面库存，无需再加减；**已删除 dynamicAdjustment / netVarianceQty 动态补偿公式** |
+| adjustmentRef                                          | 生成的 Adjustment 引用                               | Count 本身不碰库存账                                                                                                                                                  |
+
+---
+
+## 3. Adjustment（调整）—— 受控库存账事实草案
+
+### 3.1 AdjustmentHeader（调整单头）
+
+| 字段（草案）                           | 语义                         | 类型/约束草案                                                                                                                         | 备注                                                                                                                                                                                                                                               |
+| -------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id / adjustmentNo                      | 主键 / 调整单号              | DocumentSequence（前缀 ADJ）                                                                                                          |                                                                                                                                                                                                                                                    |
+| reasonCode                             | 原因码                       | **P8 Final：系统保留码（COUNT_VARIANCE / DAMAGE / LOSS / GIFT / SYSTEM_CORRECTION / MANUAL）+ 可扩展字典**——不把所有原因永久写死 enum |                                                                                                                                                                                                                                                    |
+| sourceStockCountId                     | 来源盘点单（可空）           | FK → StockCount                                                                                                                       | Manual 调整无盘点来源。**Minor Hardening ②（service Gate，进 QA）**：非空时每个非空 `sourceStockCountLineId` 必须属于该 StockCount（header 指 Count A / line 指 Count B 的跨单引用由 Shared Command/API 事务内校验拒绝；DB 不建复杂 composite FK） |
+| approvedById / appliedById / appliedAt | 授权 / Apply 人 / Apply 时点 | FK → User / date-time                                                                                                                 | P8/P9 Final：MANUAL 需高权限角色；**maker-checker：创建人与批准/Apply 人不得相同**                                                                                                                                                                 |
+| createdById / updatedById              | 审计                         | FK → User                                                                                                                             | **CTO 6B Schema Review Integrity ②**：`createdById NOT NULL`——maker-checker 闭环（可空会让 CHECK 三值逻辑失效）；系统自动创建的 Count Adjustment 必须带明确 system actor                                                                           |
+| **终态证据 CHECK**                     | 完整性约束                   | DB CHECK                                                                                                                              | **CTO 6B Schema Review Integrity ①**：`status <> 'APPLIED' OR (approvedById/appliedById/appliedAt 全部非空)`                                                                                                                                       |
+
+### 3.2 AdjustmentLine（调整行——CTO 6B Schema Review Blocking ①：direction 下沉到行级）
+
+| 字段（草案）                                           | 语义               | 类型/约束草案                             | 备注                                                                                                                                                                                                  |
+| ------------------------------------------------------ | ------------------ | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id / adjustmentHeaderId                                | 主键 / 头 FK       |                                           |                                                                                                                                                                                                       |
+| **direction**                                          | 方向（**行级**）   | enum（IN / OUT）                          | **Blocking ①：同一 Adjustment 可原子承载盘盈+盘亏差异行**（一次 Stock Count 的 +5/-3 属于同一盘点事实，无需拆两张 ADJ 单）；Manual Adjustment 同样支持多行不同方向，仍在同一 maker-checker 审批事实下 |
+| quantity                                               | 数量               | Decimal(18,4) > 0                         | 恒正数，方向在行承载正负                                                                                                                                                                              |
+| warehouseId / locationId / itemId / batchNo / serialNo | 维度（五维）       |                                           | serial-managed 仍逐 serial 原子化                                                                                                                                                                     |
+| sourceStockCountLineId                                 | 盘点行追溯（可空） | FK → StockCountLine，**UNIQUE**           | **Blocking ②：一个 StockCountLine 最多对应一个正式 AdjustmentLine——防双重入账**（PG 普通 UNIQUE 允许多个 NULL，Manual 不受影响；未来纠错走 Reversal/Correction，不建第二张 Count Adjustment）         |
+| idempotencyIdentity                                    | 幂等身份           | string（adjustmentNo + lineId + atomKey） | 防重复过账                                                                                                                                                                                            |
+| remark / 审计                                          |                    |                                           |                                                                                                                                                                                                       |
+
+---
+
+## 4. Conversion（转换）—— Consume/Produce 编组草案
+
+### 4.1 ConversionHeader（转换单头——**6B 收窄为同 item Repack / UOM Conversion**，CTO #7975 Blocking ③）
+
+| 字段（草案）              | 语义                                  | 备注                                                                                                                                                                                                                                                |
+| ------------------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id / conversionNo         | 主键 / 转换单号                       | DocumentSequence（前缀 CVT）                                                                                                                                                                                                                        |
+| status                    | 状态                                  | enum（DRAFT / SUBMITTED / EXECUTED / CANCELLED）                                                                                                                                                                                                    |
+| movementGroupId           | 编组 id（**CONSUME + PRODUCE 共享**） | CTO #7895 强制                                                                                                                                                                                                                                      |
+| itemId                    | 物料（**输入输出必须同一 itemId**）   | **CTO #7975 锁死**：6B 只允许 Inventory Repack / UOM Conversion；不允许多物料配方式 N→M 转换（多原料→多产出/装配/拆解 → 未来 Manufacturing / Transformation Gate）                                                                                  |
+| baseUomId                 | 库存基准 UOM                          | **CTO #7975 Blocking ③**：明确 inventory/base UOM；Movement/Projection 数量以 canonical inventory UOM 计账。**CTO 6B Schema Review Blocking ④**：service Gate 验证 baseUomId == 该 Item 的 inventory/stock UOM，不允许调用方任意选 UOM 冒充库存基准 |
+| ~~conversionRate~~        | ~~显式换算率 snapshot~~               | **已删除（Blocking ④）**：header 单一 rate 无法无歧义描述 CONSUME/PRODUCE 两方向各自换算——换算 snapshot 下沉到 Line（uomToBaseRate/baseQuantity），Ledger canonicalization 只认 line 级 baseQuantity                                                |
+| executedAt / executedById | 执行时点/人                           |                                                                                                                                                                                                                                                     |                                                                                                                    |
+| remark / 审计             |                                       |                                                                                                                                                                                                                                                     |                                                                                                                    |
+| **终态证据 CHECK**        | 完整性约束                            | DB CHECK                                                                                                                                                                                                                                            | **CTO 6B Schema Review Integrity ①**：`status <> 'EXECUTED' OR (movementGroupId/executedAt/executedById 全部非空)` |
+
+### 4.2 ConversionLine（转换行——输入或输出）
+
+| 字段（草案）             | 语义                | 备注                                                                                                      |
+| ------------------------ | ------------------- | --------------------------------------------------------------------------------------------------------- |
+| id / conversionHeaderId  | 主键 / 头 FK        |                                                                                                           |
+| lineRole                 | 行角色              | enum（CONSUME / PRODUCE）                                                                                 | **CTO 6B Schema Review Blocking ③：UNIQUE(conversionHeaderId, lineRole)——每张 Conversion 最多 1 CONSUME + 1 PRODUCE**（P10 单输入单输出，数据库不再允许 N×M）；service EXECUTE 前要求两种 role 都恰好存在                                                                                                                                                  |
+| quantity / uomId         | 数量 / 业务 UOM     |                                                                                                           | **守恒：换算到 base UOM 后 ΣCONSUME 与 ΣPRODUCE 相等**（P11 Final）；禁止不同物料/不同量纲硬算相等                                                                                                                                                                                                                                                         |
+| **uomToBaseRate**        | 行级换算率 snapshot | Decimal(18,6)                                                                                             | **Blocking ④：业务 UOM → base UOM 换算率**（行级声明，不隐式查表）。**Minor Hardening ①**：DB CHECK `uomToBaseRate > 0`（rate≤0 无合法业务含义）                                                                                                                                                                                                           |
+| **baseQuantity**         | canonical 数量      | Decimal(18,4)                                                                                             | **Blocking ④：baseQuantity = quantity × uomToBaseRate**（service 统一 Decimal 精度/舍入，DB 不强算）；**Minor Hardening ①**：DB CHECK `baseQuantity > 0`；service EXECUTE 前验证 CONSUME.baseQuantity == PRODUCE.baseQuantity；真正写 InventoryMovement 时 quantity=baseQuantity、uomId=conversion.baseUomId——Ledger 只看 canonical 数量，不再依赖业务 UOM |
+| warehouseId / locationId | 维度                |                                                                                                           | 输出可指定目标仓/库位                                                                                                                                                                                                                                                                                                                                      |
+| batchNo（可空）          | 批次                | **P5 Final：batch 默认精确继承**（输入批次 → 输出同批次）                                                 |
+| serialNos（可空）        | 序列号组            | **P5 Final：serial 不重生成**——6B 首版不支持 serial 重生成（Repack 通常 non-serial；serial 场景后续阶段） |
+
+---
+
+## 5. InventoryMovement 扩展字段草案（6A 已实现表——6B 只新增枚举/引用，不重构）
+
+| 字段                     | 现状（6A 已实现）                                                                                                     | 6B 草案扩展                                                                                                                                                                                                                                | 备注                                     |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------- |
+| sourceType               | enum（WAREHOUSE_RECEIPT_POSTED / PURCHASE_RETURN_RETURNED / 未来…）                                                   | **新增：TRANSFER / ADJUSTMENT / CONVERSION（实际名可定 INVENTORY_CONVERSION / REPACK）**——**删除 STOCK_COUNT**（Count 本身不产生 Movement，真正产生库存账的是 Adjustment；Count 通过 `Adjustment.sourceStockCountLineId` 追溯，CTO #7975） | **新 sourceType 须 CTO 批准**（6A 红线） |
+| movementRole             | enum（IN / OUT / 未来 SOURCE_OUT / DESTINATION_IN / CONSUME / PRODUCE / ADJUSTMENT / REVERSAL / CORRECTION）          | **启用：SOURCE_OUT / DESTINATION_IN / CONSUME / PRODUCE / ADJUSTMENT**                                                                                                                                                                     | 6A 已预留枚举位，6B 正式启用             |
+| movementGroupId          | 已实现（可空）                                                                                                        | **Transfer/Conversion/Count-Adjustment 编组正式使用**                                                                                                                                                                                      | 无需改表                                 |
+| movementType             | enum（INBOUND / OUTBOUND / 未来 TRANSFER_OUT / TRANSFER_IN / CONSUME / PRODUCE / ADJUSTMENT / REVERSAL / CORRECTION） | **启用：TRANSFER_OUT / TRANSFER_IN / CONSUME / PRODUCE / ADJUSTMENT**                                                                                                                                                                      | 6A 已预留                                |
+| idempotencyKey           | 五元（sourceType+sourceId+sourceLineId+movementRole+movementAtomKey）                                                 | **不变**——Operations 的 sourceId 取业务单据 id、sourceLineId 取业务行 id、movementAtomKey 取 BULK 或 serialNo                                                                                                                              | 幂等继承                                 |
+| quantity / serialNo 约束 | 已实现（serial 原子化）                                                                                               | 不变                                                                                                                                                                                                                                       |                                          |
+
+> **6B 不新增独立库存事实表**：Transfer/Count/Adjustment/Conversion 是**业务单据事实**（上述草案表），库存账只以 InventoryMovement 呈现。StockProjection 不加 reservedQty/availableQty（6A P3 Final）。
+
+---
+
+## 6. Outbox / 事件草案（P12 Final：Transfer/Adjustment/Repack Conversion 走同步共享 Ledger Command；6A IN/OUT 维持 Outbox 不动）
+
+| 事件（草案）                  | 方向                            | 说明                                                                                                         |
+| ----------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `InventoryMovementCommitted`  | 账本原子事件（6A 已实现，不变） | Movement COMMITTED 后发布，**不含投影余额**（P10 Final）                                                     |
+| `InventoryTransferExecuted`   | 双边                            | **业务层事件**（命名对齐 CTO #7975：不用 Committed 与 Ledger 混淆）——Transfer 双边 Movement 同事务落定后发布 |
+| `InventoryAdjustmentApplied`  | IN/OUT                          | **业务层事件**——Adjustment Movement 落定后发布                                                               |
+| `InventoryConversionExecuted` | 编组                            | **业务层事件**——CONSUME + PRODUCE 落定后发布                                                                 |
+| `InventoryCountCompleted`     | 事实                            | **业务层事件**——Count 完成（不含库存账变化——差异走 Adjustment）                                              |
+
+> 事件命名统一为 Executed / Applied / Completed（业务语义），`InventoryMovementCommitted` 保留为账本原子事件；Schema Gate 前定稿。
+
+> 事件命名/载荷在 P12 拍板 + Schema Gate 后定稿；`InventoryMovementCommitted`（6A 已实现）继续作为 Movement 落定的通用事件，Operations 事件为业务层补充。

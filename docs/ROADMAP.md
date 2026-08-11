@@ -17,7 +17,7 @@
 | Sprint 3 | ERP Foundation（ERP 底座） | ✅ Closed | 3A Workflow Foundation ✅（v0.3.0-alpha）+ 3B Platform Capabilities ✅（v0.4.0-alpha）+ 3C Business Foundation ✅（v0.5.0-alpha，3C-1~3C-5 全部完成） |
 | Sprint 4 | Sales（销售） | ✅ | 4A Quotation Foundation ✅（PR #12）；4B Sales Order Foundation ✅（PR #13）；4C Delivery Foundation ✅（PR #14）；4D Invoice Foundation ✅（PR #15 已合并）；4E-1 Accounts Receivable ✅（PR #16 已合并）；4E-2 Receipt/Payment Allocation ✅（PR #17 已合并）；4E-3 Credit/Debit Note ✅（PR #18 已合并，CTO Final Review 99/100 APPROVE & MERGE）；**已发布 v0.6.0-alpha**（2026-08-08，annotated tag，GitHub Pre-release） |
 | Sprint 5 | Purchase（采购） | 🔄 | **5A PR+PO Foundation ✅**（PR #19 已合并）；**5B Goods Receipt & Inbound ✅**（PR #20 已合并 main `7bd98cb`：Schema/Migration 0023 / Seed+RBAC / PurchaseReceipt / Inspection / WarehouseReceipt / PurchaseReturn 四模块全链 API + PO 履约投影 reopen；CTO PurchaseReturn FINAL APPROVED 98/100 #7303——Sprint 5B 核心事实链 CLOSED）；5C Supplier Invoice / Payment 未开始 |
-| Sprint 6 | Inventory（库存） | 🔄 | **6A Inventory Ledger Foundation ✅**（PR #21 待 Final Review：InventoryMovement SSOT + StockProjection + Transactional Outbox + Consumer，CTO FINAL APPROVED 99/100 #7683）；Transfer / Count / Conversion / Reservation / Costing 未开始 |
+| Sprint 6 | Inventory（库存） | 🔄 | **6A Inventory Ledger Foundation ✅**（PR #21 待 Final Review：InventoryMovement SSOT + StockProjection + Transactional Outbox + Consumer，CTO FINAL APPROVED 99/100 #7683）；**6B Inventory Operations ✅**（PR #22 待 Final Review：Transfer ✅ 98/100 #8471 / Stock Count ✅ 98/100 #8658 / Inventory Adjustment ✅ 98/100 #8658 / Conversion ✅ 99/100 #8726——四块 Vertical Slice FINAL APPROVED，Sprint 6B Finalization 完成，等 CTO Sprint 6B Final Review 后合并）；Reservation / Costing 未开始（HOLD） |
 | Sprint 7 | Finance（财务） | ⬜ | AR/AP/Expense/Voucher/Journal/GL/Profit/Cash Flow |
 | Sprint 8 | BI（商业智能） | ⬜ | 报表 / Dashboard / 数据分析 |
 | Sprint 9 | OA（办公协同） | ⬜ | 审批 / 消息 / 日程 / 知识库 |
@@ -191,7 +191,18 @@
 | Inventory Consumer | claim SKIP LOCKED + lease fencing + 五元幂等 + 五维锁 + 禁负库存 + 同事务三件套（Movement+Projection+Outbox PROCESSED） |
 | 事件 | `InventoryMovementCommitted` ✅（EVENTS v1.26） |
 
-**未开始（HOLD）**：Transfer（调拨）/ Stock Count（盘点）/ Conversion（转换）/ Reservation（ReservedQty/availableQty）/ Costing（FIFO/移动平均）——后续独立阶段
+**6B Inventory Operations ✅（PR #22 待 CTO Sprint 6B Final Review；四块 Vertical Slice 全部 FINAL APPROVED，Sprint 6B Finalization 完成）**
+
+| 完成模块 | 说明 |
+| --- | --- |
+| **Inventory Transfer（调拨）** | Transfer Vertical Slice（CTO #8471 98/100 FINAL APPROVED）：TRF Sequence（缺失 fail closed）/ 5 routes（list/create/[id]/submit/cancel/**execute**）/ SOURCE_OUT + DESTINATION_IN 同一稳定 movementGroupId 经 Shared `executeLedgerAtoms` 同事务双边落账（全有或全无）/ 自调拨拒绝 / serial 守恒 / 重试幂等（immutable-fact）；事件 `InventoryTransferExecuted` ✅ |
+| **Stock Count（盘点）** | Stock Count Vertical Slice（CTO #8658 98/100 FINAL APPROVED）：CNT Sequence / 5 routes（list/create/[id]/lines/**complete**/cancel）/ 行录入时同事务冻结五维 Projection 快照（bookQtyAtCount/countedAt/ledgerWatermark/varianceQty）/ Complete **FOR UPDATE + 锁后终态幂等**（COMPLETED/ADJUSTED 稳定响应，事件一次性）/ **variance 冻结不重算**（Count 永不直写 Projection）；事件 `InventoryCountCompleted` ✅ |
+| **Inventory Adjustment（调整）** | Inventory Adjustment Vertical Slice（CTO #8658 98/100 FINAL APPROVED）：ADJ Sequence / 5 routes（list/create/[id]/submit/**apply**/cancel）/ **maker-checker**（apply 人 ≠ createdById，409）/ 非零 Count variance 自动生成 COUNT_VARIANCE Adjustment 仍需审批 / 经 Shared LedgerCommand 追加 ADJUSTMENT Movement（sourceStockCountLineId @unique 防双重入账）/ 终态证据 CHECK；事件 `InventoryAdjustmentApplied` ✅ |
+| **Inventory Conversion（转换）** | Conversion/Repack Vertical Slice（CTO #8726 99/100 FINAL APPROVED）：CVT Sequence / 5 routes（list/create/[id]/submit/**execute**/cancel）/ **baseQuantity 服务端 canonical**（schema 不收，computeBaseQuantity ROUND_HALF_UP(×,4)）+ **Execute 逐行 canonical 重验（400 BASE_QTY_INVALID——#8706 Blocking ①）** + **baseUom==item.stockUom 重验（Blocking ②）** + 守恒 + same item + batch 精确继承 + serial 禁 / CONSUME + PRODUCE 同一 movementGroupId 经 Shared Core 原子提交 / 无审批状态机（DRAFT→SUBMITTED→EXECUTED/CANCELLED）；事件 `InventoryConversionExecuted` ✅ |
+
+> 四块库存变化均服从同一 **6A SSOT**：Business Fact → Shared InventoryLedgerCommand → immutable InventoryMovement → StockProjection（全局红线扫描：**0 个业务 route 直接写 InventoryMovement/StockProjection** ✅）。
+
+**未开始（HOLD）**：Reservation（ReservedQty/availableQty）/ Costing（FIFO/移动平均）——后续独立阶段（CTO #8726 明令不进入 6B）。
 
 > Item 的 2C 字段（安全库存/MOQ/最小包装/采购周期）在此直接复用。
 

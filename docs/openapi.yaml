@@ -71,6 +71,13 @@ tags:
   - name: Warehouse Receipts
   - name: Purchase Returns
   - name: Inventory Ledger
+  # Sprint 6B-2 — Inventory Transfer（调拨 Vertical Slice，CTO #8233 授权）
+  - name: Inventory Transfers
+  # Sprint 6B-3 — Stock Count & Inventory Adjustment（盘点 + 调整事实链，CTO #8471 授权）
+  - name: Stock Counts
+  - name: Inventory Adjustments
+  # Sprint 6B-4 — Inventory Conversion / Repack（同 item 转换，CTO #8658 授权）
+  - name: Inventory Conversions
 
 paths:
   # ==========================================================================
@@ -10632,6 +10639,1067 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
+  # ==========================================================================
+  # Sprint 6B-2 — Inventory Transfer（调拨 Vertical Slice，CTO #8233 授权）
+  # 范围：Transfer 业务事实层 CRUD + Submit/Cancel/Execute；Execute 经共享 InventoryLedgerCommand
+  #       双 atom（SOURCE_OUT + DESTINATION_IN，同一 movementGroupId）同事务落账（全有或全无）
+  # 红线：Transfer API **绝不直接 INSERT InventoryMovement / UPDATE StockProjection**（6A 唯一事实源）
+  # ==========================================================================
+  /api/inventory-transfers:
+    get:
+      tags: [Inventory Transfers]
+      summary: List inventory transfers (paginated, filterable by transferNo/sourceWarehouseId/destinationWarehouseId/status)
+      description: |
+        调拨单列表。过滤：transferNo / sourceWarehouseId / destinationWarehouseId / status（DRAFT|SUBMITTED|APPROVED|EXECUTED|CANCELLED）。软删除已过滤。
+        权限：inventory-transfer:view。
+      operationId: listInventoryTransfers
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: transferNo
+          in: query
+          schema: { type: string }
+        - name: sourceWarehouseId
+          in: query
+          schema: { type: string }
+        - name: destinationWarehouseId
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, description: InventoryTransferStatus 存储态 }
+      responses:
+        "200":
+          description: Paginated list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryTransferListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Inventory Transfers]
+      summary: Create Inventory Transfer (DRAFT; TRF 创建即取号; 自调拨防护; 红线 DRAFT 不落账)
+      description: |
+        创建调拨单（DRAFT；**创建即取号 TRF**）。源/目标 warehouse 必须有效（WAREHOUSE_INVALID）；
+        location 若提供必须属于对应 warehouse（组合 FK，LOCATION_INVALID）；**自调拨防护**（同仓同库位含都 NULL → 409 SELF_TRANSFER）；
+        至少一条有效行且 quantity > 0（NO_LINES / QUANTITY_INVALID）；行去重（DUPLICATE_LINE）；
+        serial-managed 守恒 quantity == serialNos.length 且整数（SERIAL_QTY_MISMATCH / SERIAL_DUPLICATE）；
+        transferType 由 service 推导（INTRA/INTER）。**红线：DRAFT 不落账**（不创建 InventoryMovement / 不更新 StockProjection）。
+        权限：inventory-transfer:create。
+      operationId: createInventoryTransfer
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryTransferCreate"
+      responses:
+        "201":
+          description: Created（status=DRAFT）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryTransferResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Conflict（自调拨 / 版本冲突）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/inventory-transfers/{id}:
+    get:
+      tags: [Inventory Transfers]
+      summary: Get inventory transfer detail (header + warehouses/locations + lines + approver/executor)
+      description: |
+        调拨单详情（Header + 源/目标仓库库位 + Lines(Item/UOM) + 审批/执行人）。权限：inventory-transfer:view。
+      operationId: getInventoryTransfer
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryTransferResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Inventory Transfers]
+      summary: Update inventory transfer (only DRAFT; CAS version; optional full line replace)
+      description: |
+        更新调拨单（**仅 DRAFT**；CAS version 乐观锁；行整体替换可选）。校验同 Create（仓库/库位/自调拨/行去重/serial 守恒）。
+        **DRAFT 变更不发领域事件**（仅 AuditLog）；红线 DRAFT 不落账。权限：inventory-transfer:edit。
+      operationId: updateInventoryTransfer
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryTransferUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryTransferResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（仅 DRAFT / 版本冲突）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/inventory-transfers/{id}/submit:
+    post:
+      tags: [Inventory Transfers]
+      summary: Submit inventory transfer (DRAFT → SUBMITTED; maybeTriggerApproval)
+      description: |
+        提交调拨单（DRAFT → SUBMITTED）。命中 ApprovalPolicy(module=INVENTORY_TRANSFER) → 创建/复用 WorkflowInstance；
+        未命中策略 → **直接完成审批投影**（status=APPROVED + approvedById=提交人，严格沿用既有 Workflow Policy 语义）。
+        **红线：APPROVED ≠ EXECUTED**——submit/approve 绝不自动落账，只有显式 execute 才经 Shared LedgerCommand 双 atom 落账；
+        **movementGroupId 只在 EXECUTE 时生成/复用**（锁单后已有值→复用，无值→生成一次并冻结；禁止每次 attempt 随机重造）。权限：inventory-transfer:edit。
+      operationId: submitInventoryTransfer
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryTransferVersionRequest"
+      responses:
+        "200":
+          description: Submitted（或未命中策略直接 APPROVED）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryTransferSubmitResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（仅 DRAFT / 版本冲突）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/inventory-transfers/{id}/cancel:
+    post:
+      tags: [Inventory Transfers]
+      summary: Cancel inventory transfer (DRAFT/APPROVED → CANCELLED; EXECUTED forbidden)
+      description: |
+        取消调拨单。**DRAFT / APPROVED** 允许 Cancel；**SUBMITTED** 不允许直接 Cancel（409，先 Withdraw 审批再 Cancel 或走驳回重提）；
+        **EXECUTED** 禁止 Cancel（409，已执行已落账，纠错走整组 Reversal）。CAS version 乐观锁。
+        **红线：Cancel 绝不触碰 Movement / Projection**。权限：inventory-transfer:close。
+      operationId: cancelInventoryTransfer
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryTransferVersionRequest"
+      responses:
+        "200":
+          description: Cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryTransferResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（SUBMITTED/EXECUTED 禁取消 / 版本冲突）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/inventory-transfers/{id}/execute:
+    post:
+      tags: [Inventory Transfers]
+      summary: Execute inventory transfer (APPROVED → EXECUTED; Shared LedgerCommand dual atom, all-or-nothing)
+      description: |
+        执行调拨单（**APPROVED → EXECUTED**，CTO 6B-2 最高风险点）。三个不可妥协不变量：
+        ① SOURCE_OUT + DESTINATION_IN 共用同一非空 movementGroupId（EXECUTE 时生成/复用并冻结，稳定业务事实）；
+        ② 业务单据 EXECUTED + 两笔 Movement + 两侧 Projection 同一 caller transaction 全有或全无——
+           任何 atom 失败（源库存不足 / 幂等 conflict / Projection/DB 错误）→ 整事务回滚，Transfer 仍保持 APPROVED；
+        ③ 重试必须通过 Shared Core identity+immutable-fact 幂等规则，禁止 Transfer 自己实现库存扣增逻辑。
+        幂等：已 EXECUTED → 409 ALREADY_EXECUTED。五元幂等 sourceType=TRANSFER / sourceId=transfer.id /
+        sourceLineId=line.id / SOURCE_OUT|DESTINATION_IN / atomKey=BULK 或 serialNo。batch/mfg/exp SOURCE→DESTINATION 原样继承。
+        权限：inventory-transfer:edit。
+      operationId: executeInventoryTransfer
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryTransferVersionRequest"
+      responses:
+        "200":
+          description: Executed（含 movementGroupId + atomResults）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryTransferExecuteResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（仅 APPROVED / 已 EXECUTED / 库存不足 / 幂等冲突 / 版本冲突）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ==========================================================================
+  # Sprint 6B-3 — Stock Count & Inventory Adjustment（盘点 + 调整事实链，CTO #8471 授权）
+  # 红线：Count 本身不产生 Movement/不更新 StockProjection——只有 Adjustment Apply 经 Shared LedgerCommand 落账；
+  #       sourceStockCountLineId @unique 防双重入账；Manual Adjustment maker-checker；非零差异仍需审批；
+  #       Conversion / Reservation / Costing 继续 HOLD。
+  # ==========================================================================
+  /api/stock-counts:
+    get:
+      tags: [Stock Counts]
+      summary: List stock counts (分页 + countNo/status 过滤)
+      operationId: listStockCounts
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: countNo
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockCountListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Stock Counts]
+      summary: Create stock count (DRAFT; 创建即取号 CNT; 红线 DRAFT 不落账)
+      description: |
+        创建盘点单（DRAFT；**创建即取号 CNT**）。**红线：Count 本身不产生 Movement、不更新 StockProjection**
+        （实盘事实 ≠ 库存账事实；差异经 Adjustment 审批后落账）。freezeStrategy=DYNAMIC（P6 Final）。
+        权限：stock-count:create。CNT Sequence 缺失 = 部署配置错误（fail closed，500）。
+      operationId: createStockCount
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StockCountCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockCountResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          description: Sequence 缺失（部署配置错误）等
+  /api/stock-counts/{id}:
+    get:
+      tags: [Stock Counts]
+      summary: Get stock count detail (Header + 盘点人 + Lines 五维/快照/variance)
+      operationId: getStockCount
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockCountResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Stock Counts]
+      summary: Update stock count header (仅 DRAFT; CAS version)
+      operationId: updateStockCount
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StockCountUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockCountResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（仅 DRAFT / 版本冲突）
+  /api/stock-counts/{id}/lines:
+    post:
+      tags: [Stock Counts]
+      summary: Record count lines (per-line atomic snapshot; 首次录入自动转 COUNTING)
+      description: |
+        录入盘点行（**per-line atomic snapshot——CTO #7975 Blocking ① 核心**）：同事务读取五维
+        StockProjection → bookQtyAtCount/countedAt/ledgerWatermark（仅审计）；varianceQty = countedQty -
+        bookQtyAtCount（服务端计算，**无动态补偿公式**）。五维唯一（DB UNIQUE NULLS NOT DISTINCT）。
+        权限：stock-count:edit。**红线：Count 本身不产生 Movement、不更新 StockProjection**。
+      operationId: recordStockCountLines
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StockCountLines"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockCountResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（状态非 DRAFT/COUNTING）
+  /api/stock-counts/{id}/complete:
+    post:
+      tags: [Stock Counts]
+      summary: Complete stock count (COUNTING → COMPLETED/ADJUSTED; 非零差异自动生成 COUNT_VARIANCE Adjustment)
+      description: |
+        完成盘点（CTO 6B-3 Count+Adjustment 事实链核心）：校验至少一行 + 全部行已 snapshot → 固化 varianceQty →
+        非零差异行自动生成 **COUNT_VARIANCE InventoryAdjustment（DRAFT，仍需审批——P7 System Default 非零差异需审批）**，
+        lines 引用 sourceStockCountLineId @unique 防双重入账（正差异=IN 补账，负差异=OUT 冲减）；
+        Count 状态：有差异 → ADJUSTED；零差异 → COMPLETED。
+        **红线：Count 本身不产生 Movement/不更新 StockProjection**。权限：stock-count:edit。
+        幂等：已 COMPLETED/ADJUSTED → 409 ALREADY_COMPLETED。
+      operationId: completeStockCount
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StockCountVersionRequest"
+      responses:
+        "200":
+          description: OK（含自动生成的 Adjustment 引用）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockCountCompleteResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（已 COMPLETED/ADJUSTED / 已取消 / 版本冲突）
+  /api/stock-counts/{id}/cancel:
+    post:
+      tags: [Stock Counts]
+      summary: Cancel stock count (DRAFT/COUNTING → CANCELLED)
+      description: 取消盘点（仅 DRAFT/COUNTING；COMPLETED/ADJUSTED 禁——已锁定/已生成差异调整）。
+        取消不触碰库存账（差异从未落账）。权限：stock-count:close。
+      operationId: cancelStockCount
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StockCountVersionRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockCountResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（状态非 DRAFT/COUNTING / 版本冲突）
+  /api/inventory-adjustments:
+    get:
+      tags: [Inventory Adjustments]
+      summary: List inventory adjustments (分页 + adjustmentNo/status/reasonCode/sourceStockCountId 过滤)
+      operationId: listInventoryAdjustments
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: adjustmentNo
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: reasonCode
+          in: query
+          schema: { type: string }
+        - name: sourceStockCountId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryAdjustmentListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Inventory Adjustments]
+      summary: Create inventory adjustment (DRAFT; 创建即取号 ADJ; Manual 或引用 Count 差异)
+      description: |
+        创建调整单（DRAFT；**创建即取号 ADJ**）。reasonCode（P8 Final：系统保留码 COUNT_VARIANCE/DAMAGE/LOSS/
+        GIFT/SYSTEM_CORRECTION/MANUAL + 可扩展字典）；sourceStockCountId 可空（Manual 无盘点来源）；
+        **Minor Hardening ②**：非空 sourceStockCountId ⇒ 每个非空 sourceStockCountLineId 必须属于该盘点单；
+        **sourceStockCountLineId @unique 防双重入账**；createdById NOT NULL maker-checker。
+        **红线：DRAFT 不落账**。权限：inventory-adjustment:create。
+      operationId: createInventoryAdjustment
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryAdjustmentCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryAdjustmentResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Conflict（盘点差异行已被其他调整单结算）
+        "500":
+          description: Sequence 缺失（部署配置错误）等
+  /api/inventory-adjustments/{id}:
+    get:
+      tags: [Inventory Adjustments]
+      summary: Get inventory adjustment detail (Header + 来源盘点单 + 审批/Apply 人 + Lines)
+      operationId: getInventoryAdjustment
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryAdjustmentResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Inventory Adjustments]
+      summary: Update inventory adjustment (仅 DRAFT; CAS version; 行整体替换可选)
+      operationId: updateInventoryAdjustment
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryAdjustmentUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryAdjustmentResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（仅 DRAFT / 版本冲突）
+  /api/inventory-adjustments/{id}/submit:
+    post:
+      tags: [Inventory Adjustments]
+      summary: Submit inventory adjustment (DRAFT → SUBMITTED + maybeTriggerApproval)
+      description: |
+        提交调整单（DRAFT → SUBMITTED）。命中 ApprovalPolicy(module=INVENTORY_ADJUSTMENT) → 创建/复用
+        WorkflowInstance；未命中策略 → **直接完成审批投影（status=APPROVED）**（沿用既有 Workflow Policy 语义）；
+        **maker-checker**：approvedById 不得 = createdById（提交人=创建人时 approvedById 留空，Apply 时由
+        apply 人补录）。**红线：APPROVED ≠ APPLIED**——submit/approve 绝不自动落账，只有显式 apply 才经
+        Shared LedgerCommand 逐行 ADJUSTMENT Movement 落账。权限：inventory-adjustment:edit。
+      operationId: submitInventoryAdjustment
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryAdjustmentVersionRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryAdjustmentSubmitResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（仅 DRAFT / 版本冲突）
+  /api/inventory-adjustments/{id}/apply:
+    post:
+      tags: [Inventory Adjustments]
+      summary: Apply inventory adjustment (APPROVED → APPLIED; Shared LedgerCommand 逐行 ADJUSTMENT Movement 同事务)
+      description: |
+        执行调整单（**APPROVED → APPLIED，CTO 6B-3 最高风险点**）。三个不可妥协不变量：
+        ① **Adjustment 只能经 Shared LedgerCommand 追加 ADJUSTMENT Movement**（同步命令），**绝不直写
+           InventoryMovement / UPDATE StockProjection**；
+        ② **业务单据 APPLIED + 每行 ADJUSTMENT Movement + 五维 Projection 同一 caller transaction 全有或全无**——
+           任何 atom 失败（源库存不足 / 幂等 conflict / DB 错误）→ 整事务回滚，Adjustment 仍保持 APPROVED；
+        ③ **重试通过 Shared Core identity+immutable-fact 幂等**（五元：sourceType=ADJUSTMENT/sourceId/sourceLineId/
+           movementRole=ADJUSTMENT/movementAtomKey=BULK 或 serialNo；movementGroupId=adjustment.id 稳定）。
+        maker-checker：apply 人 ≠ 创建人（409 MAKER_CHECKER）；终态证据 CHECK：APPLIED ⇒
+        approvedById/appliedById/appliedAt 全非空。**权限：inventory-adjustment:apply（受限系统权限，仅 SUPER_ADMIN/ADMIN）**。
+        幂等：已 APPLIED → 409 ALREADY_APPLIED。
+      operationId: applyInventoryAdjustment
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryAdjustmentVersionRequest"
+      responses:
+        "200":
+          description: Applied（含 atomResults）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryAdjustmentApplyResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（仅 APPROVED / 已 APPLIED / maker-checker / 库存不足 / 幂等冲突 / 版本冲突）
+  /api/inventory-adjustments/{id}/cancel:
+    post:
+      tags: [Inventory Adjustments]
+      summary: Cancel inventory adjustment (DRAFT/SUBMITTED/APPROVED → CANCELLED; APPLIED 禁)
+      description: |
+        取消调整单（DRAFT/SUBMITTED/APPROVED → CANCELLED；**APPLIED 禁**——已落账，纠错未来走 Reversal/
+        Correction，不允许 Cancel 回滚库存）。取消不触碰库存账。权限：inventory-adjustment:close。
+      operationId: cancelInventoryAdjustment
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryAdjustmentVersionRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryAdjustmentResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（已 APPLIED / 已取消 / 版本冲突）
+
+  # ==========================================================================
+  # Sprint 6B-4 — Inventory Conversion / Repack（同 item 转换，CTO #8658 授权）
+  # 首版边界（CTO 锁死）：同一 itemId Repack / UOM Conversion；一张 Conversion 最多 1 CONSUME + 1 PRODUCE；
+  # baseQuantity 服务端 canonical 计算（不信任客户端）；CONSUME.baseQuantity == PRODUCE.baseQuantity 才 Execute；
+  # 禁止 BOM/组装/拆解/多物料；batch 精确继承；serial 不允许重新生成。
+  # ==========================================================================
+  /api/inventory-conversions:
+    get:
+      tags: [Inventory Conversions]
+      summary: List inventory conversions (分页 + conversionNo/itemId/status 过滤)
+      operationId: listInventoryConversions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: conversionNo
+          in: query
+          schema: { type: string }
+        - name: itemId
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryConversionListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Inventory Conversions]
+      summary: Create inventory conversion (DRAFT; 创建即取号 CVT; 红线 DRAFT 不落账)
+      description: |
+        创建转换单（DRAFT；**创建即取号 CVT**）。**首版边界（CTO 锁死）**：同一 itemId Repack/UOM Conversion；
+        恰好 1 CONSUME + 1 PRODUCE（UNIQUE(conversionHeaderId, lineRole) 兜底）；baseUomId 必须 == 该 Item 的
+        库存单位（stockUomId，P11 Final Gate）；**baseQuantity 由服务端 canonical 计算**（quantity × uomToBaseRate，
+        Decimal 精度统一，不信任客户端）；batch 精确继承（CONSUME batch → PRODUCE batch 同值）；serial 不允许。
+        **红线：DRAFT 不落账**（不创建 Movement / 不更新 Projection——只有 Execute 经 Shared Core）。
+        权限：inventory-conversion:create。CVT Sequence 缺失 = 部署配置错误（fail closed，500）。
+      operationId: createInventoryConversion
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryConversionCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryConversionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          description: Sequence 缺失（部署配置错误）等
+  /api/inventory-conversions/{id}:
+    get:
+      tags: [Inventory Conversions]
+      summary: Get inventory conversion detail (Header + Item + BaseUom + Lines)
+      operationId: getInventoryConversion
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryConversionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Inventory Conversions]
+      summary: Update inventory conversion (仅 DRAFT; CAS version; 行整体替换可选; itemId/baseUomId 不可编辑)
+      operationId: updateInventoryConversion
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryConversionUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryConversionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（仅 DRAFT / 版本冲突）
+  /api/inventory-conversions/{id}/submit:
+    post:
+      tags: [Inventory Conversions]
+      summary: Submit inventory conversion (DRAFT → SUBMITTED; 提交确认，无审批状态机)
+      description: |
+        提交转换单（DRAFT → SUBMITTED）。**Conversion 无审批状态机（DRAFT/SUBMITTED/EXECUTED/CANCELLED）**——
+        同 item Repack/UOM 计量事实，不发明审批流；submit 只是提交确认。守恒/换算率/batch 继承前置校验。
+        **红线：SUBMITTED ≠ EXECUTED**——submit 绝不自动落账，只有显式 execute 才经 Shared LedgerCommand
+        双 atom（CONSUME + PRODUCE 同一 movementGroupId）同事务落账。权限：inventory-conversion:edit。
+      operationId: submitInventoryConversion
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryConversionVersionRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryConversionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（仅 DRAFT / 版本冲突）
+  /api/inventory-conversions/{id}/execute:
+    post:
+      tags: [Inventory Conversions]
+      summary: Execute inventory conversion (SUBMITTED → EXECUTED; Shared LedgerCommand 双 atom CONSUME+PRODUCE 同事务)
+      description: |
+        执行转换单（**SUBMITTED → EXECUTED，CTO 6B-4 最高风险点**）。四条锁死（CTO #8658）+
+        **两条 Execute 时点重验（CTO Conversion Review #8706 Blocking ①/②）**：
+        ① **baseQuantity 由服务端 canonical 计算**（quantity × uomToBaseRate，Decimal 精度统一）——不信任客户端；
+           **Execute 逐行重验 canonical：stored baseQuantity === ROUND_HALF_UP(quantity × uomToBaseRate, 4)，
+           任何一行不符 → fail closed 400 INVENTORY_CONVERSION_BASE_QTY_INVALID（Blocking ①——
+           "错误数据 9==9 也守恒，但 canonical 应为 10 仍是错误库存事实"）**；
+        ② **CONSUME.baseQuantity == PRODUCE.baseQuantity 才允许 Execute**（守恒，P11；逐行 canonical 重验通过后才判守恒）；
+        ③ **首版必须 same item**（header.itemId 单一，行无 itemId——禁止 BOM/组装/拆解/多物料）；
+        ④ **Batch 精确继承、serial 不允许重新生成**（CONSUME batch → PRODUCE batch 同值；serialNo=null）。
+        **Execute 时点重验 baseUomId == Item.stockUomId（Blocking ②）**：锁单后、调 Shared Core 前重读 Item，
+        `!item.stockUomId`（缺失）或 `item.stockUomId !== conversion.baseUomId`（不一致）→ fail closed
+        400 INVENTORY_CONVERSION_BASE_UOM_INVALID——Create 校验不能替代 posting/execution-time validation。
+        事务：FOR UPDATE 锁单 → 仅 SUBMITTED → 复核执行态事实 → 生成/复用非空 movementGroupId（**稳定业务事实**，
+        已有值复用——CTO Transfer Blocking ② 教训）→ buildConversionAtoms（CONSUME OUT + PRODUCE IN，同一 group）→
+        executeLedgerAtoms(tx, atoms) 同一 caller tx 全有或全无 → 单据 EXECUTED + 证据 + CAS version+1 → 事件
+        InventoryConversionExecuted（事务提交后 best-effort，不含余额）。五元幂等 sourceType=CONVERSION/
+        sourceId/sourceLineId/movementRole=CONSUME|PRODUCE/movementAtomKey=BULK。**权限：inventory-conversion:edit**。
+        幂等：已 EXECUTED → 409 ALREADY_EXECUTED。
+      operationId: executeInventoryConversion
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryConversionVersionRequest"
+      responses:
+        "200":
+          description: Executed（含 atomResults）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryConversionExecuteResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（仅 SUBMITTED / 已 EXECUTED / 库存不足 / 幂等冲突 / 版本冲突）
+  /api/inventory-conversions/{id}/cancel:
+    post:
+      tags: [Inventory Conversions]
+      summary: Cancel inventory conversion (DRAFT/SUBMITTED → CANCELLED; EXECUTED 禁)
+      description: |
+        取消转换单（DRAFT/SUBMITTED → CANCELLED；**EXECUTED 禁**——已落账，纠错未来走 Reversal/Correction，
+        不允许 Cancel 回滚库存）。取消不触碰库存账。权限：inventory-conversion:close。
+      operationId: cancelInventoryConversion
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryConversionVersionRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryConversionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（已 EXECUTED / 已取消 / 版本冲突）
+
 components:
   securitySchemes:
     bearerAuth:
@@ -16926,3 +17994,548 @@ components:
         movementId: { type: string, description: 入账的 InventoryMovement.id（PROCESSED/ALREADY_PROCESSED 时） }
         movementNo: { type: string, description: 入账流水号 MV-xxxxxx（PROCESSED/ALREADY_PROCESSED 时） }
         error: { type: string, description: 失败原因（RETRY/DEAD_LETTER 时） }
+
+    # ==========================================================================
+    # Sprint 6B-2 — Inventory Transfer contracts（调拨 Vertical Slice，CTO #8233 授权）
+    # 红线：载荷/响应**不含投影余额**（6A 唯一事实源）；Transfer API 绝不直接 INSERT InventoryMovement
+    # ==========================================================================
+    InventoryTransferLineCreate:
+      type: object
+      required: [itemId, quantity]
+      description: 调拨行（quantity > 0；serial-managed 每 serial 一对 Movement，数量守恒）
+      properties:
+        itemId: { type: string, minLength: 1 }
+        uomId: { type: string, description: 业务 UOM（可选；继承来源） }
+        quantity: { type: number, exclusiveMinimum: 0, description: 调拨数量（serial-managed 时须 = serialNos.length 且整数） }
+        batchNo: { type: string, description: P5 Final：batch 精确继承（SOURCE_OUT batch=B → DESTINATION_IN batch=B，首版禁止换批） }
+        serialNos: { type: array, items: { type: string }, description: serial-managed：每 serial 一对 Movement（serial 精确继承不重生成） }
+        mfgDate: { type: string, description: 生产日期（ISO 日期字符串） }
+        expDate: { type: string, description: 有效期至（ISO 日期字符串） }
+        remark: { type: string, maxLength: 500 }
+
+    InventoryTransferCreate:
+      type: object
+      required: [sourceWarehouseId, destinationWarehouseId, lines]
+      description: 创建调拨单（DRAFT；创建即取号 TRF；自调拨防护；transferType 服务端推导）
+      properties:
+        sourceWarehouseId: { type: string, minLength: 1 }
+        sourceLocationId: { type: string, description: 源库位（若提供必须属于源仓库） }
+        destinationWarehouseId: { type: string, minLength: 1 }
+        destinationLocationId: { type: string, description: 目标库位（若提供必须属于目标仓库） }
+        remark: { type: string, maxLength: 500 }
+        lines:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/InventoryTransferLineCreate" }
+
+    InventoryTransferUpdate:
+      type: object
+      required: [version]
+      description: 更新调拨单（仅 DRAFT；CAS version 乐观锁；行整体替换可选）
+      properties:
+        version: { type: integer, minimum: 1 }
+        sourceWarehouseId: { type: string }
+        sourceLocationId: { type: [string, "null"] }
+        destinationWarehouseId: { type: string }
+        destinationLocationId: { type: [string, "null"] }
+        remark: { type: [string, "null"], maxLength: 500 }
+        lines:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/InventoryTransferLineCreate" }
+
+    InventoryTransferVersionRequest:
+      type: object
+      required: [version]
+      description: CAS 版本请求体（submit/cancel/execute 共用）
+      properties:
+        version: { type: integer, minimum: 1 }
+
+    InventoryTransfer:
+      type: object
+      properties:
+        id: { type: string }
+        transferNo: { type: string, description: 调拨单号（TRF-xxxxxx） }
+        status: { $ref: "#/components/schemas/InventoryTransferStatus" }
+        transferType: { type: string, enum: [INTER_WAREHOUSE, INTRA_WAREHOUSE] }
+        sourceWarehouseId: { type: string }
+        sourceLocationId: { type: [string, "null"] }
+        destinationWarehouseId: { type: string }
+        destinationLocationId: { type: [string, "null"] }
+        movementGroupId: { type: [string, "null"], description: EXECUTE 时生成/复用并冻结（双边共享；重试复用已有值） }
+        approvedById: { type: [string, "null"] }
+        executedById: { type: [string, "null"] }
+        executedAt: { type: [string, "null"], format: date-time }
+        version: { type: integer }
+        lines:
+          type: array
+          items: { type: object }
+
+    InventoryTransferStatus:
+      type: string
+      enum: [DRAFT, SUBMITTED, APPROVED, EXECUTED, CANCELLED]
+
+    InventoryTransferResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/InventoryTransfer" }
+
+    InventoryTransferListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            total: { type: integer }
+            page: { type: integer }
+            pageSize: { type: integer }
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/InventoryTransfer" }
+
+    InventoryTransferSubmitResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          required: [transfer, workflow]
+          properties:
+            transfer: { $ref: "#/components/schemas/InventoryTransfer" }
+            workflow:
+              type: object
+              description: maybeTriggerInventoryTransferApproval 结果（triggered/instanceId/resubmitted/skipped）
+              properties:
+                triggered: { type: boolean }
+                instanceId: { type: [string, "null"] }
+                resubmitted: { type: boolean }
+                skipped: { type: [string, "null"] }
+
+    InventoryTransferExecuteResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          required: [transfer, movementGroupId, atomResults]
+          properties:
+            transfer: { $ref: "#/components/schemas/InventoryTransfer" }
+            movementGroupId: { type: string, description: EXECUTE 时生成/复用并冻结的双边共享 group id（重试复用已有值） }
+            atomResults:
+              type: array
+              description: executeLedgerAtoms 结果（每 atom inserted/movementNo）
+              items:
+                type: object
+                properties:
+                  inserted: { type: boolean, description: true=新入账 / false=五元幂等重放 }
+                  movementNo: { type: string, description: 入账流水号 MV-xxxxxx }
+
+    # ==========================================================================
+    # Sprint 6B-3 — Stock Count / Inventory Adjustment components（CTO #8471 授权）
+    # ==========================================================================
+    StockCountCreate:
+      type: object
+      description: 创建盘点单（DRAFT；创建即取号 CNT；freezeStrategy=DYNAMIC）
+      properties:
+        remark: { type: string, maxLength: 500 }
+
+    StockCountUpdate:
+      type: object
+      required: [version]
+      description: 更新盘点单 header（仅 DRAFT；CAS version 乐观锁）
+      properties:
+        version: { type: integer, minimum: 1 }
+        remark: { type: [string, "null"], maxLength: 500 }
+
+    StockCountVersionRequest:
+      type: object
+      required: [version]
+      description: 通用 version 乐观锁请求（complete/cancel）
+      properties:
+        version: { type: integer, minimum: 1 }
+
+    StockCountLines:
+      type: object
+      required: [lines]
+      description: 录入盘点行（per-line atomic snapshot；五维唯一；首次录入自动转 COUNTING）
+      properties:
+        lines:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [warehouseId, itemId, countedQty]
+            properties:
+              id: { type: string, description: 提供则更新该行（重新 snapshot），否则新增 }
+              warehouseId: { type: string, minLength: 1 }
+              locationId: { type: [string, "null"] }
+              itemId: { type: string, minLength: 1 }
+              batchNo: { type: [string, "null"], maxLength: 100 }
+              serialNo: { type: [string, "null"], maxLength: 100, description: 单值（serial-managed 逐 serial 盘点） }
+              countedQty: { type: number, minimum: 0, description: 实盘数（>= 0） }
+              remark: { type: string, maxLength: 500 }
+
+    StockCount:
+      type: object
+      description: 盘点单（实盘事实——本身不产生 Movement；差异经 Adjustment 落账）
+      properties:
+        id: { type: string }
+        countNo: { type: string, description: 盘点单号（CNT-xxxxxx） }
+        status: { type: string, enum: [DRAFT, COUNTING, COMPLETED, ADJUSTED, CANCELLED] }
+        freezeStrategy: { type: string, enum: [DYNAMIC] }
+        countedById: { type: [string, "null"] }
+        completedAt: { type: [string, "null"], format: date-time }
+        remark: { type: [string, "null"] }
+        version: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    StockCountLine:
+      type: object
+      description: 盘点行（per-line atomic snapshot：bookQtyAtCount/countedAt/ledgerWatermark/varianceQty）
+      properties:
+        id: { type: string }
+        countHeaderId: { type: string }
+        warehouseId: { type: string }
+        locationId: { type: [string, "null"] }
+        itemId: { type: string }
+        batchNo: { type: [string, "null"] }
+        serialNo: { type: [string, "null"] }
+        countedQty: { type: string, description: 实盘数（Decimal 字符串） }
+        bookQtyAtCount: { type: string, description: 录入时同事务读取五维 StockProjection.onHandQty（Decimal 字符串） }
+        countedAt: { type: string, format: date-time }
+        ledgerWatermark: { type: [string, "null"], description: 仅审计/重放证据（movementNo 不作并发时序主键） }
+        varianceQty: { type: [string, "null"], description: countedQty - bookQtyAtCount（Decimal 字符串） }
+
+    StockCountResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            count:
+              type: object
+              properties:
+                id: { type: string }
+                countNo: { type: string }
+                status: { type: string }
+                freezeStrategy: { type: string }
+                lines: { type: array, items: { $ref: "#/components/schemas/StockCountLine" } }
+
+    StockCountListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            total: { type: integer }
+            page: { type: integer }
+            pageSize: { type: integer }
+            items: { type: array, items: { $ref: "#/components/schemas/StockCount" } }
+
+    StockCountCompleteResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            count: { $ref: "#/components/schemas/StockCount" }
+            adjustment:
+              type: [object, "null"]
+              description: 非零差异自动生成的 COUNT_VARIANCE Adjustment（DRAFT，仍需审批）
+              properties:
+                id: { type: string }
+                adjustmentNo: { type: string }
+
+    InventoryAdjustmentLineCreate:
+      type: object
+      required: [warehouseId, itemId, direction, quantity]
+      description: 调整行（direction 行级 IN/OUT；quantity 恒正；serial-managed 逐 serial 原子化）
+      properties:
+        warehouseId: { type: string, minLength: 1 }
+        locationId: { type: [string, "null"] }
+        itemId: { type: string, minLength: 1 }
+        batchNo: { type: [string, "null"], maxLength: 100 }
+        serialNo: { type: [string, "null"], maxLength: 100 }
+        direction: { type: string, enum: [IN, OUT] }
+        quantity: { type: number, exclusiveMinimum: 0, description: 恒正数（方向在行承载正负） }
+        uomId: { type: string }
+        sourceStockCountLineId: { type: [string, "null"], description: 盘点行追溯（@unique 防双重入账；Manual 可空） }
+        remark: { type: string, maxLength: 500 }
+
+    InventoryAdjustmentCreate:
+      type: object
+      required: [reasonCode, lines]
+      description: 创建调整单（DRAFT；创建即取号 ADJ；Manual 或引用 Count 差异；Minor Hardening ② 来源一致性）
+      properties:
+        reasonCode: { type: string, maxLength: 50, description: 系统保留码（COUNT_VARIANCE/DAMAGE/LOSS/GIFT/SYSTEM_CORRECTION/MANUAL）+ 可扩展字典 }
+        sourceStockCountId: { type: [string, "null"], description: 来源盘点单（可空——Manual 无盘点来源） }
+        remark: { type: string, maxLength: 500 }
+        lines:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/InventoryAdjustmentLineCreate" }
+
+    InventoryAdjustmentUpdate:
+      type: object
+      required: [version]
+      description: 更新调整单（仅 DRAFT；CAS version；行整体替换可选）
+      properties:
+        version: { type: integer, minimum: 1 }
+        reasonCode: { type: string, maxLength: 50 }
+        remark: { type: [string, "null"], maxLength: 500 }
+        lines:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/InventoryAdjustmentLineCreate" }
+
+    InventoryAdjustmentVersionRequest:
+      type: object
+      required: [version]
+      description: 通用 version 乐观锁请求（submit/apply/cancel）
+      properties:
+        version: { type: integer, minimum: 1 }
+
+    InventoryAdjustment:
+      type: object
+      description: 库存调整单（受控库存账事实——只能经 Shared LedgerCommand 追加 ADJUSTMENT Movement）
+      properties:
+        id: { type: string }
+        adjustmentNo: { type: string, description: 调整单号（ADJ-xxxxxx） }
+        status: { type: string, enum: [DRAFT, SUBMITTED, APPROVED, APPLIED, CANCELLED] }
+        reasonCode: { type: string }
+        sourceStockCountId: { type: [string, "null"] }
+        approvedById: { type: [string, "null"] }
+        appliedById: { type: [string, "null"] }
+        appliedAt: { type: [string, "null"], format: date-time }
+        createdById: { type: string, description: NOT NULL——maker-checker 闭环 }
+        version: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    InventoryAdjustmentLine:
+      type: object
+      description: 调整行（每行 → 一笔 ADJUSTMENT Movement；direction 行级；sourceStockCountLineId @unique）
+      properties:
+        id: { type: string }
+        adjustmentHeaderId: { type: string }
+        warehouseId: { type: string }
+        locationId: { type: [string, "null"] }
+        itemId: { type: string }
+        batchNo: { type: [string, "null"] }
+        serialNo: { type: [string, "null"] }
+        direction: { type: string, enum: [IN, OUT] }
+        quantity: { type: string, description: 恒正数（Decimal 字符串） }
+        uomId: { type: [string, "null"] }
+        sourceStockCountLineId: { type: [string, "null"], description: @unique 防双重入账 }
+
+    InventoryAdjustmentResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            adjustment:
+              type: object
+              properties:
+                id: { type: string }
+                adjustmentNo: { type: string }
+                status: { type: string }
+                reasonCode: { type: string }
+                lines: { type: array, items: { $ref: "#/components/schemas/InventoryAdjustmentLine" } }
+
+    InventoryAdjustmentListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            total: { type: integer }
+            page: { type: integer }
+            pageSize: { type: integer }
+            items: { type: array, items: { $ref: "#/components/schemas/InventoryAdjustment" } }
+
+    InventoryAdjustmentSubmitResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            adjustment: { $ref: "#/components/schemas/InventoryAdjustment" }
+            workflow:
+              type: object
+              description: maybeTriggerInventoryAdjustmentApproval 结果（triggered/instanceId/resubmitted/skipped）
+              properties:
+                triggered: { type: boolean }
+                instanceId: { type: [string, "null"] }
+                resubmitted: { type: boolean }
+                skipped: { type: [string, "null"] }
+
+    InventoryAdjustmentApplyResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          required: [adjustment, atomResults]
+          properties:
+            adjustment: { $ref: "#/components/schemas/InventoryAdjustment" }
+            atomResults:
+              type: array
+              description: executeLedgerAtoms 结果（每 atom inserted/movementNo）
+              items:
+                type: object
+                properties:
+                  inserted: { type: boolean, description: true=新入账 / false=五元幂等重放 }
+                  movementNo: { type: string, description: 入账流水号 MV-xxxxxx }
+
+    # ==========================================================================
+    # Sprint 6B-4 — Inventory Conversion / Repack components（CTO #8658 授权）
+    # ==========================================================================
+    InventoryConversionLineCreate:
+      type: object
+      required: [lineRole, quantity, uomId, uomToBaseRate, warehouseId]
+      description: 转换行（CONSUME/PRODUCE 各一条；**baseQuantity 由服务端 canonical 计算，客户端不提交**）
+      properties:
+        lineRole: { type: string, enum: [CONSUME, PRODUCE] }
+        quantity: { type: number, exclusiveMinimum: 0, description: 业务 UOM 数量（> 0） }
+        uomId: { type: string, description: 业务 UOM }
+        uomToBaseRate: { type: number, exclusiveMinimum: 0, description: 行级换算率 snapshot（业务 UOM → base UOM，> 0） }
+        warehouseId: { type: string, minLength: 1 }
+        locationId: { type: [string, "null"] }
+        batchNo: { type: [string, "null"], maxLength: 100, description: P5 Final：batch 精确继承（CONSUME → PRODUCE 同值） }
+        remark: { type: string, maxLength: 500 }
+
+    InventoryConversionCreate:
+      type: object
+      required: [itemId, baseUomId, lines]
+      description: 创建转换单（DRAFT；创建即取号 CVT；baseUomId 必须 == Item.stockUomId；恰好 1 CONSUME + 1 PRODUCE）
+      properties:
+        itemId: { type: string, minLength: 1, description: 同一 itemId（首版 Repack/UOM Conversion，禁止多物料） }
+        baseUomId: { type: string, minLength: 1, description: Inventory Base UOM（service Gate 验证 == Item.stockUomId） }
+        remark: { type: string, maxLength: 500 }
+        lines:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items: { $ref: "#/components/schemas/InventoryConversionLineCreate" }
+
+    InventoryConversionUpdate:
+      type: object
+      required: [version]
+      description: 更新转换单（仅 DRAFT；CAS version；行整体替换可选；itemId/baseUomId 不可编辑）
+      properties:
+        version: { type: integer, minimum: 1 }
+        remark: { type: [string, "null"], maxLength: 500 }
+        lines:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items: { $ref: "#/components/schemas/InventoryConversionLineCreate" }
+
+    InventoryConversionVersionRequest:
+      type: object
+      required: [version]
+      description: 通用 version 乐观锁请求（submit/execute/cancel）
+      properties:
+        version: { type: integer, minimum: 1 }
+
+    InventoryConversion:
+      type: object
+      description: 库存转换单（同 item Repack / UOM Conversion——CONSUME + PRODUCE 同一 movementGroupId 原子落账）
+      properties:
+        id: { type: string }
+        conversionNo: { type: string, description: 转换单号（CVT-xxxxxx） }
+        status: { type: string, enum: [DRAFT, SUBMITTED, EXECUTED, CANCELLED] }
+        itemId: { type: string }
+        baseUomId: { type: string }
+        movementGroupId: { type: [string, "null"], description: EXECUTE 时生成/复用并冻结（CONSUME+PRODUCE 共享） }
+        executedById: { type: [string, "null"] }
+        executedAt: { type: [string, "null"], format: date-time }
+        version: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    InventoryConversionLine:
+      type: object
+      description: 转换行（lineRole=CONSUME/PRODUCE；uomToBaseRate 行级 snapshot；baseQuantity canonical 服务端计算）
+      properties:
+        id: { type: string }
+        conversionHeaderId: { type: string }
+        lineRole: { type: string, enum: [CONSUME, PRODUCE] }
+        quantity: { type: string, description: 业务 UOM 数量（Decimal 字符串） }
+        uomId: { type: [string, "null"] }
+        uomToBaseRate: { type: string, description: 行级换算率（Decimal 字符串，> 0） }
+        baseQuantity: { type: string, description: canonical 数量 = quantity × uomToBaseRate（Decimal 字符串，服务端计算） }
+        warehouseId: { type: string }
+        locationId: { type: [string, "null"] }
+        batchNo: { type: [string, "null"] }
+
+    InventoryConversionResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            conversion:
+              type: object
+              properties:
+                id: { type: string }
+                conversionNo: { type: string }
+                status: { type: string }
+                itemId: { type: string }
+                baseUomId: { type: string }
+                lines: { type: array, items: { $ref: "#/components/schemas/InventoryConversionLine" } }
+
+    InventoryConversionListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            total: { type: integer }
+            page: { type: integer }
+            pageSize: { type: integer }
+            items: { type: array, items: { $ref: "#/components/schemas/InventoryConversion" } }
+
+    InventoryConversionExecuteResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          required: [conversion, atomResults]
+          properties:
+            conversion: { $ref: "#/components/schemas/InventoryConversion" }
+            atomResults:
+              type: array
+              description: executeLedgerAtoms 结果（每 atom inserted/movementNo）
+              items:
+                type: object
+                properties:
+                  inserted: { type: boolean, description: true=新入账 / false=五元幂等重放 }
+                  movementNo: { type: string, description: 入账流水号 MV-xxxxxx }

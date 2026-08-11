@@ -804,3 +804,221 @@ export const purchaseReturnUpdateSchema = z.object({
 export const purchaseReturnReturnSchema = z.object({
   version: z.number().int().positive(),
 });
+
+// ============================================================================
+// Sprint 6B - Inventory Transfer（调拨 Vertical Slice，CTO 6B-2 授权）
+// 设计依据：Sprint6B_Inventory_Operations_Architecture_Process_Gate.md §3（Transfer 双边原子事实）+
+//           Field Matrix v0.5 §1 + ADR-0026 D2（Transfer = 双边原子事实 SOURCE_OUT + DESTINATION_IN）
+// - 状态机：DRAFT → SUBMITTED → APPROVED → EXECUTED / CANCELLED（P2 Final）；EXECUTED 才触发双边 Movement
+// - 审批走既有 Workflow Policy（跨仓默认需审、同仓策略配置，不硬编码）；submit 时 maybeTriggerApproval
+// - Execute：Shared LedgerCommand 双 atom（SOURCE_OUT + DESTINATION_IN 同一 movementGroupId）同事务全有或全无
+// - 行字段：itemId/uomId/quantity/batchNo（精确继承）/serialNos（每 serial 一对）/mfgDate/expDate（继承）
+// ============================================================================
+
+/** 调拨行（客户端提交；quantity > 0；serial-managed 每 serial 一对 Movement，数量守恒） */
+export const inventoryTransferLineCreateSchema = z.object({
+  itemId: z.string().min(1),
+  uomId: z.string().min(1).optional(), // 业务 UOM（可选；继承来源）
+  quantity: z.coerce.number().positive(), // 调拨数量（> 0；serial-managed 时须 = serialNos.length 且整数）
+  batchNo: z.string().max(100).optional(), // P5 Final：batch 精确继承（SOURCE_OUT batch=B → DESTINATION_IN batch=B）
+  serialNos: z.array(z.string().max(100)).default([]), // serial-managed：每 serial 一对 Movement（serial 精确继承不重生成；默认空数组）
+  mfgDate: z.string().max(50).optional(), // 生产日期（ISO 日期字符串，服务端转 Date）
+  expDate: z.string().max(50).optional(), // 有效期至（ISO 日期字符串，服务端转 Date）
+  remark: z.string().max(500).optional(),
+});
+
+/** 调拨单创建（DRAFT；创建即取号 TRF；source/destination 仓库必填，location 若提供必须属于对应仓库） */
+export const inventoryTransferCreateSchema = z.object({
+  sourceWarehouseId: z.string().min(1),
+  sourceLocationId: z.string().min(1).optional(),
+  destinationWarehouseId: z.string().min(1),
+  destinationLocationId: z.string().min(1).optional(),
+  remark: z.string().max(500).optional(),
+  lines: z.array(inventoryTransferLineCreateSchema).min(1, '至少需要一行'),
+});
+
+/** 调拨单更新（仅 DRAFT；version 乐观锁；行整体替换；warehouse/location 组合 FK 同属校验） */
+export const inventoryTransferUpdateSchema = z.object({
+  version: z.number().int().positive(),
+  sourceWarehouseId: z.string().min(1).optional(),
+  sourceLocationId: z.string().min(1).nullable().optional(),
+  destinationWarehouseId: z.string().min(1).optional(),
+  destinationLocationId: z.string().min(1).nullable().optional(),
+  remark: z.string().max(500).nullable().optional(),
+  lines: z.array(inventoryTransferLineCreateSchema).min(1).optional(),
+});
+
+/** 调拨提交（真 Gate：DRAFT → SUBMITTED；version 乐观锁；触发审批 maybeTriggerApproval） */
+export const inventoryTransferSubmitSchema = z.object({
+  version: z.number().int().positive(),
+});
+
+/** 调拨取消（DRAFT/APPROVED → CANCELLED；version 乐观锁；SUBMITTED 需先 Withdraw 审批） */
+export const inventoryTransferCancelSchema = z.object({
+  version: z.number().int().positive(),
+});
+
+/** 调拨执行（真 Gate：APPROVED → EXECUTED；version 乐观锁 + 幂等 ALREADY_EXECUTED；Shared LedgerCommand 双 atom 同事务） */
+export const inventoryTransferExecuteSchema = z.object({
+  version: z.number().int().positive(),
+});
+
+// ============================================================================
+// Sprint 6B-3 - Stock Count（盘点实盘事实，CTO 6B-3 授权：Count + Adjustment 事实链一起做）
+// 设计依据：Sprint6B_Inventory_Operations_Architecture_Process_Gate.md §4 + Field Matrix v0.5 §2 + ADR-0026
+// - 状态机：DRAFT → COUNTING → COMPLETED → ADJUSTED / CANCELLED
+// - **红线：StockCount 永不直接改 StockProjection**——只有 Adjustment Apply 才允许调用 Shared LedgerCommand
+// - 盘点行：per-line atomic snapshot（录入 countedQty 时同事务读五维 StockProjection → bookQtyAtCount/countedAt/ledgerWatermark）
+//   varianceQty = countedQty - bookQtyAtCount（服务端计算）；五维唯一（DB UNIQUE NULLS NOT DISTINCT）
+// - complete：非零差异 → 自动生成 COUNT_VARIANCE Adjustment（sourceStockCountLineId @unique 防双重入账）→ ADJUSTED；
+//   零差异 → COMPLETED；生成的 Adjustment 仍需审批（maker-checker，System Default 非零差异需审批）
+// ============================================================================
+
+/** 盘点行（客户端提交；countedQty >= 0；五维唯一） */
+export const stockCountLineSchema = z.object({
+  id: z.string().min(1).optional(), // 提供则更新该行（重新 snapshot），否则新增
+  warehouseId: z.string().min(1),
+  locationId: z.string().min(1).nullable().optional(),
+  itemId: z.string().min(1),
+  batchNo: z.string().max(100).nullable().optional(),
+  serialNo: z.string().max(100).nullable().optional(), // 单值（serial-managed 逐 serial 盘点）
+  countedQty: z.coerce.number().nonnegative(), // 实盘数（>= 0）
+  remark: z.string().max(500).optional(),
+});
+
+/** 盘点单创建（DRAFT；创建即取号 CNT） */
+export const stockCountCreateSchema = z.object({
+  remark: z.string().max(500).optional(),
+});
+
+/** 盘点单更新（仅 DRAFT；version 乐观锁；header remark） */
+export const stockCountUpdateSchema = z.object({
+  version: z.number().int().positive(),
+  remark: z.string().max(500).nullable().optional(),
+});
+
+/** 盘点行录入（COUNTING：per-line atomic snapshot——同事务读五维 StockProjection → varianceQty 服务端计算） */
+export const stockCountLinesSchema = z.object({
+  lines: z.array(stockCountLineSchema).min(1, '至少需要一行'),
+});
+
+/** 盘点完成（真 Gate：COUNTING → COMPLETED/ADJUSTED；非零差异自动生成 COUNT_VARIANCE Adjustment） */
+export const stockCountCompleteSchema = z.object({
+  version: z.number().int().positive(),
+});
+
+/** 盘点取消（DRAFT/COUNTING → CANCELLED；version 乐观锁） */
+export const stockCountCancelSchema = z.object({
+  version: z.number().int().positive(),
+});
+
+// ============================================================================
+// Sprint 6B-3 - Inventory Adjustment（受控库存账事实，CTO 6B-3 授权）
+// 设计依据：Architecture Process Gate §5 + Field Matrix v0.5 §3 + ADR-0026 + P8/P9 Final
+// - 状态机：DRAFT → SUBMITTED → APPROVED → APPLIED / CANCELLED；APPROVED ≠ APPLIED
+// - **红线：Adjustment 只能经 Shared LedgerCommand 追加 ADJUSTMENT Movement**（同步命令）；绝不直写 Projection
+// - maker-checker（P9）：createdById（创建人）与 approvedById/appliedById（批准/Apply 人）不得相同（DB CHECK 兜底）
+// - reasonCode：系统保留码（COUNT_VARIANCE/DAMAGE/LOSS/GIFT/SYSTEM_CORRECTION/MANUAL）+ 可扩展字典
+// - 行：direction 在行级（IN/OUT，quantity 恒正）；serial-managed 逐 serial 原子化；sourceStockCountLineId @unique 防双重入账
+// - Minor Hardening ②：非空 sourceStockCountLineId 必须属于 sourceStockCountId 指向的盘点单（service Gate 事务内校验）
+// - Apply：FOR UPDATE 锁单 → 仅 APPROVED → maker-checker → 同事务 executeLedgerAtoms（每行一笔 ADJUSTMENT Movement）→
+//   单据 APPLIED + appliedById/appliedAt + 证据（approvedById 若无则补 apply 人）→ 事件 InventoryAdjustmentApplied
+// ============================================================================
+
+/** 调整行（客户端提交；direction IN/OUT；quantity > 0 恒正；serial-managed 逐 serial） */
+export const inventoryAdjustmentLineCreateSchema = z.object({
+  warehouseId: z.string().min(1),
+  locationId: z.string().min(1).nullable().optional(),
+  itemId: z.string().min(1),
+  batchNo: z.string().max(100).nullable().optional(),
+  serialNo: z.string().max(100).nullable().optional(), // 单值（serial-managed 逐 serial 原子化）
+  direction: z.enum(['IN', 'OUT']),
+  quantity: z.coerce.number().positive(),
+  uomId: z.string().min(1).optional(),
+  sourceStockCountLineId: z.string().min(1).nullable().optional(), // 盘点行追溯（可空；UNIQUE 防双重入账）
+  remark: z.string().max(500).optional(),
+});
+
+/** 调整单创建（DRAFT；创建即取号 ADJ；Manual 或引用 Count 差异） */
+export const inventoryAdjustmentCreateSchema = z.object({
+  reasonCode: z.string().min(1).max(50), // P8 Final：系统保留码 + 可扩展字典（不写死 enum）
+  sourceStockCountId: z.string().min(1).nullable().optional(), // 来源盘点单（可空——Manual 无盘点来源）
+  remark: z.string().max(500).optional(),
+  lines: z.array(inventoryAdjustmentLineCreateSchema).min(1, '至少需要一行'),
+});
+
+/** 调整单更新（仅 DRAFT；version 乐观锁；行整体替换） */
+export const inventoryAdjustmentUpdateSchema = z.object({
+  version: z.number().int().positive(),
+  reasonCode: z.string().min(1).max(50).optional(),
+  remark: z.string().max(500).nullable().optional(),
+  lines: z.array(inventoryAdjustmentLineCreateSchema).min(1).optional(),
+});
+
+/** 调整提交（真 Gate：DRAFT → SUBMITTED；version 乐观锁；触发审批 maybeTriggerApproval） */
+export const inventoryAdjustmentSubmitSchema = z.object({
+  version: z.number().int().positive(),
+});
+
+/** 调整 Apply（真 Gate：APPROVED → APPLIED；version 乐观锁 + 幂等 ALREADY_APPLIED；Shared LedgerCommand 逐行 ADJUSTMENT Movement 同事务） */
+export const inventoryAdjustmentApplySchema = z.object({
+  version: z.number().int().positive(),
+});
+
+/** 调整取消（DRAFT/SUBMITTED/APPROVED → CANCELLED；version 乐观锁；APPLIED 禁——纠错走 Reversal） */
+export const inventoryAdjustmentCancelSchema = z.object({
+  version: z.number().int().positive(),
+});
+
+// ============================================================================
+// Sprint 6B-4 - Inventory Conversion（同 item Repack / UOM Conversion，CTO #8658 授权）
+// 设计依据：Architecture Process Gate §6 + Field Matrix v0.5 §4 + ADR-0026 + P10/P11 Final
+// - 状态机：DRAFT → SUBMITTED → EXECUTED / CANCELLED（Conversion 无审批状态——同 item 计量事实，不发明审批流）
+// - 同一 itemId（首版禁止 BOM/组装/拆解/多物料）；一张 Conversion 最多 1 CONSUME + 1 PRODUCE（UNIQUE(headerId, lineRole)）
+// - **baseQuantity 不由客户端提交**：服务端 canonical 计算 baseQuantity = quantity × uomToBaseRate（Decimal 精度统一），
+//   不信任客户端；EXECUTE 前验证 CONSUME.baseQuantity == PRODUCE.baseQuantity（守恒，P11）
+// - batch 精确继承（CONSUME batch → PRODUCE batch 同值）；serial 不允许（首版不支持 serial 重生成）
+// - EXECUTE：CONSUME + PRODUCE 同一稳定 movementGroupId，经 Shared executeLedgerAtoms 同事务原子提交
+// ============================================================================
+
+/** 转换行（CONSUME/PRODUCE 各一条；quantity + uomToBaseRate 由客户端提交，**baseQuantity 服务端计算**） */
+export const inventoryConversionLineCreateSchema = z.object({
+  lineRole: z.enum(['CONSUME', 'PRODUCE']),
+  quantity: z.coerce.number().positive(), // 业务 UOM 数量（> 0）
+  uomId: z.string().min(1), // 业务 UOM
+  uomToBaseRate: z.coerce.number().positive(), // 行级换算率 snapshot（业务 UOM → base UOM，> 0；DB CHECK 兜底）
+  warehouseId: z.string().min(1),
+  locationId: z.string().min(1).nullable().optional(),
+  batchNo: z.string().max(100).nullable().optional(), // P5 Final：batch 精确继承（CONSUME batch → PRODUCE batch 同值）
+  remark: z.string().max(500).optional(),
+});
+
+/** 转换单创建（DRAFT；创建即取号 CVT；baseUomId 必须 == Item 的 stock UOM——service Gate） */
+export const inventoryConversionCreateSchema = z.object({
+  itemId: z.string().min(1), // 同一 itemId（首版 Repack/UOM Conversion，禁止多物料）
+  baseUomId: z.string().min(1), // Inventory Base UOM（service Gate 验证 == Item.stockUomId）
+  remark: z.string().max(500).optional(),
+  lines: z.array(inventoryConversionLineCreateSchema).length(2, '必须恰好 1 CONSUME + 1 PRODUCE'),
+});
+
+/** 转换单更新（仅 DRAFT；version 乐观锁；行整体替换） */
+export const inventoryConversionUpdateSchema = z.object({
+  version: z.number().int().positive(),
+  remark: z.string().max(500).nullable().optional(),
+  lines: z.array(inventoryConversionLineCreateSchema).length(2).optional(),
+});
+
+/** 转换提交（真 Gate：DRAFT → SUBMITTED；version 乐观锁；Conversion 无审批状态，提交即确认） */
+export const inventoryConversionSubmitSchema = z.object({
+  version: z.number().int().positive(),
+});
+
+/** 转换执行（真 Gate：SUBMITTED → EXECUTED；version 乐观锁 + 幂等 ALREADY_EXECUTED；Shared LedgerCommand 双 atom 同事务） */
+export const inventoryConversionExecuteSchema = z.object({
+  version: z.number().int().positive(),
+});
+
+/** 转换取消（DRAFT/SUBMITTED → CANCELLED；version 乐观锁；EXECUTED 禁——纠错走 Reversal） */
+export const inventoryConversionCancelSchema = z.object({
+  version: z.number().int().positive(),
+});

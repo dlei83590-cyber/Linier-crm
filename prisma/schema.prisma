@@ -185,6 +185,10 @@ enum DocumentType {
   WAREHOUSE_RECEIPT // 采购入库单 WHR（Sprint 5B 新增）
   PURCHASE_RETURN // 采购退货单 PRT（Sprint 5B 新增）
   INVENTORY_MOVEMENT // 库存流水 MV（Sprint 6A 新增）
+  INVENTORY_TRANSFER // 调拨单 TRF（Sprint 6B 新增）
+  STOCK_COUNT // 盘点单 CNT（Sprint 6B 新增）
+  INVENTORY_ADJUSTMENT // 库存调整单 ADJ（Sprint 6B 新增）
+  INVENTORY_CONVERSION // 库存转换单 CVT（Sprint 6B 新增，同 item Repack / UOM Conversion）
 }
 
 /// Platform user account. Identity and credential record.
@@ -205,6 +209,12 @@ model User {
   postedWarehouseReceipts WarehouseReceipt[] @relation("WarehouseReceiptPostedBy") // 5B：入库单（postedById 方向，过账人 D10）
   returnedPurchaseReturns PurchaseReturn[] // 5B：退货单（returnedById 方向，经办人）
   committedInventoryMovements InventoryMovement[] @relation("InventoryMovementCommittedBy") // 6A：库存流水（committedById 方向）
+  approvedTransfers InventoryTransfer[] @relation("TransferApprovedBy") // 6B：调拨单审批人（InventoryTransfer.approvedById 方向）
+  executedTransfers InventoryTransfer[] @relation("TransferExecutedBy") // 6B：调拨单执行人（InventoryTransfer.executedById 方向）
+  countedStockCounts StockCount[] @relation("StockCountCountedBy") // 6B：盘点单盘点人（StockCount.countedById 方向）
+  approvedAdjustments InventoryAdjustment[] @relation("AdjustmentApprovedBy") // 6B：调整单审批人（InventoryAdjustment.approvedById 方向）
+  appliedAdjustments InventoryAdjustment[] @relation("AdjustmentAppliedBy") // 6B：调整单 Apply 人（InventoryAdjustment.appliedById 方向）
+  executedConversions InventoryConversion[] @relation("ConversionExecutedBy") // 6B：转换单执行人（InventoryConversion.executedById 方向）
   createdAt    DateTime    @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime    @updatedAt @db.Timestamptz(3)
 
@@ -336,6 +346,10 @@ model UnitOfMeasure {
   warehouseReceiptLines WarehouseReceiptLine[] // 5B：入库行（WarehouseReceiptLine.uom 方向）
   purchaseReturnLines PurchaseReturnLine[] // 5B：退货行（PurchaseReturnLine.uom 方向）
   inventoryMovements InventoryMovement[] // 6A：库存流水（InventoryMovement.uom 方向）
+  transferLines InventoryTransferLine[] // 6B：调拨行（InventoryTransferLine.uom 方向）
+  adjustmentLines InventoryAdjustmentLine[] // 6B：调整行（InventoryAdjustmentLine.uom 方向）
+  conversionLines InventoryConversionLine[] // 6B：转换行（InventoryConversionLine.uom 方向）
+  conversionBaseUoms InventoryConversion[] @relation("ConversionBaseUom") // 6B：转换单 base UOM（InventoryConversion.baseUom 方向）
   createdAt     DateTime @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 
@@ -422,6 +436,10 @@ model Item {
   purchaseReturnLines PurchaseReturnLine[] // 5B：退货行（PurchaseReturnLine.item 方向）
   inventoryMovements InventoryMovement[] // 6A：库存流水（InventoryMovement.item 方向）
   stockProjections StockProjection[] // 6A：库存投影（StockProjection.item 方向）
+  transferLines InventoryTransferLine[] // 6B：调拨行（InventoryTransferLine.item 方向）
+  stockCountLines StockCountLine[] // 6B：盘点行（StockCountLine.item 方向）
+  adjustmentLines InventoryAdjustmentLine[] // 6B：调整行（InventoryAdjustmentLine.item 方向）
+  conversions InventoryConversion[] // 6B：转换单（InventoryConversion.item 方向）
   createdAt     DateTime        @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime        @updatedAt @db.Timestamptz(3)
 
@@ -4826,6 +4844,11 @@ model Warehouse {
   warehouseReceipts WarehouseReceipt[] // 入库仓库方向（WarehouseReceipt.warehouseId）
   inventoryMovements InventoryMovement[] // 6A：库存流水（InventoryMovement.warehouse 方向）
   stockProjections StockProjection[] // 6A：库存投影（StockProjection.warehouse 方向）
+  transferSources InventoryTransfer[] @relation("TransferSourceWarehouse") // 6B：调拨单源仓（InventoryTransfer.sourceWarehouse 方向）
+  transferDestinations InventoryTransfer[] @relation("TransferDestinationWarehouse") // 6B：调拨单目标仓（InventoryTransfer.destinationWarehouse 方向）
+  stockCountLines StockCountLine[] // 6B：盘点行（StockCountLine.warehouse 方向）
+  adjustmentLines InventoryAdjustmentLine[] // 6B：调整行（InventoryAdjustmentLine.warehouse 方向）
+  conversionLines InventoryConversionLine[] // 6B：转换行（InventoryConversionLine.warehouse 方向）
 
   @@index([code])
   @@index([deletedAt])
@@ -4849,6 +4872,11 @@ model WarehouseLocation {
   warehouseReceipts WarehouseReceipt[] // 入库单库位方向（WarehouseReceipt.locationId，可空）
   inventoryMovements InventoryMovement[] // 6A：库存流水（InventoryMovement.location 方向）
   stockProjections StockProjection[] // 6A：库存投影（StockProjection.location 方向）
+  transferSourceLocations InventoryTransfer[] @relation("TransferSourceLocation") // 6B：调拨单源库位（InventoryTransfer.sourceLocation 方向）
+  transferDestinationLocations InventoryTransfer[] @relation("TransferDestinationLocation") // 6B：调拨单目标库位（InventoryTransfer.destinationLocation 方向）
+  stockCountLines StockCountLine[] // 6B：盘点行（StockCountLine.location 方向）
+  adjustmentLines InventoryAdjustmentLine[] // 6B：调整行（InventoryAdjustmentLine.location 方向）
+  conversionLines InventoryConversionLine[] // 6B：转换行（InventoryConversionLine.location 方向）
 
   @@unique([warehouseId, code])
   @@unique([id, warehouseId]) // 支持 WarehouseReceipt 组合 FK（Minor ②：location 必须属于同一 warehouse）
@@ -5113,6 +5141,9 @@ enum InventoryMovementStatus {
 enum InventoryMovementSourceType {
   WAREHOUSE_RECEIPT_POSTED // WarehouseReceiptPosted（status=POSTED）→ IN
   PURCHASE_RETURN_RETURNED // PurchaseReturned（仅 WAREHOUSE_RECEIPT_LINE 来源行）→ OUT；未入库退货无 Movement
+  TRANSFER // 6B：调拨（SOURCE_OUT + DESTINATION_IN 双边，同一 movementGroupId，同步共享 Ledger Command）
+  ADJUSTMENT // 6B：库存调整（Count 差异 / Manual，经共享 Ledger Command；Count 经 sourceStockCountLineId 追溯，不新增 STOCK_COUNT sourceType）
+  CONVERSION // 6B：同 item Repack / UOM Conversion（CONSUME + PRODUCE，同一 movementGroupId）
   REVERSAL // 纠错：冲销（拥有自己的 source/action identity，不与原 Movement 共用幂等身份）
   CORRECTION // 纠错：修正（同上）
 }
@@ -5155,6 +5186,58 @@ enum OutboxStatus {
   PROCESSING
   PROCESSED
   DEAD_LETTER
+}
+
+/// Sprint 6B：调拨单状态（P2 Final：DRAFT→SUBMITTED→APPROVED→EXECUTED/CANCELLED；EXECUTED 才触发双边 Movement）
+enum InventoryTransferStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  EXECUTED
+  CANCELLED
+}
+
+/// Sprint 6B：调拨类型（P3 Final：跨仓/同仓库位移动统一模型，transferType 区分）
+enum InventoryTransferType {
+  INTER_WAREHOUSE
+  INTRA_WAREHOUSE
+}
+
+/// Sprint 6B：盘点单状态（Count 是实盘事实——不直接产生 Movement；差异经 Adjustment Command）
+enum StockCountStatus {
+  DRAFT
+  COUNTING
+  COMPLETED
+  ADJUSTED // 差异已生成 Adjustment
+  CANCELLED
+}
+
+/// Sprint 6B：盘点冻结策略（P6 Final：动态盘点——per-line atomic snapshot，不冻结维度）
+enum StockCountFreezeStrategy {
+  DYNAMIC
+}
+
+/// Sprint 6B：库存调整单状态（P9 Final：maker-checker——创建人与批准/Apply 人不得相同；APPLIED 只有 Ledger 成功后）
+enum InventoryAdjustmentStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  APPLIED
+  CANCELLED
+}
+
+/// Sprint 6B：库存转换单状态（同 item Repack / UOM Conversion）
+enum InventoryConversionStatus {
+  DRAFT
+  SUBMITTED
+  EXECUTED
+  CANCELLED
+}
+
+/// Sprint 6B：转换行角色（CONSUME 消耗输入 / PRODUCE 产出输出）
+enum InventoryConversionLineRole {
+  CONSUME
+  PRODUCE
 }
 
 /// 库存数量唯一事实源（单层原子事实；**一行 = 一个不可变库存原子事实**，无 Header/Line 两层——CTO #7458）
@@ -5268,4 +5351,279 @@ model OutboxMessage {
 
   @@index([status, nextAttemptAt]) // 消费扫描 + retry 调度
   @@index([createdAt])
+}
+
+// ============================================================================
+// Sprint 6B：Inventory Operations 业务事实层（Schema Design，CTO #8014 APPROVED FOR SCHEMA DESIGN）
+// 红线：Operations 业务事实层只承载"业务单据事实"；库存账仍只以 InventoryMovement 呈现（6A SSOT）
+// 业务 API 不得直接 INSERT InventoryMovement / UPDATE StockProjection——必须经共享 Ledger Command（同步）或 Outbox + Consumer（异步）
+// 6B 实现前置（P12 Final）：抽取共享 InventoryLedgerCommand core，6A Consumer 与 6B 同步 Operations 共用同一底层
+// ============================================================================
+
+/// Sprint 6B：调拨单头（业务事实——双边 Movement 在 EXECUTE 时生成；DRAFT/SUBMITTED/APPROVED 不落账）
+/// CTO Schema 问题①：movementGroupId 不在 DRAFT 创建时生成——只在 EXECUTE 时生成并冻结；Schema 可空，执行后必有
+/// CTO Schema 问题②：防自调拨——跨仓 sourceWarehouseId 与 destinationWarehouseId 不同；同仓必须 location 不同（Schema CHECK + service invariant 锁死五维）
+model InventoryTransfer {
+  id            String   @id @default(cuid())
+  transferNo    String   @unique // 调拨单号（DocumentSequence docType=INVENTORY_TRANSFER，前缀 TRF）
+  status        InventoryTransferStatus @default(DRAFT)
+  transferType  InventoryTransferType @default(INTER_WAREHOUSE) // P3 Final：跨仓/同仓统一模型，transferType 区分
+  sourceWarehouseId String
+  sourceWarehouse   Warehouse @relation("TransferSourceWarehouse", fields: [sourceWarehouseId], references: [id], onDelete: Restrict)
+  sourceLocationId  String?
+  sourceLocation    WarehouseLocation? @relation("TransferSourceLocation", fields: [sourceLocationId, sourceWarehouseId], references: [id, warehouseId], onDelete: Restrict) // 组合 FK：location 必须属于 source warehouse
+  destinationWarehouseId String
+  destinationWarehouse   Warehouse @relation("TransferDestinationWarehouse", fields: [destinationWarehouseId], references: [id], onDelete: Restrict)
+  destinationLocationId  String?
+  destinationLocation    WarehouseLocation? @relation("TransferDestinationLocation", fields: [destinationLocationId, destinationWarehouseId], references: [id, warehouseId], onDelete: Restrict) // 组合 FK：location 必须属于 destination warehouse
+  movementGroupId String? // CTO Schema 问题①：EXECUTE 时生成并冻结（双边 SOURCE_OUT + DESTINATION_IN 共享）；DRAFT 可空
+  approvedById  String?
+  approvedBy    User? @relation("TransferApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  executedAt    DateTime? @db.Timestamptz(3) // CTO Schema 问题⑥：Ledger 双边成功后写入（EXECUTED 才有）
+  executedById  String?
+  executedBy    User? @relation("TransferExecutedBy", fields: [executedById], references: [id], onDelete: SetNull)
+  remark        String?
+  isActive      Boolean @default(true)
+  createdById   String?
+  updatedById   String?
+  version       Int     @default(1)
+  deletedAt     DateTime?
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  lines InventoryTransferLine[]
+
+  @@index([transferNo])
+  @@index([sourceWarehouseId])
+  @@index([destinationWarehouseId])
+  @@index([status])
+  @@index([movementGroupId])
+  @@index([deletedAt])
+}
+
+/// Sprint 6B：调拨单行（每行 → SOURCE_OUT + DESTINATION_IN 一对 Movement，同一 movementGroupId）
+model InventoryTransferLine {
+  id            String   @id @default(cuid())
+  transferHeaderId String
+  transferHeader   InventoryTransfer @relation(fields: [transferHeaderId], references: [id], onDelete: Cascade)
+  itemId        String
+  item          Item @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  uomId         String?
+  uom           UnitOfMeasure? @relation(fields: [uomId], references: [id], onDelete: SetNull)
+  quantity      Decimal  @db.Decimal(18, 4) // 双边 quantity 相等（守恒）
+  batchNo       String? // P5 Final：batch 精确继承
+  serialNos     String[] @default([]) // serial-managed：每 serial 一对 Movement（serial 精确继承不重生成）
+  mfgDate       DateTime? @db.Date
+  expDate       DateTime? @db.Date
+  remark        String?
+  isActive      Boolean @default(true)
+  createdById   String?
+  updatedById   String?
+  version       Int     @default(1)
+  deletedAt     DateTime?
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([transferHeaderId])
+  @@index([itemId])
+  @@index([deletedAt])
+}
+
+/// Sprint 6B：盘点单头（实盘事实——本身不产生 Movement；差异经 Adjustment Command → InventoryMovement(ADJUSTMENT)）
+/// 严禁 StockCount → UPDATE StockProjection（跳过 Movement 的直接改投影）
+model StockCount {
+  id            String   @id @default(cuid())
+  countNo       String   @unique // 盘点单号（DocumentSequence docType=STOCK_COUNT，前缀 CNT）
+  status        StockCountStatus @default(DRAFT)
+  freezeStrategy StockCountFreezeStrategy @default(DYNAMIC) // P6 Final：动态盘点（不冻结维度）
+  countedById   String?
+  countedBy     User? @relation("StockCountCountedBy", fields: [countedById], references: [id], onDelete: SetNull)
+  completedAt   DateTime? @db.Timestamptz(3)
+  remark        String?
+  isActive      Boolean @default(true)
+  createdById   String?
+  updatedById   String?
+  version       Int     @default(1)
+  deletedAt     DateTime?
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  lines StockCountLine[]
+  adjustments InventoryAdjustment[] // 6B：来源盘点单方向（InventoryAdjustment.sourceStockCountId，可空——Manual 调整无盘点来源）
+
+  @@index([countNo])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+/// Sprint 6B：盘点明细行（per-line atomic snapshot——CTO #7975 Blocking ①）
+/// CTO Schema 问题③：同一五维在一个 Count 内必须唯一（防同一盘点单对同一库存维度重复盘两行）——DB UNIQUE NULLS NOT DISTINCT
+/// 录入 countedQty 时同事务读取五维 StockProjection → bookQtyAtCount / countedAt / ledgerWatermark（仅审计）
+model StockCountLine {
+  id            String   @id @default(cuid())
+  countHeaderId String
+  countHeader   StockCount @relation(fields: [countHeaderId], references: [id], onDelete: Cascade)
+  warehouseId   String
+  warehouse     Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  locationId    String?
+  location      WarehouseLocation? @relation(fields: [locationId, warehouseId], references: [id, warehouseId], onDelete: Restrict) // 组合 FK：location 必须属于同一 warehouse
+  itemId        String
+  item          Item @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  batchNo       String?
+  serialNo      String? // 单值（serial-managed 逐 serial 盘点）
+  countedQty    Decimal  @db.Decimal(18, 4) // 实盘数（录入）
+  bookQtyAtCount Decimal @db.Decimal(18, 4) // 录入时同事务读取五维 StockProjection.onHandQty（per-line atomic snapshot）
+  countedAt     DateTime @db.Timestamptz(3) // 录入时点
+  ledgerWatermark String? // 仅审计/重放证据（movementNo 不作并发时序主键，CTO #7975 Blocking ②）
+  varianceQty   Decimal? @db.Decimal(18, 4) // 服务端计算：countedQty - bookQtyAtCount
+  remark        String?
+  isActive      Boolean @default(true)
+  createdById   String?
+  updatedById   String?
+  version       Int     @default(1)
+  deletedAt     DateTime?
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  adjustments   InventoryAdjustmentLine[] // 反向：差异生成的调整行
+
+  @@index([countHeaderId])
+  @@index([warehouseId])
+  @@index([itemId])
+  @@index([deletedAt])
+}
+
+/// Sprint 6B：库存调整单头（受控库存账事实——只能经共享 Ledger Command 追加 Movement）
+/// CTO Schema 问题④ maker-checker：createdById（创建人）与 approvedById/appliedById（批准/Apply 人）结构承载，service 强制不同人；
+/// CTO 6B Schema Re-review Integrity ②：createdById NOT NULL——可空会让 maker-checker CHECK 三值逻辑失效，系统自动创建的 Count Adjustment 也必须有明确 system actor
+/// CTO Schema 问题⑥：状态只有在 Ledger 成功后才进入 APPLIED——不允许"业务单据终态已写、Movement 失败"
+/// reasonCode（P8 Final）：系统保留码 + 可扩展字典（不写死 enum）
+/// CTO 6B Schema Re-review Integrity ①：DB CHECK 保证 status=APPLIED 时 approvedById/appliedById/appliedAt 全部非空（终态必须有执行证据）
+model InventoryAdjustment {
+  id            String   @id @default(cuid())
+  adjustmentNo  String   @unique // 调整单号（DocumentSequence docType=INVENTORY_ADJUSTMENT，前缀 ADJ）
+  status        InventoryAdjustmentStatus @default(DRAFT)
+  reasonCode    String   // P8 Final：系统保留码（COUNT_VARIANCE/DAMAGE/LOSS/GIFT/SYSTEM_CORRECTION/MANUAL）+ 可扩展字典
+  // CTO 6B Schema Re-review Blocking ①：direction 下沉到 InventoryAdjustmentLine——同一 Adjustment 可原子承载盘盈+盘亏差异行（一次 Stock Count 的 +5/-3 属于同一盘点事实）；Header 不再有单一方向
+  sourceStockCountId String? // 来源盘点单（可空——Manual 调整无盘点来源）
+  sourceStockCount   StockCount? @relation(fields: [sourceStockCountId], references: [id], onDelete: SetNull)
+  approvedById  String?
+  approvedBy    User? @relation("AdjustmentApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  appliedById   String?
+  appliedBy     User? @relation("AdjustmentAppliedBy", fields: [appliedById], references: [id], onDelete: SetNull)
+  appliedAt     DateTime? @db.Timestamptz(3) // CTO Schema 问题⑥：Ledger 成功后写入（APPLIED 才有）
+  remark        String?
+  isActive      Boolean @default(true)
+  createdById   String // CTO 6B Schema Re-review Integrity ②：NOT NULL——maker-checker 闭环（createdById 可空会让 CHECK 三值逻辑失效）；系统自动创建的 Count Adjustment 也必须带明确 system actor
+  updatedById   String?
+  version       Int     @default(1)
+  deletedAt     DateTime?
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  lines InventoryAdjustmentLine[]
+
+  @@index([adjustmentNo])
+  @@index([status])
+  @@index([reasonCode])
+  @@index([deletedAt])
+}
+
+/// Sprint 6B：库存调整行（每行 → 一笔 ADJUSTMENT Movement；Count 通过 sourceStockCountLineId 追溯，不新增 STOCK_COUNT sourceType）
+model InventoryAdjustmentLine {
+  id            String   @id @default(cuid())
+  adjustmentHeaderId String
+  adjustmentHeader   InventoryAdjustment @relation(fields: [adjustmentHeaderId], references: [id], onDelete: Cascade)
+  warehouseId   String
+  warehouse     Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  locationId    String?
+  location      WarehouseLocation? @relation(fields: [locationId, warehouseId], references: [id, warehouseId], onDelete: Restrict) // 组合 FK：location 必须属于同一 warehouse
+  itemId        String
+  item          Item @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  batchNo       String?
+  serialNo      String? // 单值（serial-managed 逐 serial 原子化）
+  direction     InventoryMovementDirection // IN / OUT（CTO 6B Schema Re-review Blocking ①：方向下沉到行——同一 Adjustment 可同时承载盘盈/盘亏；quantity 恒正数）
+  quantity      Decimal  @db.Decimal(18, 4) // 恒正数（方向在行）
+  uomId         String?
+  uom           UnitOfMeasure? @relation(fields: [uomId], references: [id], onDelete: SetNull)
+  sourceStockCountLineId String? @unique // 盘点行追溯（CTO 6B Schema Re-review Blocking ②：一个 StockCountLine 最多对应一个正式 AdjustmentLine——防双重入账；PG 普通 UNIQUE 允许多个 NULL，Manual 不受影响；未来纠错走 Reversal/Correction）
+  sourceStockCountLine   StockCountLine? @relation(fields: [sourceStockCountLineId], references: [id], onDelete: SetNull)
+  remark        String?
+  isActive      Boolean @default(true)
+  createdById   String?
+  updatedById   String?
+  version       Int     @default(1)
+  deletedAt     DateTime?
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([adjustmentHeaderId])
+  @@index([warehouseId])
+  @@index([itemId])
+  @@index([deletedAt]) // sourceStockCountLineId 由 @unique 覆盖（Blocking ②）
+}
+
+/// Sprint 6B：库存转换单头（收窄为同 item Repack / UOM Conversion——CTO #7975 Blocking ③）
+/// CTO Schema 问题⑤：Base UOM canonicalization 与现有 Item/UOM 模型对齐——baseUomId 引用现有 UnitOfMeasure（不发明第二套 UOM master）
+/// CTO Schema 问题⑥：状态只有在 Ledger 成功后才进入 EXECUTED
+model InventoryConversion {
+  id            String   @id @default(cuid())
+  conversionNo  String   @unique // 转换单号（DocumentSequence docType=INVENTORY_CONVERSION，前缀 CVT）
+  status        InventoryConversionStatus @default(DRAFT)
+  itemId        String // 同一 itemId（6B 收窄：同 item Repack/UOM Conversion）
+  item          Item @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  baseUomId     String // Inventory Base UOM（引用现有 UnitOfMeasure；P11 Final——service Gate 验证 baseUomId == 该 Item 的 inventory/stock UOM，不允许调用方任意选 UOM 冒充库存基准）
+  baseUom       UnitOfMeasure? @relation("ConversionBaseUom", fields: [baseUomId], references: [id], onDelete: Restrict)
+  // CTO 6B Schema Re-review Blocking ④：header 单一 conversionRate 已删除——换算 snapshot 下沉到 Line（uomToBaseRate/baseQuantity），Ledger canonicalization 只认 line 级 baseQuantity
+  movementGroupId String? // CTO Schema 问题①：EXECUTE 时生成并冻结（CONSUME + PRODUCE 共享）；DRAFT 可空
+  executedAt    DateTime? @db.Timestamptz(3) // CTO Schema 问题⑥：Ledger 成功后写入（EXECUTED 才有）
+  executedById  String?
+  executedBy    User? @relation("ConversionExecutedBy", fields: [executedById], references: [id], onDelete: SetNull)
+  remark        String?
+  isActive      Boolean @default(true)
+  createdById   String?
+  updatedById   String?
+  version       Int     @default(1)
+  deletedAt     DateTime?
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  lines InventoryConversionLine[]
+
+  @@index([conversionNo])
+  @@index([itemId])
+  @@index([status])
+  @@index([movementGroupId])
+  @@index([deletedAt])
+}
+
+/// Sprint 6B：库存转换行（lineRole=CONSUME / PRODUCE；换算到 base UOM 后 ΣCONSUME 与 ΣPRODUCE 相等，P11 Final）
+model InventoryConversionLine {
+  id            String   @id @default(cuid())
+  conversionHeaderId String
+  conversionHeader   InventoryConversion @relation(fields: [conversionHeaderId], references: [id], onDelete: Cascade)
+  lineRole      InventoryConversionLineRole // CONSUME / PRODUCE（CTO 6B Schema Re-review Blocking ③：UNIQUE(conversionHeaderId, lineRole)——每张 Conversion 最多 1 CONSUME + 1 PRODUCE，P10 单输入单输出）
+  quantity      Decimal  @db.Decimal(18, 4) // 业务 UOM 数量
+  uomId         String?
+  uom           UnitOfMeasure? @relation(fields: [uomId], references: [id], onDelete: SetNull)
+  uomToBaseRate Decimal  @db.Decimal(18, 6) // 行级换算率 snapshot（业务 UOM → base UOM；Blocking ④——header 单一 rate 无法无歧义描述两方向各自换算；DB CHECK uomToBaseRate > 0）
+  baseQuantity  Decimal  @db.Decimal(18, 4) // canonical 数量 = quantity × uomToBaseRate（P11 Final：Ledger/Projection 只记 base UOM canonical 数量；service EXECUTE 前验证 CONSUME.baseQuantity == PRODUCE.baseQuantity；DB CHECK baseQuantity > 0）
+  warehouseId   String
+  warehouse     Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  locationId    String?
+  location      WarehouseLocation? @relation(fields: [locationId, warehouseId], references: [id, warehouseId], onDelete: Restrict) // 组合 FK：location 必须属于同一 warehouse
+  batchNo       String? // P5 Final：batch 默认精确继承
+  remark        String?
+  isActive      Boolean @default(true)
+  createdById   String?
+  updatedById   String?
+  version       Int     @default(1)
+  deletedAt     DateTime?
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([conversionHeaderId])
+  @@unique([conversionHeaderId, lineRole]) // Blocking ③：单输入单输出（最多 1 CONSUME + 1 PRODUCE）
+  @@index([warehouseId])
+  @@index([deletedAt])
 }

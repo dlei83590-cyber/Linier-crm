@@ -1,4 +1,5 @@
 import { writeAuditLog } from '@/lib/api-helpers';
+import type { InventoryMovementRole, InventoryMovementSourceType } from '@prisma/client';
 
 /**
  * Sprint 6A - Inventory Ledger Domain Events 发布（EVENTS.md v1.26 已注册 InventoryMovementCommitted）
@@ -12,10 +13,10 @@ import { writeAuditLog } from '@/lib/api-helpers';
 export interface InventoryMovementCommittedPayload {
   movementId: string;
   movementNo: string;
-  sourceType: 'WAREHOUSE_RECEIPT_POSTED' | 'PURCHASE_RETURN_RETURNED' | 'REVERSAL' | 'CORRECTION';
+  sourceType: InventoryMovementSourceType; // 6B 扩展后含 TRANSFER/ADJUSTMENT/CONVERSION（对齐 schema 枚举，事件契约同步）
   sourceId: string;
   sourceLineId: string;
-  movementRole: 'IN' | 'OUT' | 'SOURCE_OUT' | 'DESTINATION_IN' | 'CONSUME' | 'PRODUCE' | 'ADJUSTMENT' | 'REVERSAL' | 'CORRECTION';
+  movementRole: InventoryMovementRole;
   movementAtomKey: string;
   direction: 'IN' | 'OUT';
   warehouseId: string;
