@@ -50,12 +50,16 @@
 | --- | --- | --- | --- |
 | D1 | 零差异完成 | 所有行 varianceQty=0 | Count → COMPLETED；**不生成 Adjustment**；InventoryCountCompleted 发布（variance 明细） |
 | D2 | 非零差异完成 | 有 +10/-3 差异行 | Count → ADJUSTED；**自动生成 COUNT_VARIANCE Adjustment（DRAFT）**；lines 引用 sourceStockCountLineId @unique；正差异=IN/quantity=10，负差异=OUT/quantity=3；createdById=盘点完成人（明确 actor，maker-checker） |
-| D3 | 重复 complete | 已 COMPLETED/ADJUSTED 再 complete | 409 STOCK_COUNT_ALREADY_COMPLETED（不重复生成 Adjustment） |
+| D3 | **终态幂等（CTO Re-review Gate 4）** | 已 COMPLETED/ADJUSTED 再 complete（任意 version） | **200 幂等返回既有事实**：COMPLETED → 返回既有 count（adjustment=null）；ADJUSTED → 返回既有 count + **既有 Count Adjustment（sourceStockCountId 唯一定位）**；**不重复创建 Adjustment、不重复发事件**（InventoryCountCompleted 只发一次） |
 | D4 | 无行完成 | 空盘点单 complete | 400 STOCK_COUNT_NO_LINES |
-| D5 | snapshot 缺失 | 存在 bookQtyAtCount 空行 | 400 STOCK_COUNT_SNAPSHOT_MISSING |
-| D6 | 版本冲突 | version 不匹配 | 409 VERSION_CONFLICT |
+| D5 | **冻结完整性（CTO Re-review Gate 2）** | 任一行缺 countedQty / bookQtyAtCount / countedAt / varianceQty 之一 | **400 STOCK_COUNT_SNAPSHOT_MISSING；不得创建 Adjustment、Count 不锁定**（四字段冻结校验） |
+| D6 | 版本冲突 | version 不匹配（仅 counting 状态校验） | 409 VERSION_CONFLICT（**终态幂等路径不校验 version**——重试携带旧 version 也返回既有事实） |
 | D7 | ADJ Sequence 缺失 | complete 触发生成但 INVENTORY_ADJUSTMENT Sequence 缺失 | **500 INVENTORY_ADJUSTMENT_SEQUENCE_MISSING（fail closed，零 fallback）**；事务回滚 Count 不锁定 |
 | D8 | 事件载荷 | complete 成功后 | InventoryCountCompleted 载荷含 countedQty/bookQtyAtCount/varianceQty，**不含投影余额** |
+| D9 | **variance 不重算（CTO Re-review Gate 3）** | 行录入后（Count 时点）到 Apply 前发生正常库存 Movement | varianceQty **以行录入时冻结值为准**：complete 只做一致性确认（computeVarianceQty 对比冻结值，不一致 → SNAPSHOT_MISSING）；AdjustmentLine 创建时**复制冻结的 variance fact**；Adjustment Create/Apply **绝不重读 StockProjection 计算差异**（grep 审计：complete/create/apply 零 `readProjectionSnapshot`/`computeVarianceQty` 重算调用） |
+| D10 | **并发 Complete 串行（CTO Re-review Gate 1）** | A、B 同时 complete 同一 Count | header **FOR UPDATE 串行化**：只有一个进入创建路径（Count→ADJUSTED/COMPLETED + Adjustment 创建）；另一个锁后读到终态 → **幂等返回既有事实**；**不产生重复/孤立 Adjustment、无 500/P2002、Count 与 Adjustment 状态一致** |
+| D11 | **原子性（CTO Re-review Gate 5）** | Count 状态变化 + Adjustment Header + Adjustment Lines 同事务；中途 unique/DB 失败 | **整事务回滚，不留孤立 Adjustment Header**；Count 保持原状态（不部分锁定） |
+| D12 | **事件一次性（CTO Re-review Gate 6）** | 首次真实 complete 发布事件后，幂等重放 complete | InventoryCountCompleted **只在首次真实 Complete 发布一次**；幂等重放（idempotent=true）**不重复发布**（事件段 `if (!result.idempotent)` 门控） |
 
 ## E. 盘点取消（Cancel）
 
@@ -133,3 +137,8 @@
 | K2 | 禁 fallback 编号 | grep 无 `CNT000001` / `ADJ000001` 常量 fallback（Sequence 缺失 fail closed 抛错） |
 | K3 | movementGroupId 稳定 | Adjustment atom 统一 `movementGroupId: adjustment.id`（稳定业务事实，重试复用） |
 | K4 | Conversion/Reservation/Costing 零实现 | 无 inventory-conversions / reservation / costing API |
+| K5 | **Count Line 冻结完整性（Re-review Gate 2）** | complete ⑤ 四字段冻结校验（countedQty/bookQtyAtCount/countedAt/varianceQty 全非空）；任一缺失 → 400 SNAPSHOT_MISSING，不得创建 Adjustment |
+| K6 | **variance 不重算（Re-review Gate 3）** | 行录入时固化 varianceQty；complete 只做一致性确认（computeVarianceQty 对比冻结值）；complete/create/apply 路由零 `readProjectionSnapshot`/`stockProjection` 重算调用（grep 审计） |
+| K7 | **并发 Complete 串行（Re-review Gate 1）** | header `FOR UPDATE` 串行化；锁后重判终态：已 COMPLETED/ADJUSTED → 幂等返回既有事实（`findFirst({ sourceStockCountId, deletedAt: null })` 唯一 Adjustment 定位），不重复创建 |
+| K8 | **原子性（Re-review Gate 5）** | Count 状态变化 + Adjustment Header + Lines 同一 `prisma.$transaction`；unique/DB 失败整事务回滚，不留孤立 Adjustment Header |
+| K9 | **事件一次性（Re-review Gate 6）** | `if (!result.idempotent)` 门控：只有首次真实 Complete 发布 InventoryCountCompleted；幂等重放不重复发布 |

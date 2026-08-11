@@ -150,6 +150,9 @@ Sprint 6B-2 Transfer Vertical Slice 进入 CTO Inventory Transfer Review 前必�
 | B11 | 状态机 | Count：DRAFT → COUNTING → COMPLETED → ADJUSTED / CANCELLED；Adjustment：DRAFT → SUBMITTED → APPROVED → APPLIED / CANCELLED；**APPROVED ≠ APPLIED** | ✅ |
 | B12 | Cancel 边界 | Count：COMPLETED/ADJUSTED 禁取消；Adjustment：APPLIED 禁取消（纠错走 Reversal/Correction，不允许 Cancel 回滚库存） | ✅ |
 | B13 | 审批走既有 Workflow Policy | maybeTriggerApproval（module=INVENTORY_ADJUSTMENT）；未命中 → 直接 APPROVED 投影（不发明第二套审批规则） | ✅ |
+| B14 | **Complete 锁定并冻结全部盘点行（CTO Review Blocking ①）** | complete 事务内 header FOR UPDATE 锁单 → 读全部 StockCountLine → 每行四字段冻结校验（countedQty/bookQtyAtCount/countedAt/varianceQty 全非空）→ variance 一致性确认（以行录入固化值为准，绝不重读 StockProjection/重算）→ Complete 后禁新增/删除/重新计数/修改（lines route 状态门禁：COMPLETED/ADJUSTED 后录入被拒） | ✅ |
+| B15 | **variance 属 Count 时点事实（Blocking ① 核心）** | AdjustmentLine 创建时复制冻结的 variance fact（direction=冻结值正负、quantity=\|冻结值\|）；Adjustment Create/Apply **只读 adjustment.lines 冻结值，绝不重读当前 StockProjection 计算差异**（grep 审计：complete/create/apply 零 `readProjectionSnapshot` 调用） | ✅ |
+| B16 | **Complete 并发幂等（CTO Review Blocking ②）** | 同一 StockCount 的 Complete 被 header FOR UPDATE 串行化；锁后重判终态：已 COMPLETED → 稳定幂等响应（返回既有 count）；已 ADJUSTED 且已有对应 Count Adjustment（`sourceStockCountId` 唯一）→ 返回既有事实不重新创建；CANCELLED → 拒绝；合法 counting 状态才继续；Count 状态 + Adjustment Header + Lines 同一 DB transaction（全有或全无，无孤立 Header） | ✅ |
 
 ## 3. 核心不变量（CTO 6B-3 Apply 三不变量）
 
@@ -168,9 +171,12 @@ Sprint 6B-2 Transfer Vertical Slice 进入 CTO Inventory Transfer Review 前必�
 | R3 | 源库存不足（OUT 方向） | InventoryInsufficientStockError → 409 INVENTORY_INSUFFICIENT_STOCK；事务回滚，单据保持 APPROVED，Movement/Projection 0 落账 |
 | R4 | 多行 Adjustment 中途失败 | executeLedgerAtoms 同 tx 顺序执行，某行抛错 → 整事务 0 落账（**无部分行残留**） |
 | R5 | 幂等 immutable-fact conflict | 同五元 identity 但 fact 不同 → InventoryLedgerIdempotencyConflictError → 409；绝不静默重放 |
-| R6 | Count complete 重复 | 已 COMPLETED/ADJUSTED → 409 ALREADY_COMPLETED（不重复生成 Adjustment） |
+| R6 | Count complete 重复（终态幂等） | 已 COMPLETED/ADJUSTED 再 complete | **200 幂等返回既有事实**（已 COMPLETED → 返回既有 count；已 ADJUSTED → 返回既有 count + 既有 Count Adjustment，`sourceStockCountId` 唯一）；**不重复创建 Adjustment、不重复发事件** |
 | R7 | sourceStockCountLineId 并发占用 | UNIQUE 冲突 → 409 SOURCE_LINE_ALREADY_SETTLED（一条盘点差异只能正式结算一次） |
 | R8 | maker-checker 并发 | apply 人=创建人 → 409 MAKER_CHECKER（service 校验 + DB CHECK 兜底） |
+| R9 | **并发 Complete 串行（Blocking ②）** | A、B 同时 complete 同一 Count | header FOR UPDATE 串行化：只有一个进入创建路径（Count→终态 + Adjustment 创建）；另一个锁后读到终态 → **幂等返回既有事实**；不产生重复/孤立 Adjustment、无 500/P2002、Count 与 Adjustment 状态一致 |
+| R10 | **Complete 原子性（Blocking ②）** | Count 状态变化 + Adjustment Header + Lines 同事务；中途 unique/DB 失败 | **整事务回滚，不留孤立 Adjustment Header**；Count 保持原状态 |
+| R11 | **事件一次性（Blocking ② 事件侧）** | 首次真实 complete 后幂等重放 | `if (!result.idempotent)` 门控：InventoryCountCompleted **只在首次真实 Complete 发布一次**；幂等重放不重复发布 |
 
 ## 5. 已知限制（Known Limitations）
 

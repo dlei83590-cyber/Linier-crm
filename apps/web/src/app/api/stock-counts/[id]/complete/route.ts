@@ -14,8 +14,16 @@ export const dynamic = 'force-dynamic';
 /**
  * POST /api/stock-counts/:id/complete —— 完成盘点（COUNTING → COMPLETED / ADJUSTED）
  * CTO 6B-3 Count + Adjustment 事实链核心：
- * - 校验：至少一条有效行；所有行已 snapshot（bookQtyAtCount 非空）；varianceQty 服务端计算
- *   （countedQty - bookQtyAtCount，**无动态补偿公式**——盘点期间正常 Movement 同时改变物理与账面库存）；
+ * - 校验：至少一条有效行；**所有行已冻结（countedQty + bookQtyAtCount + countedAt + varianceQty 四字段全具备）**；
+ *   varianceQty 服务端计算（countedQty - bookQtyAtCount，**无动态补偿公式**）且**以行录入时固化值为准**；
+ * - **冻结语义（CTO Count+Adjustment Review Blocking ①）**：盘点差异属于 **Count 时点事实**，不属于
+ *   Apply 时点重新计算的事实——AdjustmentLine 创建时**复制冻结后的 variance fact**，不在 Adjustment
+ *   Create/Apply 阶段重新读取当前 StockProjection 计算差异；Complete 后禁止新增/删除/重新计数/修改盘点行
+ *   （lines route 状态门禁：COMPLETED/ADJUSTED 后录入被拒）；
+ * - **并发幂等（CTO Blocking ②）**：同一 StockCount 的 Complete 被 header **FOR UPDATE 串行化**；锁后重判终态：
+ *   已 COMPLETED → 稳定幂等响应（返回既有 count 事实）；已 ADJUSTED 且已有对应 Count Adjustment →
+ *   返回既有事实**不重新创建**；CANCELLED → 拒绝；合法 counting 状态才允许继续 Complete；
+ *   Count 状态变化 + Adjustment Header + Adjustment Lines 在同一 DB transaction（全有或全无，无半成品）；
  * - **差异处理（Architecture Gate §4.2）**：零差异行 → 不生成 Movement；非零差异行 →
  *   自动生成 COUNT_VARIANCE InventoryAdjustment（sourceStockCountId 指向本盘点单，
  *   lines 引用 sourceStockCountLineId @unique 防双重入账；正差异 = IN 补账，负差异 = OUT 冲减，
@@ -23,7 +31,7 @@ export const dynamic = 'force-dynamic';
  * - Count 状态：有非零差异 → ADJUSTED；零差异 → COMPLETED；
  * - **红线：Count 本身不产生 Movement、不更新 StockProjection**——只有 Adjustment Apply
  *   才经 Shared LedgerCommand 落账；生成的 Adjustment 仍需审批（System Default 非零差异需审批，P7 Final）；
- * - 幂等：已 COMPLETED/ADJUSTED → 409 ALREADY_COMPLETED（不重复生成 Adjustment）。
+ * - 幂等：已 COMPLETED/ADJUSTED → 返回既有事实（稳定幂等响应），不重复生成 Adjustment。
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await authenticate(request);
@@ -55,6 +63,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           }>;
         };
         adjustment: { id: string; adjustmentNo: string } | null;
+        idempotent: boolean; // 终态幂等命中（已 COMPLETED/ADJUSTED 返回既有事实，不重复创建/不发重复事件）
       }
     | { ok: false; error: string }
     | undefined;
@@ -73,14 +82,30 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       });
       if (!count) return { ok: false as const, error: 'NOT_FOUND' };
 
-      // ② 状态门禁：DRAFT/COUNTING 可 complete
+      // ② 状态门禁 + 锁后重判终态（CTO Count+Adjustment Review Blocking ②：并发幂等最终防线）
+      //    已 COMPLETED → 稳定幂等响应（返回既有 count 事实）；已 ADJUSTED 且已有对应 Count Adjustment →
+      //    返回既有事实不重新创建；CANCELLED → 拒绝；合法 counting 状态（DRAFT/COUNTING）才继续 Complete。
       if (count.status === 'COMPLETED' || count.status === 'ADJUSTED') {
-        return { ok: false as const, error: 'ALREADY_COMPLETED' };
+        // 终态幂等：查既有 Count Adjustment（同一 Count 的差异调整，不重新创建）
+        const existingAdjustment = await tx.inventoryAdjustment.findFirst({
+          where: { sourceStockCountId: count.id, deletedAt: null },
+          select: { id: true, adjustmentNo: true },
+          orderBy: { createdAt: 'asc' },
+        });
+        const finalCount = await tx.stockCount.findFirst({
+          where: { id, deletedAt: null },
+          include: {
+            countedBy: { select: { id: true, name: true, email: true } },
+            lines: { where: { deletedAt: null }, orderBy: { createdAt: 'asc' } },
+          },
+        });
+        if (!finalCount) return { ok: false as const, error: 'NOT_FOUND' };
+        return { ok: true as const, count: finalCount, adjustment: existingAdjustment, idempotent: true };
       }
       if (count.status === 'CANCELLED') {
         return { ok: false as const, error: 'INVALID_STATE' };
       }
-      // ③ CAS version
+      // ③ CAS version（仅对合法 counting 状态；终态幂等路径不校验 version——重试携带旧 version 也返回既有事实）
       if (count.version !== version) {
         return { ok: false as const, error: 'VERSION_CONFLICT' };
       }
@@ -88,28 +113,31 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (count.lines.length === 0) {
         return { ok: false as const, error: 'NO_LINES' };
       }
-      // ⑤ 所有行已 snapshot（bookQtyAtCount 非空；countedQty >= 0 由 DB CHECK 兜底）
-      const missingSnapshot = count.lines.some((l) => l.bookQtyAtCount === null);
-      if (missingSnapshot) {
+      // ⑤ 冻结校验（CTO Blocking ①）：**每一行必须已具备完整冻结快照**——
+      //    countedQty + bookQtyAtCount + countedAt + varianceQty 四字段全非空（countedQty>=0 由 DB CHECK 兜底）
+      const incompleteLine = count.lines.some(
+        (l) => l.countedQty === null || l.bookQtyAtCount === null || l.countedAt === null || l.varianceQty === null,
+      );
+      if (incompleteLine) {
         return { ok: false as const, error: 'SNAPSHOT_MISSING' };
       }
 
-      // ⑥ 计算/固化 varianceQty（服务端；行录入时已算，此处确认）
+      // ⑥ 冻结确认（CTO Blocking ① 核心）：varianceQty **以行录入时固化值为准**（Count 时点事实）——
+      //    **绝不在此重读 StockProjection / 重算差异**（否则 Count variance=-10 → 后续正常 Movement →
+      //    Apply 时重看库存 → adjustment 被漂移，破坏 Count 审计闭环）；
+      //    行录入时已写 varianceQty，此处仅做一致性确认（理论必然一致，防御性校验）
       for (const l of count.lines) {
-        const variance = computeVarianceQty(l.countedQty, l.bookQtyAtCount);
-        if (!l.varianceQty || !l.varianceQty.equals(variance)) {
-          await tx.stockCountLine.update({
-            where: { id: l.id },
-            data: { varianceQty: variance, updatedById: actorId },
-          });
+        const expected = computeVarianceQty(l.countedQty, l.bookQtyAtCount);
+        if (!l.varianceQty!.equals(expected)) {
+          return { ok: false as const, error: 'SNAPSHOT_MISSING' };
         }
       }
 
       const completedAt = new Date();
-      // ⑦ 非零差异行（varianceQty 可空——DB 列 Decimal?；用 ?? 0 兜底防御）
-      const diffLines = count.lines.filter((l) => !(l.varianceQty ?? new Prisma.Decimal(0)).isZero());
+      // ⑦ 非零差异行（使用**冻结后的内存值**——l.varianceQty 已确认非空，直接使用，不依赖 DB 回读）
+      const diffLines = count.lines.filter((l) => !l.varianceQty!.isZero());
 
-      // ⑧ 锁定盘点（COUNTING → COMPLETED 先置；若有差异随后置 ADJUSTED）
+      // ⑧ 锁定盘点（COUNTING/DRAFT → COMPLETED 先置；若有差异随后置 ADJUSTED）
       await tx.stockCount.update({
         where: { id },
         data: {
@@ -173,7 +201,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         },
       });
       if (!finalCount) return { ok: false as const, error: 'NOT_FOUND' };
-      return { ok: true as const, count: finalCount, adjustment };
+      return { ok: true as const, count: finalCount, adjustment, idempotent: false };
     });
   } catch (err) {
     // ADJ DocumentSequence 缺失 = 部署配置错误（fail closed，禁 fallback——CTO Blocking ① 同款治理）
@@ -187,11 +215,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!result || result.ok === false) {
     const codeMap: Record<string, { code: ErrorCode; msg: string; status: number }> = {
       NOT_FOUND: { code: ERROR_CODES.STOCK_COUNT_NOT_FOUND, msg: '盘点单不存在', status: 404 },
-      ALREADY_COMPLETED: { code: ERROR_CODES.STOCK_COUNT_ALREADY_COMPLETED, msg: '盘点单已完成/已生成差异调整，禁止重复 complete', status: 409 },
+      // 终态（COMPLETED/ADJUSTED）走 ok:true + idempotent:true 幂等返回，不再返回 409 ALREADY_COMPLETED
       INVALID_STATE: { code: ERROR_CODES.STOCK_COUNT_INVALID_STATE, msg: '已取消的盘点单不可完成', status: 409 },
       VERSION_CONFLICT: { code: ERROR_CODES.VERSION_CONFLICT, msg: '版本冲突，请刷新后重试', status: 409 },
       NO_LINES: { code: ERROR_CODES.STOCK_COUNT_NO_LINES, msg: '盘点单至少需要一条有效盘点行', status: 400 },
-      SNAPSHOT_MISSING: { code: ERROR_CODES.STOCK_COUNT_SNAPSHOT_MISSING, msg: '存在未完成快照的盘点行（bookQtyAtCount 缺失）', status: 400 },
+      SNAPSHOT_MISSING: { code: ERROR_CODES.STOCK_COUNT_SNAPSHOT_MISSING, msg: '存在未完成冻结快照的盘点行（countedQty/bookQtyAtCount/countedAt/varianceQty 缺失或与冻结值不一致）', status: 400 },
     };
     const entry = result?.ok === false ? codeMap[result.error] : undefined;
     if (entry) return fail(entry.code, entry.msg, entry.status);
@@ -215,30 +243,33 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   });
 
   // 事务提交后 best-effort 发布 InventoryCountCompleted（EVENTS v1.28 已注册；不含库存余额）
-  publishStockCountEvent({
-    eventType: 'InventoryCountCompleted',
-    actorId,
-    entityId: result.count.id,
-    payload: {
-      countId: result.count.id,
-      countNo: result.count.countNo,
-      freezeStrategy: result.count.freezeStrategy,
-      lines: result.count.lines.map((l) => ({
-        lineId: l.id,
-        warehouseId: l.warehouseId,
-        locationId: l.locationId,
-        itemId: l.itemId,
-        batchNo: l.batchNo,
-        serialNo: l.serialNo,
-        countedQty: l.countedQty.toString(),
-        bookQtyAtCount: l.bookQtyAtCount.toString(),
-        varianceQty: (l.varianceQty ?? new Prisma.Decimal(0)).toString(),
-      })),
-      countedById: actorId,
-      completedAt: result.count.completedAt?.toISOString() ?? new Date().toISOString(),
-    },
-    meta,
-  }).catch(() => undefined);
+  // **幂等路径（idempotent=true，已 COMPLETED/ADJUSTED 返回既有事实）不重复发布**——事件只在真正完成时发一次
+  if (!result.idempotent) {
+    publishStockCountEvent({
+      eventType: 'InventoryCountCompleted',
+      actorId,
+      entityId: result.count.id,
+      payload: {
+        countId: result.count.id,
+        countNo: result.count.countNo,
+        freezeStrategy: result.count.freezeStrategy,
+        lines: result.count.lines.map((l) => ({
+          lineId: l.id,
+          warehouseId: l.warehouseId,
+          locationId: l.locationId,
+          itemId: l.itemId,
+          batchNo: l.batchNo,
+          serialNo: l.serialNo,
+          countedQty: l.countedQty.toString(),
+          bookQtyAtCount: l.bookQtyAtCount.toString(),
+          varianceQty: (l.varianceQty ?? new Prisma.Decimal(0)).toString(),
+        })),
+        countedById: actorId,
+        completedAt: result.count.completedAt?.toISOString() ?? new Date().toISOString(),
+      },
+      meta,
+    }).catch(() => undefined);
+  }
 
   return ok({ count: result.count, adjustment: result.adjustment });
 }
