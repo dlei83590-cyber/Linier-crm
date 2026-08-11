@@ -7,19 +7,23 @@ import type {
 } from '@prisma/client';
 
 /**
- * Sprint 6B-1 - Shared InventoryLedgerCommand Core（CTO 6B Schema Re-review #8116 97/100 FINAL APPROVED → APPROVED TO START）
+ * Sprint 6B-1/6B-2 - Shared InventoryLedgerCommand Core
+ * （CTO 6B Schema Re-review #8116 97/100 FINAL APPROVED；CTO Shared Core Review #8123 90/100 REQUEST CHANGES——2 Blocking 已修：
+ *  ① movementGroupId 落入 LedgerAtom + INSERT（Transfer SOURCE_OUT+DESTINATION_IN / Conversion CONSUME+PRODUCE 成组可识别）
+ *  ② 幂等升级：Same identity + Same immutable fact = replay；Same identity + Different fact = InventoryLedgerIdempotencyConflictError）
  *
  * 目标（P12 实现前置，CTO #7975 锁死）：把 6A Consumer 里已 FINAL 的 Ledger 原子能力抽成**唯一共享核心**——
  * 6A Consumer 与 6B Transfer/Adjustment/Conversion 共用同一底层，不各写一套 Movement/Projection/锁逻辑。
  *
  * 共享 Core 承载（canonical 流程，CTO 锁死）：
- *   五元幂等 → 五维 Projection 定位/创建/锁（FOR UPDATE）→ OUT 禁负库存 → INSERT InventoryMovement → UPSERT StockProjection
+ *   五元幂等（identity + immutable payload 一致性校验）→ 五维 Projection 定位/创建/锁（FOR UPDATE）→ OUT 禁负库存 →
+ *   INSERT InventoryMovement → UPSERT StockProjection
  *
  * 三条硬约束（CTO 三个 Review Gate）：
  * 1. **caller-owned transaction**：所有函数接受调用方提供的 `Prisma.TransactionClient`，**内部绝不自行 `$transaction`**——
  *    否则 Transfer/Adjustment/Conversion 无法把「业务单据终态 + Movement + Projection」包进同一个事务；
  * 2. **多 atom 原子性**：`executeLedgerAtoms(tx, atoms)` 在同一 tx 内顺序执行，任一失败 → 调用方整体回滚（全有或全无），
- *    不是逐 atom 各自提交；
+ *    不是逐 atom 各自提交；成组 atoms 的 movementGroupId 必须一致（全 null 或同一非空 group id）；
  * 3. **6A Consumer 语义零回归**：Consumer 只把内部 Ledger mutation 换成调用本 Core；claim / lease fencing / retry /
  *    Outbox 状态机 / 事件发布逻辑一律不动。
  *
@@ -34,6 +38,14 @@ export class InventoryInsufficientStockError extends Error {
   }
 }
 
+/** 幂等冲突：同一五元 identity 已存在，但 immutable payload 与本次请求不一致（CTO Shared Core Review Blocking ②） */
+export class InventoryLedgerIdempotencyConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InventoryLedgerIdempotencyConflictError';
+  }
+}
+
 /** 单条 Ledger 原子（一次不可变库存变化的完整描述；quantity 为 canonical base UOM 正数） */
 export interface LedgerAtom {
   // 五元幂等（DB UNIQUE：sourceType|sourceId|sourceLineId|movementRole|movementAtomKey）
@@ -42,6 +54,9 @@ export interface LedgerAtom {
   sourceLineId: string;
   movementRole: InventoryMovementRole;
   movementAtomKey: string;
+  // 成组编组（Blocking ①）：Transfer SOURCE_OUT+DESTINATION_IN / Conversion CONSUME+PRODUCE 共享同一 group id；
+  // 6A Consumer（单原子）显式传 null；成组 Operation 由业务事务在执行时生成同一个 group id
+  movementGroupId: string | null;
   // 方向与细分类型（由调用方按业务语义声明；Core 不做隐式映射）
   direction: InventoryMovementDirection;
   movementType: InventoryMovementType;
@@ -161,7 +176,7 @@ export async function lockOrCreateProjection(
   };
 }
 
-/** 五元幂等预检：同五元 Movement 已存在 → 幂等重放（不重复入账） */
+/** 五元幂等预检：同五元 Movement 已存在 → 读回 immutable payload 供一致性校验（不重复入账） */
 async function findExistingMovement(
   tx: Prisma.TransactionClient,
   atom: {
@@ -180,8 +195,81 @@ async function findExistingMovement(
       movementRole: atom.movementRole,
       movementAtomKey: atom.movementAtomKey,
     },
-    select: { id: true, movementNo: true },
+    select: {
+      id: true,
+      movementNo: true,
+      direction: true,
+      movementType: true,
+      movementGroupId: true,
+      warehouseId: true,
+      locationId: true,
+      itemId: true,
+      batchNo: true,
+      serialNo: true,
+      quantity: true,
+      uomId: true,
+      mfgDate: true,
+      expDate: true,
+    },
   });
+}
+
+/**
+ * 幂等 payload 一致性校验（CTO Shared Core Review Blocking ②）：
+ * **Same identity + Same immutable fact = idempotent replay；Same identity + Different fact = conflict。**
+ * 比较 direction/movementType/movementGroupId/五维/quantity/uomId/mfgDate/expDate；任一不一致 → 抛
+ * `InventoryLedgerIdempotencyConflictError`（绝不静默返回 inserted=false，防止调用方把单据置终态但 Ledger 仍是旧事实）。
+ */
+function assertIdempotentPayloadMatches(
+  existing: {
+    direction: InventoryMovementDirection;
+    movementType: InventoryMovementType;
+    movementGroupId: string | null;
+    warehouseId: string;
+    locationId: string | null;
+    itemId: string;
+    batchNo: string | null;
+    serialNo: string | null;
+    quantity: Prisma.Decimal;
+    uomId: string | null;
+    mfgDate: Date | null;
+    expDate: Date | null;
+  },
+  atom: LedgerAtom,
+): void {
+  const mismatches: string[] = [];
+  const norm = (v: string | null) => v ?? null;
+  if (existing.direction !== atom.direction)
+    mismatches.push(`direction ${existing.direction} != ${atom.direction}`);
+  if (existing.movementType !== atom.movementType)
+    mismatches.push(`movementType ${existing.movementType} != ${atom.movementType}`);
+  if (norm(existing.movementGroupId) !== norm(atom.movementGroupId)) {
+    mismatches.push(
+      `movementGroupId ${norm(existing.movementGroupId)} != ${norm(atom.movementGroupId)}`,
+    );
+  }
+  if (existing.warehouseId !== atom.warehouseId)
+    mismatches.push(`warehouseId ${existing.warehouseId} != ${atom.warehouseId}`);
+  if (norm(existing.locationId) !== norm(atom.locationId))
+    mismatches.push(`locationId ${norm(existing.locationId)} != ${norm(atom.locationId)}`);
+  if (existing.itemId !== atom.itemId)
+    mismatches.push(`itemId ${existing.itemId} != ${atom.itemId}`);
+  if (norm(existing.batchNo) !== norm(atom.batchNo))
+    mismatches.push(`batchNo ${norm(existing.batchNo)} != ${norm(atom.batchNo)}`);
+  if (norm(existing.serialNo) !== norm(atom.serialNo))
+    mismatches.push(`serialNo ${norm(existing.serialNo)} != ${norm(atom.serialNo)}`);
+  if (!existing.quantity.equals(atom.quantity))
+    mismatches.push(`quantity ${existing.quantity} != ${atom.quantity}`);
+  if (norm(existing.uomId) !== norm(atom.uomId))
+    mismatches.push(`uomId ${norm(existing.uomId)} != ${norm(atom.uomId)}`);
+  const normDate = (d: Date | null) => (d ? d.getTime() : null);
+  if (normDate(existing.mfgDate) !== normDate(atom.mfgDate)) mismatches.push('mfgDate 不一致');
+  if (normDate(existing.expDate) !== normDate(atom.expDate)) mismatches.push('expDate 不一致');
+  if (mismatches.length > 0) {
+    throw new InventoryLedgerIdempotencyConflictError(
+      `幂等身份相同但 immutable 事实不一致：${mismatches.join('；')} [sourceType=${atom.sourceType} sourceId=${atom.sourceId} sourceLineId=${atom.sourceLineId} role=${atom.movementRole} atomKey=${atom.movementAtomKey}]`,
+    );
+  }
 }
 
 /**
@@ -197,9 +285,11 @@ export async function executeLedgerAtom(
   tx: Prisma.TransactionClient,
   atom: LedgerAtom,
 ): Promise<ExecuteLedgerAtomResult> {
-  // 五元幂等：预检（快路径）——已存在 → 直接返回（幂等重放）
+  // 五元幂等：预检（快路径）——已存在 → **先校验 immutable payload 一致**（Blocking ②）
+  // 一致 = 幂等重放；不一致 = 抛 InventoryLedgerIdempotencyConflictError（绝不静默重放）
   const existing = await findExistingMovement(tx, atom);
   if (existing) {
+    assertIdempotentPayloadMatches(existing, atom);
     return { inserted: false, movementId: existing.id, movementNo: existing.movementNo };
   }
 
@@ -231,7 +321,7 @@ export async function executeLedgerAtom(
   const inserted = await tx.$queryRaw<Array<{ id: string }>>(
     Prisma.sql`INSERT INTO "InventoryMovement"
       ("id", "movementNo", "sourceType", "sourceId", "sourceLineId", "movementRole", "movementAtomKey",
-       "direction", "status", "movementType",
+       "movementGroupId", "direction", "status", "movementType",
        "warehouseId", "locationId", "itemId", "batchNo", "serialNo",
        "mfgDate", "expDate", "quantity", "uomId", "referenceNo", "committedById", "committedAt", "remark")
     VALUES (
@@ -242,6 +332,7 @@ export async function executeLedgerAtom(
       ${atom.sourceLineId},
       ${atom.movementRole}::"InventoryMovementRole",
       ${atom.movementAtomKey},
+      ${atom.movementGroupId},
       ${atom.direction}::"InventoryMovementDirection",
       'COMMITTED'::"InventoryMovementStatus",
       ${atom.movementType}::"InventoryMovementType",
@@ -267,11 +358,13 @@ export async function executeLedgerAtom(
   if (inserted.length === 1) {
     movementId = inserted[0].id;
   } else {
-    // 幂等兜底：五元已存在（并发/重试）→ 查既有 Movement → 幂等重放
+    // 幂等兜底（慢路径）：ON CONFLICT DO NOTHING 未插入 → 读回既有 Movement → **同一份 payload 一致性校验**
+    // （不能只快路径检查；并发/重试下慢路径同样要拦 identity 相同 fact 不同）
     const dup = await findExistingMovement(tx, atom);
     if (!dup) {
       throw new Error(`Movement ON CONFLICT DO NOTHING 未插入且五元预检未命中（不可达）`);
     }
+    assertIdempotentPayloadMatches(dup, atom);
     return { inserted: false, movementId: dup.id, movementNo: dup.movementNo };
   }
 
@@ -293,11 +386,21 @@ export async function executeLedgerAtom(
  * 批量执行多条 Ledger 原子（**在调用方事务内，全有或全无**——任一失败抛错，调用方事务整体回滚；
  * 支持 Transfer SOURCE_OUT + DESTINATION_IN、Conversion CONSUME + PRODUCE 等成组 command）。
  * 不自行 `$transaction`：由调用方把「业务单据终态 + Movement + Projection」包进同一个事务。
+ *
+ * Group-level invariant（CTO Shared Core Review Blocking ① 建议项）：成组 atoms 的 `movementGroupId` 必须一致——
+ * 要么全部 null（无编组），要么全部相同非空 group id（Transfer/Conversion 成组语义）；
+ * 混合（部分 null / 部分非空，或不同非空值）直接拒绝——防止 SOURCE_OUT 与 DESTINATION_IN 落库后无法识别为同一原子组。
  */
 export async function executeLedgerAtoms(
   tx: Prisma.TransactionClient,
   atoms: LedgerAtom[],
 ): Promise<ExecuteLedgerAtomResult[]> {
+  const groupIds = new Set(atoms.map((a) => a.movementGroupId ?? null));
+  if (groupIds.size > 1) {
+    throw new Error(
+      `executeLedgerAtoms: 成组 atoms 的 movementGroupId 必须一致（当前: ${[...groupIds].map((v) => String(v)).join(', ')}）——Transfer/Conversion 必须共享同一非空 group id，6A 单原子必须全为 null`,
+    );
+  }
   const results: ExecuteLedgerAtomResult[] = [];
   for (const atom of atoms) {
     results.push(await executeLedgerAtom(tx, atom));

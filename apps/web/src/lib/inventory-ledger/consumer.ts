@@ -261,6 +261,7 @@ export async function consumeOutboxMessage(
       sourceLineId: atom.sourceLineId,
       movementRole: atom.movementRole,
       movementAtomKey: atom.movementAtomKey,
+      movementGroupId: null, // CTO Shared Core Review Blocking ①：6A Consumer 单原子无编组，显式 null 保持 6A 等价（Transfer/Conversion 由业务事务传同一 group id）
       direction: atom.movementRole === 'IN' ? 'IN' : 'OUT',
       movementType: atom.movementRole === 'IN' ? 'INBOUND' : 'OUTBOUND',
       warehouseId: atom.warehouseId,
