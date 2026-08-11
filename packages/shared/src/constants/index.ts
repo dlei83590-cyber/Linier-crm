@@ -155,6 +155,10 @@ export const PERMISSION_MODULES = [
   "item-attachment",
   // Sprint 6B：Inventory Operations 模块（Transfer 业务事实——动作映射：create→inventory-transfer:create（创建即取号）；submit→inventory-transfer:edit（复用统一 RBAC，不新造 submit 体系——对齐 5A/5B 拍板）；approve→inventory-transfer:approve（Workflow 审批）；execute→inventory-transfer:edit（对齐 5B post→:edit 先例）；cancel DRAFT/SUBMITTED→inventory-transfer:close；line 仅 view/edit——见 SEED_RESTRICTED_ACTION_PERMISSIONS）
   "inventory-transfer",
+  // Sprint 6B-3：Stock Count 业务事实（动作映射：create→stock-count:create（创建即取号）；录入行/complete→stock-count:edit（对齐 execute→:edit 先例）；cancel→stock-count:close；line 仅 view/edit——见 SEED_RESTRICTED_ACTION_PERMISSIONS；**Count 本身不产生 Movement，差异经 Adjustment 审批后落账**）
+  "stock-count",
+  // Sprint 6B-3：Inventory Adjustment 受控库存账事实（动作映射：create→inventory-adjustment:create；submit→inventory-adjustment:edit；approve→inventory-adjustment:approve（Workflow 审批）；apply→**inventory-adjustment:apply 受限权限**（P8/P9 Final：MANUAL 需高权限角色，仅 SUPER_ADMIN/ADMIN——见 SYSTEM_PERMISSIONS）；cancel→inventory-adjustment:close；line 仅 view/edit）
+  "inventory-adjustment",
 ] as const;
 
 /** 生成模块×动作权限码（如 "item:view"） */
@@ -170,6 +174,8 @@ export const ALL_ACTION_PERMISSIONS: string[] = PERMISSION_MODULES.flatMap((m) =
 /** 受限系统权限（Sprint 6A：inventory-ledger:consume 为后台执行动作——**不进入全局 PERMISSION_ACTIONS/PERMISSION_MODULES**（consume 非通用 CRUD action）；仅 SUPER_ADMIN/ADMIN 静态授权，seed 同步注册（见 prisma/seed.ts SEED_SYSTEM_ACTION_PERMISSIONS）；Manager/Member/Viewer 默认无权限 → 403） */
 export const SYSTEM_PERMISSIONS = [
   "inventory-ledger:consume",
+  // Sprint 6B-3：Inventory Adjustment Apply 受限系统权限（P8/P9 Final：Adjustment 直接动库存账且 Manual 高风险——apply 仅 SUPER_ADMIN/ADMIN 静态授权（见 rbac SYSTEM_PERMISSIONS）；Manager/Member/Viewer 默认无权限 → 403；seed 同步注册（见 prisma/seed.ts SEED_SYSTEM_ACTION_PERMISSIONS））
+  "inventory-adjustment:apply",
 ] as const;
 
 export const DEFAULT_PAGE_SIZE = 20;

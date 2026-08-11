@@ -129,6 +129,10 @@ const SEED_ACTION_MODULES = [
   "purchase-return",
   // Sprint 6B：Inventory Operations 模块（动作映射：create→inventory-transfer:create（创建即取号）；submit→inventory-transfer:edit（复用统一 RBAC，不新造 submit 体系——对齐 5A 拍板）；approve→inventory-transfer:approve；execute→inventory-transfer:edit（对齐 5B post→:edit 先例）；cancel DRAFT/SUBMITTED→inventory-transfer:close；line 仅 view/edit——见 SEED_RESTRICTED_ACTION_PERMISSIONS）
   "inventory-transfer",
+  // Sprint 6B-3：Stock Count 盘点模块（动作映射：create→stock-count:create（创建即取号）；录入/complete→stock-count:edit（对齐 execute→:edit 先例）；cancel→stock-count:close；line 仅 view/edit——见 SEED_RESTRICTED_ACTION_PERMISSIONS；**Count 本身不产生 Movement，差异经 Adjustment 审批后落账**）
+  "stock-count",
+  // Sprint 6B-3：Inventory Adjustment 调整模块（动作映射：create→inventory-adjustment:create（创建即取号）；submit→inventory-adjustment:edit；approve→inventory-adjustment:approve（Workflow 审批）；apply→**inventory-adjustment:apply 受限系统权限**（P8/P9 Final：仅 SUPER_ADMIN/ADMIN，见 SEED_SYSTEM_ACTION_PERMISSIONS）；cancel→inventory-adjustment:close；line 仅 view/edit）
+  "inventory-adjustment",
   // Sprint 3A：平台底座模块
   "workflow-definition",
   "workflow-step",
@@ -186,11 +190,19 @@ const SEED_RESTRICTED_ACTION_PERMISSIONS: Array<{ name: string; code: string; mo
   // Sprint 6B：Inventory Transfer 子资源（line 受限 view/edit——行由单据驱动，客户端不直接改行；对齐 5A/5B line 模式）
   { name: "view inventory-transfer-line", code: "inventory-transfer-line:view", module: "inventory-transfer-line" },
   { name: "edit inventory-transfer-line", code: "inventory-transfer-line:edit", module: "inventory-transfer-line" },
+  // Sprint 6B-3：Stock Count 子资源（line 受限 view/edit——盘点行由盘点单驱动；对齐 5A/5B line 模式）
+  { name: "view stock-count-line", code: "stock-count-line:view", module: "stock-count-line" },
+  { name: "edit stock-count-line", code: "stock-count-line:edit", module: "stock-count-line" },
+  // Sprint 6B-3：Inventory Adjustment 子资源（line 受限 view/edit——调整行由调整单驱动；对齐 5A/5B line 模式）
+  { name: "view inventory-adjustment-line", code: "inventory-adjustment-line:view", module: "inventory-adjustment-line" },
+  { name: "edit inventory-adjustment-line", code: "inventory-adjustment-line:edit", module: "inventory-adjustment-line" },
 ];
 
 // Sprint 6A：Inventory Ledger 受限系统权限（consume 为后台执行动作——**不进入全局 PERMISSION_ACTIONS**（consume 非通用 CRUD action）；仅 SUPER_ADMIN/ADMIN 静态授权（见 packages/shared/src/rbac/index.ts SYSTEM_PERMISSIONS）；Manager/Member/Viewer 默认无权限 → 403；seed 注册该 Permission 供权限矩阵/审计可见）
 const SEED_SYSTEM_ACTION_PERMISSIONS: Array<{ name: string; code: string; module: string }> = [
   { name: "consume inventory-ledger", code: "inventory-ledger:consume", module: "inventory-ledger" },
+  // Sprint 6B-3：Adjustment Apply 受限系统权限（P8/P9 Final：Adjustment 直接动库存账且 MANUAL 高风险——apply 仅 SUPER_ADMIN/ADMIN，不进入全局 PERMISSION_ACTIONS（apply 非通用 CRUD action）；seed 注册供权限矩阵/审计可见）
+  { name: "apply inventory-adjustment", code: "inventory-adjustment:apply", module: "inventory-adjustment" },
 ];
 
 const SEED_UNITS = [
@@ -506,6 +518,9 @@ const SEED_DOCUMENT_SEQUENCES = [
   { code: "MV", name: "库存流水", docType: "INVENTORY_MOVEMENT", prefix: "MV", nextNo: 1, padLength: 6 },
   // Sprint 6B：Inventory Operations 单据序列（docType=INVENTORY_TRANSFER 为 6B 新增，prefix TRF，padLength 6；幂等 upsert——创建即取号，P2 Final 命名）
   { code: "TRF", name: "调拨单", docType: "INVENTORY_TRANSFER", prefix: "TRF", nextNo: 1, padLength: 6 },
+  // Sprint 6B-3：Stock Count / Inventory Adjustment 单据序列（docType=STOCK_COUNT 前缀 CNT、docType=INVENTORY_ADJUSTMENT 前缀 ADJ，padLength 6；幂等 upsert——创建即取号，**Sequence 缺失 fail closed，禁止 fallback 临时编号**）
+  { code: "CNT", name: "盘点单", docType: "STOCK_COUNT", prefix: "CNT", nextNo: 1, padLength: 6 },
+  { code: "ADJ", name: "库存调整单", docType: "INVENTORY_ADJUSTMENT", prefix: "ADJ", nextNo: 1, padLength: 6 },
   { code: "PI", name: "形式发票", docType: "PROFORMA_INVOICE", prefix: "PI", nextNo: 1, padLength: 6 },
   { code: "CI", name: "商业发票", docType: "COMMERCIAL_INVOICE", prefix: "CI", nextNo: 1, padLength: 6 },
   // Sprint 4C：Delivery Foundation 单据序列（CTO 锁定：DELIVERY_ORDER / prefix DO / padLength 6；幂等 upsert）

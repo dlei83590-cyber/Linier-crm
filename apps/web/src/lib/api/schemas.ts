@@ -862,3 +862,110 @@ export const inventoryTransferCancelSchema = z.object({
 export const inventoryTransferExecuteSchema = z.object({
   version: z.number().int().positive(),
 });
+
+// ============================================================================
+// Sprint 6B-3 - Stock Count（盘点实盘事实，CTO 6B-3 授权：Count + Adjustment 事实链一起做）
+// 设计依据：Sprint6B_Inventory_Operations_Architecture_Process_Gate.md §4 + Field Matrix v0.5 §2 + ADR-0026
+// - 状态机：DRAFT → COUNTING → COMPLETED → ADJUSTED / CANCELLED
+// - **红线：StockCount 永不直接改 StockProjection**——只有 Adjustment Apply 才允许调用 Shared LedgerCommand
+// - 盘点行：per-line atomic snapshot（录入 countedQty 时同事务读五维 StockProjection → bookQtyAtCount/countedAt/ledgerWatermark）
+//   varianceQty = countedQty - bookQtyAtCount（服务端计算）；五维唯一（DB UNIQUE NULLS NOT DISTINCT）
+// - complete：非零差异 → 自动生成 COUNT_VARIANCE Adjustment（sourceStockCountLineId @unique 防双重入账）→ ADJUSTED；
+//   零差异 → COMPLETED；生成的 Adjustment 仍需审批（maker-checker，System Default 非零差异需审批）
+// ============================================================================
+
+/** 盘点行（客户端提交；countedQty >= 0；五维唯一） */
+export const stockCountLineSchema = z.object({
+  id: z.string().min(1).optional(), // 提供则更新该行（重新 snapshot），否则新增
+  warehouseId: z.string().min(1),
+  locationId: z.string().min(1).nullable().optional(),
+  itemId: z.string().min(1),
+  batchNo: z.string().max(100).nullable().optional(),
+  serialNo: z.string().max(100).nullable().optional(), // 单值（serial-managed 逐 serial 盘点）
+  countedQty: z.coerce.number().nonnegative(), // 实盘数（>= 0）
+  remark: z.string().max(500).optional(),
+});
+
+/** 盘点单创建（DRAFT；创建即取号 CNT） */
+export const stockCountCreateSchema = z.object({
+  remark: z.string().max(500).optional(),
+});
+
+/** 盘点单更新（仅 DRAFT；version 乐观锁；header remark） */
+export const stockCountUpdateSchema = z.object({
+  version: z.number().int().positive(),
+  remark: z.string().max(500).nullable().optional(),
+});
+
+/** 盘点行录入（COUNTING：per-line atomic snapshot——同事务读五维 StockProjection → varianceQty 服务端计算） */
+export const stockCountLinesSchema = z.object({
+  lines: z.array(stockCountLineSchema).min(1, '至少需要一行'),
+});
+
+/** 盘点完成（真 Gate：COUNTING → COMPLETED/ADJUSTED；非零差异自动生成 COUNT_VARIANCE Adjustment） */
+export const stockCountCompleteSchema = z.object({
+  version: z.number().int().positive(),
+});
+
+/** 盘点取消（DRAFT/COUNTING → CANCELLED；version 乐观锁） */
+export const stockCountCancelSchema = z.object({
+  version: z.number().int().positive(),
+});
+
+// ============================================================================
+// Sprint 6B-3 - Inventory Adjustment（受控库存账事实，CTO 6B-3 授权）
+// 设计依据：Architecture Process Gate §5 + Field Matrix v0.5 §3 + ADR-0026 + P8/P9 Final
+// - 状态机：DRAFT → SUBMITTED → APPROVED → APPLIED / CANCELLED；APPROVED ≠ APPLIED
+// - **红线：Adjustment 只能经 Shared LedgerCommand 追加 ADJUSTMENT Movement**（同步命令）；绝不直写 Projection
+// - maker-checker（P9）：createdById（创建人）与 approvedById/appliedById（批准/Apply 人）不得相同（DB CHECK 兜底）
+// - reasonCode：系统保留码（COUNT_VARIANCE/DAMAGE/LOSS/GIFT/SYSTEM_CORRECTION/MANUAL）+ 可扩展字典
+// - 行：direction 在行级（IN/OUT，quantity 恒正）；serial-managed 逐 serial 原子化；sourceStockCountLineId @unique 防双重入账
+// - Minor Hardening ②：非空 sourceStockCountLineId 必须属于 sourceStockCountId 指向的盘点单（service Gate 事务内校验）
+// - Apply：FOR UPDATE 锁单 → 仅 APPROVED → maker-checker → 同事务 executeLedgerAtoms（每行一笔 ADJUSTMENT Movement）→
+//   单据 APPLIED + appliedById/appliedAt + 证据（approvedById 若无则补 apply 人）→ 事件 InventoryAdjustmentApplied
+// ============================================================================
+
+/** 调整行（客户端提交；direction IN/OUT；quantity > 0 恒正；serial-managed 逐 serial） */
+export const inventoryAdjustmentLineCreateSchema = z.object({
+  warehouseId: z.string().min(1),
+  locationId: z.string().min(1).nullable().optional(),
+  itemId: z.string().min(1),
+  batchNo: z.string().max(100).nullable().optional(),
+  serialNo: z.string().max(100).nullable().optional(), // 单值（serial-managed 逐 serial 原子化）
+  direction: z.enum(['IN', 'OUT']),
+  quantity: z.coerce.number().positive(),
+  uomId: z.string().min(1).optional(),
+  sourceStockCountLineId: z.string().min(1).nullable().optional(), // 盘点行追溯（可空；UNIQUE 防双重入账）
+  remark: z.string().max(500).optional(),
+});
+
+/** 调整单创建（DRAFT；创建即取号 ADJ；Manual 或引用 Count 差异） */
+export const inventoryAdjustmentCreateSchema = z.object({
+  reasonCode: z.string().min(1).max(50), // P8 Final：系统保留码 + 可扩展字典（不写死 enum）
+  sourceStockCountId: z.string().min(1).nullable().optional(), // 来源盘点单（可空——Manual 无盘点来源）
+  remark: z.string().max(500).optional(),
+  lines: z.array(inventoryAdjustmentLineCreateSchema).min(1, '至少需要一行'),
+});
+
+/** 调整单更新（仅 DRAFT；version 乐观锁；行整体替换） */
+export const inventoryAdjustmentUpdateSchema = z.object({
+  version: z.number().int().positive(),
+  reasonCode: z.string().min(1).max(50).optional(),
+  remark: z.string().max(500).nullable().optional(),
+  lines: z.array(inventoryAdjustmentLineCreateSchema).min(1).optional(),
+});
+
+/** 调整提交（真 Gate：DRAFT → SUBMITTED；version 乐观锁；触发审批 maybeTriggerApproval） */
+export const inventoryAdjustmentSubmitSchema = z.object({
+  version: z.number().int().positive(),
+});
+
+/** 调整 Apply（真 Gate：APPROVED → APPLIED；version 乐观锁 + 幂等 ALREADY_APPLIED；Shared LedgerCommand 逐行 ADJUSTMENT Movement 同事务） */
+export const inventoryAdjustmentApplySchema = z.object({
+  version: z.number().int().positive(),
+});
+
+/** 调整取消（DRAFT/SUBMITTED/APPROVED → CANCELLED；version 乐观锁；APPLIED 禁——纠错走 Reversal） */
+export const inventoryAdjustmentCancelSchema = z.object({
+  version: z.number().int().positive(),
+});

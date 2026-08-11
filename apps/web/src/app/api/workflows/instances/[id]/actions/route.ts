@@ -14,6 +14,7 @@ import { syncCreditDebitNoteApproval } from '@/lib/credit-debit-note/workflow-sy
 import { syncPurchaseRequisitionApproval } from '@/lib/purchase-requisition/workflow-sync';
 import { syncPurchaseOrderApproval } from '@/lib/purchase-order/workflow-sync';
 import { syncInventoryTransferApproval } from '@/lib/inventory-transfer/workflow-sync';
+import { syncInventoryAdjustmentApproval } from '@/lib/inventory-adjustment/workflow-sync';
 
 export const dynamic = 'force-dynamic';
 
@@ -454,6 +455,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   ) {
     await syncInventoryTransferApproval({
       transferId: instance.businessId,
+      workflowStatus: result.afterStatus,
+      actorId: user!.id,
+    });
+  }
+
+  // Sprint 6B-3：InventoryAdjustment 审批终态回写（Workflow 唯一审批事实源；不建 Approval 表）
+  // **红线（CTO 6B-3 锁死）：审批只回写 status=APPROVED + approvedById，绝不自动 APPLIED**——
+  // 正式落账必须显式 POST /api/inventory-adjustments/{id}/apply（Shared LedgerCommand 逐行 ADJUSTMENT Movement 同事务）；
+  // REJECTED → status=DRAFT（可重提）；SUBMITTED 由 maybeTrigger 回写；maker-checker：approvedById ≠ createdById（DB CHECK 兜底）
+  if (
+    instance.businessType === 'inventory-adjustment' &&
+    (result.afterStatus === 'COMPLETED' || result.afterStatus === 'REJECTED')
+  ) {
+    await syncInventoryAdjustmentApproval({
+      adjustmentId: instance.businessId,
       workflowStatus: result.afterStatus,
       actorId: user!.id,
     });
