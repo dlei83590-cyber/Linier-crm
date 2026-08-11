@@ -443,6 +443,7 @@ model Item {
   stockCountLines StockCountLine[] // 6B：盘点行（StockCountLine.item 方向）
   adjustmentLines InventoryAdjustmentLine[] // 6B：调整行（InventoryAdjustmentLine.item 方向）
   conversions InventoryConversion[] // 6B：转换单（InventoryConversion.item 方向）
+  supplierInvoiceLines SupplierInvoiceLine[] // 5C-1：供应商发票行（SupplierInvoiceLine.item 方向）
   createdAt     DateTime        @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime        @updatedAt @db.Timestamptz(3)
 
@@ -2866,6 +2867,8 @@ model Supplier {
   purchaseOrders PurchaseOrder[] // 5A：采购订单（PurchaseOrder.supplierId 方向）
   purchaseReceipts PurchaseReceipt[] // 5B：收货单（PurchaseReceipt.supplierId 方向，快照自 PO）
   purchaseReturns PurchaseReturn[] // 5B：退货单（PurchaseReturn.supplierId 方向，快照自 PO）
+  supplierInvoices SupplierInvoice[] // 5C-1：供应商发票（SupplierInvoice.supplierId 方向）
+  apLiabilityFacts ApLiabilityFact[] // 5C-1：AP 应付债务事实（ApLiabilityFact.supplierId 方向）
   isActive      Boolean  @default(true)
   createdById   String?
   updatedById   String?
