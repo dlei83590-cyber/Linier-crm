@@ -44,6 +44,8 @@
 | C11 | **WHR item null（Blocking ②）** | WHR Line.itemId 为空 | 400 SUPPLIER_INVOICE_ITEM_INVALID（NULL 穿透拒绝） |
 | C12 | **item mismatch（Blocking ②）** | PO Line.itemId ≠ WHR Line.itemId（均非空） | 400 SUPPLIER_INVOICE_SOURCE_CHAIN_MISMATCH |
 | C13 | **正常 item PASS（Blocking ②）** | PO itemId != null 且 WHR itemId != null 且相等且 Item 有效 | 通过；SupplierInvoiceLine.itemId 服务端写非空值（不再写 null） |
+| C14 | **Item 非 ACTIVE 拒绝（Final Hardening CTO #9197）** | PO/WHR itemId 相等但 Item.status = INACTIVE/LOCKED/ARCHIVED（未删除但不可用） | 400 SUPPLIER_INVOICE_ITEM_INVALID（按 Item 真实状态字段 status='ACTIVE' 校验，不能只靠 deletedAt:null） |
+| C15 | **确定性锁序（Final Hardening CTO #9197）** | 多行发票涉及多个 WHR Lines；两个事务以相反行顺序请求同一组 WHR Lines | helper 先对 warehouseReceiptLineId 唯一化 + 稳定排序（ORDER BY id）再统一 FOR UPDATE——锁序确定，不会死锁；业务校验仍在锁内 |
 
 ## D. 发票更新（PATCH — 仅 DRAFT + CAS）
 

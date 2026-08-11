@@ -97,17 +97,20 @@ export async function verifyReceiptBasedSourceChain(
 > {
   const itemIds: Record<string, string | null> = {};
 
+  // ① Deterministic lock order（CTO #9197 Final Hardening）：先对 warehouseReceiptLineId 唯一化 +
+  //    稳定排序，再统一 FOR UPDATE 锁——避免两个事务针对同一组 WHR Lines 以相反顺序取锁形成
+  //    可避免的锁顺序风险（死锁）；之后逐行业务校验均已在锁内（防累计超收双计，Blocking ①）
+  const whrLineIds = [...new Set(params.lines.map((l) => l.warehouseReceiptLineId))].sort();
+  if (whrLineIds.length === 0) return { ok: false, error: 'SOURCE_CHAIN_MISMATCH' };
+  const lockedWhr = await tx.$queryRaw<Array<{ id: string }>>(
+    Prisma.sql`SELECT "id" FROM "WarehouseReceiptLine" WHERE "id" IN (${Prisma.join(whrLineIds)}) AND "deletedAt" IS NULL ORDER BY "id" FOR UPDATE`,
+  );
+  if (lockedWhr.length !== whrLineIds.length) return { ok: false, error: 'SOURCE_CHAIN_MISMATCH' };
+
   for (const line of params.lines) {
     const key = `${line.purchaseOrderLineId}:${line.warehouseReceiptLineId}`;
 
-    // ① Lock WHR Line（FOR UPDATE）——Blocking ①（CTO #9161）：并发 Create/PATCH/Submit
-    //    必须锁对应 WHR Line，避免两个请求同时读到相同 available（防累计超收双计）
-    const lockedWhr = await tx.$queryRaw<Array<{ id: string }>>(
-      Prisma.sql`SELECT "id" FROM "WarehouseReceiptLine" WHERE "id" = ${line.warehouseReceiptLineId} AND "deletedAt" IS NULL FOR UPDATE`,
-    );
-    if (lockedWhr.length === 0) return { ok: false, error: 'SOURCE_CHAIN_MISMATCH' };
-
-    // ② WHR Line 存在 + 所属 WHR header 状态
+    // ② WHR Line 存在 + 所属 WHR header 状态（已统一锁，读安全）
     const whrLine = await tx.warehouseReceiptLine.findFirst({
       where: { id: line.warehouseReceiptLineId, deletedAt: null },
       select: {
@@ -162,7 +165,10 @@ export async function verifyReceiptBasedSourceChain(
     if (!poLine.itemId || !whrLine.itemId) return { ok: false, error: 'ITEM_INVALID' }; // NULL 穿透拒绝
     if (poLine.itemId !== whrLine.itemId) return { ok: false, error: 'SOURCE_CHAIN_MISMATCH' };
     const itemId = poLine.itemId;
-    const item = await tx.item.findFirst({ where: { id: itemId, deletedAt: null } });
+    // Final Hardening（CTO #9197）：Item 可用状态真 Gate——按 Item 模型真实状态字段校验
+    //    status = ACTIVE（ACTIVE/INACTIVE/LOCKED/ARCHIVED 语义），不能只靠 deletedAt:null
+    //    （未删除但已停用/锁定/归档的 Item 不允许开票）
+    const item = await tx.item.findFirst({ where: { id: itemId, deletedAt: null, status: 'ACTIVE' } });
     if (!item) return { ok: false, error: 'ITEM_INVALID' };
 
     // ⑥ Supplier 链一致：WHR → PurchaseReceipt.supplierId == 发票 supplierId
