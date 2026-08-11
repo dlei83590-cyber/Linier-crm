@@ -1,121 +1,101 @@
-# Sprint 5C：CTO Pending Decisions（待拍板决策清单 → 5C Design Review）
+# Sprint 5C：CTO Pending Decisions（待拍板决策清单 → **CTO 5C Design Review 88/100 已拍板**）
 
-- 版本：v0.1（草案，P1-P12 待 CTO 拍板）
+- 版本：v0.2（**CTO #8845 已全部拍板**；原 v0.1 草案 P1-P12 已按 CTO 决策表转 Final）
 - 日期：2026-08-11
-- 状态：**设计先行——禁止 Schema / Migration / API**（拍板完成前不写任何 5C 实现）
-- 关联：Sprint5C_Supplier_Invoice_Three_Way_Match_AP_Gate.md / ADR-0027（草案）/ Sprint5C_Field_Matrix.md
-- CTO 授权：#8777 Post-6B Portfolio Gate —— **Track B Sprint 5C START（后端最高优先级）**
-
-> 说明：每项含推荐方案/备选方案/风险/CTO Recommendation——本轮不擅自 Final。P 编号沿用 6B 模式（P1-P12）。
+- 状态：**设计先行——禁止 Schema / Migration / API**（CTO 5C Gate Re-review 通过前不写任何 5C 实现）
+- 关联：Sprint5C_Supplier_Invoice_Three_Way_Match_AP_Gate.md（v0.2）/ ADR-0027（**Approved with Changes**）/ Sprint5C_Field_Matrix.md（v0.2）
+- CTO 授权：#8777 Post-6B Portfolio Gate —— **Track B Sprint 5C START（后端最高优先级）**；#8845 双轨首批评审（4 Blocking + 3 Hardening 已修复，P1-P12 按表转 Final）
 
 ---
 
-## P1：SupplierInvoice 编号时机 —— 推荐：创建即取号（SINV）
+## CTO P1-P12 拍板总表（#8845）
 
-**决策点**：DRAFT 不占号（对齐 4D Sales Invoice Issue 原子取号）vs 创建即取号（对齐 5A PO/5B GR/6B 全模块）。
+| P | CTO Decision | 状态 |
+| --- | --- | --- |
+| P1 | ✅ 创建即取 SINV 编号；Sequence 缺失 fail closed | **Final** |
+| P2 | ✅ Invoice creation 快照 FX；人工覆盖需受限权限 + audit | **Final** |
+| P3 | 🔧 Document status 截止 POSTED/CANCELLED；付款进独立 settlementStatus（两维） | **Final（修改后固化）** |
+| P4 | ✅ 首版只做 RECEIPT_BASED；必须 PO Line + 已 POSTED WHR 来源 | **Final** |
+| P5 | ❌ 改为 immutable MatchRun/MatchSnapshot + current projection | **Final（方案推翻重定）** |
+| P6 | ✅ tolerance policy；超阈值不得自动通过 | **Final** |
+| P7 | ✅ Supplier CN/DN 独立事实，不能修改已 POSTED Invoice | **Final** |
+| P8 | 🔧 GRIR 加 WarehouseReceipt-based PurchaseReturn reversal | **Final（修改后固化）** |
+| P9 | 🔧 明确 net/tax canonical basis 与 input VAT recognition | **Final（修改后固化）** |
+| P10 | ✅ PaymentAllocation M:N；防超核销，锁内重算 | **Final** |
+| P11 | ✅ 5C 不建 GL，只发布稳定会计事件/接口 | **Final** |
+| P12 | ✅ maker-checker，Creator ≠ Approver/Poster；Payment 同样执行 | **Final** |
 
-**推荐方案**：**创建即取号（SINV DocumentSequence）**，缺失 fail closed 零 fallback（对齐 6B TRF/CNT/ADJ/CVT 模式）。
-- 理由：采购侧单据一贯创建即取号（PO/GR/收据），发票录入是"供应商已开票"的事实记录，不是我方签发动作；取号延迟会造成单据编号不稳定（4D 取号延迟是因为 Invoice 是签发动作）。
-- 备选：DRAFT 不占号（4D 模式）——若 CTO 认为发票=签发动作则选此。
-- 风险：创建即取号会消耗编号（草稿废弃不回收）——采购侧可接受。
+---
 
-## P2：外币发票汇率 —— 推荐：行/头快照汇率（对齐 4D 快照税务汇率模式）
+## P1：SupplierInvoice 编号时机 —— ✅ Final（创建即取号 SINV）
 
-**决策点**：本币发票 vs 外币发票如何处理汇率。
+**决策（CTO）**：**创建即取号（SINV DocumentSequence）**，缺失 fail closed 零 fallback（对齐 6B TRF/CNT/ADJ/CVT 模式）。
+- 理由：采购侧单据一贯创建即取号（PO/GR/收据），发票录入是"供应商已开票"的事实记录，不是我方签发动作。
+- 风险：创建即取号消耗编号（草稿废弃不回收）——采购侧可接受。
 
-**推荐方案**：`exchangeRate` 头级快照（录入时点冻结，服务端 Decimal），金额统一折本币聚合；汇率来源 = 系统汇率表（快照复制，不实时重算）。
-- 风险：汇率时效性——快照即事实（对齐 4D Invoice 快照税务/汇率先例）。
-- 备选：仅支持本币（首版收窄）——若 CTO 认为外币场景非首版。
+## P2：外币发票汇率 —— ✅ Final（创建时快照 FX）
 
-## P3：SupplierInvoice 状态机 —— 推荐：DRAFT → SUBMITTED → MATCHED → APPROVED → POSTED / CANCELLED（含 VARIANCE 差异路径）
+**决策（CTO）**：**Invoice creation 时点快照 FX**（服务端 Decimal，头级），金额统一折本币聚合；**人工覆盖需受限权限 + audit**（快照即事实，对齐 4D 快照税务/汇率先例）。
 
-**决策点**：状态机如何表达三单匹配与过账。
+## P3：SupplierInvoice 状态机 —— ✅ Final（两维：documentStatus + settlementStatus）
 
-**推荐方案**：
-```
-DRAFT → SUBMITTED → MATCHED → APPROVED → POSTED（生成 AP Open Item）/ CANCELLED
-         │              │
-         │              └─> VARIANCE → 差异处置（ACCEPT → APPROVED / REJECT / HOLD / CREATE_CN_DN）
-         └──────────────> CANCELLED（POSTED 后禁取消——纠错走 Supplier CN/DN）
-```
-- **APPROVED ≠ POSTED**（POSTED 唯一生成 AP Liability 入口，终态证据 postedAt/postedById 非空）
+**决策（CTO）**：**documentStatus 截止 POSTED/CANCELLED**（`DRAFT → SUBMITTED → MATCHED → APPROVED → POSTED / CANCELLED`，含 VARIANCE 差异路径）；**付款进独立 settlementStatus**（`UNPAID / PARTIALLY_PAID / PAID`）——**付款核销不反向改变 documentStatus**（两维分离，CTO #8845 Hardening 1）。
+- **APPROVED ≠ POSTED**（POSTED 唯一生成 AP Liability Fact 入口，终态证据 postedAt/postedById 非空）
 - 差异路径：VARIANCE 不是终态，是中间态（挂起待处置）
-- 风险：状态机复杂度——若 CTO 认为差异应在行级而非头级，改为行级 matchStatus + 头级聚合。
 
-## P4：发票溯源模式 —— 推荐：RECEIPT_BASED 强制（首版收窄）
+## P4：发票溯源模式 —— ✅ Final（首版 RECEIPT_BASED）
 
-**决策点**：PO-only 直票（发票直接挂 PO，不需入库）vs RECEIPT_BASED（发票必须挂已入库事实）。
+**决策（CTO）**：**首版只做 RECEIPT_BASED**——必须 **PO Line + 已 POSTED WHR 来源**；SupplierInvoiceLine 溯源 WarehouseReceiptLine（数量匹配基准）+ PO Line（承诺快照）。
+- **Non-PO Expense Invoice / Service Invoice / 纯费用 AP 不进入首版**（CTO #8845 Hardening 2，正式 Scope 收窄）
+- 理由：三单匹配需要真实收货数量作匹配基准；PO-only 直票会破坏"已收未票/暂估冲销"闭环
+- 备选（后续阶段）：预付/订金场景走独立 Prepayment/Deposit 模型（不混入 Supplier Invoice）
 
-**推荐方案**：**RECEIPT_BASED 强制**（首版）——SupplierInvoiceLine 必须溯源 WarehouseReceiptLine（数量匹配基准），PO Line 仅作快照参考。
-- 理由：三单匹配（PO/Receipt/Invoice）需要真实收货数量作为匹配基准；PO-only 直票会破坏"已收未票/暂估冲销"闭环（没有入库事实就没有暂估可冲）。
-- 备选：双模式（PO_ONLY + RECEIPT_BASED）——若 CTO 认为存在"货未到先开票"的行业惯例（预付款/订金场景）。
-- 风险：收窄可能挡掉预付/订金场景——若 CTO 要求，预付场景走独立 Prepayment/Deposit 模型（不混入 Supplier Invoice）。
+## P5：匹配结果模型 —— ✅ Final（immutable MatchRun/MatchSnapshot + current projection）
 
-## P5：匹配结果模型 —— 推荐：行级内嵌 matchStatus（不建独立 InvoiceMatch 表）
+**决策（CTO）**：**❌ 原"行级内嵌 matchStatus + AuditLog"方案被否**（Blocking ②）——改为 **SupplierInvoiceMatchRun + SupplierInvoiceMatchLine（immutable Match Snapshot）**：
+- 每次匹配生成一条 Run（不可 UPDATE/DELETE，纠错追加新 Run）；`SupplierInvoiceLine.currentMatchStatus/currentMatchRunId` 只是**当前投影**
+- **审批必须引用 immutable matchRunId/revision**（可靠回答"这张发票当时为什么在 14:03 被批准？"）
+- 触发重算场景：后续收货 / 分批发票 / PO-receipt snapshot / 差异接受拒绝
 
-**决策点**：匹配结果随 Invoice 行内嵌 vs 独立 InvoiceMatch 模型。
+## P6：差异处置 —— ✅ Final（tolerance policy；超阈值不得自动通过）
 
-**推荐方案**：**行级内嵌**（matchStatus + varianceQty/variancePrice/varianceTax 在 SupplierInvoiceLine 上）——匹配是行级校验事实，无独立生命周期。
-- 备选：独立 InvoiceMatch 表（可追溯每次匹配快照）——若 CTO 认为需要匹配历史审计（每次重新匹配留痕）。
-- 风险：内嵌模式每次匹配覆盖旧结果（不保留历史）——审计靠 AuditLog。
+**决策（CTO）**：**tolerance policy；超阈值不得自动通过**。
+- 数量差异：invoiceQty > 已收数量 → OVER_INVOICE（超过已收部分不可入 AP，挂起待收或供应商 CN）；invoiceQty < 已收数量 → UNDER_INVOICE（差异处置）
+- 单价差异：invoiceUnitPrice ≠ PO 快照 → 容差内 ACCEPT；**超阈值不得自动通过** → 差异审批（Workflow，module=SUPPLIER_INVOICE）或 Supplier CN/DN；容差优先级对齐 5B 超收容差模式（PO Line → Supplier+Item → Item → Supplier → System 0%）
+- 税额差异：invoiceTax ≠ 服务端计算税 → 差异处置（税务快照/税率配置核对）
 
-## P6：差异处置 —— 推荐：ACCEPT（审批放行）/ REJECT / HOLD / CREATE_CN_DN
+## P7：Supplier CN/DN 模型 —— ✅ Final（独立事实，不能修改已 POSTED Invoice）
 
-**决策点**：数量/单价/税额差异如何处置。
+**决策（CTO）**：**Supplier CN/DN 独立事实**（SCN/SDN 序列），signed adjustment（CN<0 冲减 AP / DN>0 增加 AP）+ 累计防超调锁内重算（调整后 AP Liability + CN/DN 不得为负）；状态机 DRAFT/SUBMITTED/APPROVED/APPLIED/CANCELLED，**APPROVED ≠ APPLIED**（Apply 唯一回写 AP Liability Fact 入口）。
+- **不能修改已 POSTED Invoice**（对齐 4E-3 治理先例，方向相反）
+- 触发：发票差异处置 / 退货（5B PurchaseReturn CREDIT_ONLY 处置关联）
 
-**推荐方案**：
-- **数量差异**：invoiceQty > 已收数量 → OVER_INVOICE（超过已收部分不可入 AP，挂起待收或供应商 CN）；invoiceQty < 已收数量 → UNDER_INVOICE（差异处置：接受差异或供应商 CN）
-- **单价差异**：invoiceUnitPrice ≠ PO 快照 → 超容差走差异审批（Workflow，module=SUPPLIER_INVOICE）或 Supplier CN/DN；容差优先级对齐 5B 超收容差模式（PO Line → Supplier+Item → Item → Supplier → System 0%）
-- **税额差异**：invoiceTax ≠ 服务端计算税 → 差异处置（税务快照/税率配置核对）
-- 风险：差异审批条件复杂——首版建议阈值化（容差内直接 ACCEPT，超出走 Workflow）。
+## P8：暂估应付触发 —— ✅ Final（自动暂估 + **WHR-based PurchaseReturn reversal**）
 
-## P7：Supplier CN/DN 模型 —— 推荐：独立单据（signed adjustment，对齐 4E-3 模式方向相反）
+**决策（CTO）**：**自动暂估**（WarehouseReceipt Posted 时按 PO 快照单价 × 已入库数量生成 GRIR Accrual；不生成真实 AP Open Item）；**🔧 加 WarehouseReceipt-based PurchaseReturn reversal（Blocking ①）**：
+- 完整生命周期：`WarehouseReceiptPosted → GRIR Accrual`；`WHR-based PurchaseReturned → GRIR Reversal/Reduction`（**只有来自已 POSTED WarehouseReceiptLine 的退货才冲减 GR/IR**——未入库拒收/退货不产生 reversal，继承 5B 区分）；`SupplierInvoice POSTED → consume/reverse remaining GRIR + create actual AP Liability`
+- **源幂等身份**：WHR Line → accrual identity；Return Line → reversal identity；Invoice Line → consume identity（防重复冲回，对齐 6A 五元幂等纪律）
 
-**决策点**：独立 SupplierCN/DN 单据 vs 复用 SupplierInvoice 调整行。
+## P9：进项税处理 —— ✅ Final（价税分离 + **canonical basis 锁死**）
 
-**推荐方案**：**独立 SupplierCreditNote / SupplierDebitNote 单据**（SCN/SDN 序列），signed adjustment（CN<0 冲减 AP / DN>0 增加 AP）+ 累计防超调锁内重算（调整后 AP 余额不得为负）；状态机 DRAFT/SUBMITTED/APPROVED/APPLIED/CANCELLED，**APPROVED ≠ APPLIED**（Apply 唯一回写 AP 入口）。
-- 理由：对齐 4E-3 CN/DN 治理先例（方向相反），独立模型可承载来源（发票差异/退货 CREDIT_ONLY）追溯。
-- 备选：SupplierInvoice 负向行（简单但混淆"开票"与"调整"事实）。
-- 风险：独立模型多一套序列/审批——但事实边界更清晰。
+**决策（CTO）**：**价税分离（Blocking ④）**——SupplierInvoiceLine 存 `netAmount`（不含税）+ `taxRate`（快照）+ `taxAmount`；税基 = 匹配后的净额。
+- **GR/IR baseAmount = 不含税暂估净额**：PO 含税价 normalize 成暂估净额（税率快照自 PO/税务配置）——**进项税只在合规发票事实进入时确认，暂估阶段不隐式确认 Input VAT**（中国采购业务：可抵扣进项税只在合规发票进入时确认）
+- **VAT recoverable 标记** + `Invoice POSTED` 拆分 **net liability / input VAT / total AP**
+- **不可抵扣税**处理（计入成本/费用）在 Schema 前拍板（P9 已锁方向，具体拆分实现阶段定）
 
-## P8：暂估应付触发 —— 推荐：WarehouseReceipt Posted 时自动暂估（GR/IR 投影）
+## P10：付款核销 —— ✅ Final（Payment 独立事实 + M:N Allocation）
 
-**决策点**：自动暂估（入库即暂估）vs 月结批量暂估。
+**决策（CTO）**：Payment（PAY 序列，DRAFT/SUBMITTED/APPROVED/APPLIED/CANCELLED）+ PaymentAllocationLine M:N 核销 AP Open Item；**Created ≠ Applied**（Apply 唯一回写 Settlement Fact）；**累计 allocation ≤ openAmount 锁内重算防超核销**；同供应商同币种。
+- **PaymentAllocation = Settlement Fact**（Blocking ③ 分层）；纠错 → 追加 reversal/correction allocation，不手改 openAmount
 
-**推荐方案**：**自动暂估**——WarehouseReceipt Posted 时按 PO 快照单价 × 入库数量生成 GR/IR 暂估投影（不生成真实 AP Open Item）；到票冲暂估在 POSTED 时冲销。
-- 备选：月结批量暂估（会计期末统一暂估）——若 CTO 认为逐单暂估噪音大。
-- 风险：自动暂估产生大量投影——但"已收未票"是 5C 核心场景，逐单暂估可审计性更好。
+## P11：与 GL 的边界 —— ✅ Final（5C 不建 GL，只发布稳定会计事件/接口）
 
-## P9：进项税处理 —— 推荐：价税分离（不含税 AP + 税，税率快照）
+**决策（CTO）**：**不建 GL 总账**；5C 产出"财务事实"（AP Liability Fact / GRIR / Supplier CN-DN / Payment Settlement），**只发布稳定会计事件/接口**，GL 过账留给未来 Finance 阶段消费（对齐 4E 不写 GL 先例）。
 
-**决策点**：含税 AP vs 价税分离。
+## P12：maker-checker / 审批边界 —— ✅ Final（Creator ≠ Approver/Poster；Payment 同样执行）
 
-**推荐方案**：**价税分离**——SupplierInvoiceLine 存 netAmount（不含税）+ taxRate（快照）+ taxAmount；AP Open Item 存含税总额（grossAmount），但净额/税额分开可审计（对齐中国增值税发票场景：进项税可抵扣）。
-- 备选：含税单一金额（简单，但丢失进项税可抵扣信息）。
-- 风险：价税分离增加行级计算复杂度——服务端 Decimal 聚合统一处理。
-
-## P10：付款核销 —— 推荐：Payment 独立事实 + M:N Allocation（对齐 4E-2 方向相反）
-
-**决策点**：付款如何核销 AP。
-
-**推荐方案**：Payment（PAY 序列，DRAFT/SUBMITTED/APPROVED/APPLIED/CANCELLED）+ PaymentAllocationLine M:N 核销 AP Open Item；**Created ≠ Applied**（Apply 唯一回写 AP allocatedAmount）；**累计 allocation ≤ openAmount 锁内重算防超核销**；同供应商同币种。
-- 备选：简单整单付款（无核销行）——若 CTO 认为首版不需要部分核销。
-- 风险：M:N 核销复杂度高——但 AP 部分付款是常态（对齐 4E-2 先例）。
-
-## P11：与 GL 的边界 —— 推荐：本阶段不建 GL，5C 只产出财务事实 + 事件
-
-**决策点**：5C 是否做 GL 过账。
-
-**推荐方案**：**不建 GL 总账**；5C 产出"财务事实"（AP Liability / GR/IR 暂估 / Supplier CN-DN / Payment Allocation），GL 过账留给未来 Finance 阶段消费（对齐 4E 不写 GL 先例——4E 产出 AR 事实，GL 后续）。
-- 风险：财务侧可能期望 5C 直接过账——需明确"事实先行，过账后置"的边界。
-
-## P12：maker-checker / 审批边界 —— 推荐：POSTED 与 APPLIED 高权限强审计；差异审批走 Workflow
-
-**决策点**：谁可以过账发票（POSTED）、谁可以核销付款（Apply）。
-
-**推荐方案**：**POSTED（过账）与 Payment Apply（核销）为受限权限**（SUPER_ADMIN/ADMIN，对齐 6B inventory-adjustment:apply 模式）；提交人 ≠ 过账人（maker-checker，DB CHECK + service 双保险，对齐 6B maker-checker）；差异审批走 Workflow（module=SUPPLIER_INVOICE，对齐 4E-3 条件审批模式）。
-- 备选：普通审批流（全部走 Workflow）——若 CTO 认为发票过账必须全量审批。
+**决策（CTO）**：**POSTED（过账）与 Payment Apply（核销）为受限权限**（SUPER_ADMIN/ADMIN，对齐 6B inventory-adjustment:apply 模式）；**Creator ≠ Approver/Poster（maker-checker，DB CHECK + service 双保险）**；**Payment 同样执行 maker-checker**；差异审批走 Workflow（module=SUPPLIER_INVOICE，对齐 4E-3 条件审批模式）。
 
 ---
 
-> **注**：P1-P12 拍板后固化进 ADR-0027 / Gate / Field Matrix；**Schema/Migration 0027 仍需 CTO Gate 批准后创建**。
+> **注**：P1-P12 已全部转 Final（CTO #8845）。4 Blocking + 3 Hardening 修复已固化进 ADR-0027 / Gate / Field Matrix。**Schema/Migration 0027 仍需 CTO 5C Gate Re-review 通过后创建**。
