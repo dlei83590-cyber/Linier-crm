@@ -117,6 +117,7 @@ export async function POST(request: NextRequest) {
       if (dup) return { ok: false as const, error: 'DUPLICATE_NUMBER' };
 
       // ④ RECEIPT_BASED 三重 Gate（红线 1，第一次验证）：WHR POSTED + 来源链一致 + 数量 ≤ 已入库
+      //    （Blocking ① CTO #9161：helper 内部锁 WHR Line + 累计占用校验——Create 无自身旧行，不传 excludeInvoiceId）
       const chain = await verifyReceiptBasedSourceChain(tx, {
         supplierId: data.supplierId,
         lines: data.lines.map((l) => ({
@@ -203,8 +204,9 @@ export async function POST(request: NextRequest) {
       DUPLICATE_NUMBER: { code: ERROR_CODES.SUPPLIER_INVOICE_DUPLICATE_NUMBER, msg: '供应商发票号重复（供应商维度唯一）', status: 409 },
       WHR_NOT_POSTED: { code: ERROR_CODES.SUPPLIER_INVOICE_WHR_NOT_POSTED, msg: '入库行所属 WHR 必须已 POSTED（只有已入库事实可开票）', status: 400 },
       SOURCE_CHAIN_MISMATCH: { code: ERROR_CODES.SUPPLIER_INVOICE_SOURCE_CHAIN_MISMATCH, msg: 'WHR Line ↔ PO Line ↔ Item ↔ Supplier 来源链不一致', status: 400 },
-      ITEM_INVALID: { code: ERROR_CODES.SUPPLIER_INVOICE_ITEM_INVALID, msg: '物料不存在或已停用', status: 400 },
+      ITEM_INVALID: { code: ERROR_CODES.SUPPLIER_INVOICE_ITEM_INVALID, msg: '物料不存在/已停用或 PO/WHR 未绑定物料（NULL 穿透禁止）', status: 400 },
       QUANTITY_INVALID: { code: ERROR_CODES.SUPPLIER_INVOICE_QUANTITY_INVALID, msg: '开票数量必须 > 0 且 ≤ 已入库数量', status: 400 },
+      CUMULATIVE_QTY_EXCEEDED: { code: ERROR_CODES.SUPPLIER_INVOICE_CUMULATIVE_QTY_EXCEEDED, msg: '累计开票数量超过已入库数量（含其他发票占用）', status: 400 },
     };
     const entry = result?.ok === false ? codeMap[result.error] : undefined;
     if (entry) return fail(entry.code, entry.msg, entry.status);

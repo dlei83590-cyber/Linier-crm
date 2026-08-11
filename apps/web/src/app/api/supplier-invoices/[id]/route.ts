@@ -99,7 +99,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   let result:
     | { ok: true; invoice: SupplierInvoiceWithRelations }
-    | { ok: false; error: 'NOT_FOUND' | 'INVALID_STATE' | 'VERSION_CONFLICT' | 'WHR_NOT_POSTED' | 'SOURCE_CHAIN_MISMATCH' | 'ITEM_INVALID' | 'QUANTITY_INVALID' }
+    | {
+        ok: false;
+        error: 'NOT_FOUND' | 'INVALID_STATE' | 'VERSION_CONFLICT' | 'WHR_NOT_POSTED' | 'SOURCE_CHAIN_MISMATCH' | 'ITEM_INVALID' | 'QUANTITY_INVALID' | 'CUMULATIVE_QTY_EXCEEDED';
+      }
     | undefined;
 
   try {
@@ -140,8 +143,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       let totals: { netAmount: Prisma.Decimal; taxAmount: Prisma.Decimal; grossAmount: Prisma.Decimal } | null = null;
 
       if (lines && lines.length > 0) {
+        // Blocking ①（CTO #9161）：PATCH 排除当前发票自身旧行（行替换时旧行仍在 DB，
+        //   不排除会把自身占用重复计入 → 永远超收误报）+ helper 内部锁 WHR Line
         const chain = await verifyReceiptBasedSourceChain(tx, {
           supplierId: existing.supplierId,
+          excludeInvoiceId: id,
           lines: lines.map((l) => ({
             purchaseOrderLineId: l.purchaseOrderLineId,
             warehouseReceiptLineId: l.warehouseReceiptLineId,
@@ -247,8 +253,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const codeMap: Record<string, { code: ErrorCode; msg: string }> = {
       WHR_NOT_POSTED: { code: ERROR_CODES.SUPPLIER_INVOICE_WHR_NOT_POSTED, msg: '入库行所属 WHR 必须已 POSTED（只有已入库事实可开票）' },
       SOURCE_CHAIN_MISMATCH: { code: ERROR_CODES.SUPPLIER_INVOICE_SOURCE_CHAIN_MISMATCH, msg: 'WHR Line ↔ PO Line ↔ Item ↔ Supplier 来源链不一致' },
-      ITEM_INVALID: { code: ERROR_CODES.SUPPLIER_INVOICE_ITEM_INVALID, msg: '物料不存在或已停用' },
+      ITEM_INVALID: { code: ERROR_CODES.SUPPLIER_INVOICE_ITEM_INVALID, msg: '物料不存在/已停用或 PO/WHR 未绑定物料（NULL 穿透禁止）' },
       QUANTITY_INVALID: { code: ERROR_CODES.SUPPLIER_INVOICE_QUANTITY_INVALID, msg: '开票数量必须 > 0 且 ≤ 已入库数量' },
+      CUMULATIVE_QTY_EXCEEDED: { code: ERROR_CODES.SUPPLIER_INVOICE_CUMULATIVE_QTY_EXCEEDED, msg: '累计开票数量超过已入库数量（含其他发票占用）' },
     };
     const entry = result?.ok === false ? codeMap[result.error] : undefined;
     if (entry) return fail(entry.code, entry.msg, 400);

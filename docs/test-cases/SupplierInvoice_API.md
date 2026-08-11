@@ -36,7 +36,14 @@
 | C3 | Item 链不一致 | WHR Line.itemId ≠ PO Line.itemId（两端均有值） | 400 SUPPLIER_INVOICE_SOURCE_CHAIN_MISMATCH |
 | C4 | Supplier 链不一致 | WHR → PurchaseReceipt.supplierId ≠ 发票 supplierId | 400 SUPPLIER_INVOICE_SOURCE_CHAIN_MISMATCH |
 | C5 | 数量超已入库 | 开票数量 > WHR Line.quantity | 400 SUPPLIER_INVOICE_QUANTITY_INVALID |
+| C7 | **累计超收（Blocking ① CTO #9161）** | WHR 已入库 100；发票 A 开 60，发票 B 再开 60（B 本次 60 ≤ 100 但 60+60 > 100） | 400 SUPPLIER_INVOICE_CUMULATIVE_QTY_EXCEEDED（helper 累计占用 SUM 非 CANCELLED 发票行） |
+| C8 | **PATCH 自身排除（Blocking ①）** | 发票 A（DRAFT）行 60；PATCH 行替换改 80（WHR=100）——自身旧行 60 不得计入累计占用 | 200 成功（60 排除后 80 ≤ 100）；若把自身计入会误报 400 |
+| C9 | **并发抢同一 WHR Line（Blocking ①）** | WHR 已入库 100；两个请求同时 Create 各 60 | FOR UPDATE 锁 WHR Line 串行化——第二个请求 400 CUMULATIVE_QTY_EXCEEDED（不会双读到 available=100） |
 | C6 | 三次验证时机 | Create 成功 → 之后 WHR 状态/来源被改 → Submit | Submit 时第三次重验 → 400（失效来源不带入 Match 阶段） |
+| C10 | **PO item null（Blocking ②）** | PO Line.itemId 为空 | 400 SUPPLIER_INVOICE_ITEM_INVALID（NULL 穿透拒绝） |
+| C11 | **WHR item null（Blocking ②）** | WHR Line.itemId 为空 | 400 SUPPLIER_INVOICE_ITEM_INVALID（NULL 穿透拒绝） |
+| C12 | **item mismatch（Blocking ②）** | PO Line.itemId ≠ WHR Line.itemId（均非空） | 400 SUPPLIER_INVOICE_SOURCE_CHAIN_MISMATCH |
+| C13 | **正常 item PASS（Blocking ②）** | PO itemId != null 且 WHR itemId != null 且相等且 Item 有效 | 通过；SupplierInvoiceLine.itemId 服务端写非空值（不再写 null） |
 
 ## D. 发票更新（PATCH — 仅 DRAFT + CAS）
 

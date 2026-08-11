@@ -66,8 +66,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     // ⑤ 第三次 RECEIPT_BASED 三重 Gate（红线 1）：状态迁移前重验 WHR POSTED + 来源链一致 + 数量 ≤ 已入库
+    //    （Blocking ① CTO #9161：提交时自身行已在 DB（DRAFT 非 CANCELLED）——排除自身避免累计占用误报；
+    //    helper 内部锁 WHR Line 防并发双计）
     const chain = await verifyReceiptBasedSourceChain(tx, {
       supplierId: invoice.supplierId,
+      excludeInvoiceId: id,
       lines: lines.map((l) => ({
         purchaseOrderLineId: l.purchaseOrderLineId,
         warehouseReceiptLineId: l.warehouseReceiptLineId,
@@ -118,10 +121,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const codeMap: Record<string, { code: ErrorCode; msg: string }> = {
       WHR_NOT_POSTED: { code: ERROR_CODES.SUPPLIER_INVOICE_WHR_NOT_POSTED, msg: '入库行所属 WHR 必须已 POSTED（只有已入库事实可开票）' },
       SOURCE_CHAIN_MISMATCH: { code: ERROR_CODES.SUPPLIER_INVOICE_SOURCE_CHAIN_MISMATCH, msg: 'WHR Line ↔ PO Line ↔ Item ↔ Supplier 来源链不一致' },
-      ITEM_INVALID: { code: ERROR_CODES.SUPPLIER_INVOICE_ITEM_INVALID, msg: '物料不存在或已停用' },
+      ITEM_INVALID: { code: ERROR_CODES.SUPPLIER_INVOICE_ITEM_INVALID, msg: '物料不存在/已停用或 PO/WHR 未绑定物料（NULL 穿透禁止）' },
       QUANTITY_INVALID: { code: ERROR_CODES.SUPPLIER_INVOICE_QUANTITY_INVALID, msg: '开票数量必须 > 0 且 ≤ 已入库数量' },
+      CUMULATIVE_QTY_EXCEEDED: { code: ERROR_CODES.SUPPLIER_INVOICE_CUMULATIVE_QTY_EXCEEDED, msg: '累计开票数量超过已入库数量（含其他发票占用）' },
     };
-    const entry = codeMap[result.error as 'WHR_NOT_POSTED' | 'SOURCE_CHAIN_MISMATCH' | 'ITEM_INVALID' | 'QUANTITY_INVALID'];
+    const entry = codeMap[result.error as 'WHR_NOT_POSTED' | 'SOURCE_CHAIN_MISMATCH' | 'ITEM_INVALID' | 'QUANTITY_INVALID' | 'CUMULATIVE_QTY_EXCEEDED'];
     if (entry) return fail(entry.code, entry.msg, 400);
     return fail(ERROR_CODES.INTERNAL_ERROR, '提交供应商发票失败', 500);
   }

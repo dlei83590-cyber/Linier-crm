@@ -31,7 +31,8 @@
 
 | # | 边界 | 实现 |
 | --- | --- | --- |
-| B1 | **RECEIPT_BASED 三重 Gate（红线 ①）**：Create/PATCH/Submit 三次都重新验证 WHR header=POSTED + WHR Line↔PO Line↔Item↔Supplier 来源链一致 + 数量 ≤ 已入库 | `verifyReceiptBasedSourceChain(tx, ...)` 在三个路由各调用一次（Create 第一次 / PATCH 第二次 / Submit 状态迁移前第三次） |
+| B1 | **RECEIPT_BASED 三重 Gate（红线 ①）**：Create/PATCH/Submit 三次都重新验证 WHR header=POSTED + WHR Line↔PO Line↔Item↔Supplier 来源链一致；**累计开票守恒（Blocking ① CTO #9161）**：本次数量 + 其他非 CANCELLED/非 deleted 发票行占用 ≤ WHR 已入库（PATCH/Submit 排除自身旧行；helper 内部 FOR UPDATE 锁 WHR Line 防并发双计） | `verifyReceiptBasedSourceChain(tx, { supplierId, excludeInvoiceId?, lines })` 在三路由各调用一次（Create 第一次 / PATCH 第二次 + excludeInvoiceId=id / Submit 第三次 + excludeInvoiceId=id）；累计占用 = SUM 非 CANCELLED 发票行 quantity |
+| B1b | **Item 来源链 NULL 穿透锁死（Blocking ② CTO #9161）**：PO itemId != null 且 WHR itemId != null 且 PO itemId == WHR itemId 且 Item 有效——5C-1 RECEIPT_BASED 首版不允许 NULL 穿透 | helper 内：`!poLine.itemId || !whrLine.itemId → ITEM_INVALID`；`poLine.itemId !== whrLine.itemId → SOURCE_CHAIN_MISMATCH`；item 存在校验 |
 | B2 | **金额不可由客户端篡改**：Create/PATCH 都不信客户端头金额/行金额 | schema 不收金额；行 netAmount=quantity×unitPrice（2dp）、taxAmount=netAmount×taxRate/100（2dp）、nonRecoverableTaxAmount=vatRecoverable?0:taxAmount；头 net/tax/gross 服务端聚合（Decimal，禁 number 中间转换） |
 | B3 | **Submit 只允许 DRAFT→SUBMITTED** | 不得提前创建 MatchRun/GRIR/ApLiabilityFact；不写 postedAt/postedById（POSTED evidence 属 5C-1C） |
 | B4 | **重复供应商发票号**：API 稳定 409 + DB 组合 UNIQUE 最终防线 | 创建前 findFirst 预检 → 409 SUPPLIER_INVOICE_DUPLICATE_NUMBER；P2002 catch → 同 409（@@unique([supplierId, supplierInvoiceNo])） |

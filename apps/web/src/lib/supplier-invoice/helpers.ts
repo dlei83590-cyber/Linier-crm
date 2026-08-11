@@ -87,18 +87,27 @@ export async function verifyReceiptBasedSourceChain(
   tx: Prisma.TransactionClient,
   params: {
     supplierId: string;
+    /** Blocking ①（CTO #9161）：PATCH/Submit 排除当前发票自身旧行（自身已占用量不重复计入） */
+    excludeInvoiceId?: string;
     lines: Array<{ purchaseOrderLineId: string; warehouseReceiptLineId: string; quantity: Prisma.Decimal }>;
   },
 ): Promise<
   | { ok: true; itemIds: Record<string, string | null> } // key = `${purchaseOrderLineId}:${warehouseReceiptLineId}` → itemId
-  | { ok: false; error: 'WHR_NOT_POSTED' | 'SOURCE_CHAIN_MISMATCH' | 'ITEM_INVALID' | 'QUANTITY_INVALID' }
+  | { ok: false; error: 'WHR_NOT_POSTED' | 'SOURCE_CHAIN_MISMATCH' | 'ITEM_INVALID' | 'QUANTITY_INVALID' | 'CUMULATIVE_QTY_EXCEEDED' }
 > {
   const itemIds: Record<string, string | null> = {};
 
   for (const line of params.lines) {
     const key = `${line.purchaseOrderLineId}:${line.warehouseReceiptLineId}`;
 
-    // ① WHR Line 存在 + 所属 WHR header 状态
+    // ① Lock WHR Line（FOR UPDATE）——Blocking ①（CTO #9161）：并发 Create/PATCH/Submit
+    //    必须锁对应 WHR Line，避免两个请求同时读到相同 available（防累计超收双计）
+    const lockedWhr = await tx.$queryRaw<Array<{ id: string }>>(
+      Prisma.sql`SELECT "id" FROM "WarehouseReceiptLine" WHERE "id" = ${line.warehouseReceiptLineId} AND "deletedAt" IS NULL FOR UPDATE`,
+    );
+    if (lockedWhr.length === 0) return { ok: false, error: 'SOURCE_CHAIN_MISMATCH' };
+
+    // ② WHR Line 存在 + 所属 WHR header 状态
     const whrLine = await tx.warehouseReceiptLine.findFirst({
       where: { id: line.warehouseReceiptLineId, deletedAt: null },
       select: {
@@ -112,33 +121,51 @@ export async function verifyReceiptBasedSourceChain(
     if (!whrLine) return { ok: false, error: 'SOURCE_CHAIN_MISMATCH' };
     if (whrLine.warehouseReceipt.status !== 'POSTED') return { ok: false, error: 'WHR_NOT_POSTED' };
 
-    // ④ 开票数量 ≤ 已入库数量
-    if (line.quantity.gt(whrLine.quantity)) return { ok: false, error: 'QUANTITY_INVALID' };
+    // ③ 累计开票数量守恒（Blocking ①，CTO #9161）：
+    //    本次数量 + 其他非 CANCELLED/非 deleted 发票行占用 ≤ WHR quantity
+    //    （excludeInvoiceId 排除当前发票自身旧行——PATCH 行替换/Submit 时自身已占量不重复计入）
+    const usedAgg = await tx.supplierInvoiceLine.aggregate({
+      where: {
+        warehouseReceiptLineId: line.warehouseReceiptLineId,
+        deletedAt: null,
+        supplierInvoice: {
+          deletedAt: null,
+          documentStatus: { not: 'CANCELLED' },
+          ...(params.excludeInvoiceId ? { id: { not: params.excludeInvoiceId } } : {}),
+        },
+      },
+      _sum: { quantity: true },
+    });
+    const usedQty = usedAgg._sum.quantity ?? new Prisma.Decimal(0);
+    if (line.quantity.gt(whrLine.quantity)) {
+      return { ok: false, error: 'QUANTITY_INVALID' }; // 单行本身超已入库
+    }
+    if (line.quantity.add(usedQty).gt(whrLine.quantity)) {
+      return { ok: false, error: 'CUMULATIVE_QTY_EXCEEDED' }; // 含其他发票累计超已入库
+    }
 
-    // ② WHR Line ↔ PO Line 一致：WHR Line 溯源收货行 → PO Line 必须等于行提交的 PO Line
+    // ④ WHR Line ↔ PO Line 一致：WHR Line 溯源收货行 → PO Line 必须等于行提交的 PO Line
     const prLine = await tx.purchaseReceiptLine.findFirst({
       where: { id: whrLine.purchaseReceiptLineId, deletedAt: null },
-      select: { id: true, purchaseOrderLineId: true, itemId: true },
+      select: { id: true, purchaseOrderLineId: true },
     });
     if (!prLine) return { ok: false, error: 'SOURCE_CHAIN_MISMATCH' };
     if (prLine.purchaseOrderLineId !== line.purchaseOrderLineId) return { ok: false, error: 'SOURCE_CHAIN_MISMATCH' };
 
-    // ③ Item 链一致：PO Line.itemId == WHR Line.itemId（若两端都有值必须相等）
+    // ⑤ Item 来源链锁死（Blocking ②，CTO #9161）：RECEIPT_BASED 首版不允许 NULL 穿透——
+    //    PO itemId != null 且 WHR itemId != null 且 PO itemId == WHR itemId 且 Item 有效
     const poLine = await tx.purchaseOrderLine.findFirst({
       where: { id: line.purchaseOrderLineId, deletedAt: null },
       select: { id: true, itemId: true },
     });
     if (!poLine) return { ok: false, error: 'SOURCE_CHAIN_MISMATCH' };
-    if (poLine.itemId && whrLine.itemId && poLine.itemId !== whrLine.itemId) {
-      return { ok: false, error: 'SOURCE_CHAIN_MISMATCH' };
-    }
-    const itemId = whrLine.itemId ?? poLine.itemId ?? null;
-    if (itemId) {
-      const item = await tx.item.findFirst({ where: { id: itemId, deletedAt: null } });
-      if (!item) return { ok: false, error: 'ITEM_INVALID' };
-    }
+    if (!poLine.itemId || !whrLine.itemId) return { ok: false, error: 'ITEM_INVALID' }; // NULL 穿透拒绝
+    if (poLine.itemId !== whrLine.itemId) return { ok: false, error: 'SOURCE_CHAIN_MISMATCH' };
+    const itemId = poLine.itemId;
+    const item = await tx.item.findFirst({ where: { id: itemId, deletedAt: null } });
+    if (!item) return { ok: false, error: 'ITEM_INVALID' };
 
-    // ③ Supplier 链一致：WHR → PurchaseReceipt.supplierId == 发票 supplierId
+    // ⑥ Supplier 链一致：WHR → PurchaseReceipt.supplierId == 发票 supplierId
     const receipt = await tx.purchaseReceipt.findFirst({
       where: { id: whrLine.warehouseReceipt.purchaseReceiptId, deletedAt: null },
       select: { id: true, supplierId: true },
