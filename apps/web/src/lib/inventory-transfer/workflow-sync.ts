@@ -1,7 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { resolveStepApprovers } from '@/lib/workflow/engine';
-import { publishInventoryTransferEvent } from '@/lib/inventory-transfer/events';
 
 /**
  * Sprint 6B-2 - InventoryTransfer ↔ Workflow 集成（条件审批；对齐 PurchaseOrder/WriteOff 已验证模式）
