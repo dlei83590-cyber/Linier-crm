@@ -95,7 +95,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         lines: { where: { deletedAt: null }, orderBy: { lineNo: 'asc' } },
       },
     });
-    return { error: null as const, invoice: submitted };
+    return { error: null, invoice: submitted };
   });
 
   if (!result || result.error === 'NOT_FOUND') {

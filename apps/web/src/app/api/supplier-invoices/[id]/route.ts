@@ -15,6 +15,20 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+/** 带关系的发票详情类型（PATCH 返回 + 审计 lineCount 用；findFirst include 泛型） */
+type SupplierInvoiceWithRelations = NonNullable<
+  Awaited<
+    ReturnType<
+      typeof prisma.supplierInvoice.findFirst<{
+        include: {
+          supplier: { select: { id: true; code: true; name: true } };
+          lines: { where: { deletedAt: null }; orderBy: { lineNo: 'asc' } };
+        };
+      }>
+    >
+  >
+>;
+
 /** GET /api/supplier-invoices/:id（详情：Header + Supplier + Lines(双溯源 PO/WHR Line + Item)） */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await authenticate(request);
@@ -84,7 +98,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 
   let result:
-    | { ok: true; invoice: NonNullable<Awaited<ReturnType<typeof prisma.supplierInvoice.findFirst>>> }
+    | { ok: true; invoice: SupplierInvoiceWithRelations }
     | { ok: false; error: 'NOT_FOUND' | 'INVALID_STATE' | 'VERSION_CONFLICT' | 'WHR_NOT_POSTED' | 'SOURCE_CHAIN_MISMATCH' | 'ITEM_INVALID' | 'QUANTITY_INVALID' }
     | undefined;
 
