@@ -5719,8 +5719,10 @@ model SupplierInvoice {
   taxAmount   Decimal @db.Decimal(18, 2) // 税额合计 = gross - net
   // 匹配（当前投影 + 审批引用；不变量③④）
   currentMatchRunId String? // 当前匹配 Run 引用（当前投影，历史走 immutable MatchRun）
+  currentMatchRun SupplierInvoiceMatchRun? @relation("SupplierInvoiceCurrentMatchRun", fields: [currentMatchRunId, id], references: [id, supplierInvoiceId], onDelete: Restrict) // Hardening ①：current run 引用完整性 + 必须属于本 invoice（组合 FK）
   approvedMatchRunId String? // 审批引用 immutable MatchRun（Approval references MatchRun，不 mutates MatchRun——#8901）
-  approvedMatchRevision Int? // 审批引用 revision（冗余存证；与 approvedMatchRunId 同属当前发票，组合 FK 保证）
+  approvedMatchRevision Int? // 审批引用 revision（Blocking ①：三列 FK 绑定——approvedRunId+revision+invoice 必须同属一个 immutable snapshot）
+  approvedMatchRun SupplierInvoiceMatchRun? @relation("SupplierInvoiceApprovedMatchRun", fields: [approvedMatchRunId, id, approvedMatchRevision], references: [id, supplierInvoiceId, revision], onDelete: Restrict) // Blocking ①：三列 FK → MatchRun(id, supplierInvoiceId, revision) 同 snapshot 一致性
   // POSTED 终态证据（不变量⑧：POSTED ⇒ 全非空；APPROVED ≠ POSTED）
   postedAt DateTime? @db.Timestamptz(3)
   postedById String?
@@ -5736,7 +5738,7 @@ model SupplierInvoice {
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   lines SupplierInvoiceLine[]
-  matchRuns SupplierInvoiceMatchRun[]
+  matchRuns SupplierInvoiceMatchRun[] @relation("SupplierInvoiceMatchRuns") // 反向：本发票的 MatchRun（immutable snapshot 集合）
   grirRecords GrirRecord[]
   apLiabilityFact ApLiabilityFact?
 
@@ -5785,6 +5787,7 @@ model SupplierInvoiceLine {
 
   matchLines SupplierInvoiceMatchLine[]
   grirRecords GrirRecord[]
+  currentMatchRun SupplierInvoiceMatchRun? @relation("SupplierInvoiceLineCurrentMatchRun", fields: [currentMatchRunId], references: [id], onDelete: Restrict) // Hardening ①：行级 current run 引用完整性
 
   @@unique([supplierInvoiceId, lineNo])
   @@index([supplierInvoiceId])
@@ -5799,7 +5802,7 @@ model SupplierInvoiceLine {
 model SupplierInvoiceMatchRun {
   id       String   @id @default(cuid())
   supplierInvoiceId String
-  supplierInvoice SupplierInvoice @relation(fields: [supplierInvoiceId], references: [id], onDelete: Cascade)
+  supplierInvoice SupplierInvoice @relation("SupplierInvoiceMatchRuns", fields: [supplierInvoiceId], references: [id], onDelete: Cascade)
   runNo     Int      @default(1) // 每发票递增 1,2,3…
   revision  Int      @default(1) // 不可变快照标识（审批引用；重新匹配 → 追加新 Run revision+1）
   runAt     DateTime @default(now()) @db.Timestamptz(3)
@@ -5811,9 +5814,13 @@ model SupplierInvoiceMatchRun {
   createdAt DateTime @default(now()) @db.Timestamptz(3)
 
   lines SupplierInvoiceMatchLine[]
+  currentForInvoices SupplierInvoice[] @relation("SupplierInvoiceCurrentMatchRun") // Hardening ①：SupplierInvoice.currentMatchRun 反向
+  approvedForInvoices SupplierInvoice[] @relation("SupplierInvoiceApprovedMatchRun") // Blocking ①：SupplierInvoice.approvedMatchRun 反向
+  currentForLines SupplierInvoiceLine[] @relation("SupplierInvoiceLineCurrentMatchRun") // Hardening ①：SupplierInvoiceLine.currentMatchRun 反向
 
   @@unique([supplierInvoiceId, revision]) // 不变量③：invoice + revision 唯一识别
-  @@unique([id, supplierInvoiceId]) // 不变量④：支持 SupplierInvoice(approvedMatchRunId, id) 组合 FK 引用（必须属于同一发票）
+  @@unique([id, supplierInvoiceId]) // 不变量④：支持 SupplierInvoice(currentMatchRunId, id) 组合 FK 引用（current run 必须属于同一发票）
+  @@unique([id, supplierInvoiceId, revision]) // Blocking ①：支持 SupplierInvoice(approvedMatchRunId, id, approvedMatchRevision) 三列 FK 引用（同 snapshot）
   @@index([supplierInvoiceId])
 }
 

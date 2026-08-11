@@ -126,8 +126,11 @@ CREATE TABLE "SupplierInvoiceMatchRun" (
     CONSTRAINT "SupplierInvoiceMatchRun_pkey" PRIMARY KEY ("id"),
     -- 不变量③：invoice + revision 唯一识别
     CONSTRAINT "SupplierInvoiceMatchRun_invoice_revision_key" UNIQUE ("supplierInvoiceId", "revision"),
-    -- 不变量④：支持 SupplierInvoice(approvedMatchRunId, id) 组合 FK 引用（必须属于同一发票）
-    CONSTRAINT "SupplierInvoiceMatchRun_id_invoice_key" UNIQUE ("id", "supplierInvoiceId")
+    -- 不变量④：支持 SupplierInvoice(currentMatchRunId, id) 组合 FK 引用（current run 必须属于同一发票）
+    CONSTRAINT "SupplierInvoiceMatchRun_id_invoice_key" UNIQUE ("id", "supplierInvoiceId"),
+    -- Blocking ①（CTO #8986）：支持 SupplierInvoice(approvedMatchRunId, id, approvedMatchRevision) 三列 FK 引用——
+    -- approved Run ID + approved revision + invoice 三者必须同属一个 immutable snapshot（三元一致性）
+    CONSTRAINT "SupplierInvoiceMatchRun_id_invoice_revision_key" UNIQUE ("id", "supplierInvoiceId", "revision")
 );
 CREATE INDEX "SupplierInvoiceMatchRun_supplierInvoiceId_idx" ON "SupplierInvoiceMatchRun"("supplierInvoiceId");
 
@@ -174,9 +177,22 @@ CREATE TABLE "GrirRecord" (
     "createdById" TEXT,
     "createdAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "GrirRecord_pkey" PRIMARY KEY ("id"),
-    -- 不变量⑤：GRIR 三类源 identity 幂等唯一（accrual/reversal/consume 各自唯一，防重复冲回）
+    -- Blocking ②（CTO #8986）：type/source shape CHECK——不同 grirType 只允许对应来源列非空，其余必须 NULL
+    -- ACCRUAL: warehouseReceiptLineId NOT NULL + purchaseReturnLineId NULL + supplierInvoiceLineId NULL
+    -- REVERSAL: purchaseReturnLineId NOT NULL + warehouseReceiptLineId NULL + supplierInvoiceLineId NULL
+    -- CONSUME:  supplierInvoiceLineId NOT NULL + warehouseReceiptLineId NULL + purchaseReturnLineId NULL + supplierInvoiceId NOT NULL
+    CONSTRAINT "GrirRecord_source_shape_check" CHECK (
+        ("grirType" = 'ACCRUAL' AND "warehouseReceiptLineId" IS NOT NULL AND "purchaseReturnLineId" IS NULL AND "supplierInvoiceLineId" IS NULL AND "supplierInvoiceId" IS NULL) OR
+        ("grirType" = 'REVERSAL' AND "purchaseReturnLineId" IS NOT NULL AND "warehouseReceiptLineId" IS NULL AND "supplierInvoiceLineId" IS NULL AND "supplierInvoiceId" IS NULL) OR
+        ("grirType" = 'CONSUME' AND "supplierInvoiceLineId" IS NOT NULL AND "warehouseReceiptLineId" IS NULL AND "purchaseReturnLineId" IS NULL AND "supplierInvoiceId" IS NOT NULL)
+    ),
+    -- 日志/查询幂等 key（Blocking ②：不能作为唯一业务事实防线——业务事实防线=下方三类 partial UNIQUE）
     CONSTRAINT "GrirRecord_sourceKey_key" UNIQUE ("sourceKey")
 );
+-- Blocking ②（CTO #8986）：三类 source partial UNIQUE indexes（业务事实幂等防线）
+CREATE UNIQUE INDEX "GrirRecord_accrual_source_key" ON "GrirRecord"("warehouseReceiptLineId") WHERE "grirType" = 'ACCRUAL';
+CREATE UNIQUE INDEX "GrirRecord_reversal_source_key" ON "GrirRecord"("purchaseReturnLineId") WHERE "grirType" = 'REVERSAL';
+CREATE UNIQUE INDEX "GrirRecord_consume_source_key" ON "GrirRecord"("supplierInvoiceLineId") WHERE "grirType" = 'CONSUME';
 CREATE INDEX "GrirRecord_grirType_idx" ON "GrirRecord"("grirType");
 CREATE INDEX "GrirRecord_supplierInvoiceId_idx" ON "GrirRecord"("supplierInvoiceId");
 CREATE INDEX "GrirRecord_warehouseReceiptLineId_idx" ON "GrirRecord"("warehouseReceiptLineId");
@@ -222,9 +238,14 @@ CREATE INDEX "ApOpenItem_settlementStatus_idx" ON "ApOpenItem"("settlementStatus
 -- ============ 9. FK 约束 ============
 ALTER TABLE "SupplierInvoice" ADD CONSTRAINT "SupplierInvoice_supplierId_fkey" FOREIGN KEY ("supplierId") REFERENCES "Supplier"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "SupplierInvoice" ADD CONSTRAINT "SupplierInvoice_postedById_fkey" FOREIGN KEY ("postedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-ALTER TABLE "SupplierInvoice" ADD CONSTRAINT "SupplierInvoice_approvedMatchRunId_fkey" FOREIGN KEY ("approvedMatchRunId", "id") REFERENCES "SupplierInvoiceMatchRun"("id", "supplierInvoiceId") ON DELETE RESTRICT ON UPDATE CASCADE; -- 不变量④：组合 FK 保证审批引用的 MatchRun 属于当前发票
+-- Hardening ①（CTO #8986）：currentMatchRun 引用完整性 + 必须属于本 invoice（组合 FK）
+ALTER TABLE "SupplierInvoice" ADD CONSTRAINT "SupplierInvoice_currentMatchRunId_fkey" FOREIGN KEY ("currentMatchRunId", "id") REFERENCES "SupplierInvoiceMatchRun"("id", "supplierInvoiceId") ON DELETE RESTRICT ON UPDATE CASCADE;
+-- Blocking ①（CTO #8986）：approvedMatchRun 三元一致性 FK——approved Run ID + revision + invoice 同属一个 immutable snapshot
+ALTER TABLE "SupplierInvoice" ADD CONSTRAINT "SupplierInvoice_approvedMatchRunId_fkey" FOREIGN KEY ("approvedMatchRunId", "id", "approvedMatchRevision") REFERENCES "SupplierInvoiceMatchRun"("id", "supplierInvoiceId", "revision") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 ALTER TABLE "SupplierInvoiceLine" ADD CONSTRAINT "SupplierInvoiceLine_supplierInvoiceId_fkey" FOREIGN KEY ("supplierInvoiceId") REFERENCES "SupplierInvoice"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+-- Hardening ①（CTO #8986）：行级 currentMatchRun 引用完整性（单列 FK）
+ALTER TABLE "SupplierInvoiceLine" ADD CONSTRAINT "SupplierInvoiceLine_currentMatchRunId_fkey" FOREIGN KEY ("currentMatchRunId") REFERENCES "SupplierInvoiceMatchRun"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "SupplierInvoiceLine" ADD CONSTRAINT "SupplierInvoiceLine_purchaseOrderLineId_fkey" FOREIGN KEY ("purchaseOrderLineId") REFERENCES "PurchaseOrderLine"("id") ON DELETE RESTRICT ON UPDATE CASCADE; -- 不变量①：PO Line 溯源
 ALTER TABLE "SupplierInvoiceLine" ADD CONSTRAINT "SupplierInvoiceLine_warehouseReceiptLineId_fkey" FOREIGN KEY ("warehouseReceiptLineId") REFERENCES "WarehouseReceiptLine"("id") ON DELETE RESTRICT ON UPDATE CASCADE; -- 不变量①：POSTED WHR Line 溯源（service Gate 保证来源已 POSTED）
 ALTER TABLE "SupplierInvoiceLine" ADD CONSTRAINT "SupplierInvoiceLine_itemId_fkey" FOREIGN KEY ("itemId") REFERENCES "Item"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -270,3 +291,27 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_supplier_invoice_match_line_immutable
 BEFORE UPDATE OR DELETE ON "SupplierInvoiceMatchLine"
 FOR EACH ROW EXECUTE FUNCTION forbid_matchline_mutation();
+
+-- Blocking ③（CTO #8986）：GrirRecord 同样 append-only（禁 UPDATE/DELETE；GRIR 纠错追加 REVERSAL/补偿事实）
+CREATE OR REPLACE FUNCTION forbid_grir_mutation()
+RETURNS TRIGGER AS $$
+BEGIN
+    RAISE EXCEPTION 'GrirRecord is immutable: UPDATE/DELETE forbidden (append REVERSAL/compensation fact instead)';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_grir_record_immutable
+BEFORE UPDATE OR DELETE ON "GrirRecord"
+FOR EACH ROW EXECUTE FUNCTION forbid_grir_mutation();
+
+-- Blocking ③（CTO #8986）：ApLiabilityFact 同样 append-only（禁 UPDATE/DELETE；纠错未来走 CN/DN / correction fact）
+CREATE OR REPLACE FUNCTION forbid_ap_liability_mutation()
+RETURNS TRIGGER AS $$
+BEGIN
+    RAISE EXCEPTION 'ApLiabilityFact is immutable: UPDATE/DELETE forbidden (use CN/DN or correction fact)';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_ap_liability_fact_immutable
+BEFORE UPDATE OR DELETE ON "ApLiabilityFact"
+FOR EACH ROW EXECUTE FUNCTION forbid_ap_liability_mutation();
