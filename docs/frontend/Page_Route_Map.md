@@ -41,8 +41,8 @@
 | `/purchasing/inspections` | 质检 | `inspection:view` | 质量合格事实；SKIP/SPOT/FULL，qualifiedQty + rejectedQty = inspectableQty |
 | `/purchasing/warehouse-receipts` | 采购入库 | `warehouse-receipt:view` | 采购入库事实；Posted 触发 6A InventoryMovement(IN) |
 | `/purchasing/returns` | 采购退货 | `purchase-return:view` | 独立退货事实；来源可退余额 Gate，REPLACE_REQUIRED 重开 PO 履约 |
-| `/inventory/stock-projection` | 库存余额投影 | `inventory-ledger:view` | **只读**五维余额（item/warehouse/location/batch/serial）；余额来自 6A 后端 |
-| `/inventory/ledger` | 库存流水 | `inventory-ledger:view` | **只读** InventoryMovement 追溯（不可变账本） |
+| `/inventory/stock-projection` | 库存余额投影 | `null`（⚠️ HOLD） | **QUERY CONTRACT GAP / HOLD（CTO #8845）**：无 FINAL Read API，仅 Placeholder，不接线 |
+| `/inventory/ledger` | 库存流水 | `null`（⚠️ HOLD） | **QUERY CONTRACT GAP / HOLD（CTO #8845）**：无 FINAL 只读端点，仅 Placeholder，不接线 |
 | `/inventory/transfers` | 库存调拨 | `inventory-transfer:view` | 双边原子事实（SOURCE_OUT + DESTINATION_IN 同一 movementGroupId） |
 | `/inventory/stock-counts` | 库存盘点 | `stock-count:view` | 实盘事实；行录入冻结 bookQtyAtCount/varianceQty，Complete 不直写库存账 |
 | `/inventory/adjustments` | 库存调整 | `inventory-adjustment:view` | 受控库存账事实；maker-checker（apply 人 ≠ 创建人）；Apply 唯一落账入口 |
@@ -69,6 +69,7 @@ export default function Page() {
 ```
 
 > 骨架页统一使用现有 `PlaceholderPage` + `PermissionGuard` 模式（对齐 items/projects 页面先例），**不新增 UI 组件、不写后端调用**——Page Skeleton 阶段只确立 IA 与路由骨架。
+> ⚠️ **CTO #8845 Contract Blocking**：`/inventory/stock-projection` 与 `/inventory/ledger` 无 FINAL Read API（6A 只暴露 Consumer contract）——两页保留 Placeholder、**不接线、不声明 inventory-ledger:view 为可用权限**（等独立 Backend Read Model Gate）。
 
 ---
 

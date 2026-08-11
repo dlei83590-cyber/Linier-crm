@@ -19,14 +19,15 @@
 | Inspection | `/purchasing/inspections` | `inspection:view` | `<Forbidden />` |
 | Warehouse Receipt | `/purchasing/warehouse-receipts` | `warehouse-receipt:view` | `<Forbidden />` |
 | Purchase Return | `/purchasing/returns` | `purchase-return:view` | `<Forbidden />` |
-| Stock Projection | `/inventory/stock-projection` | `inventory-ledger:view` | `<Forbidden />` |
-| Inventory Movement Ledger | `/inventory/ledger` | `inventory-ledger:view` | `<Forbidden />` |
+| Stock Projection | `/inventory/stock-projection` | `null`（⚠️ **HOLD**——QUERY CONTRACT GAP，权限码未生效） | Placeholder（不接线） |
+| Inventory Movement Ledger | `/inventory/ledger` | `null`（⚠️ **HOLD**——QUERY CONTRACT GAP，权限码未生效） | Placeholder（不接线） |
 | Inventory Transfer | `/inventory/transfers` | `inventory-transfer:view` | `<Forbidden />` |
 | Stock Count | `/inventory/stock-counts` | `stock-count:view` | `<Forbidden />` |
 | Inventory Adjustment | `/inventory/adjustments` | `inventory-adjustment:view` | `<Forbidden />` |
 | Conversion / Repack | `/inventory/conversions` | `inventory-conversion:view` | `<Forbidden />` |
 
 > 按钮级权限（后续迭代）：create → `{module}:create`；PATCH/submit/execute/post/complete/receive/return/confirm → `{module}:edit`；cancel → `{module}:close`；**Adjustment apply → `inventory-adjustment:apply`（受限系统权限，仅 SUPER_ADMIN/ADMIN——前端按钮对非管理员隐藏，后端仍 403 兜底）**。
+> ⚠️ **CTO #8845 Contract Blocking**：`inventory-ledger:view` **不是已存在的生产权限事实**（6A 只暴露 Consumer contract，无 FINAL Read API）——Stock Projection / Inventory Ledger 两页**不声明该权限码**、**不接线**，等独立 Backend Read Model Gate；前端不得多 API 拼装余额、不得 SUM Movement 充当 StockProjection。
 
 ---
 

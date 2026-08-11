@@ -53,8 +53,9 @@ export const PERMISSIONS = {
   PURCHASE_RETURN_READ: "purchase-return:view",
   PURCHASE_RETURN_WRITE: "purchase-return:write",
   // Sprint 6A/6B：库存工作台（前端消费层对齐 FINAL 契约）
-  INVENTORY_LEDGER_READ: "inventory-ledger:view",
-  INVENTORY_LEDGER_WRITE: "inventory-ledger:write",
+  // 注：Inventory Ledger / Stock Projection **无 FINAL Read API**（6A 只暴露 Consumer contract，
+  //     未发布 InventoryMovement/StockProjection 只读端点）——inventory-ledger:view **不是已存在的
+  //     生产权限事实**（CTO #8845 Contract Blocking）。正式 Query API Gate 前不声明该权限码。
   INVENTORY_TRANSFER_READ: "inventory-transfer:view",
   INVENTORY_TRANSFER_WRITE: "inventory-transfer:write",
   STOCK_COUNT_READ: "stock-count:view",
