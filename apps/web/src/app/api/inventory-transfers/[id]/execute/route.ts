@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from '@/lib/api-helpers';
 import { ok, fail, failValidation } from '@/lib/api/response';
-import { ERROR_CODES } from '@/lib/api/errors';
+import { ERROR_CODES, type ErrorCode } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
 import { inventoryTransferExecuteSchema } from '@/lib/api/schemas';
 import { buildTransferAtoms } from '@/lib/inventory-transfer/helpers';
@@ -56,7 +56,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   let result:
     | {
         ok: true;
-        transfer: NonNullable<Awaited<ReturnType<typeof prisma.inventoryTransfer.findFirst>>>;
+        transfer: NonNullable<Awaited<ReturnType<typeof prisma.inventoryTransfer.findFirst>>> & {
+          lines: Array<{ id: string; itemId: string; quantity: Prisma.Decimal; batchNo: string | null }>;
+        };
         movementGroupId: string;
         atomResults: Array<{ inserted: boolean; movementNo: string }>;
       }

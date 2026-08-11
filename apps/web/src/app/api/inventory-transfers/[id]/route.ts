@@ -129,7 +129,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       }
 
       // ⑤ 行处理（lines 提供 → 全量替换）
-      let lineCreate: Array<Record<string, unknown>> | undefined;
+      let lineCreate: Array<Prisma.InventoryTransferLineCreateManyInput> | undefined;
       if (lines) {
         const dedupeKeys = lines.map((l) => transferLineDedupeKey({ itemId: l.itemId, batchNo: l.batchNo ?? null, serialNos: l.serialNos }));
         if (new Set(dedupeKeys).size !== dedupeKeys.length) {
@@ -139,8 +139,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           const item = await tx.item.findFirst({ where: { id: l.itemId, deletedAt: null } });
           if (!item) return { ok: false as const, error: 'ITEM_NOT_FOUND' };
           if (l.serialNos.length > 0) {
-            if (!l.quantity.isInteger()) return { ok: false as const, error: 'SERIAL_QTY_MISMATCH' };
-            if (!l.quantity.equals(new Prisma.Decimal(l.serialNos.length))) {
+            // zod quantity 是 number（非 Prisma.Decimal）——用 Number.isInteger + 直接比较
+            if (!Number.isInteger(l.quantity)) return { ok: false as const, error: 'SERIAL_QTY_MISMATCH' };
+            if (l.quantity !== l.serialNos.length) {
               return { ok: false as const, error: 'SERIAL_QTY_MISMATCH' };
             }
             if (new Set(l.serialNos).size !== l.serialNos.length) {
@@ -149,6 +150,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           }
         }
         lineCreate = lines.map((l) => ({
+          transferHeaderId: id,
           itemId: l.itemId,
           uomId: l.uomId ?? null,
           quantity: l.quantity,
@@ -183,7 +185,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if (lineCreate) {
         await tx.inventoryTransferLine.deleteMany({ where: { transferHeaderId: id, deletedAt: null } });
         await tx.inventoryTransferLine.createMany({
-          data: lineCreate.map((l) => ({ transferHeaderId: id, ...l })),
+          data: lineCreate,
         });
       }
 

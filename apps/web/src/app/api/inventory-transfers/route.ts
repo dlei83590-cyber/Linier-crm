@@ -124,8 +124,9 @@ export async function POST(request: NextRequest) {
         const item = await tx.item.findFirst({ where: { id: l.itemId, deletedAt: null } });
         if (!item) return { ok: false as const, error: 'ITEM_NOT_FOUND' };
         if (l.serialNos.length > 0) {
-          if (!l.quantity.isInteger()) return { ok: false as const, error: 'SERIAL_QTY_MISMATCH' };
-          if (!l.quantity.equals(new Prisma.Decimal(l.serialNos.length))) {
+          // zod quantity 是 number（非 Prisma.Decimal）——用 Number.isInteger + 直接比较
+          if (!Number.isInteger(l.quantity)) return { ok: false as const, error: 'SERIAL_QTY_MISMATCH' };
+          if (l.quantity !== l.serialNos.length) {
             return { ok: false as const, error: 'SERIAL_QTY_MISMATCH' };
           }
           if (new Set(l.serialNos).size !== l.serialNos.length) {
