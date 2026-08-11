@@ -13,6 +13,7 @@ import { syncWriteOffApproval } from '@/lib/write-off/workflow-sync';
 import { syncCreditDebitNoteApproval } from '@/lib/credit-debit-note/workflow-sync';
 import { syncPurchaseRequisitionApproval } from '@/lib/purchase-requisition/workflow-sync';
 import { syncPurchaseOrderApproval } from '@/lib/purchase-order/workflow-sync';
+import { syncInventoryTransferApproval } from '@/lib/inventory-transfer/workflow-sync';
 
 export const dynamic = 'force-dynamic';
 
@@ -438,6 +439,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   ) {
     await syncPurchaseOrderApproval({
       purchaseOrderId: instance.businessId,
+      workflowStatus: result.afterStatus,
+      actorId: user!.id,
+    });
+  }
+
+  // Sprint 6B-2：InventoryTransfer 审批终态回写（Workflow 唯一审批事实源；不建 Approval 表）
+  // **红线（CTO 6B-2 再次锁死）：审批只回写 status=APPROVED + approvedById，绝不自动 EXECUTED**——
+  // 正式执行必须显式 POST /api/inventory-transfers/{id}/execute（Shared LedgerCommand 双 atom 同事务落账）；
+  // REJECTED → status=DRAFT（可重提）；SUBMITTED 由 maybeTrigger 回写
+  if (
+    instance.businessType === 'inventory-transfer' &&
+    (result.afterStatus === 'COMPLETED' || result.afterStatus === 'REJECTED')
+  ) {
+    await syncInventoryTransferApproval({
+      transferId: instance.businessId,
       workflowStatus: result.afterStatus,
       actorId: user!.id,
     });

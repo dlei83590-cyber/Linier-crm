@@ -153,6 +153,8 @@ export const PERMISSION_MODULES = [
   "item-revision",
   "item-tag",
   "item-attachment",
+  // Sprint 6B：Inventory Operations 模块（Transfer 业务事实——动作映射：create→inventory-transfer:create（创建即取号）；submit→inventory-transfer:edit（复用统一 RBAC，不新造 submit 体系——对齐 5A/5B 拍板）；approve→inventory-transfer:approve（Workflow 审批）；execute→inventory-transfer:edit（对齐 5B post→:edit 先例）；cancel DRAFT/SUBMITTED→inventory-transfer:close；line 仅 view/edit——见 SEED_RESTRICTED_ACTION_PERMISSIONS）
+  "inventory-transfer",
 ] as const;
 
 /** 生成模块×动作权限码（如 "item:view"） */

@@ -804,3 +804,61 @@ export const purchaseReturnUpdateSchema = z.object({
 export const purchaseReturnReturnSchema = z.object({
   version: z.number().int().positive(),
 });
+
+// ============================================================================
+// Sprint 6B - Inventory Transfer（调拨 Vertical Slice，CTO 6B-2 授权）
+// 设计依据：Sprint6B_Inventory_Operations_Architecture_Process_Gate.md §3（Transfer 双边原子事实）+
+//           Field Matrix v0.5 §1 + ADR-0026 D2（Transfer = 双边原子事实 SOURCE_OUT + DESTINATION_IN）
+// - 状态机：DRAFT → SUBMITTED → APPROVED → EXECUTED / CANCELLED（P2 Final）；EXECUTED 才触发双边 Movement
+// - 审批走既有 Workflow Policy（跨仓默认需审、同仓策略配置，不硬编码）；submit 时 maybeTriggerApproval
+// - Execute：Shared LedgerCommand 双 atom（SOURCE_OUT + DESTINATION_IN 同一 movementGroupId）同事务全有或全无
+// - 行字段：itemId/uomId/quantity/batchNo（精确继承）/serialNos（每 serial 一对）/mfgDate/expDate（继承）
+// ============================================================================
+
+/** 调拨行（客户端提交；quantity > 0；serial-managed 每 serial 一对 Movement，数量守恒） */
+export const inventoryTransferLineCreateSchema = z.object({
+  itemId: z.string().min(1),
+  uomId: z.string().min(1).optional(), // 业务 UOM（可选；继承来源）
+  quantity: z.coerce.number().positive(), // 调拨数量（> 0；serial-managed 时须 = serialNos.length 且整数）
+  batchNo: z.string().max(100).optional(), // P5 Final：batch 精确继承（SOURCE_OUT batch=B → DESTINATION_IN batch=B）
+  serialNos: z.array(z.string().max(100)).default([]), // serial-managed：每 serial 一对 Movement（serial 精确继承不重生成；默认空数组）
+  mfgDate: z.string().max(50).optional(), // 生产日期（ISO 日期字符串，服务端转 Date）
+  expDate: z.string().max(50).optional(), // 有效期至（ISO 日期字符串，服务端转 Date）
+  remark: z.string().max(500).optional(),
+});
+
+/** 调拨单创建（DRAFT；创建即取号 TRF；source/destination 仓库必填，location 若提供必须属于对应仓库） */
+export const inventoryTransferCreateSchema = z.object({
+  sourceWarehouseId: z.string().min(1),
+  sourceLocationId: z.string().min(1).optional(),
+  destinationWarehouseId: z.string().min(1),
+  destinationLocationId: z.string().min(1).optional(),
+  remark: z.string().max(500).optional(),
+  lines: z.array(inventoryTransferLineCreateSchema).min(1, '至少需要一行'),
+});
+
+/** 调拨单更新（仅 DRAFT；version 乐观锁；行整体替换；warehouse/location 组合 FK 同属校验） */
+export const inventoryTransferUpdateSchema = z.object({
+  version: z.number().int().positive(),
+  sourceWarehouseId: z.string().min(1).optional(),
+  sourceLocationId: z.string().min(1).nullable().optional(),
+  destinationWarehouseId: z.string().min(1).optional(),
+  destinationLocationId: z.string().min(1).nullable().optional(),
+  remark: z.string().max(500).nullable().optional(),
+  lines: z.array(inventoryTransferLineCreateSchema).min(1).optional(),
+});
+
+/** 调拨提交（真 Gate：DRAFT → SUBMITTED；version 乐观锁；触发审批 maybeTriggerApproval） */
+export const inventoryTransferSubmitSchema = z.object({
+  version: z.number().int().positive(),
+});
+
+/** 调拨取消（DRAFT/APPROVED → CANCELLED；version 乐观锁；SUBMITTED 需先 Withdraw 审批） */
+export const inventoryTransferCancelSchema = z.object({
+  version: z.number().int().positive(),
+});
+
+/** 调拨执行（真 Gate：APPROVED → EXECUTED；version 乐观锁 + 幂等 ALREADY_EXECUTED；Shared LedgerCommand 双 atom 同事务） */
+export const inventoryTransferExecuteSchema = z.object({
+  version: z.number().int().positive(),
+});

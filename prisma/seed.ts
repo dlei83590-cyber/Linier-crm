@@ -127,6 +127,8 @@ const SEED_ACTION_MODULES = [
   "inspection",
   "warehouse-receipt",
   "purchase-return",
+  // Sprint 6B：Inventory Operations 模块（动作映射：create→inventory-transfer:create（创建即取号）；submit→inventory-transfer:edit（复用统一 RBAC，不新造 submit 体系——对齐 5A 拍板）；approve→inventory-transfer:approve；execute→inventory-transfer:edit（对齐 5B post→:edit 先例）；cancel DRAFT/SUBMITTED→inventory-transfer:close；line 仅 view/edit——见 SEED_RESTRICTED_ACTION_PERMISSIONS）
+  "inventory-transfer",
   // Sprint 3A：平台底座模块
   "workflow-definition",
   "workflow-step",
@@ -181,6 +183,9 @@ const SEED_RESTRICTED_ACTION_PERMISSIONS: Array<{ name: string; code: string; mo
   { name: "edit warehouse-receipt-line", code: "warehouse-receipt-line:edit", module: "warehouse-receipt-line" },
   { name: "view purchase-return-line", code: "purchase-return-line:view", module: "purchase-return-line" },
   { name: "edit purchase-return-line", code: "purchase-return-line:edit", module: "purchase-return-line" },
+  // Sprint 6B：Inventory Transfer 子资源（line 受限 view/edit——行由单据驱动，客户端不直接改行；对齐 5A/5B line 模式）
+  { name: "view inventory-transfer-line", code: "inventory-transfer-line:view", module: "inventory-transfer-line" },
+  { name: "edit inventory-transfer-line", code: "inventory-transfer-line:edit", module: "inventory-transfer-line" },
 ];
 
 // Sprint 6A：Inventory Ledger 受限系统权限（consume 为后台执行动作——**不进入全局 PERMISSION_ACTIONS**（consume 非通用 CRUD action）；仅 SUPER_ADMIN/ADMIN 静态授权（见 packages/shared/src/rbac/index.ts SYSTEM_PERMISSIONS）；Manager/Member/Viewer 默认无权限 → 403；seed 注册该 Permission 供权限矩阵/审计可见）
@@ -499,6 +504,8 @@ const SEED_DOCUMENT_SEQUENCES = [
   { code: "PRT", name: "采购退货单", docType: "PURCHASE_RETURN", prefix: "PRT", nextNo: 1, padLength: 6 },
   // Sprint 6A：Inventory Ledger Foundation 单据序列（docType=INVENTORY_MOVEMENT 为 6A 新增，prefix MV，padLength 6；幂等 upsert——Consumer 取号依赖此序列，缺失=配置错误 RETRY，**禁止 fallback**）
   { code: "MV", name: "库存流水", docType: "INVENTORY_MOVEMENT", prefix: "MV", nextNo: 1, padLength: 6 },
+  // Sprint 6B：Inventory Operations 单据序列（docType=INVENTORY_TRANSFER 为 6B 新增，prefix TRF，padLength 6；幂等 upsert——创建即取号，P2 Final 命名）
+  { code: "TRF", name: "调拨单", docType: "INVENTORY_TRANSFER", prefix: "TRF", nextNo: 1, padLength: 6 },
   { code: "PI", name: "形式发票", docType: "PROFORMA_INVOICE", prefix: "PI", nextNo: 1, padLength: 6 },
   { code: "CI", name: "商业发票", docType: "COMMERCIAL_INVOICE", prefix: "CI", nextNo: 1, padLength: 6 },
   // Sprint 4C：Delivery Foundation 单据序列（CTO 锁定：DELIVERY_ORDER / prefix DO / padLength 6；幂等 upsert）
