@@ -1,5 +1,4 @@
 import type { NextRequest } from 'next/server';
-import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from '@/lib/api-helpers';
 import { ok, fail, failValidation, parsePagination } from '@/lib/api/response';
