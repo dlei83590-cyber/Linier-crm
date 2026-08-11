@@ -357,3 +357,58 @@ if (!item.stockUomId || item.stockUomId !== conversion.baseUomId) {
 - Schema / Migration 0026 **零改动**（新错误码只落 errors.ts + route codeMap）✅
 - 未引入 Workflow、未开始 Finalization、未动 Reservation/Costing（HOLD 保持）✅
 - execute 头注释 + 事务顺序注释同步更新（Blocking ①/② 标注）
+
+---
+
+# Sprint 6B Finalization — 总收口（CTO #8726：Conversion 99/100 FINAL APPROVED，Phase 6B-4 CLOSED，四块全部 FINAL）
+
+> 阶段：Sprint 6B Finalization Gate（CTO #8726 指令：**不新增业务能力**，只做 QA/Test Cases 总收口 + OpenAPI 完整一致性 + EVENTS 终态 + ADR-0026 Implementation Status + ROADMAP/CHANGELOG/RELEASE_NOTES + PR #22 Scope 重定义 + 全局红线扫描）。
+> 状态：⏳ Finalization 文档完成，commit/push/CI 后 STOP → CTO Sprint 6B Final Review → 通过后才允许 Merge PR #22。
+
+## 1. Sprint 6B 四块 Vertical Slice FINAL 状态矩阵
+
+| 模块 | Phase | 最终 commit | CTO Review | 状态 |
+| --- | --- | --- | --- | --- |
+| Shared InventoryLedgerCommand Core | 6B-1 | `624b996`（Core 2 Blocking 修复） | #8233 98/100 FINAL APPROVED | ✅ CLOSED |
+| Inventory Transfer | 6B-2 | `842c00d`（2 Blocking 修复） | #8471 98/100 FINAL APPROVED | ✅ CLOSED |
+| Stock Count | 6B-3 | `31059bc`（2 Blocking 修复） | #8658 98/100 FINAL APPROVED | ✅ CLOSED |
+| Inventory Adjustment | 6B-3 | `31059bc` | #8658 98/100 FINAL APPROVED | ✅ CLOSED |
+| Inventory Conversion / Repack | 6B-4 | `f54b300`（2 Hardening Fixes） | #8726 99/100 FINAL APPROVED | ✅ CLOSED |
+
+**六 A SSOT 统一性**：四类库存变化均服从 **Business Fact → Shared InventoryLedgerCommand → immutable InventoryMovement → StockProjection**，无第二套库存写入路径（CTO #8726 确认）。
+
+## 2. 全局红线扫描（Finalization 强制项）
+
+| # | 红线 | 结果 |
+| --- | --- | --- |
+| R1 | **0 个业务 route 直接写 InventoryMovement / StockProjection** | ✅ 全仓 grep：`inventoryMovement.create/update/delete`、`stockProjection.create/update/upsert/delete` 在 `apps/web/src/app/api/**/route.ts` **零命中**；四模块只经 `executeLedgerAtoms` |
+| R2 | **Reservation / ReservedQty / AvailableQty 未进入 6B** | ✅ 零 reservation API 目录；无 ReservedQty/availableQty 库存投影引用 |
+| R3 | **Costing / FIFO / Moving Average 未进入 6B** | ✅ 零 costing/fifo API；`InventoryMovementType` 枚举 TRANSFER_OUT/TRANSFER_IN/CONSUME/PRODUCE/ADJUSTMENT 仍标"未来"（本轮以 direction OUT/IN + movementRole 表达） |
+| R4 | **sourceType 集合收敛** | ✅ 仅 6A/6B 五类 + REVERSAL/CORRECTION（预留）：WAREHOUSE_RECEIPT_POSTED / PURCHASE_RETURN_RETURNED / TRANSFER / ADJUSTMENT / CONVERSION；**无 STOCK_COUNT sourceType**（CTO #8471 红线保持） |
+| R5 | **终态证据 CHECK 完整性** | ✅ Migration 0026：EXECUTED ⇒ movementGroupId/executedAt/executedById；APPLIED ⇒ approvedById/appliedById/appliedAt；maker-checker CHECK×2（approvedById/appliedById ≠ createdById） |
+| R6 | **Sequence fail closed** | ✅ TRF/CNT/ADJ/CVT 四序列缺失均抛专用配置错误（500），零 fallback 临时编号 |
+
+## 3. 文档总收口清单
+
+| 文档 | 状态 |
+| --- | --- |
+| docs/EVENTS.md | ✅ v1.29：4 个 6B 业务事件 ⏳→✅（InventoryTransferExecuted / InventoryCountCompleted / InventoryAdjustmentApplied / InventoryConversionExecuted） |
+| docs/ADR/ADR-0026 | ✅ v0.5 **Implemented** + Implementation Status I1-I11（对齐 ADR-0025 模式） |
+| docs/ROADMAP.md | ✅ Sprint 6 状态行 + §8 段：6A ✅ + 6B 四块 ✅（PR #22 待 Final Review） |
+| docs/CHANGELOG.md | ✅ Unreleased 新增 Sprint 6B 段（四模块 + Shared Core + 事件 + 边界） |
+| docs/RELEASE_NOTES.md | ✅ 新增 Sprint 6B 段（业务可感知能力 + 边界说明） |
+| docs/openapi.yaml | ✅ Sprint 6B 段完整：4 tags × 5 endpoints（transfers/stock-counts/inventory-adjustments/inventory-conversions 各 list+create/get+patch/submit/execute|apply|complete/cancel）+ components（每模块 Create/Update/Line/Response/List + 终态响应） |
+| docs/qa/Sprint6B_QA.md | ✅ 本文件：6B-1（Core）/6B-2（Transfer）/6B-3（Count+Adjustment）/6B-4（Conversion）/6B-4.1（2 Hardening Fixes）/Finalization 六段 |
+| docs/test-cases/ | ✅ 三份终检：InventoryTransfer_API.md（A-H）/ StockCount_Adjustment_API.md（A-K）/ Conversion_API.md（A-H，含 E13-E18/H7-H8） |
+
+## 4. Release Gate（CTO Sprint 6B Final Review 前必须满足）
+
+1. 四块 Vertical Slice 全部 FINAL APPROVED（#8471/#8658/#8726），Blocking 0 ✅
+2. 全局红线扫描 R1-R6 全 PASS ✅
+3. EVENTS 终态（v1.29）+ ADR-0026 Implemented（I1-I11）+ ROADMAP/CHANGELOG/RELEASE_NOTES 同步 ✅
+4. OpenAPI 完整一致性（4 tags × 5 endpoints + components）✅
+5. PR #22 Scope 重定义完成（Design First → 完整实现 + Finalization）✅
+6. CI 全绿（run #230 @ f54b300 为 Finalization 前基线；Finalization commit 待 run）
+7. **Reservation / Costing / FIFO / Moving Average 零实现（HOLD 保持）** ✅
+8. Shared Core 零改动（四块全链）✅
+9. Migration 0026 未进 main（0026 直接修不建 0027）；PR #22 通过 CTO Final Review 后才允许 Merge
