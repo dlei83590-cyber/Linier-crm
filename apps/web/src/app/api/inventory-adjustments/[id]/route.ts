@@ -99,11 +99,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if (cur.status !== 'DRAFT') return { ok: false as const, error: 'INVALID_STATE' };
       if (cur.version !== version) return { ok: false as const, error: 'VERSION_CONFLICT' };
 
-      // ② effective 值
-      const effectiveSourceCountId = fields.reasonCode !== undefined || fields.lines !== undefined
-        ? (fields.reasonCode !== undefined ? cur.sourceStockCountId : cur.sourceStockCountId)
-        : cur.sourceStockCountId;
-      void effectiveSourceCountId; // sourceStockCountId 本轮不支持编辑（来源事实不可改），保留原值
+      // ② sourceStockCountId 本轮不支持编辑（来源事实不可改，保留原值）——直接使用 cur.sourceStockCountId
 
       // ③ 行处理（lines 提供 → 全量替换）
       let lineCreate: Array<Prisma.InventoryAdjustmentLineCreateManyInput> | undefined;

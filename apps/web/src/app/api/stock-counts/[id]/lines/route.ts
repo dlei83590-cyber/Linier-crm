@@ -49,7 +49,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   let result:
-    | { ok: true; count: NonNullable<Awaited<ReturnType<typeof prisma.stockCount.findFirst>>> }
+    | {
+        ok: true;
+        count: NonNullable<Awaited<ReturnType<typeof prisma.stockCount.findFirst>>> & {
+          lines: Array<{ id: string }>;
+        };
+      }
     | { ok: false; error: string }
     | undefined;
 

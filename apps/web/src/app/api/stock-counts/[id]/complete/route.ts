@@ -41,7 +41,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   let result:
     | {
         ok: true;
-        count: NonNullable<Awaited<ReturnType<typeof prisma.stockCount.findFirst>>>;
+        count: NonNullable<Awaited<ReturnType<typeof prisma.stockCount.findFirst>>> & {
+          lines: Array<{
+            id: string;
+            warehouseId: string;
+            locationId: string | null;
+            itemId: string;
+            batchNo: string | null;
+            serialNo: string | null;
+            countedQty: Prisma.Decimal;
+            bookQtyAtCount: Prisma.Decimal;
+            varianceQty: Prisma.Decimal | null;
+          }>;
+        };
         adjustment: { id: string; adjustmentNo: string } | null;
       }
     | { ok: false; error: string }
