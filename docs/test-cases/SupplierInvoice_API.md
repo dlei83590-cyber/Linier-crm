@@ -84,3 +84,26 @@
 | G3 | 金额服务端 | schema 不收金额；helpers.computeSupplierInvoiceLineAmounts 唯一金额入口 |
 | G4 | Submit 不建 AP | submit 路由 0 处 supplierInvoiceMatchRun/grirRecord/apLiabilityFact create（5C-1B/1C） |
 | G5 | Migration 0027 未动 | git diff 不含 prisma/migrations/0027_*（FROZEN BASELINE） |
+
+## H. Immutable 3-Way Match（5C-1B——Match/Approval 分层，CTO #9238/#9247）
+
+| # | 用例 | 场景 | 预期 |
+| --- | --- | --- | --- |
+| H1 | **首次 Match revision=1** | SUBMITTED 发票 + 双溯源行 → POST /:id/match | 200；MatchRun revision=1；MatchLine snapshot 全服务端；documentStatus=MATCHED |
+| H2 | **重复 Match 追加 revision** | MATCHED 发票再 match | 200；新 MatchRun revision=2（旧 run 保留审计）；currentMatchRunId 指向 revision=2 |
+| H3 | **两并发 Match 不产生相同 revision** | 两个请求同时 POST /:id/match | header FOR UPDATE 串行化——第二个 revision=2（不重复）；DB UNIQUE(supplierInvoiceId, revision) 兜底 |
+| H4 | **历史 Run/Line 无法修改** | UPDATE/DELETE 已创建 MatchRun/MatchLine | DB immutable trigger 拒绝（forbid_matchrun_mutation） |
+| H5 | **来源链 Submit 后失效 → Match fail closed** | Submit 后 WHR 状态/来源被改 → Match | 400 WHR_NOT_POSTED / SOURCE_CHAIN_MISMATCH / ITEM_INVALID / CUMULATIVE_QTY_EXCEEDED（Match 时重新验证，不信任 Submit 结果） |
+| H6 | **客户端无法伪造 variance** | 请求 body 带 poQty/qtyVariance/result 等计算字段 | 字段被忽略（schema 只收 version）；snapshot 全服务端生成 |
+| H7 | **current projection 指向最新 Run** | 多次 Match 后查发票/行 | currentMatchRunId = 最新 run；currentMatchStatus/matchedQty/variance* 同步最新 |
+| H8 | **旧 Workflow approval 遇 re-match 被拒绝** | Match rev1 → 触发审批 → re-match rev2 → 旧审批 COMPLETED | syncSupplierInvoiceApproval stale 校验失败（绑定 run != current）→ fail closed（不批准新 snapshot） |
+| H9 | **Approval 引用正确 run+revision** | Match rev1 → 审批 COMPLETED（无 re-match） | approvedMatchRunId=rev1 run、approvedMatchRevision=1 固化；documentStatus=APPROVED；MatchRun 自身无 approvedAt/approvedById（不 mutates） |
+| H10 | **Match/Approval 均不产生 GRIR/AP/POSTED** | Match + APPROVED 后检查 | 0 GrirRecord/ApLiabilityFact/ApOpenItem create；postedAt/postedById 为 NULL（5C-1C 才实现） |
+
+### H 段静态核验（红线 grep）
+| # | 检查 | 预期 |
+| --- | --- | --- |
+| H11 | Match Engine 0 直写 GRIR/AP/OpenItem/POSTED | match-helpers.ts 0 处 grirRecord/apLiabilityFact/apOpenItem/postedAt create/update |
+| H12 | Match route 不写 approved* | match/route.ts 0 处 approvedMatchRunId/approvedMatchRevision update（仅 maybeTrigger 传参） |
+| H13 | revision 锁内计算 | runMatch 中 FOR UPDATE 在 aggregate max(revision) 之前 |
+| H14 | re-match 门禁 | APPROVED/POSTED/CANCELLED → 409 MATCH_NOT_MATCHABLE |

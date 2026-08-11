@@ -11895,6 +11895,55 @@ paths:
         "409":
           description: Conflict（非 DRAFT / 版本冲突）
 
+  /api/supplier-invoices/{id}/match:
+    post:
+      tags: [Supplier Invoices]
+      summary: Immutable 3-Way Match（SUBMITTED/MATCHED → MATCHED，追加 immutable revision；Match/Approval 分层）
+      description: |
+        **Immutable 3-Way Match（CTO #9238/#9247）**：SUBMITTED/MATCHED → MATCHED（追加 immutable revision）。
+        Match Engine（runMatch）事务内固定顺序：FOR UPDATE 锁 SupplierInvoice header（唯一串行点）→ 重读状态/current run →
+        状态门禁（SUBMITTED/MATCHED 可进；APPROVED/POSTED/CANCELLED 禁直接 re-match → 409 MATCH_NOT_MATCHABLE）→
+        CAS version → 锁内算 next revision（max+1）→ 来源链重验（WHR POSTED + 链一致 + Item ACTIVE + 累计守恒）→
+        服务端 snapshot 计算（poQty/receiptQty/invoiceQty/poUnitPrice/invoiceUnitPrice/qtyVariance/priceVariance/
+        taxVariance/result/disposition——**客户端不得上传计算结果**）→ 创建 MatchRun + MatchLines（immutable，DB trigger 兜底）→
+        更新 current projection（header.currentMatchRunId + lines currentMatchRunId/currentMatchStatus/matchedQty/variance*）→
+        CAS documentStatus → MATCHED（version+1）。
+        **Match API 自己不写 approvedMatchRunId/approvedMatchRevision**（Approval 单独接 Workflow——#9238；
+        Match 成功后 maybeTrigger 把 matchRunId+revision 绑定进 workflow business context——#9247 细节③）。
+        红线：不创建 GrirRecord/ApLiabilityFact/ApOpenItem；不写 postedAt/postedById；不接 CN/DN。
+        权限：supplier-invoice:edit。
+      operationId: matchSupplierInvoice
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierInvoiceVersionRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierInvoiceMatchResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（非 MATCHABLE / 版本冲突）
+
 components:
   securitySchemes:
     bearerAuth:
@@ -18875,3 +18924,63 @@ components:
                   documentStatus: { type: string }
                   settlementStatus: { type: string }
                   grossAmount: { type: string }
+
+    SupplierInvoiceMatchResponse:
+      type: object
+      required: [success, data]
+      description: 5C-1B Immutable 3-Way Match 响应（Match/Approval 分层——CTO #9238/#9247）
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            invoice:
+              type: object
+              properties:
+                id: { type: string }
+                invoiceNo: { type: string }
+                documentStatus: { type: string }
+                currentMatchRunId: { type: [string, "null"], description: 当前投影（历史走 immutable MatchRun） }
+                lines:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      currentMatchStatus: { type: string, enum: [MATCHED, VARIANCE, PENDING] }
+                      currentMatchRunId: { type: [string, "null"] }
+                      matchedQty: { type: string, description: = min(invoiceQty, 可用入库量)（Decimal 字符串，服务端） }
+                      varianceQty: { type: string }
+                      variancePrice: { type: string }
+                      varianceTax: { type: string }
+            matchRun:
+              type: object
+              description: immutable MatchRun（DB trigger 禁止后续 UPDATE/DELETE）
+              properties:
+                id: { type: string }
+                runNo: { type: integer }
+                revision: { type: integer, description: 不可变快照标识（Approval 引用） }
+                result: { type: string, enum: [MATCHED, VARIANCE] }
+                disposition: { type: string, enum: [ACCEPT, REJECT, HOLD, CREATE_CN_DN] }
+                runAt: { type: string, format: date-time }
+                runById: { type: [string, "null"] }
+                lines:
+                  type: array
+                  description: immutable MatchLines（snapshot 全服务端生成）
+                  items:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      supplierInvoiceLineId: { type: string }
+                      purchaseOrderLineId: { type: string }
+                      warehouseReceiptLineId: { type: string }
+                      poQty: { type: string }
+                      receiptQty: { type: string }
+                      invoiceQty: { type: string }
+                      poUnitPrice: { type: string }
+                      invoiceUnitPrice: { type: string }
+                      qtyVariance: { type: string }
+                      priceVariance: { type: string }
+                      taxVariance: { type: string }
+                      result: { type: string, enum: [MATCHED, VARIANCE] }
+                      disposition: { type: string, enum: [ACCEPT, REJECT, HOLD, CREATE_CN_DN] }

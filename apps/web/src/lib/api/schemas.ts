@@ -1065,3 +1065,17 @@ export const supplierInvoiceUpdateSchema = z.object({
 export const supplierInvoiceSubmitSchema = z.object({
   version: z.number().int().positive(),
 });
+
+// ============================================================================
+// Sprint 5C-1B — Immutable 3-Way Match（Match 与 Approval 分层——CTO #9238/#9247）
+// ============================================================================
+
+/**
+ * 供应商发票 Match（SUBMITTED/MATCHED → MATCHED，追加 immutable revision；version 乐观锁）
+ * **客户端不得上传任何匹配计算结果**（poQty/receiptQty/invoiceQty/poUnitPrice/invoiceUnitPrice/
+ * qtyVariance/priceVariance/taxVariance/result/disposition 全部服务端 snapshot——CTO #9238）；
+ * Match API 自己不得写 approvedMatchRunId/approvedMatchRevision（Approval 单独接 Workflow——#9238/#9247）。
+ */
+export const supplierInvoiceMatchSchema = z.object({
+  version: z.number().int().positive(),
+});

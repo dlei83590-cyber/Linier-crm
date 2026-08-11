@@ -58,3 +58,32 @@
 - 5C-1B：Immutable 3-Way Match（MatchRun 创建 / revision 并发 / current projection / Workflow approval 引用 immutable matchRunId/revision）
 - 5C-1C：POST 最终 Gate / consume GRIR / ApLiabilityFact / ApOpenItem 初始 Projection / maker-checker（红线 ②③④ 在此落地）
 - 5C-2：Supplier CN/DN + Payment Allocation（独立 Gate）；GL / Costing / Reservation 继续 HOLD
+
+## 5. 5C-1B QA 段（Immutable 3-Way Match——CTO #9238/#9247）
+
+### 5.1 交付范围（新增）
+| 分组 | 文件 | 说明 |
+| --- | --- | --- |
+| Match Engine | `lib/supplier-invoice/match-helpers.ts` | `runMatch(tx, {invoiceId, version, actorId})`——FOR UPDATE 锁 header（唯一串行点）→ 状态门禁（SUBMITTED/MATCHED 可进，APPROVED/POSTED/CANCELLED 禁）→ CAS → 锁内 next revision（max+1）→ 来源链重验（复用 verifyReceiptBasedSourceChain）→ 服务端 snapshot → 创建 Run+Lines → current projection → MATCHED（同一事务） |
+| Match API | `api/supplier-invoices/[id]/match/route.ts` | POST /:id/match（只推进 MATCHED；**不写 approved\***；成功后 maybeTrigger 审批绑定 run identity + 发 SupplierInvoiceMatched） |
+| Workflow sync | `lib/supplier-invoice/workflow-sync.ts` | `maybeTriggerSupplierInvoiceApproval`（grossAmount 金额区间；SUBMIT comment 携带 {matchRunId, revision}——#9247 细节③）+ `syncSupplierInvoiceApproval`（COMPLETED → stale 校验 == current + status==MATCHED → 固化 approved\* + APPROVED；REJECTED → 保持 MATCHED 可重 Match；**绝不 UPDATE MatchRun**） |
+| 分发 | `api/workflows/instances/[id]/actions/route.ts` | businessType === 'supplier-invoice' → syncSupplierInvoiceApproval |
+| 事件 | `lib/supplier-invoice/events.ts` + EVENTS v1.32 | `SupplierInvoiceMatched` ⏳→✅（引用 immutable matchRunId + revision；不含投影余额） |
+| 文档 | openapi.yaml 5C-1B 段 + test-cases H 段 | match 端点 + MatchRun/MatchLine components + H1-H14 |
+
+### 5.2 关键不变量（CTO #9238/#9247）
+| # | 不变量 | 实现 |
+| --- | --- | --- |
+| M1 | **每次 Match 创建新 revision**（禁止 UPDATE/DELETE 历史 Run/Line） | runMatch 内 revision=max+1；MatchRun/MatchLine immutable trigger（trg_supplier_invoice_match_run/line_immutable） |
+| M2 | **revision 并发以 header lock 为唯一串行点**（禁裸 MAX+1 无锁路径） | runMatch 先 FOR UPDATE 锁 SupplierInvoice 再 aggregate max(revision) |
+| M3 | **re-match 门禁**：SUBMITTED/MATCHED 可进；APPROVED 禁直接 re-match | 状态门禁 → 409 MATCH_NOT_MATCHABLE |
+| M4 | **Match 时重新执行来源事实 Gate**（WHR POSTED + 链一致 + Item ACTIVE + 累计守恒 + 确定性锁序） | verifyReceiptBasedSourceChain 复用（含 FOR UPDATE + ORDER BY id + status='ACTIVE'） |
+| M5 | **snapshot 全服务端**（客户端不得上传计算结果） | supplierInvoiceMatchSchema 只收 version；poQty/receiptQty/invoiceQty/poUnitPrice/invoiceUnitPrice/variance/result/disposition 全服务端生成 |
+| M6 | **current projection 与 immutable history 分离** | Match 成功后才更新 header.currentMatchRunId + lines currentMatchRunId/currentMatchStatus/matchedQty/variance*（投影可更新） |
+| M7 | **Match API 不写 approved\*** | match/route.ts 0 处 approvedMatchRunId/approvedMatchRevision update |
+| M8 | **Approval references MatchRun（不 mutates）** | syncSupplierInvoiceApproval 只固化 approved\* 到 SupplierInvoice；MatchRun 自身无 approvedAt/approvedById |
+| M9 | **stale approval fail closed**（旧审批不得批准新 revision） | sync 校验 workflow 绑定 run == invoice.currentMatchRun 且 documentStatus==MATCHED，不一致抛 SUPPLIER_INVOICE_MATCH_STALE_APPROVAL |
+| M10 | **1B 零 GRIR/AP/POSTED 越界** | match-helpers 0 处 grirRecord/apLiabilityFact/apOpenItem/postedAt create/update；5C-1C 才实现 |
+
+### 5.3 Release Gate（10 项重点测试，详见 test-cases H1-H14）
+首次 Match revision=1 / 重复 Match 追加 revision / 并发不重号 / 历史不可改 / 来源链失效 fail closed / 客户端不可伪造 variance / current 指向最新 Run / 旧审批遇 re-match 拒绝 / 引用正确 run+revision / 不产生 GRIR-AP-POSTED evidence。
