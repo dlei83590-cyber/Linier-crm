@@ -50,11 +50,11 @@
 - 理由：三单匹配需要真实收货数量作匹配基准；PO-only 直票会破坏"已收未票/暂估冲销"闭环
 - 备选（后续阶段）：预付/订金场景走独立 Prepayment/Deposit 模型（不混入 Supplier Invoice）
 
-## P5：匹配结果模型 —— ✅ Final（immutable MatchRun/MatchSnapshot + current projection）
+## P5：匹配结果模型 —— ✅ Final（immutable MatchRun/MatchSnapshot + current projection；CTO #8901 最终修正）
 
 **决策（CTO）**：**❌ 原"行级内嵌 matchStatus + AuditLog"方案被否**（Blocking ②）——改为 **SupplierInvoiceMatchRun + SupplierInvoiceMatchLine（immutable Match Snapshot）**：
-- 每次匹配生成一条 Run（不可 UPDATE/DELETE，纠错追加新 Run）；`SupplierInvoiceLine.currentMatchStatus/currentMatchRunId` 只是**当前投影**
-- **审批必须引用 immutable matchRunId/revision**（可靠回答"这张发票当时为什么在 14:03 被批准？"）
+- 每次匹配生成一条 Run（**自创建后禁止任何业务字段 UPDATE/DELETE**，纠错追加新 Run）；`SupplierInvoiceLine.currentMatchStatus/currentMatchRunId` 只是**当前投影**
+- **审批事实引用 immutable matchRunId/revision**：审批证据存 Workflow / SupplierInvoice approval evidence（`approvedMatchRunId` + `approvedMatchRevision`），**MatchRun 自身无 approvedAt/approvedById——Approval references MatchRun，不 mutates MatchRun**（CTO #8901 拍板：Run 在 match 时产生不可变，Approval 发生在之后、只引用不修改；若需显式业务关联，未来可设计独立 immutable approval evidence，本阶段不另造模型）
 - 触发重算场景：后续收货 / 分批发票 / PO-receipt snapshot / 差异接受拒绝
 
 ## P6：差异处置 —— ✅ Final（tolerance policy；超阈值不得自动通过）
@@ -76,12 +76,12 @@
 - 完整生命周期：`WarehouseReceiptPosted → GRIR Accrual`；`WHR-based PurchaseReturned → GRIR Reversal/Reduction`（**只有来自已 POSTED WarehouseReceiptLine 的退货才冲减 GR/IR**——未入库拒收/退货不产生 reversal，继承 5B 区分）；`SupplierInvoice POSTED → consume/reverse remaining GRIR + create actual AP Liability`
 - **源幂等身份**：WHR Line → accrual identity；Return Line → reversal identity；Invoice Line → consume identity（防重复冲回，对齐 6A 五元幂等纪律）
 
-## P9：进项税处理 —— ✅ Final（价税分离 + **canonical basis 锁死**）
+## P9：进项税处理 —— ✅ Final（价税分离 + canonical basis 锁死；CTO #8901 最终拍板）
 
 **决策（CTO）**：**价税分离（Blocking ④）**——SupplierInvoiceLine 存 `netAmount`（不含税）+ `taxRate`（快照）+ `taxAmount`；税基 = 匹配后的净额。
 - **GR/IR baseAmount = 不含税暂估净额**：PO 含税价 normalize 成暂估净额（税率快照自 PO/税务配置）——**进项税只在合规发票事实进入时确认，暂估阶段不隐式确认 Input VAT**（中国采购业务：可抵扣进项税只在合规发票进入时确认）
 - **VAT recoverable 标记** + `Invoice POSTED` 拆分 **net liability / input VAT / total AP**
-- **不可抵扣税**处理（计入成本/费用）在 Schema 前拍板（P9 已锁方向，具体拆分实现阶段定）
+- **不可抵扣税（CTO #8901 Final 边界）**：recoverable=true → 税额进 **Input VAT component**；recoverable=false → 税额进 **nonRecoverableTaxAmount（expense-or-capitalizable component）财务事实**——5C 只保存/发布该金额事实，**不写 InventoryMovement/StockProjection/库存成本层**（不把不可抵扣税资本化进 Inventory Cost，Costing HOLD 保持），未来 Costing/GL 决定该 component 最终资本化还是费用化；**AP 总债务 = net + total tax，不因 recoverability 改变应付总额**
 
 ## P10：付款核销 —— ✅ Final（Payment 独立事实 + M:N Allocation）
 

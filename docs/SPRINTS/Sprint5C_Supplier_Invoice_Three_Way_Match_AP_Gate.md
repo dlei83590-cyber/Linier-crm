@@ -56,7 +56,7 @@ CTO #8777 明确要求：**Supplier Invoice ≠ Sales Invoice 反向版**。每�
 | 业务含义 | 将供应商发票与 **PO（承诺）** + **收货/入库事实（WarehouseReceipt）** 三方核对，确认"订购了什么、实际到了什么、供应商收多少钱"三者一致 |
 | 匹配维度 | **数量差异**（invoiceQty vs receiptQty vs poQty）、**单价差异**（invoiceUnitPrice vs PO 快照单价）、**税额差异**（invoiceTax vs 计算税） |
 | 事实属性 | 匹配结果（MATCHED / VARIANCE）、差异明细（qtyVariance / priceVariance / taxVariance）、处置（接受差异 / 拒绝 / 挂起） |
-| **不可变 Match Run（CTO #8845 Blocking ②）** | **匹配历史必须可审计**：三单匹配可能因后续收货 / 分批发票 / snapshot / 差异处置**多次重算**——必须用 **SupplierInvoiceMatchRun + SupplierInvoiceMatchLine**（或等价 revision 模型）保存每次匹配的不可变快照；SupplierInvoiceLine 上保留 `currentMatchStatus` 作为**当前投影**，但**审批必须引用 immutable `matchRunId/revision`**（回答"这张发票当时为什么在 14:03 被批准？"） |
+| **不可变 Match Run（CTO #8845 Blocking ② + #8901 最终修正）** | **匹配历史必须可审计**：三单匹配可能因后续收货 / 分批发票 / snapshot / 差异处置**多次重算**——必须用 **SupplierInvoiceMatchRun + SupplierInvoiceMatchLine**（或等价 revision 模型）保存每次匹配的不可变快照；SupplierInvoiceLine 上保留 `currentMatchStatus` 作为**当前投影**；**审批事实引用 immutable `matchRunId/revision`**（存 `approvedMatchRunId/approvedMatchRevision` 于 Workflow/Invoice approval evidence，**MatchRun 自身无 approvedAt/approvedById——Approval references MatchRun，不 mutates MatchRun**；回答"这张发票当时为什么在 14:03 被批准？"） |
 | 关键约束 | **匹配是校验事实，不是冲销事实**——差异处置后才会形成 AP Liability；差异超阈值需审批（Workflow）或生成 Supplier Credit/Debit Note |
 
 ### 2.3 应付账款（AP Liability）——应付债务事实
@@ -76,7 +76,7 @@ CTO #8777 明确要求：**Supplier Invoice ≠ Sales Invoice 反向版**。每�
 | 触发方 | 系统（WarehouseReceipt Posted 时自动生成暂估） |
 | **完整生命周期（CTO #8845 Blocking ①）** | ① `WarehouseReceiptPosted` → **GRIR Accrual**（按 PO 快照单价 × 已入库数量）；② `WarehouseReceipt-based PurchaseReturned` → **GRIR Reversal/Reduction**（已入库后退货冲减暂估——**只有来自已 POSTED WarehouseReceiptLine 的退货才冲减 GR/IR**；未入库拒收/退货不产生 GR/IR reversal，继承 5B 区分）；③ `SupplierInvoice POSTED` → **consume/reverse remaining GRIR + create actual AP Liability**。**源幂等身份**：WHR Line → GRIR accrual identity；Return Line → GRIR reversal identity（防重复冲回，对齐 6A 五元幂等纪律） |
 | 与发票关系 | 到票时**冲销剩余暂估**（到票冲暂估），按发票实际金额确认 AP；暂估与实票差异计入差异处置 |
-| **金额口径（CTO #8845 Blocking ④）** | **GR/IR baseAmount 必须明确 net/tax canonical basis**：PO 含税价如何 normalize 成暂估净额（税率快照自 PO/税务配置）；`GRIR baseAmount` = **不含税暂估净额**（进项税只在合规发票事实进入时确认——不在暂估阶段隐式确认 Input VAT）；`VAT recoverable` 标记 + `Invoice POSTED` 拆分 **net liability / input VAT / total AP**；**不可抵扣税**处理（计入成本/费用）待 Schema 前拍板（P9） |
+| **金额口径（CTO #8845 Blocking ④ + #8901 P9 Final）** | **GR/IR baseAmount 必须明确 net/tax canonical basis**：PO 含税价如何 normalize 成暂估净额（税率快照自 PO/税务配置）；`GRIR baseAmount` = **不含税暂估净额**（进项税只在合规发票事实进入时确认——不在暂估阶段隐式确认 Input VAT）；`VAT recoverable` 标记 + `Invoice POSTED` 拆分 **net liability / input VAT / total AP**；**不可抵扣税（P9 Final，CTO #8901 拍板）**：recoverable=true → 税额进 **Input VAT component**；recoverable=false → 税额进 **nonRecoverableTaxAmount（expense-or-capitalizable component）财务事实**——5C 只保存/发布该金额事实，**不写 InventoryMovement/StockProjection/库存成本层**（不把不可抵扣税资本化进 Inventory Cost），未来 Costing/GL 决定最终资本化或费用化；**AP 总债务 = net + total tax，不因 recoverability 改变应付总额** |
 
 ### 2.5 Supplier Credit / Debit Note（供应商贷项/借项通知）——发票调整事实
 
@@ -124,7 +124,7 @@ PO Commitment（5A，已 Implemented）
 | 4.5 | **数量差异** | invoiceQty > 已收数量 → 部分匹配/挂起（未收货部分不可入 AP）；invoiceQty < 已收数量 → 差异处置（CREDIT_ONLY 或 Supplier CN） |
 | 4.6 | **单价差异** | invoiceUnitPrice ≠ PO 快照单价 → 差异审批（Workflow）或 Supplier CN/DN；超容差 fail closed（对齐 5B 超收容差模式） |
 | 4.7 | **税额差异** | 进项税：invoiceTax ≠ 服务端计算税 → 差异处置（税务快照/税率配置）；进项税凭证归属 GL 边界（§10） |
-| 4.8 | **进项税（P9 Final）** | **价税分离**：SupplierInvoiceLine 存 netAmount（不含税）+ taxRate（快照）+ taxAmount；税基 = 匹配后的净额；**VAT recoverable 标记** + Invoice POSTED 拆分 **net liability / input VAT / total AP**；**不可抵扣税**处理（计入成本/费用）在 Schema 前拍板（P9）；进项税凭证归属 GL 边界（§10） |
+| 4.8 | **进项税（P9 Final，CTO #8901 最终拍板）** | **价税分离**：SupplierInvoiceLine 存 netAmount（不含税）+ taxRate（快照）+ taxAmount；税基 = 匹配后的净额；**VAT recoverable 标记** + Invoice POSTED 拆分 **net liability / input VAT / total AP**；**不可抵扣税（Final）**：recoverable=true → Input VAT component；recoverable=false → **nonRecoverableTaxAmount（expense-or-capitalizable component）财务事实**——5C 只保存/发布该金额事实，**不写库存成本层**（Costing HOLD 保持），未来 Costing/GL 决定资本化/费用化；**AP 总债务 = net + total tax，不因 recoverability 改变**；进项税凭证归属 GL 边界（§10） |
 | 4.9 | **发票多次/分批到票** | 一张 PO 可对应多张 Supplier Invoice（部分开票）；累计开票金额 ≤ PO 行可开票余额（锁内重算防超开，对齐 4E Partial Billing + 5B 来源可退余额模式） |
 | 4.10 | **Credit Note / Supplier Debit/Credit** | Supplier CN（冲减 AP）/ Supplier DN（增加 AP）；signed adjustment（CN<0/DN>0）+ 累计防超调锁内重算（对齐 4E-3 模式，方向相反）；**独立事实，不能修改已 POSTED Invoice（P7 Final）** |
 | 4.11 | **AP Open Item（P10 相关）** | **materialized projection / read model**（CTO #8845 Blocking ③）——不是财务事实源；`openAmount` = **Liability + CN/DN - Allocations** 的 reconciliation 结果（服务端计算）；到期日/账龄（对齐 4E-1 AR aging 模式，方向相反） |

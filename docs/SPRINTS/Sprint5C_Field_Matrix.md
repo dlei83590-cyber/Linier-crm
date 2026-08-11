@@ -52,6 +52,8 @@
 | netAmount | 行净额 | Decimal(18,2)，服务端计算 | = quantity × unitPrice（Decimal 聚合） |
 | taxRate | 税率快照 | Decimal(6,4) | 开票时点税率冻结（对齐 4D 快照税务） |
 | taxAmount | 行税额 | Decimal(18,2)，服务端计算 | = netAmount × taxRate |
+| **vatRecoverable** | 进项税是否可抵扣（P9 Final，CTO #8901） | boolean | recoverable=true → 税额进 Input VAT component；recoverable=false → 进 nonRecoverableTaxAmount |
+| **nonRecoverableTaxAmount** | 不可抵扣税额（P9 Final，CTO #8901） | Decimal(18,2)，服务端计算 | recoverable=false 时 = taxAmount（expense-or-capitalizable component **财务事实**）；5C 只保存/发布该金额，**不写库存成本层**（Costing HOLD），未来 Costing/GL 决定资本化/费用化；AP 总债务 = net + total tax 不因 recoverability 改变 |
 | **currentMatchStatus** | 行匹配结果（**当前投影**） | enum：`MATCHED / QTY_VARIANCE / PRICE_VARIANCE / TAX_VARIANCE / OVER_INVOICE / UNDER_INVOICE` | 三单匹配行级结果；**历史走 immutable MatchRun**（Blocking ②） |
 | **currentMatchRunId** | 当前匹配 Run 引用 | FK → SupplierInvoiceMatchRun | **审批必须引用 immutable matchRunId/revision**（Blocking ②） |
 | varianceQty / variancePrice / varianceTax | 差异明细 | Decimal | 数量/单价/税额差异（绝对值 + 方向） |
@@ -63,7 +65,8 @@
 ## 2. SupplierInvoiceMatchRun + SupplierInvoiceMatchLine（**immutable Match Snapshot**，Blocking ② Final）
 
 > **CTO #8845 Blocking ②**：三单匹配可能因后续收货 / 分批发票 / snapshot / 差异处置**多次重算**——只靠 InvoiceLine 当前字段 + AuditLog 无法回答"这张发票当时为什么在 14:03 被批准？"。
-> **拍板**：**不可变 MatchRun/MatchSnapshot**（每次匹配生成一条 Run，不可 UPDATE/DELETE，纠错追加新 Run）；`SupplierInvoiceLine.currentMatchStatus/currentMatchRunId` 只是**当前投影**；**审批必须引用 immutable matchRunId/revision**。
+> **拍板（CTO #8901 最终修正）**：**不可变 MatchRun/MatchSnapshot**（每次匹配生成一条 Run，**自创建后禁止业务字段 UPDATE/DELETE**，纠错追加新 Run）；`SupplierInvoiceLine.currentMatchStatus/currentMatchRunId` 只是**当前投影**；**审批事实引用 immutable matchRunId/revision**。
+> **Approval → references MatchRun（不是 mutates MatchRun）**：审批证据存现有 Workflow / SupplierInvoice approval evidence（`approvedMatchRunId` + `approvedMatchRevision`），**MatchRun 自身不保存审批后写入字段**（无 approvedAt/approvedById）——Run 在 match 时产生、不可变，Approval 发生在之后、只引用不修改。
 
 ### 2.1 SupplierInvoiceMatchRun（匹配 Run 头——不可变）
 
@@ -76,8 +79,9 @@
 | runAt / runById | 匹配时点 | date-time / FK → User | |
 | result | 头级结果 | enum：`MATCHED / VARIANCE` |
 | disposition | 头级处置 | enum：`ACCEPT / REJECT / HOLD / CREATE_CN_DN` | 触发 Workflow 审批条件 |
-| approvedAt / approvedById | 审批证据 | date-time / FK → User（可空） | **审批引用此 immutable runId** |
 | createdById | 审计 | FK → User | |
+
+> **审批证据不在 MatchRun 上（CTO #8901）**：`approvedAt/approvedById` 已删除——审批事实存 SupplierInvoice/Workflow approval evidence（`approvedMatchRunId` + `approvedMatchRevision` 引用此不可变 Run），**MatchRun 自创建后禁止任何业务字段 UPDATE/DELETE**（不可变快照纪律，对齐 6A Movement 不可变）。
 
 ### 2.2 SupplierInvoiceMatchLine（匹配 Run 行——不可变）
 

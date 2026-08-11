@@ -32,7 +32,7 @@ Sprint 6B CLOSED 后，采购库存链（PO → PurchaseReceipt → Inspection �
 - 匹配维度：**数量**（invoiceQty vs receiptQty vs poQty）、**单价**（invoiceUnitPrice vs PO 快照）、**税额**（invoiceTax vs 服务端计算税）
 - 差异处置（接受差异 / 拒绝 / 挂起 / 生成 Supplier CN-DN）后才进入 AP Liability
 - 数量差异红线：**invoiceQty > 已收数量部分不可入 AP**（未收货部分不能形成应付）；invoiceQty < 已收数量 → 差异处置
-- **Blocking ②**：匹配可能因后续收货 / 分批发票 / snapshot / 差异处置**多次重算**——必须 **SupplierInvoiceMatchRun + MatchLine**（不可变快照，每次匹配一条 Run，不可 UPDATE/DELETE）；`SupplierInvoiceLine.currentMatchStatus/currentMatchRunId` 只是**当前投影**；**审批必须引用 immutable matchRunId/revision**（可靠回答"这张发票当时为什么在 14:03 被批准？"）
+- **Blocking ②**：匹配可能因后续收货 / 分批发票 / snapshot / 差异处置**多次重算**——必须 **SupplierInvoiceMatchRun + MatchLine**（不可变快照，每次匹配一条 Run，**自创建后禁止业务字段 UPDATE/DELETE**）；`SupplierInvoiceLine.currentMatchStatus/currentMatchRunId` 只是**当前投影**；**审批事实引用 immutable matchRunId/revision**（存 `approvedMatchRunId/approvedMatchRevision` 于 Workflow/Invoice approval evidence，**MatchRun 自身无 approvedAt/approvedById——Approval references MatchRun，不 mutates MatchRun**；可靠回答"这张发票当时为什么在 14:03 被批准？"）
 
 ### D3：暂估应付（GR/IR）= 过渡投影，不是真实债务；**完整生命周期含 Purchase Return 冲回（CTO #8845 Blocking ①）**
 
@@ -56,7 +56,7 @@ Sprint 6B CLOSED 后，采购库存链（PO → PurchaseReceipt → Inspection �
 
 - **价税分离（P9 Final）**：SupplierInvoiceLine 存 `netAmount`（不含税）+ `taxRate`（快照）+ `taxAmount`；税基 = 匹配后的净额
 - **GR/IR baseAmount = 不含税暂估净额**：PO 含税价如何 normalize 成暂估净额（税率快照自 PO/税务配置）——**进项税只在合规发票事实进入时确认，暂估阶段不隐式确认 Input VAT**
-- **VAT recoverable 标记** + `Invoice POSTED` 拆分 **net liability / input VAT / total AP**；**不可抵扣税**处理（计入成本/费用）在 Schema 前拍板（P9）
+- **VAT recoverable 标记** + `Invoice POSTED` 拆分 **net liability / input VAT / total AP**；**不可抵扣税（P9 Final，CTO #8901 拍板）**：recoverable=true → 税额进 **Input VAT component**；recoverable=false → 税额进 **nonRecoverableTaxAmount（expense-or-capitalizable component）财务事实**——5C 只保存/发布该金额事实，**不写 InventoryMovement/StockProjection/库存成本层**（不把不可抵扣税资本化进 Inventory Cost），未来 Costing/GL 决定最终资本化或费用化；**AP 总债务 = net + total tax，不因 recoverability 改变应付总额**
 - 税额差异（invoiceTax ≠ 服务端计算税）→ 差异处置（税务快照/税率配置）
 
 ### D6：Supplier CN / DN = 供应商调整事实（方向与 4E 相反；**P7 Final：独立事实**）
