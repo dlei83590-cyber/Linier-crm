@@ -293,3 +293,67 @@ Sprint 6B-4 Conversion Vertical Slice 进入 CTO Conversion Review 前必须满�
 7. OpenAPI Sprint 6B-4 段（端点 + components）已补齐；
 8. EVENTS.md v1.28 载荷对齐（InventoryConversionExecuted 已注册，无需扩事件）；
 9. Reservation/Costing 零实现（HOLD 保持）。
+
+---
+
+# Sprint 6B-4.1 — CTO Conversion Review（#8706）2 Required Hardening Fixes 修复记录
+
+> CTO Conversion Review 结论：**96/100 — APPROVED WITH 2 REQUIRED HARDENING FIXES**（Blocking ① + Blocking ②）。
+> 其余 Gate 全 PASS：Same-item structural enforcement / 1 CONSUME+1 PRODUCE / Batch inheritance / Serial boundary /
+> Caller-owned transaction / Shared Core 零改动 / Stable movementGroupId / CVT sequence fail-closed / Scope governance。
+> CTO 原则：**Create validation 不能替代 posting/execution-time validation。最终产生 InventoryMovement 的边界必须自行证明事实成立。**
+> 指令范围：只改 Execute canonical validation + 对应错误码 + QA/Test Cases/OpenAPI 错误契约；不改 Shared Core、不改 Schema/Migration 0026、
+> 不引入 Workflow、不开始 Finalization。Reservation / Costing 继续 HOLD。
+
+## Blocking ① — Execute 必须重新验证 canonical baseQuantity ✅
+
+**问题**：原 execute 只做守恒复核（`CONSUME.baseQuantity == PRODUCE.baseQuantity`）。"两边相等"不足以证明库存事实正确——
+错误数据 `9 == 9` 也守恒，但如果 canonical 应为 `10`，仍是错误库存事实。
+
+**修复**（`[id]/execute/route.ts` ⑤，在守恒校验之前）：
+```ts
+for (const l of conversion.lines) {
+  const expectedBaseQty = computeBaseQuantity(l.quantity, l.uomToBaseRate); // ROUND_HALF_UP(quantity × rate, 4)
+  if (!l.baseQuantity.equals(expectedBaseQty)) {
+    return { ... error: 'BASE_QTY_INVALID', status: 400, ... }; // INVENTORY_CONVERSION_BASE_QTY_INVALID（新错误码）
+  }
+}
+// 之后才执行守恒校验（⑧）
+```
+- 两个独立不变量，顺序执行：**① 每行 canonical correctness**（stored === 重算值）→ **② 两行 conservation**（CONSUME === PRODUCE）
+- 错误码：`INVENTORY_CONVERSION_BASE_QTY_INVALID`（errors.ts 新增，400，稳定业务错误）
+- 任何一行 stored baseQuantity 与 `computeBaseQuantity`（`toDecimalPlaces(4, ROUND_HALF_UP)`）重算结果不同 → fail closed，**不进入 Shared Core、单据保持 SUBMITTED**
+
+## Blocking ② — Execute 时重新验证 baseUomId == Item.stockUomId ✅
+
+**问题**：Create 已做 baseUomId Gate，但最终 Execute 同样必须 fail closed（Item 的 stockUomId 可能事后被改/缺失）。
+
+**修复**（`[id]/execute/route.ts` ⑥，锁单后、调 Shared Core 前）：
+```ts
+const item = await tx.item.findFirst({ where: { id: conversion.itemId, deletedAt: null } });
+if (!item) return { ... error: 'ITEM_INVALID', status: 400, ... };
+if (!item.stockUomId || item.stockUomId !== conversion.baseUomId) {
+  return { ... error: 'BASE_UOM_INVALID', status: 400, ... }; // 缺 stockUomId / 不一致均拒绝
+}
+```
+- Item 缺 `stockUomId` → 拒绝（`!item.stockUomId` fail closed）；`baseUomId != item.stockUomId` → 拒绝（400 BASE_UOM_INVALID）
+- 两行 canonical quantity 均以该 base UOM 解释（atom `uomId=conversion.baseUomId`、`quantity=baseQuantity`）
+- 校验位于 `executeLedgerAtoms` 调用之前 → 失败绝不产生 InventoryMovement
+
+## 测试覆盖（docs/test-cases/Conversion_API.md E13-E18 + H7-H8）
+
+| 用例 | 场景 | 预期 |
+| --- | --- | --- |
+| E13 | **stored baseQuantity 被污染但两边仍相等**（都改成 9，canonical 应为 10） | 400 `INVENTORY_CONVERSION_BASE_QTY_INVALID`（9==9 也守恒，但 canonical 错误仍拒绝） |
+| E14 | **quantity/rate 与 stored baseQuantity 不一致** | 400 BASE_QTY_INVALID（stored != 重算值） |
+| E15 | **baseUomId != Item.stockUomId**（提交后 stockUomId 被改） | 400 BASE_UOM_INVALID（Execute 时点 Gate） |
+| E16 | **Item stockUomId 缺失** | 400 BASE_UOM_INVALID（`!item.stockUomId` fail closed） |
+| E17 | canonical 两行均正确且 baseQuantity 相等 | 200 EXECUTED（正路径） |
+| E18 | 上述失败全部证明 document 保持非 EXECUTED、Movement/Projection 0 变化 | 同事务回滚，单据保持 SUBMITTED |
+
+## 范围红线（CTO #8706 复核点）
+
+- Shared Core `ledger-command.ts` **零改动** ✅
+- Schema / Migration 0026 **零改动**（新错误码只落 errors.ts + route codeMap）✅
+- 未引入 Workflow、未开始 Finalization、未动 Reservation/Costing（HOLD 保持）✅
+- execute 头注释 + 事务顺序注释同步更新（Blocking ①/② 标注）

@@ -11612,11 +11612,18 @@ paths:
       tags: [Inventory Conversions]
       summary: Execute inventory conversion (SUBMITTED → EXECUTED; Shared LedgerCommand 双 atom CONSUME+PRODUCE 同事务)
       description: |
-        执行转换单（**SUBMITTED → EXECUTED，CTO 6B-4 最高风险点**）。四条锁死（CTO #8658）：
+        执行转换单（**SUBMITTED → EXECUTED，CTO 6B-4 最高风险点**）。四条锁死（CTO #8658）+
+        **两条 Execute 时点重验（CTO Conversion Review #8706 Blocking ①/②）**：
         ① **baseQuantity 由服务端 canonical 计算**（quantity × uomToBaseRate，Decimal 精度统一）——不信任客户端；
-        ② **CONSUME.baseQuantity == PRODUCE.baseQuantity 才允许 Execute**（守恒，P11）；
+           **Execute 逐行重验 canonical：stored baseQuantity === ROUND_HALF_UP(quantity × uomToBaseRate, 4)，
+           任何一行不符 → fail closed 400 INVENTORY_CONVERSION_BASE_QTY_INVALID（Blocking ①——
+           "错误数据 9==9 也守恒，但 canonical 应为 10 仍是错误库存事实"）**；
+        ② **CONSUME.baseQuantity == PRODUCE.baseQuantity 才允许 Execute**（守恒，P11；逐行 canonical 重验通过后才判守恒）；
         ③ **首版必须 same item**（header.itemId 单一，行无 itemId——禁止 BOM/组装/拆解/多物料）；
         ④ **Batch 精确继承、serial 不允许重新生成**（CONSUME batch → PRODUCE batch 同值；serialNo=null）。
+        **Execute 时点重验 baseUomId == Item.stockUomId（Blocking ②）**：锁单后、调 Shared Core 前重读 Item，
+        `!item.stockUomId`（缺失）或 `item.stockUomId !== conversion.baseUomId`（不一致）→ fail closed
+        400 INVENTORY_CONVERSION_BASE_UOM_INVALID——Create 校验不能替代 posting/execution-time validation。
         事务：FOR UPDATE 锁单 → 仅 SUBMITTED → 复核执行态事实 → 生成/复用非空 movementGroupId（**稳定业务事实**，
         已有值复用——CTO Transfer Blocking ② 教训）→ buildConversionAtoms（CONSUME OUT + PRODUCE IN，同一 group）→
         executeLedgerAtoms(tx, atoms) 同一 caller tx 全有或全无 → 单据 EXECUTED + 证据 + CAS version+1 → 事件

@@ -6,7 +6,7 @@ import { ok, fail, failValidation } from '@/lib/api/response';
 import { ERROR_CODES, type ErrorCode } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
 import { inventoryConversionExecuteSchema } from '@/lib/api/schemas';
-import { buildConversionAtoms } from '@/lib/inventory-conversion/helpers';
+import { buildConversionAtoms, computeBaseQuantity } from '@/lib/inventory-conversion/helpers';
 import { publishInventoryConversionEvent } from '@/lib/inventory-conversion/events';
 import {
   executeLedgerAtoms,
@@ -20,15 +20,18 @@ export const dynamic = 'force-dynamic';
  * POST /api/inventory-conversions/:id/execute —— **SUBMITTED → EXECUTED（CTO 6B-4 最高风险点）**
  * 四条锁死（CTO #8658）：
  * ① **baseQuantity = quantity × uomToBaseRate 必须由服务端 canonical 计算并按既定 Decimal 精度规则验证**——
- *    不信任客户端提交的 baseQuantity（Create/Update 时已服务端计算，Execute 只读行值并复核守恒）；
+ *    不信任客户端提交的 baseQuantity（Create/Update 时已服务端计算；**Execute 时逐行重验 canonical：
+ *    stored baseQuantity === ROUND_HALF_UP(quantity × uomToBaseRate, 4)（computeBaseQuantity 服务端重算），
+ *    任何一行不符 → fail closed 400 BASE_QTY_INVALID（CTO Conversion Review Blocking ①）**）；
  * ② **CONSUME.baseQuantity == PRODUCE.baseQuantity 才允许 Execute**（守恒，P11 Final）；
  * ③ **首版必须 same item**（header.itemId 单一，行无 itemId——禁止借 Conversion 偷渡 BOM/组装/拆解/多物料）；
  * ④ **Batch 默认精确继承、serial 不允许重新生成**（CONSUME batch → PRODUCE batch 同值；serialNo=null）。
  *
  * 事务顺序（对齐 Transfer/Adjustment）：
  *   FOR UPDATE 锁 InventoryConversion → status 必须 = SUBMITTED（EXECUTED → 409 ALREADY_EXECUTED 幂等拒绝）→
- *   复核执行态事实（恰好 1 CONSUME + 1 PRODUCE / quantity>0 / uomToBaseRate>0 / warehouse+location 组合 FK /
- *   item 有效 / baseUom==item.stockUom / baseQuantity 守恒 / batch 继承）→
+ *   复核执行态事实（恰好 1 CONSUME + 1 PRODUCE / quantity>0 / uomToBaseRate>0 / **逐行 canonical 重验
+ *   stored baseQuantity === ROUND_HALF_UP(quantity×rate,4)——Blocking ①** / warehouse+location 组合 FK /
+ *   item 有效 / **baseUom==item.stockUom 重验（Blocking ②）** / baseQuantity 守恒 / batch 继承）→
  *   生成/复用非空 movementGroupId（**稳定业务事实**：已有值复用，无值生成一次并冻结——CTO Transfer Blocking ② 教训）→
  *   buildConversionAtoms（CONSUME OUT + PRODUCE IN，同一 movementGroupId）→
  *   executeLedgerAtoms(tx, atoms)（同一 caller tx，全有或全无）→ 全部成功 →
@@ -130,13 +133,27 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (conversion.lines.some((l) => l.quantity.lte(0) || l.uomToBaseRate.lte(0) || l.baseQuantity.lte(0))) {
         return { ok: false as const, error: 'QUANTITY_INVALID', status: 400, message: '转换数量/换算率/canonical 数量必须 > 0' };
       }
-      // ⑤ item 有效 + baseUom == item.stockUom（P11 Final Gate 复核）
+      // ⑤ **逐行 canonical baseQuantity 重验（CTO Conversion Review Blocking ①）**：
+      //    stored baseQuantity 必须 == ROUND_HALF_UP(quantity × uomToBaseRate, 4)（computeBaseQuantity 服务端重算）。
+      //    仅证明"两边相等"（守恒）不够：错误数据 9 == 9 也守恒，但 canonical 应为 10 仍是错误库存事实 → fail closed。
+      for (const l of conversion.lines) {
+        const expectedBaseQty = computeBaseQuantity(l.quantity, l.uomToBaseRate);
+        if (!l.baseQuantity.equals(expectedBaseQty)) {
+          return {
+            ok: false as const,
+            error: 'BASE_QTY_INVALID',
+            status: 400,
+            message: `行 ${l.lineRole} stored baseQuantity(${l.baseQuantity}) != canonical 重算值(${expectedBaseQty})（必须 == ROUND_HALF_UP(quantity × uomToBaseRate, 4)）`,
+          };
+        }
+      }
+      // ⑥ item 有效 + baseUom == item.stockUom（P11 Final Gate 复核；**Execute 时点重验——CTO Conversion Review Blocking ②**）
       const item = await tx.item.findFirst({ where: { id: conversion.itemId, deletedAt: null } });
       if (!item) return { ok: false as const, error: 'ITEM_INVALID', status: 400, message: '物料不存在或已停用' };
       if (!item.stockUomId || item.stockUomId !== conversion.baseUomId) {
         return { ok: false as const, error: 'BASE_UOM_INVALID', status: 400, message: 'baseUomId 必须 == 该物料的库存单位（stockUomId）' };
       }
-      // ⑥ warehouse/location 组合 FK（防御性复核）
+      // ⑦ warehouse/location 组合 FK（防御性复核）
       for (const l of conversion.lines) {
         const wh = await tx.warehouse.findFirst({ where: { id: l.warehouseId, deletedAt: null } });
         if (!wh) return { ok: false as const, error: 'WAREHOUSE_INVALID', status: 400, message: '仓库不存在或已停用' };
@@ -147,7 +164,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           if (!loc) return { ok: false as const, error: 'LOCATION_INVALID', status: 400, message: '库位不存在或不属于对应仓库' };
         }
       }
-      // ⑦ 守恒（CTO 锁死②）：CONSUME.baseQuantity == PRODUCE.baseQuantity（canonical 服务端计算值）
+      // ⑧ 守恒（CTO 锁死②）：CONSUME.baseQuantity == PRODUCE.baseQuantity（逐行 canonical 重验通过后才判守恒）
       if (!consume.baseQuantity.equals(produce.baseQuantity)) {
         return {
           ok: false as const,
@@ -156,16 +173,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           message: `CONSUME.baseQuantity(${consume.baseQuantity}) 必须 == PRODUCE.baseQuantity(${produce.baseQuantity})（守恒，P11）`,
         };
       }
-      // ⑧ batch 精确继承（CTO 锁死④）：CONSUME batch → PRODUCE batch 同值；serial 不允许（行无 serialNo 字段）
+      // ⑨ batch 精确继承（CTO 锁死④）：CONSUME batch → PRODUCE batch 同值；serial 不允许（行无 serialNo 字段）
       if ((consume.batchNo ?? null) !== (produce.batchNo ?? null)) {
         return { ok: false as const, error: 'BATCH_MISMATCH', status: 400, message: 'CONSUME 与 PRODUCE 的 batchNo 必须一致（P5 精确继承，首版不拆批不换批）' };
       }
 
-      // ⑨ movementGroupId：**稳定业务事实**（CTO Transfer Blocking ② 教训沿用）——已有值复用，无值生成一次并冻结；
+      // ⑩ movementGroupId：**稳定业务事实**（CTO Transfer Blocking ② 教训沿用）——已有值复用，无值生成一次并冻结；
       //    CONSUME + PRODUCE 共享同一非空 group id（Schema 终态 CHECK 要求 EXECUTED ⇒ group 非空）
       const movementGroupId = conversion.movementGroupId ?? crypto.randomUUID();
 
-      // ⑩ 构造双 atom（CONSUME OUT + PRODUCE IN，同一 movementGroupId；quantity=baseQuantity canonical）
+      // ⑪ 构造双 atom（CONSUME OUT + PRODUCE IN，同一 movementGroupId；quantity=baseQuantity canonical）
       const atoms = buildConversionAtoms({
         conversion: {
           id: conversion.id,
@@ -192,10 +209,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         occurredAt: new Date().toISOString(),
       });
 
-      // ⑪ Shared Core 双 atom 同事务执行（**全有或全无**——任一失败抛错 → 整事务回滚，Conversion 保持 SUBMITTED）
+      // ⑫ Shared Core 双 atom 同事务执行（**全有或全无**——任一失败抛错 → 整事务回滚，Conversion 保持 SUBMITTED）
       const results = await executeLedgerAtoms(tx, atoms);
 
-      // ⑫ 全部成功 → 单据 EXECUTED + 证据（同一事务；CAS version+1；终态证据 CHECK 全非空）
+      // ⑬ 全部成功 → 单据 EXECUTED + 证据（同一事务；CAS version+1；终态证据 CHECK 全非空）
       const executedAt = new Date();
       const cas = await tx.inventoryConversion.updateMany({
         where: { id, version, status: 'SUBMITTED', deletedAt: null },
@@ -265,6 +282,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       WAREHOUSE_INVALID: { code: ERROR_CODES.INVENTORY_CONVERSION_WAREHOUSE_INVALID, msg: '仓库不存在或已停用', status: 400 },
       LOCATION_INVALID: { code: ERROR_CODES.INVENTORY_CONVERSION_LOCATION_INVALID, msg: '库位不存在或不属于对应仓库', status: 400 },
       BASE_QTY_MISMATCH: { code: ERROR_CODES.INVENTORY_CONVERSION_BASE_QTY_MISMATCH, msg: 'CONSUME.baseQuantity 必须 == PRODUCE.baseQuantity（守恒，P11）', status: 400 },
+      BASE_QTY_INVALID: { code: ERROR_CODES.INVENTORY_CONVERSION_BASE_QTY_INVALID, msg: 'stored baseQuantity 必须 == ROUND_HALF_UP(quantity × uomToBaseRate, 4)（canonical 重验，Blocking ①）', status: 400 },
       BATCH_MISMATCH: { code: ERROR_CODES.INVENTORY_CONVERSION_BATCH_MISMATCH, msg: 'CONSUME 与 PRODUCE 的 batchNo 必须一致（P5 精确继承，首版不拆批不换批）', status: 400 },
     };
     const entry = result && result.ok === false ? codeMap[result.error] : undefined;

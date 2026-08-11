@@ -66,6 +66,12 @@
 | E10 | **movementGroupId 稳定** | 重试/恢复 Execute | `conversion.movementGroupId ?? crypto.randomUUID()`——已有值复用，无值首次生成并冻结；**不随机重造**（CTO Transfer Blocking ② 教训） |
 | E11 | 版本冲突 | version 不匹配 | 409 VERSION_CONFLICT |
 | E12 | 并发 execute / cancel | 同单并发 | FOR UPDATE 串行；败者 409 VERSION_CONFLICT / INVALID_STATE |
+| E13 | **canonical 重验：stored baseQuantity 被污染但两边仍相等（Blocking ①）** | DB 中两行 stored baseQuantity 都被改成 9（原 canonical 应为 10），但 9 == 9 守恒 | **400 INVENTORY_CONVERSION_BASE_QTY_INVALID**（逐行重算 expectedBaseQty=ROUND_HALF_UP(quantity×rate,4)=10，stored 9 != 10 → fail closed；"错误数据 9==9 也守恒，但 canonical 应为 10 仍是错误库存事实"）；单据保持 SUBMITTED、Movement/Projection 0 变化 |
+| E14 | **canonical 重验：quantity/rate 与 stored baseQuantity 不一致（Blocking ①）** | quantity/rate 被改但 stored baseQuantity 未同步更新 | 400 INVENTORY_CONVERSION_BASE_QTY_INVALID（stored != 重算值）；事务回滚，单据保持 SUBMITTED |
+| E15 | **baseUomId != Item.stockUomId 拒绝（Blocking ②）** | Item 的 stockUomId 在提交后被改，与 conversion.baseUomId 不一致 | **400 INVENTORY_CONVERSION_BASE_UOM_INVALID**（锁单后重读 Item 校验，Execute 时点 Gate——Create 校验不能替代 posting-time validation）；不得进入 EXECUTED |
+| E16 | **Item stockUomId 缺失拒绝（Blocking ②）** | Item.stockUomId 为 null/未配置 | 400 INVENTORY_CONVERSION_BASE_UOM_INVALID（`!item.stockUomId` fail closed）；不得进入 EXECUTED |
+| E17 | **canonical 两行均正确且相等 → 成功** | 两行 stored baseQuantity 均 == 重算值且 CONSUME==PRODUCE | 200 EXECUTED；双 Movement + 双 Projection 落账（正路径） |
+| E18 | **失败全部保持非 EXECUTED + 0 落账** | E13-E16 任一失败后查询 | 单据 status=SUBMITTED（非 EXECUTED）；InventoryMovement / StockProjection 零变化（同事务回滚，无 CONSUME 残留） |
 
 ## F. Conversion 取消（Cancel）
 
@@ -92,3 +98,5 @@
 | H4 | movementGroupId 稳定 | execute 统一 `conversion.movementGroupId ?? crypto.randomUUID()`（复用已有值） |
 | H5 | 守恒/同 item/batch/serial | execute 校验 BASE_QTY_MISMATCH；Movement itemId=conversion.itemId；batch 继承；serialNo=null |
 | H6 | Reservation/Costing 零实现 | 无 reservation / costing API |
+| H7 | **Execute canonical 重验（Blocking ①）** | grep execute route | ⑤ 逐行 `computeBaseQuantity(l.quantity, l.uomToBaseRate)` 重算并 `l.baseQuantity.equals(expectedBaseQty)` 比对，不符 → BASE_QTY_INVALID；**守恒校验在 canonical 重验之后**（先证每行正确，再证两边相等） |
+| H8 | **Execute baseUom 重验（Blocking ②）** | grep execute route | ⑥ 锁单后重读 Item：`!item.stockUomId` 或 `item.stockUomId !== conversion.baseUomId` → 400 BASE_UOM_INVALID（缺 stockUomId 同样 fail closed）；校验位于调用 Shared Core（executeLedgerAtoms）之前 |
