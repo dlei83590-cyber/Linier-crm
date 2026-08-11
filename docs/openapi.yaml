@@ -10796,7 +10796,7 @@ paths:
         提交调拨单（DRAFT → SUBMITTED）。命中 ApprovalPolicy(module=INVENTORY_TRANSFER) → 创建/复用 WorkflowInstance；
         未命中策略 → **直接完成审批投影**（status=APPROVED + approvedById=提交人，严格沿用既有 Workflow Policy 语义）。
         **红线：APPROVED ≠ EXECUTED**——submit/approve 绝不自动落账，只有显式 execute 才经 Shared LedgerCommand 双 atom 落账；
-        **movementGroupId 只能在 EXECUTE 时生成**。权限：inventory-transfer:edit。
+        **movementGroupId 只在 EXECUTE 时生成/复用**（锁单后已有值→复用，无值→生成一次并冻结；禁止每次 attempt 随机重造）。权限：inventory-transfer:edit。
       operationId: submitInventoryTransfer
       security:
         - bearerAuth: []
@@ -10883,7 +10883,7 @@ paths:
       summary: Execute inventory transfer (APPROVED → EXECUTED; Shared LedgerCommand dual atom, all-or-nothing)
       description: |
         执行调拨单（**APPROVED → EXECUTED**，CTO 6B-2 最高风险点）。三个不可妥协不变量：
-        ① SOURCE_OUT + DESTINATION_IN 共用同一非空 movementGroupId（EXECUTE 时生成并冻结）；
+        ① SOURCE_OUT + DESTINATION_IN 共用同一非空 movementGroupId（EXECUTE 时生成/复用并冻结，稳定业务事实）；
         ② 业务单据 EXECUTED + 两笔 Movement + 两侧 Projection 同一 caller transaction 全有或全无——
            任何 atom 失败（源库存不足 / 幂等 conflict / Projection/DB 错误）→ 整事务回滚，Transfer 仍保持 APPROVED；
         ③ 重试必须通过 Shared Core identity+immutable-fact 幂等规则，禁止 Transfer 自己实现库存扣增逻辑。
@@ -17288,7 +17288,7 @@ components:
         sourceLocationId: { type: [string, "null"] }
         destinationWarehouseId: { type: string }
         destinationLocationId: { type: [string, "null"] }
-        movementGroupId: { type: [string, "null"], description: EXECUTE 时生成并冻结（双边共享） }
+        movementGroupId: { type: [string, "null"], description: EXECUTE 时生成/复用并冻结（双边共享；重试复用已有值） }
         approvedById: { type: [string, "null"] }
         executedById: { type: [string, "null"] }
         executedAt: { type: [string, "null"], format: date-time }
@@ -17352,7 +17352,7 @@ components:
           required: [transfer, movementGroupId, atomResults]
           properties:
             transfer: { $ref: "#/components/schemas/InventoryTransfer" }
-            movementGroupId: { type: string, description: EXECUTE 时生成并冻结的双边共享 group id }
+            movementGroupId: { type: string, description: EXECUTE 时生成/复用并冻结的双边共享 group id（重试复用已有值） }
             atomResults:
               type: array
               description: executeLedgerAtoms 结果（每 atom inserted/movementNo）

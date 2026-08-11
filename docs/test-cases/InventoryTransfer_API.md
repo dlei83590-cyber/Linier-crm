@@ -95,9 +95,10 @@
 | # | 用例 | 场景 | 预期 |
 | --- | --- | --- | --- |
 | G1 | DRAFT 无 groupId | 创建后查询 | movementGroupId = null |
-| G2 | SUBMITTED/APPROVED 无 groupId | 提交/审批后查询 | movementGroupId = null（**只能 EXECUTE 时生成**） |
+| G2 | SUBMITTED/APPROVED 无 groupId | 提交/审批后查询 | movementGroupId = null（**只在 EXECUTE 时生成/复用**） |
 | G3 | EXECUTED 有 groupId | 执行后查询 | movementGroupId 非空；与两笔 Movement.movementGroupId 一致 |
 | G4 | 双边同组 | 查询执行后 Movement | SOURCE_OUT 与 DESTINATION_IN 的 movementGroupId 完全相同 |
+| G5 | 重试复用（CTO Review Blocking ②） | 已生成 groupId 的 Execute 重试/恢复 | 锁单后**复用已有 movementGroupId**（`transfer.movementGroupId ?? crypto.randomUUID()`），**禁止每次 attempt 随机重造**——同五元 identity 不同 group fact → Shared Core 判幂等 conflict |
 
 ## H. 串行化与并发
 

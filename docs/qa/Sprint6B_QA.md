@@ -37,7 +37,7 @@
 | --- | --- | --- | --- |
 | B1 | Transfer = 双边原子事实（D2） | Execute 构造 SOURCE_OUT + DESTINATION_IN 双 atom，同一 movementGroupId，同一 caller tx | ✅ |
 | B2 | 全有或全无（CTO #7895） | executeLedgerAtoms 任一失败 → 整事务回滚，单据保持 APPROVED（不提前写 EXECUTED） | ✅ |
-| B3 | 同一 movementGroupId | Execute 事务内 `crypto.randomUUID()` 生成并冻结；Create/Submit/Approve 阶段不生成（Schema 可空，EXECUTE 后必有） | ✅ |
+| B3 | 同一 movementGroupId | Execute 锁单后**复用已有值或首次生成**（`transfer.movementGroupId ?? crypto.randomUUID()`）并冻结；**禁止每次 attempt 随机重造**（CTO Transfer Review Blocking ②：同五元 identity 不同 group fact → Shared Core 判幂等 conflict）；Create/Submit/Approve 阶段不生成（Schema 可空，EXECUTE 后必有） | ✅ |
 | B4 | 六A 红线：不经 Ledger Command 直写 | Transfer API **绝不直接 INSERT InventoryMovement / UPDATE StockProjection**——只调用 `executeLedgerAtoms`（grep 审计） | ✅ |
 | B5 | 幂等重试走 Shared Core | 五元 identity（sourceType=TRANSFER/sourceId/sourceLineId/role/atomKey）+ immutable-fact equality；重复 execute → 409 ALREADY_EXECUTED；Core 幂等防并发重放 | ✅ |
 | B6 | serial-managed 守恒 | serialNos.length == quantity 且整数、去重；双边**完全相同 serial 集合**（每 serial 一对） | ✅ |
@@ -52,7 +52,7 @@
 
 | # | 不变量 | 实现证据 |
 | --- | --- | --- |
-| I1 | SOURCE_OUT + DESTINATION_IN 共用同一非空 movementGroupId | execute/route.ts：`const movementGroupId = crypto.randomUUID()` → buildTransferAtoms 全部 atom 携带 → 单据 movementGroupId 同值落库 |
+| I1 | SOURCE_OUT + DESTINATION_IN 共用同一非空 movementGroupId | execute/route.ts：`const movementGroupId = transfer.movementGroupId ?? crypto.randomUUID()`（已有值复用，无值首次生成）→ buildTransferAtoms 全部 atom 携带 → 单据 movementGroupId 同值落库 |
 | I2 | 单据 EXECUTED + 两笔 Movement + 两侧 Projection 同一 caller transaction 全有或全无 | 全部在 `prisma.$transaction` 内：executeLedgerAtoms(tx, atoms) → CAS updateMany(status=EXECUTED + 证据 + version+1)；任何失败抛错 → 事务回滚 |
 | I3 | 重试通过 Shared Core identity+immutable-fact 幂等；禁止自实现扣增 | 只调用 `executeLedgerAtoms`；InventoryInsufficientStockError / InventoryLedgerIdempotencyConflictError 上抛 → 409；无任何自行 INSERT Movement/UPDATE Projection 代码 |
 

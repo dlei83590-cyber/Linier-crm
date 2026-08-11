@@ -5,7 +5,7 @@ import { ok, fail, failValidation, parsePagination } from '@/lib/api/response';
 import { ERROR_CODES, type ErrorCode } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
 import { inventoryTransferCreateSchema } from '@/lib/api/schemas';
-import { nextTransferNo, transferLineDedupeKey } from '@/lib/inventory-transfer/helpers';
+import { nextTransferNo, transferLineDedupeKey, InventoryTransferSequenceMissingError } from '@/lib/inventory-transfer/helpers';
 
 export const dynamic = 'force-dynamic';
 
@@ -174,6 +174,10 @@ export async function POST(request: NextRequest) {
       return { ok: true as const, transfer };
     });
   } catch (err) {
+    // CTO Transfer Review Blocking ①：TRF DocumentSequence 缺失 = 部署配置错误（fail closed，禁 fallback 临时编号）
+    if (err instanceof InventoryTransferSequenceMissingError) {
+      return fail(ERROR_CODES.INVENTORY_TRANSFER_SEQUENCE_MISSING, err.message, 500);
+    }
     console.error('[inventory-transfer.create]', err);
     return fail(ERROR_CODES.INTERNAL_ERROR, '创建调拨单失败', 500);
   }

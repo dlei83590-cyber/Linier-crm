@@ -16,21 +16,33 @@ import type { LedgerAtom } from '@/lib/inventory-ledger/ledger-command';
  * - 金额始终 `Prisma.Decimal`，**禁止 number 中间转换**（CTO 红线：Decimal 无 Float/Number 转换）。
  */
 
-/** DocumentSequence 原子取号（docType=INVENTORY_TRANSFER，前缀 TRF，位数 6；创建即取号） */
+/**
+ * DocumentSequence 缺失 = **部署配置错误**（CTO Transfer Review Blocking ① 修复）。
+ * Sequence 是 deployment prerequisite，不是可静默降级的 optional configuration：
+ * 缺失时**禁止生成临时编号**（fallback 会导致首次/第二次 Transfer 都拿到 TRF000001 →
+ * UNIQUE 冲突/不稳定 500，并把真正的部署配置错误伪装成业务运行正常——与 6A Movement
+ * 已修问题完全同类）。缺失必须 fail closed：抛稳定配置错误，由 Create API 显式映射。
+ */
+export class InventoryTransferSequenceMissingError extends Error {
+  constructor() {
+    super('INVENTORY_TRANSFER DocumentSequence 缺失（docType=INVENTORY_TRANSFER）——部署配置错误，请先执行 seed 初始化');
+    this.name = 'InventoryTransferSequenceMissingError';
+  }
+}
+
+/** DocumentSequence 原子取号（docType=INVENTORY_TRANSFER，前缀 TRF，位数 6；创建即取号；Sequence 缺失 fail closed） */
 export async function nextTransferNo(tx: Prisma.TransactionClient): Promise<string> {
   const seq = await tx.documentSequence.findFirst({
     where: { docType: 'INVENTORY_TRANSFER', isActive: true, deletedAt: null },
   });
-  const prefix = seq?.prefix ?? 'TRF';
-  const padLength = seq?.padLength ?? 6;
-  if (seq) {
-    const updated = await tx.documentSequence.update({
-      where: { id: seq.id },
-      data: { nextNo: { increment: 1 } },
-    });
-    return `${prefix}${String(updated.nextNo - 1).padStart(padLength, '0')}`;
+  if (!seq) {
+    throw new InventoryTransferSequenceMissingError();
   }
-  return `${prefix}${String(1).padStart(padLength, '0')}`;
+  const updated = await tx.documentSequence.update({
+    where: { id: seq.id },
+    data: { nextNo: { increment: 1 } },
+  });
+  return `${seq.prefix}${String(updated.nextNo - 1).padStart(seq.padLength, '0')}`;
 }
 
 /**

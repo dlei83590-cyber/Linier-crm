@@ -20,6 +20,7 @@ export const dynamic = 'force-dynamic';
  * POST /api/inventory-transfers/:id/execute —— **APPROVED → EXECUTED（CTO 6B-2 最高风险点）**
  * 三个不可妥协不变量（CTO 锁死）：
  * ① **SOURCE_OUT + DESTINATION_IN 共用同一非空 movementGroupId**——EXECUTE 时生成并冻结（DRAFT 可空，EXECUTE 后必有）；
+ *    **movementGroupId 是稳定业务事实（CTO Transfer Review Blocking ②）**：锁单后已有值（重试/恢复）→ 复用；无值 → 生成一次并冻结；禁止每次 attempt 随机重造（同五元 identity 不同 group fact → Shared Core 判 idempotency conflict）；
  * ② **业务单据 EXECUTED + 两笔 Movement + 两侧 Projection 必须在同一个 caller transaction 内全有或全无**——
  *    任何 atom 失败（源库存不足 / 幂等 conflict / Projection/DB 错误）→ 整事务回滚，**Transfer 仍保持 APPROVED**；
  * ③ **重试必须通过 Shared Core 的 identity+immutable-fact 幂等规则**——只调用 executeLedgerAtoms，
@@ -28,7 +29,7 @@ export const dynamic = 'force-dynamic';
  * 事务顺序（CTO 指定）：
  *   FOR UPDATE 锁 InventoryTransfer → status 必须 = APPROVED（EXECUTED → 409 ALREADY_EXECUTED 幂等拒绝）→
  *   校验执行态事实（lines 非空 / quantity>0 / warehouse+location 组合 FK / item 有效 / serial 守恒）→
- *   生成非空 movementGroupId → 每行构造 SOURCE_OUT(OUT/TRANSFER_OUT) + DESTINATION_IN(IN/TRANSFER_IN)
+ *   生成/复用非空 movementGroupId（已有值复用，无值生成一次并冻结）→ 每行构造 SOURCE_OUT(OUT/TRANSFER_OUT) + DESTINATION_IN(IN/TRANSFER_IN)
  *   （同源 lineId + 同 groupId）→ executeLedgerAtoms(tx, allAtoms)（同一 caller tx）→ 全部成功 →
  *   status=EXECUTED + movementGroupId + executedById/executedAt + CAS version+1（同事务）→ AuditLog → COMMIT
  *   → 事务提交后 best-effort 发布 InventoryTransferExecuted。
@@ -164,8 +165,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
       }
 
-      // ④ 生成非空 movementGroupId（**只能 EXECUTE 时生成**——Create/Submit/Approve 阶段不得提前生成）
-      const movementGroupId = crypto.randomUUID();
+      // ④ movementGroupId：**稳定业务事实**（CTO Transfer Review Blocking ② 修复）
+      //    锁单后：已有值（重试/恢复场景，曾生成并冻结）→ **复用**；无值 → 生成一次并随单据 EXECUTED 冻结。
+      //    **禁止每次 attempt 随机重造**：movementGroupId 属于 Shared Core immutable-fact equality 的一部分，
+      //    同五元 identity 但 group fact 不同（G1→G2）→ Shared Core 必然判 idempotency conflict。
+      //    （仅 EXECUTE 时生成/冻结——Create/Submit/Approve 阶段不提前生成；EXECUTED 后必有，DB CHECK 兑底）
+      const movementGroupId = transfer.movementGroupId ?? crypto.randomUUID();
 
       // ⑤ 构造双 atom（SOURCE_OUT + DESTINATION_IN，同一行共用 sourceLineId + movementGroupId）
       const atoms = buildTransferAtoms({
