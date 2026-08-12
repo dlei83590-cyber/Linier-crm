@@ -94,3 +94,33 @@
 ### 5.3 Release Gate（10 项重点测试 + 2 项回归用例，详见 test-cases H1-H16）
 
 首次 Match revision=1 / 重复 Match 追加 revision / 并发不重号 / 历史不可改 / 来源链失效 fail closed / 客户端不可伪造 variance / current 指向最新 Run / 旧审批遇 re-match 拒绝 / 引用正确 run+revision / 不产生 GRIR-AP-POSTED evidence / **re-match 自身排除（数量不变不得因把自身计入累计量而失败，H15）/ re-match 累计边界（他票占 60 自身 40 通过、改 41 拒绝，H16）**。
+
+## 6. 5C-1C0 QA 段（Accounting Readiness Hardening——CTO #9477，Match tax basis + GRIR Producer Foundation）
+
+### 6.1 交付范围
+
+| 分组           | 文件                                        | 说明                                                                                                                                                                                                                                                                                                                                                                                            |
+| -------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Match tax 修正 | `lib/supplier-invoice/match-helpers.ts`     | **expectedTax basis 改为 PO Line.taxRate 快照**（C0-A）：`expectedTax = matchedQty × poUnitPrice × poTaxRate / 100`；`taxVariance = invoiceTaxAmount - expectedTax`；poLine select 增加 taxRate。**不改 Migration 0027 / MatchLine schema**（现有 MatchLine 只有 taxVariance，本轮只修计算逻辑）                                                                                                |
+| GRIR Producer  | `lib/supplier-invoice/grir-helpers.ts`      | `createGrirAccrualsForWhrPost`（C0-B：WHR POSTED + Outbox IN + ACCRUAL 同事务，每 WHR Line 一条，quantity=WHR qty、unitPrice/taxRate=PO 快照、baseAmount=quantity×unitPrice 未税）+ `createGrirReversalsForReturn`（C0-C：仅 WAREHOUSE_RECEIPT_LINE 来源；remaining unconsumed = ΣACCRUAL-ΣREVERSAL-ΣCONSUME；reversibleQty=min(returnQty, remaining)；仅 >0 创建 REVERSAL；**不制造负 GRIR**） |
+| WHR POST 接入  | `api/warehouse-receipts/[id]/post/route.ts` | 事务内（CAS POSTED + Outbox IN 之后）调用 ACCRUAL producer——全有或全无                                                                                                                                                                                                                                                                                                                          |
+| Return 接入    | `api/purchase-returns/[id]/return/route.ts` | 事务内（CAS RETURNED + Outbox OUT + PO reopen 之后）调用 REVERSAL producer；返回 `grirReversals[].pendingQty` 留痕（AP correction pending / requires Supplier CN-DN，5C-2 处理）                                                                                                                                                                                                                |
+
+### 6.2 关键不变量（CTO #9477）
+
+| #     | 不变量                                                                                                                                                                                                   | 实现                                                                                                                   |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| C0-M1 | **Match expectedTax 用 PO 税率快照**（PO 13%/Invoice 6%/qty-price 一致 → taxVariance ≠ 0 → VARIANCE/HOLD；错误税率不得带进 AP）                                                                          | match-helpers.ts expectedTax = matchedQty×poUnitPrice×poLine.taxRate/100；taxVariance = invoiceTaxAmount - expectedTax |
+| C0-M2 | **GRIR ACCRUAL 与 WHR POSTED 同事务**（POSTED + Outbox IN + ACCRUAL 全有或全无）                                                                                                                         | createGrirAccrualsForWhrPost 在 WHR post prisma.$transaction 内调用                                                    |
+| C0-M3 | **ACCRUAL 金额口径锁死**：quantity=WHR qty；unitPrice/taxRate=PO Line 快照（WHR Line→PurchaseReceiptLine→PurchaseOrderLine 溯源）；baseAmount=quantity×unitPrice（**未税暂估净额，不得确认 Input VAT**） | grir-helpers.ts createGrirAccrualsForWhrPost                                                                           |
+| C0-M4 | **ACCRUAL 幂等**：每 WHR Line 一条；DB partial UNIQUE(warehouseReceiptLineId WHERE grirType='ACCRUAL') + sourceKey UNIQUE 兜底                                                                           | 既有 Migration 0027 约束（未改）                                                                                       |
+| C0-M5 | **REVERSAL 只冲 remaining unconsumed GRIR**：`reversibleQty = min(returnQty, remainingUnconsumedGrirQty)`；仅 >0 创建；**5C-1 不得制造负 GRIR**                                                          | grir-helpers.ts createGrirReversalsForReturn（remaining 为负归零）                                                     |
+| C0-M6 | **REVERSAL 只对 WAREHOUSE_RECEIPT_LINE 来源**（RECEIPT_LINE/INSPECTION 从未形成已入库暂估事实 → 0 GRIR）                                                                                                 | sourceRefType !== 'WAREHOUSE_RECEIPT_LINE' → skip                                                                      |
+| C0-M7 | **REVERSAL 幂等**：purchaseReturnLineId 绑定；DB partial UNIQUE(purchaseReturnLineId WHERE grirType='REVERSAL') + sourceKey 兜底                                                                         | 既有 Migration 0027 约束（未改）                                                                                       |
+| C0-M8 | **超 remaining 部分 = AP correction pending**：退货业务仍成功（不因 Finance 未实现阻塞物理退货）；pendingQty>0 留痕（返回载荷 + Audit + QA/ADR note），**5C-2 Supplier CN/DN 处理，本轮不实现 CN/DN**    | PurchaseReturn 返回 `grirReversals[].pendingQty`；ADR-0027 note 锁定                                                   |
+
+### 6.3 财务边界（CTO #9477 锁定，ADP note 入 ADR-0027）
+
+- 场景：WHR 100 → ACCRUAL 100 → Invoice POSTED 100 → CONSUME 100 → 后续 Purchase Return 20
+- **不得盲目 REVERSAL 20**（GRIR balance 会变负）；该 20 已是"已形成 AP 后的供应商贷/借项调整" → 5C-2 Supplier CN/DN
+- 5C-1 阶段：REVERSAL 仅冲 remaining unconsumed；超限部分以 pendingQty 标志 + Audit 留痕，5C-2 处理

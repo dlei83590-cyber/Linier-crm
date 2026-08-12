@@ -115,3 +115,23 @@
 | --- | ------------------------------ | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | H15 | **re-match 自身排除（回归①）** | 同一 Invoice MATCHED → re-match，数量完全没变（WHR=100，自身行 60，无其他发票） | 200 成功 revision+1（helper excludeInvoiceId=invoiceId——累计占用只算其他发票=0，60 ≤ 100；若把自身 60 计入会误报 60+60>100 拒绝） |
 | H16 | **re-match 累计边界（回归②）** | Receipt=100；其他 Invoice 已占 60；当前 Invoice=40 → re-match                   | 200 通过（40 ≤ 100-60=availableQty）；当前 Invoice 行改为 41 → 400 SUPPLIER_INVOICE_CUMULATIVE_QTY_EXCEEDED（41 > 100-60）        |
+
+### J 段 5C-1C0 回归用例（CTO #9477 Accounting Readiness Hardening —— Match tax basis + GRIR Producer）
+
+| #   | 用例                                         | 场景                                                    | 预期                                                                                                                                                                              |
+| --- | -------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| J1  | **Match tax basis = PO 税率快照（C0-A）**    | PO taxRate=13%；Invoice taxRate=6%；qty/未税单价一致    | taxVariance ≠ 0 → 行 result=VARIANCE、disposition=HOLD（错误税率不得判成 0 差异带进 AP）                                                                                          |
+| J2  | **税率一致 taxVariance=0（C0-A）**           | PO taxRate=13%；Invoice taxRate=13%；qty/未税单价一致   | taxVariance=0（expectedTax = matchedQty×poUnitPrice×poTaxRate/100 与 invoiceTaxAmount 相等）                                                                                      |
+| J3  | **WHR POST → GRIR ACCRUAL（C0-B）**          | WHR POST 成功（行含 PO 快照）                           | 每 WHR Line 一条 GrirRecord ACCRUAL：quantity=WHR qty、unitPrice/taxRate=PO 快照、baseAmount=quantity×unitPrice（未税）；与 POSTED+Outbox IN 同事务                               |
+| J4  | **ACCRUAL 幂等（C0-B）**                     | 重复 POST 被 409 拦截；同 WHR Line 不产生第二条 ACCRUAL | DB partial UNIQUE(warehouseReceiptLineId WHERE grirType=ACCRUAL) 兜底；sourceKey 唯一                                                                                             |
+| J5  | **WHR-based Return → GRIR REVERSAL（C0-C）** | WAREHOUSE_RECEIPT_LINE 来源退货 20（剩余暂估 ≥20）      | 创建 GrirRecord REVERSAL quantity=20（purchaseReturnLineId 绑定）；与 RETURNED+Outbox OUT 同事务                                                                                  |
+| J6  | **REVERSAL 不超 remaining（C0-C 财务边界）** | 暂估 100 已 consume 100（或已 reversal 80）→ 再退货 20  | reversibleQty = min(20, remaining unconsumed)；剩余不足部分不制造负 GRIR → pendingQty>0 留痕 "AP correction pending / requires Supplier CN-DN"（5C-2）；PurchaseReturn 业务仍成功 |
+| J7  | **非已入库退货 0 GRIR（C0-C）**              | RECEIPT_LINE / INSPECTION 来源退货                      | 不产生 REVERSAL（从未形成已入库暂估事实）；reversibleQty=0                                                                                                                        |
+
+### J 段静态核验（红线 grep）
+
+| #   | 检查                     | 预期                                                                                                                             |
+| --- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| J8  | 0 超 consume / 0 负 GRIR | grir-helpers.ts REVERSAL 用 min(returnQty, remainingUnconsumed) 且 remaining 为负时归零；无负数量写入                            |
+| J9  | Producer 与业务同事务    | WHR post：createGrirAccrualsForWhrPost 在 prisma.$transaction 内；Return：createGrirReversalsForReturn 在 prisma.$transaction 内 |
+| J10 | 不改 Migration 0027      | git diff 不含 prisma/migrations/0027_*（FROZEN BASELINE；GrirRecord 幂等靠既有 partial UNIQUE）                                  |

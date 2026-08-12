@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { prisma } from '@/lib/prisma';
+import type { prisma } from '@/lib/prisma';
 import { verifyReceiptBasedSourceChain } from '@/lib/supplier-invoice/helpers';
 
 /**
@@ -35,7 +35,11 @@ type MatchRunWithLines = NonNullable<
 >;
 
 export type MatchResult =
-  | { ok: true; run: MatchRunWithLines; invoice: NonNullable<Awaited<ReturnType<typeof prisma.supplierInvoice.findFirst>>> }
+  | {
+      ok: true;
+      run: MatchRunWithLines;
+      invoice: NonNullable<Awaited<ReturnType<typeof prisma.supplierInvoice.findFirst>>>;
+    }
   | {
       ok: false;
       error:
@@ -77,7 +81,13 @@ export async function runMatch(
   // ② 重读状态/current run + CAS version
   const invoice = await tx.supplierInvoice.findFirst({
     where: { id: params.invoiceId, deletedAt: null },
-    select: { id: true, documentStatus: true, version: true, supplierId: true, currentMatchRunId: true },
+    select: {
+      id: true,
+      documentStatus: true,
+      version: true,
+      supplierId: true,
+      currentMatchRunId: true,
+    },
   });
   if (!invoice) return { ok: false, error: 'NOT_FOUND' };
   // 状态门禁（#9247）：SUBMITTED/MATCHED 可进；APPROVED/POSTED/CANCELLED 禁直接 re-match
@@ -131,10 +141,10 @@ export async function runMatch(
   }> = [];
 
   for (const line of lines) {
-    // 快照源：PO Line（poQty/poUnitPrice）+ WHR Line（receiptQty）+ Invoice Line（invoiceQty/invoiceUnitPrice/taxAmount）
+    // 快照源：PO Line（poQty/poUnitPrice/poTaxRate——5C-1C0-A：税率必须用 PO 快照，不得用发票自身 taxRate）+ WHR Line（receiptQty）+ Invoice Line（invoiceQty/invoiceUnitPrice/taxAmount）
     const poLine = await tx.purchaseOrderLine.findFirst({
       where: { id: line.purchaseOrderLineId, deletedAt: null },
-      select: { quantity: true, unitPrice: true },
+      select: { quantity: true, unitPrice: true, taxRate: true },
     });
     const whrLine = await tx.warehouseReceiptLine.findFirst({
       where: { id: line.warehouseReceiptLineId, deletedAt: null },
@@ -154,11 +164,22 @@ export async function runMatch(
     const qtyVariance = invoiceQty.sub(matchedQty).toDecimalPlaces(4, Prisma.Decimal.ROUND_HALF_UP);
 
     // 单价差异（4.6）：invoiceUnitPrice vs PO 快照
-    const priceVariance = invoiceUnitPrice.sub(poUnitPrice).toDecimalPlaces(6, Prisma.Decimal.ROUND_HALF_UP);
+    const priceVariance = invoiceUnitPrice
+      .sub(poUnitPrice)
+      .toDecimalPlaces(6, Prisma.Decimal.ROUND_HALF_UP);
 
-    // 税额差异（4.7）：invoiceTax vs 服务端计算税（税率快照自 PO；税基 = 匹配净额 = matchedQty × poUnitPrice）
-    const expectedTax = matchedQty.mul(poUnitPrice).mul(line.taxRate).div(100).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
-    const taxVariance = line.taxAmount.sub(expectedTax).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+    // 税额差异（4.7，5C-1C0-A 修正，CTO #9477）：invoiceTax vs 服务端计算税——
+    // **expectedTax basis 必须是 PO Line.taxRate 快照**（不是 SupplierInvoiceLine.taxRate）：
+    // PO 13% / Invoice 6% / qty-price 相同 → taxVariance ≠ 0 → VARIANCE/HOLD（错误税率不得被判成 0 差异带进 AP）；
+    // 税基 = 匹配净额 = matchedQty × poUnitPrice；expectedTax = matchedQty × poUnitPrice × poTaxRate / 100
+    const expectedTax = matchedQty
+      .mul(poUnitPrice)
+      .mul(poLine.taxRate)
+      .div(100)
+      .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+    const taxVariance = line.taxAmount
+      .sub(expectedTax)
+      .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
 
     // 行 result/disposition：全零差异 → MATCHED/ACCEPT；任一差异 → VARIANCE/HOLD（触发审批；CREATE_CN_DN 5C-2 不接）
     const isClean = qtyVariance.isZero() && priceVariance.isZero() && taxVariance.isZero();
@@ -241,7 +262,12 @@ export async function runMatch(
 
   // ⑧ CAS 状态：SUBMITTED/MATCHED → MATCHED（version+1）
   const cas = await tx.supplierInvoice.updateMany({
-    where: { id: params.invoiceId, version: params.version, documentStatus: { in: ['SUBMITTED', 'MATCHED'] }, deletedAt: null },
+    where: {
+      id: params.invoiceId,
+      version: params.version,
+      documentStatus: { in: ['SUBMITTED', 'MATCHED'] },
+      deletedAt: null,
+    },
     data: { documentStatus: 'MATCHED', version: { increment: 1 }, updatedById: params.actorId },
   });
   if (cas.count !== 1) return { ok: false, error: 'VERSION_CONFLICT' };

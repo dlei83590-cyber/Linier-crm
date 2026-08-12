@@ -11,6 +11,7 @@ import {
   computeInspectionAvailableQty,
 } from '@/lib/warehouse-receipt/helpers';
 import { publishWarehouseReceiptEvent } from '@/lib/warehouse-receipt/events';
+import { createGrirAccrualsForWhrPost } from '@/lib/supplier-invoice/grir-helpers';
 import {
   InventoryOutboxError,
   expandSourceLineAtoms,
@@ -47,144 +48,159 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   let result;
   try {
     result = await prisma.$transaction(async (tx) => {
-    // ① Lock WarehouseReceipt（FOR UPDATE）
-    const locked = await tx.$queryRaw<Array<{ id: string }>>(
-      Prisma.sql`SELECT "id" FROM "WarehouseReceipt" WHERE "id" = ${id} AND "deletedAt" IS NULL FOR UPDATE`,
-    );
-    if (locked.length === 0) return { error: 'NOT_FOUND' as const };
-
-    const receipt = await tx.warehouseReceipt.findFirst({
-      where: { id, deletedAt: null },
-      select: {
-        id: true,
-        code: true,
-        status: true,
-        version: true,
-        purchaseReceiptId: true,
-        warehouseId: true,
-        locationId: true,
-      },
-    });
-    if (!receipt) return { error: 'NOT_FOUND' as const };
-
-    // ② 状态 Gate + 幂等：仅 DRAFT 可 Post；已 POSTED → 409；CANCELLED → 409
-    if (receipt.status === 'POSTED') {
-      return { error: 'ALREADY_POSTED' as const, status: receipt.status };
-    }
-    if (receipt.status !== 'DRAFT') {
-      return { error: 'INVALID_STATE' as const, status: receipt.status };
-    }
-
-    // ③ 行级校验（FOR UPDATE 锁 Inspection 后重算余额：postedUsedQty 仅统计 POSTED——本单 DRAFT 未过账不占额度，不双计）
-    const lines = await tx.warehouseReceiptLine.findMany({
-      where: { warehouseReceiptId: id, deletedAt: null },
-      orderBy: { createdAt: 'asc' },
-      select: {
-        id: true,
-        purchaseReceiptLineId: true,
-        inspectionId: true,
-        quantity: true,
-        itemId: true,
-        uomId: true,
-        batchNo: true,
-        serialNos: true,
-        mfgDate: true,
-        expDate: true,
-      },
-    });
-    if (lines.length === 0) {
-      return { error: 'NO_LINES' as const };
-    }
-    const inspectionIds = [...new Set(lines.map((l) => l.inspectionId))];
-    for (const insId of inspectionIds) {
-      const inspection = await tx.$queryRaw<Array<{ id: string }>>(
-        Prisma.sql`SELECT "id" FROM "Inspection" WHERE "id" = ${insId} AND "deletedAt" IS NULL FOR UPDATE`,
+      // ① Lock WarehouseReceipt（FOR UPDATE）
+      const locked = await tx.$queryRaw<Array<{ id: string }>>(
+        Prisma.sql`SELECT "id" FROM "WarehouseReceipt" WHERE "id" = ${id} AND "deletedAt" IS NULL FOR UPDATE`,
       );
-      if (inspection.length === 0) return { error: 'INSPECTION_NOT_FOUND' as const };
-    }
-    const inspections = await tx.inspection.findMany({
-      where: { id: { in: inspectionIds }, deletedAt: null },
-      select: { id: true, purchaseReceiptLineId: true, result: true, qualifiedQty: true },
-    });
-    const inspectionById = new Map(inspections.map((i) => [i.id, i]));
-    for (const line of lines) {
-      const inspection = inspectionById.get(line.inspectionId);
-      if (!inspection) return { error: 'INSPECTION_NOT_FOUND' as const };
-      if (inspection.result === 'PENDING') return { error: 'INSPECTION_NOT_COMPLETED' as const };
-      if (inspection.qualifiedQty.lte(0)) return { error: 'INSPECTION_NO_QUALIFIED' as const };
-      if (inspection.purchaseReceiptLineId !== line.purchaseReceiptLineId) {
-        return { error: 'INSPECTION_MISMATCH' as const };
-      }
-      // 可入库余额 = qualifiedQty - **postedUsedQty**（CTO #7192：只有 POSTED 消耗正式额度；本单 DRAFT 未过账不计入，不双计）
-      const usedQty = await computeInspectionUsedQty(tx, inspection.id); // postedUsedQty（仅 POSTED）
-      if (line.quantity.gt(computeInspectionAvailableQty(inspection.qualifiedQty, usedQty))) {
-        return { error: 'OVER_INSPECTION_BALANCE' as const };
-      }
-    }
+      if (locked.length === 0) return { error: 'NOT_FOUND' as const };
 
-    // ④ CAS 落定：id + version + status=DRAFT 原子条件；成功递增 version（幂等防并发双 Post）
-    const postedAt = new Date();
-    const cas = await tx.warehouseReceipt.updateMany({
-      where: { id, version, status: 'DRAFT', deletedAt: null },
-      data: {
-        status: 'POSTED',
-        postedAt,
-        postedById: actorId,
-        updatedById: actorId,
-        version: { increment: 1 },
-      },
-    });
-    if (cas.count !== 1) {
-      return { error: 'VERSION_CONFLICT' as const };
-    }
+      const receipt = await tx.warehouseReceipt.findFirst({
+        where: { id, deletedAt: null },
+        select: {
+          id: true,
+          code: true,
+          status: true,
+          version: true,
+          purchaseReceiptId: true,
+          warehouseId: true,
+          locationId: true,
+        },
+      });
+      if (!receipt) return { error: 'NOT_FOUND' as const };
 
-    // ⑤ Outbox Writer（6A Phase 2 第一步，CTO #7508）：业务事实 + Outbox **同事务**——
-    // WarehouseReceiptPosted → IN 原子 Movement（serial-managed 每 serial 一条 quantity=1；非 serial 一条 BULK）；
-    // 幂等键 = sourceType|sourceId|sourceLineId|movementRole|movementAtomKey（与 InventoryMovement 五元 UNIQUE 一致）；
-    // 库存链不再依赖事务后 best-effort 事件（Consumer 第二步实现）。
-    // invariant（CTO #7543）：itemId 缺失 → INVENTORY_DIMENSION_INCOMPLETE（poison Outbox 防线，整个事务回滚）
-    for (const line of lines) {
-      if (!line.itemId) {
-        throw new InventoryOutboxError(
-          ERROR_CODES.INVENTORY_DIMENSION_INCOMPLETE,
-          `入库行 ${line.id} 缺少 itemId，无法生成库存 Movement（canonical dimension 不完整）`,
+      // ② 状态 Gate + 幂等：仅 DRAFT 可 Post；已 POSTED → 409；CANCELLED → 409
+      if (receipt.status === 'POSTED') {
+        return { error: 'ALREADY_POSTED' as const, status: receipt.status };
+      }
+      if (receipt.status !== 'DRAFT') {
+        return { error: 'INVALID_STATE' as const, status: receipt.status };
+      }
+
+      // ③ 行级校验（FOR UPDATE 锁 Inspection 后重算余额：postedUsedQty 仅统计 POSTED——本单 DRAFT 未过账不占额度，不双计）
+      const lines = await tx.warehouseReceiptLine.findMany({
+        where: { warehouseReceiptId: id, deletedAt: null },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          purchaseReceiptLineId: true,
+          inspectionId: true,
+          quantity: true,
+          itemId: true,
+          uomId: true,
+          batchNo: true,
+          serialNos: true,
+          mfgDate: true,
+          expDate: true,
+        },
+      });
+      if (lines.length === 0) {
+        return { error: 'NO_LINES' as const };
+      }
+      const inspectionIds = [...new Set(lines.map((l) => l.inspectionId))];
+      for (const insId of inspectionIds) {
+        const inspection = await tx.$queryRaw<Array<{ id: string }>>(
+          Prisma.sql`SELECT "id" FROM "Inspection" WHERE "id" = ${insId} AND "deletedAt" IS NULL FOR UPDATE`,
         );
+        if (inspection.length === 0) return { error: 'INSPECTION_NOT_FOUND' as const };
       }
-      const atoms = expandSourceLineAtoms({
-        sourceType: 'WAREHOUSE_RECEIPT_POSTED',
-        sourceId: receipt.id,
-        sourceLineId: line.id,
-        movementRole: 'IN',
+      const inspections = await tx.inspection.findMany({
+        where: { id: { in: inspectionIds }, deletedAt: null },
+        select: { id: true, purchaseReceiptLineId: true, result: true, qualifiedQty: true },
+      });
+      const inspectionById = new Map(inspections.map((i) => [i.id, i]));
+      for (const line of lines) {
+        const inspection = inspectionById.get(line.inspectionId);
+        if (!inspection) return { error: 'INSPECTION_NOT_FOUND' as const };
+        if (inspection.result === 'PENDING') return { error: 'INSPECTION_NOT_COMPLETED' as const };
+        if (inspection.qualifiedQty.lte(0)) return { error: 'INSPECTION_NO_QUALIFIED' as const };
+        if (inspection.purchaseReceiptLineId !== line.purchaseReceiptLineId) {
+          return { error: 'INSPECTION_MISMATCH' as const };
+        }
+        // 可入库余额 = qualifiedQty - **postedUsedQty**（CTO #7192：只有 POSTED 消耗正式额度；本单 DRAFT 未过账不计入，不双计）
+        const usedQty = await computeInspectionUsedQty(tx, inspection.id); // postedUsedQty（仅 POSTED）
+        if (line.quantity.gt(computeInspectionAvailableQty(inspection.qualifiedQty, usedQty))) {
+          return { error: 'OVER_INSPECTION_BALANCE' as const };
+        }
+      }
+
+      // ④ CAS 落定：id + version + status=DRAFT 原子条件；成功递增 version（幂等防并发双 Post）
+      const postedAt = new Date();
+      const cas = await tx.warehouseReceipt.updateMany({
+        where: { id, version, status: 'DRAFT', deletedAt: null },
+        data: {
+          status: 'POSTED',
+          postedAt,
+          postedById: actorId,
+          updatedById: actorId,
+          version: { increment: 1 },
+        },
+      });
+      if (cas.count !== 1) {
+        return { error: 'VERSION_CONFLICT' as const };
+      }
+
+      // ⑤ Outbox Writer（6A Phase 2 第一步，CTO #7508）：业务事实 + Outbox **同事务**——
+      // WarehouseReceiptPosted → IN 原子 Movement（serial-managed 每 serial 一条 quantity=1；非 serial 一条 BULK）；
+      // 幂等键 = sourceType|sourceId|sourceLineId|movementRole|movementAtomKey（与 InventoryMovement 五元 UNIQUE 一致）；
+      // 库存链不再依赖事务后 best-effort 事件（Consumer 第二步实现）。
+      // invariant（CTO #7543）：itemId 缺失 → INVENTORY_DIMENSION_INCOMPLETE（poison Outbox 防线，整个事务回滚）
+      for (const line of lines) {
+        if (!line.itemId) {
+          throw new InventoryOutboxError(
+            ERROR_CODES.INVENTORY_DIMENSION_INCOMPLETE,
+            `入库行 ${line.id} 缺少 itemId，无法生成库存 Movement（canonical dimension 不完整）`,
+          );
+        }
+        const atoms = expandSourceLineAtoms({
+          sourceType: 'WAREHOUSE_RECEIPT_POSTED',
+          sourceId: receipt.id,
+          sourceLineId: line.id,
+          movementRole: 'IN',
+          warehouseId: receipt.warehouseId,
+          locationId: receipt.locationId,
+          itemId: line.itemId,
+          batchNo: line.batchNo,
+          serialNos: line.serialNos,
+          quantity: line.quantity,
+          uomId: line.uomId,
+          mfgDate: line.mfgDate,
+          expDate: line.expDate,
+          eventType: 'WarehouseReceiptPosted',
+          aggregateType: 'WarehouseReceipt',
+          aggregateId: receipt.id,
+          referenceNo: receipt.code,
+          actorId,
+          occurredAt: postedAt.toISOString(),
+        });
+        for (const atom of atoms) {
+          await writeInventoryOutboxAtom(tx, atom);
+        }
+      }
+
+      // ⑤b GRIR ACCRUAL producer（5C-1C0-B，CTO #9477）：WHR POSTED + Outbox IN + GRIR ACCRUAL **同事务**（全有或全无）——
+      // 每 WHR Line 一条 ACCRUAL；quantity = WHR Line.quantity；unitPrice/taxRate = PO Line 快照（
+      // WHR Line → PurchaseReceiptLine → PurchaseOrderLine 溯源）；baseAmount = quantity × unitPrice
+      // （**未税暂估净额，不得确认 Input VAT**——P9 Final）；DB partial UNIQUE + sourceKey 幂等兜底；
+      // PO 快照缺失 → 抛错整个事务回滚（fail closed：否则 Invoice POST consume 时无暂估事实可消费）。
+      await createGrirAccrualsForWhrPost(tx, {
+        lines: lines.map((l) => ({
+          id: l.id,
+          quantity: l.quantity,
+          purchaseReceiptLineId: l.purchaseReceiptLineId,
+        })),
+        actorId,
+        warehouseReceiptCode: receipt.code,
+      });
+
+      return {
+        ok: true as const,
+        warehouseReceiptId: receipt.id,
+        warehouseReceiptCode: receipt.code,
+        purchaseReceiptId: receipt.purchaseReceiptId,
         warehouseId: receipt.warehouseId,
         locationId: receipt.locationId,
-        itemId: line.itemId,
-        batchNo: line.batchNo,
-        serialNos: line.serialNos,
-        quantity: line.quantity,
-        uomId: line.uomId,
-        mfgDate: line.mfgDate,
-        expDate: line.expDate,
-        eventType: 'WarehouseReceiptPosted',
-        aggregateType: 'WarehouseReceipt',
-        aggregateId: receipt.id,
-        referenceNo: receipt.code,
-        actorId,
-        occurredAt: postedAt.toISOString(),
-      });
-      for (const atom of atoms) {
-        await writeInventoryOutboxAtom(tx, atom);
-      }
-    }
-
-    return {
-      ok: true as const,
-      warehouseReceiptId: receipt.id,
-      warehouseReceiptCode: receipt.code,
-      purchaseReceiptId: receipt.purchaseReceiptId,
-      warehouseId: receipt.warehouseId,
-      locationId: receipt.locationId,
-      postedAt: postedAt.toISOString(),
-    };
+        postedAt: postedAt.toISOString(),
+      };
     });
   } catch (err) {
     if (err instanceof InventoryOutboxError) {
@@ -210,7 +226,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       case 'NO_LINES':
         return fail(ERROR_CODES.WAREHOUSE_RECEIPT_NO_LINES, '入库单没有行，无法过账', 400);
       case 'INSPECTION_NOT_FOUND':
-        return fail(ERROR_CODES.WAREHOUSE_RECEIPT_INSPECTION_NOT_FOUND, '质检记录不存在或已删除', 409);
+        return fail(
+          ERROR_CODES.WAREHOUSE_RECEIPT_INSPECTION_NOT_FOUND,
+          '质检记录不存在或已删除',
+          409,
+        );
       case 'INSPECTION_NOT_COMPLETED':
         return failConflict(
           ERROR_CODES.WAREHOUSE_RECEIPT_INSPECTION_NOT_COMPLETED,

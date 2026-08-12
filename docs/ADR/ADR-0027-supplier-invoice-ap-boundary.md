@@ -105,9 +105,38 @@ Sprint 6B CLOSED 后，采购库存链（PO → PurchaseReceipt → Inspection �
 
 ## 变更记录
 
-| 版本 | 日期 | 状态 | 说明 |
-| --- | --- | --- | --- |
-| v0.1 | 2026-08-11 | **Proposed** | 5C Design Gate 首版（D1-D9，P1-P12 待拍板） |
+| 版本 | 日期       | 状态                      | 说明                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ---- | ---------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| v0.1 | 2026-08-11 | **Proposed**              | 5C Design Gate 首版（D1-D9，P1-P12 待拍板）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | v0.2 | 2026-08-11 | **Approved with Changes** | CTO 5C Design Review 88/100 #8845——4 Blocking + 3 Hardening 全部修复：① GRIR 完整生命周期含 Purchase Return 冲回（WHR-based 才冲减 + 源幂等身份）② Match 改 immutable MatchRun/MatchSnapshot + current projection ③ AP Liability Fact vs OpenItem Projection 分层（openAmount = Liability + CN/DN - Allocations reconciliation）④ GR/IR net/tax canonical basis + Input VAT 识别时点锁死（价税分离，GRIR baseAmount=不含税净额）；3 Hardening：documentStatus/settlementStatus 两维、首版 RECEIPT_BASED scope、5C-1/5C-2 切片；P1-P12 按 CTO 表转 Final（P3/P5/P8/P9 修改后固化） |
 
 > 批准后：更新为 Approved（CTO Re-review 通过）→ 追加 Implementation Status（对齐 ADR-0025/0026 模式）。
+
+## Implementation Note（5C-1C0，CTO #9477 —— GRIR Producer Foundation + AP correction pending 边界）
+
+### 背景
+
+正式实现 Supplier Invoice POST（GRIR CONSUME + AP Liability）之前，必须先补齐 GRIR Producer：
+
+- **WHR POST → GRIR ACCRUAL**（每 WHR Line 一条；与 WarehouseReceipt POSTED + Inventory Outbox IN 同事务）；
+- **WHR-based PurchaseReturn RETURN → GRIR REVERSAL**（只冲 remaining unconsumed GRIR；与 RETURNED + Outbox OUT 同事务）。
+  否则 Invoice POST 的 CONSUME 会面临"无暂估事实可消费"的假闭环。
+
+### 关键实现（5C-1C0-A/B/C）
+
+| 项                      | 决策                                                                                                                                                                                                                                                                                                                                                                                   |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Match tax basis（C0-A） | `expectedTax = matchedQty × poUnitPrice × poLine.taxRate / 100`（PO Line 税率快照，不是 SupplierInvoiceLine.taxRate）；`taxVariance = invoiceTaxAmount - expectedTax`。不改 Migration 0027 / MatchLine schema。                                                                                                                                                                        |
+| GRIR ACCRUAL（C0-B）    | quantity = WHR Line.quantity；unitPrice/taxRate = PO Line 快照（WHR Line → PurchaseReceiptLine → PurchaseOrderLine 溯源）；baseAmount = quantity × unitPrice（**未税暂估净额，不得确认 Input VAT**）；sourceKey = `ACCRUAL:WAREHOUSE_RECEIPT_LINE:{whrLineId}`；幂等 = DB partial UNIQUE(warehouseReceiptLineId WHERE grirType='ACCRUAL') + sourceKey UNIQUE。                         |
+| GRIR REVERSAL（C0-C）   | **只对 sourceRefType=WAREHOUSE_RECEIPT_LINE 产生**（RECEIPT_LINE/INSPECTION 从未形成已入库暂估事实 → 0 GRIR）；remaining unconsumed = ΣACCRUAL - ΣREVERSAL - ΣCONSUME（同 WHR Line）；`reversibleQty = min(returnQty, remaining)`，**仅 > 0 创建**；sourceKey = `REVERSAL:PURCHASE_RETURN_LINE:{prLineId}`；幂等 = DB partial UNIQUE(purchaseReturnLineId WHERE grirType='REVERSAL')。 |
+| 财务边界                | **5C-1 不得制造负 GRIR**：退货超 remaining 部分 → 不创建 REVERSAL；以 `pendingQty`（返回载荷 + Audit）留痕 **"AP correction pending / requires Supplier CN-DN"**；PurchaseReturn 业务仍成功（不因 Finance 未实现阻塞物理退货）。                                                                                                                                                       |
+
+### 边界场景（CTO #9477 锁定）
+
+- WHR 100 → ACCRUAL 100 → Invoice POSTED 100（CONSUME 100）→ 后续 Purchase Return 20：
+  该 20 已是"已形成 AP 后的供应商贷/借项调整"，**不是已收未票暂估问题** → 进入 **5C-2 Supplier CN/DN**；
+  5C-1 阶段 REVERSAL 只冲 remaining unconsumed，超限部分 pending 留痕，**本轮不实现 CN/DN**。
+
+### 不可变纪律
+
+GrirRecord / ApLiabilityFact 均为 immutable facts——只 create，绝不 UPDATE/DELETE；纠错只能追加事实（对齐 6A 库存事实/投影纪律）。
