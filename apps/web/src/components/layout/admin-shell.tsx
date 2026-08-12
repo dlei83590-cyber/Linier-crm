@@ -23,8 +23,10 @@ const NAV_ITEMS: ReadonlyArray<{ href: string; label: string; permission: Permis
   { href: "/departments", label: "部门管理", permission: PERMISSIONS.USER_READ },
   { href: "/roles", label: "角色权限", permission: PERMISSIONS.ROLE_READ },
   { href: "/audit-logs", label: "操作日志", permission: PERMISSIONS.AUDIT_READ },
-  // Track A Frontend Iteration 1 — reference 模块（其余 8 个采购/库存模块入口随批量推进加入）
+  // Track A Frontend Iteration 1 — reference 模块 + Commit A（其余采购/库存模块入口随批量推进加入）
   { href: "/purchasing/requisitions", label: "采购申请", permission: PERMISSIONS.PURCHASE_REQUISITION_READ },
+  { href: "/purchasing/orders", label: "采购订单", permission: PERMISSIONS.PURCHASE_ORDER_READ },
+  { href: "/purchasing/receipts", label: "到货收货", permission: PERMISSIONS.PURCHASE_RECEIPT_READ },
   { href: "/inventory/transfers", label: "库存调拨", permission: PERMISSIONS.INVENTORY_TRANSFER_READ },
 ];
 
