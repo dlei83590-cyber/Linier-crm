@@ -28,7 +28,7 @@
 3. **冲突反馈**：`409` 系列必须展示后端 `error.code` + 结构化 message（ApiClientError 契约），不得吞成通用错误。
 4. **成功后事实刷新**：成功响应后**重新 GET 详情/列表**（或以响应中的最新事实替换），不得依赖本地乐观状态。
 5. **失败不得乐观更新业务事实**：请求失败时 UI 保持原状态（单据不假装成功），展示结构化错误 + 重试入口；**绝不先改本地状态再等后端**。
-6. **幂等拒绝语义**：重复触发返回 `409 ALREADY_*`（ALREADY_POSTED / ALREADY_EXECUTED / ALREADY_APPLIED / ALREADY_RETURNED / ALREADY_CANCELLED）——前端按"已成功"处理并刷新，不视为错误弹窗。
+6. **ALREADY_\* replay 收敛（不得仅凭错误码判成功）**：重复触发返回 `409 ALREADY_*`（ALREADY_POSTED / ALREADY_EXECUTED / ALREADY_APPLIED / ALREADY_RETURNED / ALREADY_CANCELLED）视为 **terminal/replay signal**。**409 code 本身不能证明当前请求对应的事实已正确完成**（对齐 Supplier Invoice POST 收紧口径）；前端必须**强制重新 GET authoritative resource**：仅当服务端事实确认已处于预期 terminal state 时，UI 才按"已完成"收敛并刷新；否则显示 conflict/invariant error（含 code + message），**不做本地乐观成功**。
 
 ### 0.3 统一错误契约（复用 Frontend Error Contract，`apps/web/src/lib/api-client.ts`）
 
@@ -63,7 +63,7 @@
 | Submit | `POST /api/purchase-requisitions/{id}/submit` | `purchase-requisition:edit` | DRAFT → SUBMITTED | version CAS（`id+version+status=DRAFT`） | 触发 Workflow（命中策略 → PENDING；未命中直接 APPROVED 投影） | 重复 submit → 409 INVALID_STATE | 无事实副作用（审批中） | `PurchaseRequisitionSubmitted` | 409 INVALID_STATE / NO_LINES / APPROVAL_POLICY_NOT_FOUND / WORKFLOW_FAILED |
 | Approve / Reject | Workflow 回调（非前端） | —（服务端 Workflow） | SUBMITTED → APPROVED / → DRAFT（驳回） | Workflow 内部 | 审批人 ≠ 提交人（Workflow SSOT） | — | 无 | `PurchaseRequisitionApproved` / `Rejected` | WORKFLOW_ACTION_* |
 | **Convert** | `POST /api/purchase-requisitions/{id}/convert` | `purchase-requisition:approve` | APPROVED → CONVERTED | version CAS + 审批快照校验 | approve 权限 | 重复 convert → 409 ALREADY_CONVERTED | **级联创建 PO（新单据事实）；PR 转单后不可回退**（纠错走取消 PO） | `PurchaseRequisitionConverted` | 409 REQUISITION_NOT_APPROVED / ALREADY_CONVERTED / NO_LINES / SUPPLIER_NOT_FOUND / ITEM_NOT_FOUND / PRICE_NOT_FOUND |
-| Cancel | （PR 无独立 cancel route——DRAFT/SUBMITTED 取消入口后续确认） | — | DRAFT/SUBMITTED → CANCELLED | — | — | — | 无 | `PurchaseRequisitionCancelled`（HOLD） | — |
+| Cancel | **CONTRACT GAP / IMPLEMENTATION HOLD**：main @ 15323139 不存在 PR cancel endpoint；前端**不展示 Cancel、不推断状态转换、不注册/消费假事件**（`PurchaseRequisitionCancelled` 未实现，不声明） | — | — | — | — | — | — | — | — |
 
 ### 1.2 Purchase Order（采购订单）— 状态机：DRAFT → SUBMITTED → APPROVED → CONFIRMED → PARTIALLY_RECEIVED/RECEIVED / CANCELLED
 
@@ -93,7 +93,7 @@
 | Create | `POST /api/inspections` | `inspection:create` | — → PENDING | 无 | 同一 ReceiptLine 至多一个有效 Inspection（DB unique） | 重复 create → 409 INSPECTION_ALREADY_EXISTS | 无（创建不发领域事件） | — | 409 INSPECTION_LINE_NOT_RECEIVED / ALREADY_EXISTS / NO_INSPECTABLE_QTY |
 | Edit | `PATCH /api/inspections/{id}` | `inspection:edit` | PENDING → PENDING | version CAS | — | — | 无 | — | 409 VERSION_CONFLICT |
 | **Complete（Tier 3）** | `POST /api/inspections/{id}/complete` | `inspection:edit` | PENDING → QUALIFIED / PARTIAL / REJECTED | version CAS（`id+version+result=PENDING`） | 免检 SKIP+QUALIFIED 不绕过 | 重复 complete → 409 INVALID_STATE | **质检结论事实（合格/拒收数量）**；后续入库/退货以此为源 | `InspectionCompleted` | 409 VERSION_CONFLICT / INSPECTION_LINE_NOT_RECEIVED / QUANTITY_INVALID / INVALID_STATE |
-| Cancel | 无 | — | — | — | — | — | — | — | — |
+| Cancel | **CONTRACT GAP / IMPLEMENTATION HOLD**：main @ 15323139 不存在 Inspection cancel endpoint；前端**不展示 Cancel、不推断状态转换、不注册/消费假事件** | — | — | — | — | — | — | — | — |
 
 ### 1.5 Warehouse Receipt（仓库收货/入库）— 状态机：DRAFT → POSTED / CANCELLED
 
@@ -102,7 +102,7 @@
 | Create | `POST /api/warehouse-receipts` | `warehouse-receipt:create` | — → DRAFT | 无 | — | 新建即取号 | 无 | — | VALIDATION |
 | Edit | `PATCH /api/warehouse-receipts/{id}` | `warehouse-receipt:edit` | DRAFT → DRAFT | version CAS | — | — | 无 | — | 409 VERSION_CONFLICT；非 DRAFT 禁改 |
 | **Post（Tier 3）** | `POST /api/warehouse-receipts/{id}/post` | `warehouse-receipt:edit` | DRAFT → POSTED | version CAS（`id+version+status=DRAFT`） | — | 重复 post → 409 ALREADY_POSTED | **触发 6A InventoryMovement(IN) + 5C-1 GRIR ACCRUAL 同事务；Created ≠ Posted** | `WarehouseReceiptPosted` + `GrirAccrued`（5C-1） | 409 ALREADY_POSTED / INVALID_STATE / NO_LINES / INSPECTION_NOT_FOUND / INSPECTION_NOT_COMPLETED / INVENTORY_DIMENSION_INCOMPLETE |
-| Cancel | 无独立 cancel（WHR 无 cancel route） | — | — | — | — | — | — | — | — |
+| Cancel | **CONTRACT GAP / IMPLEMENTATION HOLD**：main @ 15323139 不存在 Warehouse Receipt cancel endpoint；前端**不展示 Cancel、不推断状态转换、不注册/消费假事件** | — | — | — | — | — | — | — | — |
 
 ### 1.6 Purchase Return（采购退货）— 状态机：DRAFT → RETURNED / CANCELLED
 
@@ -111,7 +111,7 @@
 | Create | `POST /api/purchase-returns` | `purchase-return:create` | — → DRAFT | 无 | 必须有真实来源（RECEIPT_LINE / INSPECTION / WAREHOUSE_RECEIPT_LINE exactly-one） | 新建即取号 | 无（创建不发领域事件） | — | VALIDATION / SOURCE_INVALID |
 | Edit | `PATCH /api/purchase-returns/{id}` | `purchase-return:edit` | DRAFT → DRAFT | version CAS | — | — | 无 | — | 409 VERSION_CONFLICT；非 DRAFT 禁改 |
 | **Return（Tier 3）** | `POST /api/purchase-returns/{id}/return` | `purchase-return:edit` | DRAFT → RETURNED | version CAS（`id+version+status=DRAFT`） | 普通退货不审批；特殊退货走 Workflow | 重复 return → 409 ALREADY_RETURNED | **退货完成事实**；WHR-based 触发 5C-1 GRIR REVERSAL（reversibleQty=min(returnQty, remaining)）；不制造负 GRIR；超限留 AP correction pending | `PurchaseReturned` + `GrirReversed`（5C-1） | 409 ALREADY_RETURNED / INVALID_STATE / SOURCE_NOT_POSTED（WHR 未过账）/ INVENTORY_DIMENSION_INCOMPLETE / INVENTORY_SERIAL_* |
-| Cancel | 无独立 cancel | — | — | — | — | — | — | — | — |
+| Cancel | **CONTRACT GAP / IMPLEMENTATION HOLD**：main @ 15323139 不存在 Purchase Return cancel endpoint；前端**不展示 Cancel、不推断状态转换、不注册/消费假事件** | — | — | — | — | — | — | — | — |
 
 ---
 
