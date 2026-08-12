@@ -229,6 +229,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     payload: {
       invoiceId: invoice.id,
       invoiceNo: invoice.invoiceNo,
+      supplierId: invoice.supplierId,
       consumes,
       consumedById: actorId,
       consumedAt: invoice.postedAt?.toISOString() ?? new Date().toISOString(),
