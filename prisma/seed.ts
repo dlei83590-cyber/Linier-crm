@@ -135,6 +135,8 @@ const SEED_ACTION_MODULES = [
   "inventory-adjustment",
   // Sprint 6B-4：Inventory Conversion 转换模块（动作映射：create→inventory-conversion:create（创建即取号 CVT）；submit→inventory-conversion:edit；execute→inventory-conversion:edit（对齐 5B post→:edit 先例）；cancel→inventory-conversion:close；line 仅 view/edit——见 SEED_RESTRICTED_ACTION_PERMISSIONS；**Conversion 状态机无 APPROVED（DRAFT/SUBMITTED/EXECUTED/CANCELLED——同 item Repack/UOM 计量事实，不发明审批流）**）
   "inventory-conversion",
+  // Sprint 5C-1：Supplier Invoice 供应商发票（动作映射：create→supplier-invoice:create（创建即取号 SINV，P1 Final）；submit→supplier-invoice:edit；cancel→supplier-invoice:close；line 仅 view/edit——见 SEED_RESTRICTED_ACTION_PERMISSIONS；**5C-1A 状态机 DRAFT→SUBMITTED（Match/Approval/POST 属 5C-1B/1C，本阶段不实现）；SUBMITTED ≠ POSTED，submit 不生成 AP/GRIR**）
+  "supplier-invoice",
   // Sprint 3A：平台底座模块
   "workflow-definition",
   "workflow-step",
@@ -201,6 +203,9 @@ const SEED_RESTRICTED_ACTION_PERMISSIONS: Array<{ name: string; code: string; mo
   // Sprint 6B-4：Inventory Conversion 子资源（line 受限 view/edit——转换行由转换单驱动；对齐 5A/5B line 模式）
   { name: "view inventory-conversion-line", code: "inventory-conversion-line:view", module: "inventory-conversion-line" },
   { name: "edit inventory-conversion-line", code: "inventory-conversion-line:edit", module: "inventory-conversion-line" },
+  // Sprint 5C-1：Supplier Invoice 子资源（line 受限 view/edit——发票行由发票驱动，双溯源 PO Line + WHR Line；对齐 5A/5B line 模式）
+  { name: "view supplier-invoice-line", code: "supplier-invoice-line:view", module: "supplier-invoice-line" },
+  { name: "edit supplier-invoice-line", code: "supplier-invoice-line:edit", module: "supplier-invoice-line" },
 ];
 
 // Sprint 6A：Inventory Ledger 受限系统权限（consume 为后台执行动作——**不进入全局 PERMISSION_ACTIONS**（consume 非通用 CRUD action）；仅 SUPER_ADMIN/ADMIN 静态授权（见 packages/shared/src/rbac/index.ts SYSTEM_PERMISSIONS）；Manager/Member/Viewer 默认无权限 → 403；seed 注册该 Permission 供权限矩阵/审计可见）
@@ -528,6 +533,8 @@ const SEED_DOCUMENT_SEQUENCES = [
   { code: "ADJ", name: "库存调整单", docType: "INVENTORY_ADJUSTMENT", prefix: "ADJ", nextNo: 1, padLength: 6 },
   // Sprint 6B-4：Inventory Conversion 单据序列（docType=INVENTORY_CONVERSION 前缀 CVT，padLength 6；幂等 upsert——创建即取号，**Sequence 缺失 fail closed，禁止 fallback 临时编号**）
   { code: "CVT", name: "库存转换单", docType: "INVENTORY_CONVERSION", prefix: "CVT", nextNo: 1, padLength: 6 },
+  // Sprint 5C-1：Supplier Invoice 单据序列（docType=SUPPLIER_INVOICE 前缀 SINV，padLength 6；幂等 upsert——创建即取号 P1 Final，**Sequence 缺失 fail closed，禁止 fallback 临时编号**）
+  { code: "SINV", name: "供应商发票", docType: "SUPPLIER_INVOICE", prefix: "SINV", nextNo: 1, padLength: 6 },
   { code: "PI", name: "形式发票", docType: "PROFORMA_INVOICE", prefix: "PI", nextNo: 1, padLength: 6 },
   { code: "CI", name: "商业发票", docType: "COMMERCIAL_INVOICE", prefix: "CI", nextNo: 1, padLength: 6 },
   // Sprint 4C：Delivery Foundation 单据序列（CTO 锁定：DELIVERY_ORDER / prefix DO / padLength 6；幂等 upsert）
