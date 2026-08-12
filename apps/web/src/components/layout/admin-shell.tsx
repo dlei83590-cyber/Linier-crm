@@ -31,6 +31,9 @@ const NAV_ITEMS: ReadonlyArray<{ href: string; label: string; permission: Permis
   { href: "/purchasing/warehouse-receipts", label: "仓库收货", permission: PERMISSIONS.WAREHOUSE_RECEIPT_READ },
   { href: "/purchasing/returns", label: "采购退货", permission: PERMISSIONS.PURCHASE_RETURN_READ },
   { href: "/inventory/transfers", label: "库存调拨", permission: PERMISSIONS.INVENTORY_TRANSFER_READ },
+  { href: "/inventory/stock-counts", label: "库存盘点", permission: PERMISSIONS.STOCK_COUNT_READ },
+  { href: "/inventory/adjustments", label: "库存调整", permission: PERMISSIONS.INVENTORY_ADJUSTMENT_READ },
+  { href: "/inventory/conversions", label: "库存转换", permission: PERMISSIONS.INVENTORY_CONVERSION_READ },
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
