@@ -124,3 +124,35 @@
 - 场景：WHR 100 → ACCRUAL 100 → Invoice POSTED 100 → CONSUME 100 → 后续 Purchase Return 20
 - **不得盲目 REVERSAL 20**（GRIR balance 会变负）；该 20 已是"已形成 AP 后的供应商贷/借项调整" → 5C-2 Supplier CN/DN
 - 5C-1 阶段：REVERSAL 仅冲 remaining unconsumed；超限部分以 pendingQty 标志 + Audit 留痕，5C-2 处理
+
+## 7. 0028 Historical GRIR Backfill QA 段（CTO #9547 Required Readiness Fix）
+
+### 7.1 背景
+
+C0-B/C producer 只覆盖"此后发生"的 WHR POST / PurchaseReturn RETURN。5B 早于 5C 上线，
+Migration 0027 部署时数据库可能已有 `WarehouseReceipt.status=POSTED` / `PurchaseReturn.status=RETURNED`
+历史事实，不会重新调用新 route → 5C-1C POST 引用"旧 WHR"时 GrirRecord 无 ACCRUAL 可 consume（假闭环）。
+
+### 7.2 交付（数据补偿 migration，不新增业务模型、不触碰 frozen 0027）
+
+| 分组     | 文件                                                                 | 说明                                                                                                                                                                                                                                                                                                                                                                                                  |
+| -------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Backfill | `prisma/migrations/0028_grir_historical_fact_backfill/migration.sql` | ① POSTED WHR Line 缺 ACCRUAL → 生成（quantity=WHR qty、unitPrice/taxRate=PO 快照、baseAmount=qty×unitPrice 未税、sourceKey=canonical identity、createdAt=WHR.postedAt、remark='historical backfill'）；② RETURNED PR Line（WAREHOUSE_RECEIPT_LINE）缺 REVERSAL → 生成历史 reversal（reversibleQty=min(returnQty, ΣACCRUAL-Σ已REVERSAL-同WHR先前分配)；**不得使 GRIR 为负**；createdAt=PR.returnedAt） |
+
+### 7.3 关键不变量（CTO #9547）
+
+| #    | 不变量                           | 实现                                                                                                               |
+| ---- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| B-M1 | **幂等**：重复部署零副作用       | INSERT...SELECT...WHERE NOT EXISTS + ON CONFLICT(sourceKey) DO NOTHING（partial UNIQUE + sourceKey UNIQUE 双防线） |
+| B-M2 | **createdAt 不失真**             | 取源业务事实 postedAt/returnedAt（非 migration 执行时间）；remark='historical backfill'                            |
+| B-M3 | **不制造负 GRIR**                | 同 WHR Line 多退货线按 returnedAt 顺序窗口累计分配 remaining（GREATEST(...,0) 归零）                               |
+| B-M4 | **ACCRUAL 缺 PO 快照 fail-safe** | 溯源链断的行跳过（JOIN 不命中），不阻塞 migration、不伪造事实                                                      |
+| B-M5 | **sourceKey 与 C0 同构**         | 与 grir-helpers.ts 完全一致（ACCRUAL/REVERSAL canonical identity）                                                 |
+
+### 7.4 1C1/1C2 Blocking Gate（CTO #9547 锁序契约固化，本轮不改 C0）
+
+- **Invoice POST CONSUME 必须与 Return REVERSAL 使用同一 WHR Line 锁顺序**：
+  收集 invoice 涉及 WHR Line ids → **去重 + 稳定排序 → `ORDER BY id FOR UPDATE`** → 才允许计算
+  remaining GRIR / 创建 CONSUME（grir-helpers 复用同一 remaining 计算口径）；
+- 否则并发时 Return 读 remaining=100 / Invoice POST 也读 remaining=100 → reversal 80 + consume 80
+  → 累计超过 accrual（超 consume / 负 GRIR）——1C1/1C2 实现必须遵守此锁序。

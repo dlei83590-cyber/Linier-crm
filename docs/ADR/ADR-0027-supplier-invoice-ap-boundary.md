@@ -140,3 +140,30 @@ Sprint 6B CLOSED 后，采购库存链（PO → PurchaseReceipt → Inspection �
 ### 不可变纪律
 
 GrirRecord / ApLiabilityFact 均为 immutable facts——只 create，绝不 UPDATE/DELETE；纠错只能追加事实（对齐 6A 库存事实/投影纪律）。
+
+## Implementation Note 2（5C-1C0 Review，CTO #9547 —— 0028 Historical GRIR Backfill + 锁序契约）
+
+### 背景（Blocking）
+
+C0-B/C producer 只覆盖"此后发生"的 WHR POST / Return RETURN。5B 早于 5C，Migration 0027 部署时
+数据库可能已有 POSTED WHR / RETURNED Return 历史事实，不会重新调用新 route → 5C-1C POST 引用旧 WHR
+时 GrirRecord 无 ACCRUAL 可 consume（假闭环）。CTO #9547 拍板：**新增 0028 数据补偿 migration，
+不重写 frozen 0027**。
+
+### 0028 范围（不新增业务模型）
+
+- **ACCRUAL backfill**：POSTED WarehouseReceiptLine 缺 ACCRUAL → 从 WHR Line→PurchaseReceiptLine→
+  PurchaseOrderLine 生成（quantity=WHR qty、unitPrice/taxRate=PO 快照、baseAmount=qty×unitPrice 未税、
+  sourceKey=`ACCRUAL:WAREHOUSE_RECEIPT_LINE:{id}`、createdAt=WHR.postedAt、remark='historical backfill'）。
+- **REVERSAL backfill**：RETURNED PurchaseReturnLine（WAREHOUSE_RECEIPT_LINE）缺 REVERSAL → 生成历史
+  reversal（reversibleQty=min(returnQty, ΣACCRUAL-Σ已REVERSAL-同WHR先前分配)；**不得使 GRIR 为负**；
+  createdAt=PR.returnedAt、remark='historical backfill'）。
+- **幂等**：INSERT...SELECT...WHERE NOT EXISTS + ON CONFLICT(sourceKey) DO NOTHING（partial UNIQUE +
+  sourceKey UNIQUE 双防线）；审计时间线不失真（createdAt 用源事实时间）。
+
+### 1C1/1C2 Blocking Gate（CTO #9547 锁序契约，本轮不改 C0）
+
+- **Invoice POST CONSUME 必须与 Return REVERSAL 使用同一 WHR Line 锁顺序**：收集 invoice 涉及 WHR Line
+  ids → 去重 + 稳定排序 → `ORDER BY id FOR UPDATE` → 才允许计算 remaining GRIR / 创建 CONSUME；
+- 否则并发（Return 读 remaining=100 / POST 也读 100 → reversal 80 + consume 80）会超 accrual →
+  超 consume / 负 GRIR；1C1/1C2 实现必须遵守（grir-helpers 复用同一 remaining 计算口径）。

@@ -135,3 +135,21 @@
 | J8  | 0 超 consume / 0 负 GRIR | grir-helpers.ts REVERSAL 用 min(returnQty, remainingUnconsumed) 且 remaining 为负时归零；无负数量写入                            |
 | J9  | Producer 与业务同事务    | WHR post：createGrirAccrualsForWhrPost 在 prisma.$transaction 内；Return：createGrirReversalsForReturn 在 prisma.$transaction 内 |
 | J10 | 不改 Migration 0027      | git diff 不含 prisma/migrations/0027_*（FROZEN BASELINE；GrirRecord 幂等靠既有 partial UNIQUE）                                  |
+
+### K 段 0028 Historical GRIR Backfill（CTO #9547 Required Readiness Fix）
+
+| #   | 用例                                                   | 场景                                                                     | 预期                                                                                                                                                                                                          |
+| --- | ------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| K1  | **历史 POSTED WHR → ACCRUAL backfill**                 | 0027 部署前已 POSTED 的 WHR Line（无 ACCRUAL）                           | 0028 执行后生成 ACCRUAL：quantity=WHR qty、unitPrice/taxRate=PO 快照、baseAmount=qty×unitPrice（未税）、sourceKey=`ACCRUAL:WAREHOUSE_RECEIPT_LINE:{id}`、createdAt=WHR.postedAt、remark='historical backfill' |
+| K2  | **历史 RETURNED WHR-based Return → REVERSAL backfill** | 0027 部署前已 RETURNED 的 PR Line（WAREHOUSE_RECEIPT_LINE，无 REVERSAL） | 0028 生成 REVERSAL：reversibleQty=min(returnQty, ΣACCRUAL-Σ已REVERSAL-同WHR先前分配)；createdAt=PR.returnedAt、remark='historical backfill'                                                                   |
+| K3  | **Backfill 幂等**                                      | 0028 重复执行 / 重新 deploy                                              | NOT EXISTS + ON CONFLICT(sourceKey) DO NOTHING → 零重复（partial UNIQUE + sourceKey UNIQUE 双防线）                                                                                                           |
+| K4  | **Backfill 不制造负 GRIR**                             | 退货 20 但 remaining unconsumed 仅 10                                    | reversibleQty=10（GREATEST(...,0) 归零保护）；不足部分不打负 GRIR（5C-2 CN/DN 处理）                                                                                                                          |
+| K5  | **ACCRUAL 缺 PO 快照 fail-safe**                       | WHR Line 溯源链断（PO Line 缺失）                                        | 该行跳过（JOIN 不命中），不阻塞 migration；不产生伪造事实                                                                                                                                                     |
+
+### K 段静态核验
+
+| #   | 检查                 | 预期                                                                          |
+| --- | -------------------- | ----------------------------------------------------------------------------- |
+| K6  | 0027 未动            | git diff 不含 0027（FROZEN）；0028 仅 INSERT...SELECT 数据补偿                |
+| K7  | createdAt 不失真     | backfill 行 createdAt=源业务事实 postedAt/returnedAt（非 migration 执行时间） |
+| K8  | sourceKey 与 C0 同构 | 与 grir-helpers.ts 生成格式完全一致（ACCRUAL/REVERSAL canonical identity）    |
