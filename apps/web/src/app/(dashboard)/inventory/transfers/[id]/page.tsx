@@ -7,6 +7,7 @@ import { PERMISSIONS } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatDate } from "@/lib/format";
+import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 
 interface TransferDetail {
   id: string;
@@ -39,31 +40,17 @@ function TransferDetailPage() {
   const id = typeof params.id === "string" ? params.id : "";
   const [detail, setDetail] = useState<TransferDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiClientError | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
     setError(null);
-    fetch(`/api/inventory-transfers/${id}`, { signal: controller.signal })
-      .then(async (res) => {
-        if (!res.ok) {
-          let message = `请求失败（${res.status}）`;
-          try {
-            const body = (await res.json()) as { error?: { message?: string } };
-            message = body.error?.message ?? message;
-          } catch {
-            // 保留默认错误消息
-          }
-          throw new Error(message);
-        }
-        const body = (await res.json()) as { success: boolean; data: TransferDetail };
-        if (!body.success) throw new Error("加载失败");
-        setDetail(body.data);
-      })
+    apiFetch<TransferDetail>(`/api/inventory-transfers/${id}`, { signal: controller.signal })
+      .then((body) => setDetail(body.data))
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(err instanceof Error ? err.message : "加载失败");
+        setError(err instanceof ApiClientError ? err : new ApiClientError(0, "网络错误", "NETWORK_ERROR"));
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -87,7 +74,10 @@ function TransferDetailPage() {
         <div className="p-6 text-sm text-slate-400">加载中…</div>
       ) : error ? (
         <div className="p-6">
-          <p className="text-sm text-red-600">{error}</p>
+          <p className="text-sm text-red-600">
+            {describeStatus(error.status)}：{error.message}
+            {error.code ? `（${error.code}）` : ""}
+          </p>
           <Link href="/inventory/transfers" className="mt-2 inline-block text-sm text-brand-600">
             返回列表
           </Link>

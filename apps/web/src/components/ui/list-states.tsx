@@ -1,6 +1,8 @@
+import { describeStatus, type ApiClientError } from "@/lib/api-client";
+
 /**
- * Track A Frontend Iteration 1 — 列表三态（Loading / Empty / Error）横切组件（reference 实现）
- * 与 useListQuery + 表格配合：tr 内单行状态展示。
+ * Track A Frontend Iteration 1 — 列表三态（Loading / Empty / Error）横切组件（Reference 实现）
+ * ErrorRow 消费结构化 ApiClientError（status/code/message），按 HTTP 状态分类展示。
  */
 export function LoadingRow({ colSpan }: { colSpan: number }) {
   return (
@@ -22,11 +24,22 @@ export function EmptyRow({ colSpan, message = "暂无数据" }: { colSpan: numbe
   );
 }
 
-export function ErrorRow({ colSpan, message, onRetry }: { colSpan: number; message: string; onRetry: () => void }) {
+export function ErrorRow({
+  colSpan,
+  error,
+  onRetry,
+}: {
+  colSpan: number;
+  error: ApiClientError;
+  onRetry: () => void;
+}) {
   return (
     <tr>
       <td colSpan={colSpan} className="px-4 py-10 text-center">
-        <p className="text-sm text-red-600">{message}</p>
+        <p className="text-sm text-red-600">
+          {describeStatus(error.status)}：{error.message}
+          {error.code ? `（${error.code}）` : ""}
+        </p>
         <button
           type="button"
           onClick={onRetry}

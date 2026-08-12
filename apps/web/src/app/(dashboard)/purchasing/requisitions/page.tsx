@@ -104,7 +104,7 @@ function RequisitionList() {
             {loading ? (
               <LoadingRow colSpan={7} />
             ) : error ? (
-              <ErrorRow colSpan={7} message={error} onRetry={refresh} />
+              <ErrorRow colSpan={7} error={error} onRetry={refresh} />
             ) : items.length === 0 ? (
               <EmptyRow colSpan={7} />
             ) : (
