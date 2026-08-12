@@ -1079,3 +1079,16 @@ export const supplierInvoiceSubmitSchema = z.object({
 export const supplierInvoiceMatchSchema = z.object({
   version: z.number().int().positive(),
 });
+
+// ============================================================================
+// Sprint 5C-1C — Supplier Invoice POST / GRIR CONSUME / AP Liability-OpenItem（CTO #9678）
+// ============================================================================
+
+/**
+ * 供应商发票 POST（APPROVED → POSTED；version 乐观锁）。
+ * **POST 是服务端事务闭环**：client 只传 version（其余全部服务端派生——批准快照重验、WHR Line
+ * deterministic lock、remaining GRIR 重算、CONSUME、ApLiabilityFact、ApOpenItem、CAS POSTED）。
+ */
+export const supplierInvoicePostSchema = z.object({
+  version: z.number().int().positive(),
+});

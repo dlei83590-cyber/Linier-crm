@@ -102,6 +102,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
 
       // 锁真实来源行（按来源类型分组，逐一 FOR UPDATE）
+      // **Lock Protocol Hardening（CTO #9757）**：receiptLineIds / warehouseLineIds / inspectionIds
+      // 唯一化后必须 `.sort()`——与 SupplierInvoice POST CONSUME 共享同一 deterministic WHR Line
+      // 锁协议（Invoice POST 锁 WHR Lines 排序后 FOR UPDATE；Return REVERSAL 若按 Set 无序锁同组多行
+      // 会与 POST 形成可避免的 DB deadlock）。至少 warehouseLineIds 必须排序（REVERSAL 与 CONSUME
+      // 串行竞争同一 remaining GRIR）。不新建 migration，不改变 Return 业务语义。
       const receiptLineIds = [
         ...new Set(
           lines
@@ -109,7 +114,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             .map((l) => l.sourcePurchaseReceiptLineId!)
             .filter(Boolean),
         ),
-      ];
+      ].sort();
       const warehouseLineIds = [
         ...new Set(
           lines
@@ -117,7 +122,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             .map((l) => l.sourceWarehouseReceiptLineId!)
             .filter(Boolean),
         ),
-      ];
+      ].sort();
       const inspectionIds = [
         ...new Set(
           lines
@@ -125,7 +130,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             .map((l) => l.sourceInspectionId!)
             .filter(Boolean),
         ),
-      ];
+      ].sort();
 
       for (const srcId of receiptLineIds) {
         const r = await tx.$queryRaw<Array<{ id: string }>>(
