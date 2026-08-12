@@ -5,7 +5,7 @@
 1. Start from an up-to-date protected default branch.
 2. Create a focused branch following `GIT_STANDARD.md`.
 3. Make the smallest coherent change.
-4. Run formatting, linting, type checks, tests, and relevant migrations locally.
+4. Perform static review only: inspect the diff, imports/exports, schema vs migration consistency, and error-code/event registration. Do NOT run formatting, linting, type checks, tests, or migrations locally — GitHub CI is the verification source (see repo-root `AGENTS.md`: CI-First / No Local Server).
 5. Update documentation and open a pull request.
 
 ## Code Requirements

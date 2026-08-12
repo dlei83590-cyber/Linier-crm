@@ -1,7 +1,7 @@
 # 产品路线图（ROADMAP）
 
-- 版本：v1.17
-- 日期：2026-08-05
+- 版本：v1.19
+- 日期：2026-08-12
 - 维护者：CIO（JINZA）｜审核：CTO
 - 状态说明：✅ 已完成 ｜ 🔄 进行中 ｜ ⬜ 未开始
 - **本文件是项目唯一开发路线依据，CTO / CIO / 开发人员一律以此为准，不再依赖聊天记录推进项目。**
@@ -16,15 +16,17 @@
 | Sprint 2 | Master Data（主数据） | ✅ Closed | Release v0.2.0-alpha（2A+2B+2C） |
 | Sprint 3 | ERP Foundation（ERP 底座） | ✅ Closed | 3A Workflow Foundation ✅（v0.3.0-alpha）+ 3B Platform Capabilities ✅（v0.4.0-alpha）+ 3C Business Foundation ✅（v0.5.0-alpha，3C-1~3C-5 全部完成） |
 | Sprint 4 | Sales（销售） | ✅ | 4A Quotation Foundation ✅（PR #12）；4B Sales Order Foundation ✅（PR #13）；4C Delivery Foundation ✅（PR #14）；4D Invoice Foundation ✅（PR #15 已合并）；4E-1 Accounts Receivable ✅（PR #16 已合并）；4E-2 Receipt/Payment Allocation ✅（PR #17 已合并）；4E-3 Credit/Debit Note ✅（PR #18 已合并，CTO Final Review 99/100 APPROVE & MERGE）；**已发布 v0.6.0-alpha**（2026-08-08，annotated tag，GitHub Pre-release） |
-| Sprint 5 | Purchase（采购） | 🔄 | **5A PR+PO Foundation ✅**（PR #19 已合并）；**5B Goods Receipt & Inbound ✅**（PR #20 已合并 main `7bd98cb`：Schema/Migration 0023 / Seed+RBAC / PurchaseReceipt / Inspection / WarehouseReceipt / PurchaseReturn 四模块全链 API + PO 履约投影 reopen；CTO PurchaseReturn FINAL APPROVED 98/100 #7303——Sprint 5B 核心事实链 CLOSED）；5C Supplier Invoice / Payment 未开始 |
-| Sprint 6 | Inventory（库存） | 🔄 | **6A Inventory Ledger Foundation ✅**（PR #21 待 Final Review：InventoryMovement SSOT + StockProjection + Transactional Outbox + Consumer，CTO FINAL APPROVED 99/100 #7683）；**6B Inventory Operations ✅**（PR #22 待 Final Review：Transfer ✅ 98/100 #8471 / Stock Count ✅ 98/100 #8658 / Inventory Adjustment ✅ 98/100 #8658 / Conversion ✅ 99/100 #8726——四块 Vertical Slice FINAL APPROVED，Sprint 6B Finalization 完成，等 CTO Sprint 6B Final Review 后合并）；Reservation / Costing 未开始（HOLD） |
-| Sprint 7 | Finance（财务） | ⬜ | AR/AP/Expense/Voucher/Journal/GL/Profit/Cash Flow |
+| Sprint 5 | Purchase（采购） | 🔄 | **5A PR+PO Foundation ✅ FINAL**（PR #19 已合并）；**5B Goods Receipt & Inbound ✅ FINAL**（PR #20 已合并 main `7bd98cb`：Schema/Migration 0023 / Seed+RBAC / PurchaseReceipt / Inspection / WarehouseReceipt / PurchaseReturn 四模块全链 API + PO 履约投影 reopen；CTO PurchaseReturn FINAL APPROVED 98/100 #7303——Sprint 5B 核心事实链 CLOSED）；**5C-1 Supplier Invoice / AP ACTIVE**（PR #23） |
+| Sprint 6 | Inventory（库存） | ✅ | **6A Inventory Ledger Foundation ✅ FINAL**（PR #21 已合并 main `67c031d`：InventoryMovement SSOT + StockProjection + Transactional Outbox + Consumer，CTO FINAL APPROVED 99/100 #7683）；**6B Inventory Operations ✅ FINAL**（PR #22 已合并 main `874e060`：Transfer ✅ 98/100 #8471 / Stock Count ✅ 98/100 #8658 / Inventory Adjustment ✅ 98/100 #8658 / Conversion ✅ 99/100 #8726——四块 Vertical Slice FINAL APPROVED，Sprint 6B Finalization 完成）；Reservation / Costing 未开始（HOLD） |
+| Sprint 7 | Finance（财务） | ⬜ HOLD | AR/AP/Expense/Voucher/Journal/GL/Profit/Cash Flow（HOLD until AP foundation，CTO Directive 2026-08-12） |
 | Sprint 8 | BI（商业智能） | ⬜ | 报表 / Dashboard / 数据分析 |
 | Sprint 9 | OA（办公协同） | ⬜ | 审批 / 消息 / 日程 / 知识库 |
 | Sprint 10 | Mobile（移动端） | ⬜ | 移动应用 / 小程序 |
 
 > 依赖顺序：1 → 2 → 3 → 4/5/6 → 7 → 8 → 9 → 10
 > （Sprint 4-6 可部分并行，但都依赖 Sprint 3 业务底座；Sprint 7 依赖 4-6 的单据）
+>
+> **Post-6B 双轨执行（CTO Directive 2026-08-12，baseline main @ `874e060`）**：Track A = Frontend Operations（PR #24，ACTIVE）；Track B = Supplier Invoice / AP（PR #23，5C-1 ACTIVE）；Inventory Read Model = PLANNED（Query Contract 设计先行，实现 HOLD）；Reservation / Costing / GL / BI / OA / Mobile = HOLD（解除需 CTO 单独指令）
 
 ---
 
@@ -160,7 +162,7 @@
 
 ---
 
-## 7. Sprint 5：Purchase（采购）🔄（5A ✅ 已合并，5B ✅ 待 Final Review，5C 未开始）
+## 7. Sprint 5：Purchase（采购）🔄（5A ✅ FINAL，5B ✅ FINAL，5C-1 ACTIVE）
 
 ### 5A — Purchase Requisition & Purchase Order Foundation ✅（PR #19，2026-08-09）
 
@@ -174,14 +176,14 @@
 | 采购员/部门 | PO Header +purchaserId/departmentId（Migration 0022；中国采购分析与报表维度） | ✅ 完成 |
 | Snapshot/Revision | PO Snapshot 唯一约束 [purchaseOrderId, snapshotType, revisionNo]（多轮审批不冲突）；CONFIRMED Snapshot + Revision 留痕 | ✅ 完成 |
 | GRN | 收货单（GRN，入库触发库存） | ✅ 完成（5B：PurchaseReceipt 到货/收货事实 + Inspection 质检唯一事实 + WarehouseReceipt 入库事实（D10：Created ≠ Posted，只有 Posted 才触发 6A InventoryMovement(IN)）+ PurchaseReturn 退货独立事实；**5B 全程 0 写 Stock/InventoryMovement**（6A 唯一事实源）） |
-| Supplier Invoice | 供应商发票（应付挂账） | ⬜ 未开始（5C；区分 Supplier Invoice Fact / 中国增值税发票 Tax Invoice；已收未票→暂估应付→到票→三单匹配→进项税→AP） |
-| Payment | 付款（核销应付） | ⬜ 未开始（7B） |
+| Supplier Invoice | 供应商发票（应付挂账） | 🔄 ACTIVE（5C-1，PR #23：GRIR Producer → SINV POST → GRIR CONSUME → AP Liability → AP Open Item；区分 Supplier Invoice Fact / 中国增值税发票 Tax Invoice；已收未票→暂估应付→到票→三单匹配→进项税→AP；5C-2 Payment / Allocation HOLD） |
+| Payment | 付款（核销应付） | ⬜ HOLD（5C-2 / Sprint 7，CTO Directive 2026-08-12） |
 
 ---
 
-## 8. Sprint 6：Inventory（库存）🔄
+## 8. Sprint 6：Inventory（库存）🔄（6A ✅ FINAL，6B ✅ FINAL；Reservation / Costing HOLD）
 
-**6A Inventory Ledger Foundation ✅（PR #21 待 Final Review；CTO FINAL APPROVED 99/100 #7683——Ledger Command / Inventory Consumer FINAL）**
+**6A Inventory Ledger Foundation ✅ FINAL（PR #21 已合并 main `67c031d`；CTO FINAL APPROVED 99/100 #7683——Ledger Command / Inventory Consumer FINAL）**
 
 | 完成模块 | 说明 |
 | --- | --- |
@@ -191,7 +193,7 @@
 | Inventory Consumer | claim SKIP LOCKED + lease fencing + 五元幂等 + 五维锁 + 禁负库存 + 同事务三件套（Movement+Projection+Outbox PROCESSED） |
 | 事件 | `InventoryMovementCommitted` ✅（EVENTS v1.26） |
 
-**6B Inventory Operations ✅（PR #22 待 CTO Sprint 6B Final Review；四块 Vertical Slice 全部 FINAL APPROVED，Sprint 6B Finalization 完成）**
+**6B Inventory Operations ✅ FINAL（PR #22 已合并 main `874e060`；四块 Vertical Slice 全部 FINAL APPROVED，Sprint 6B Finalization 完成）**
 
 | 完成模块 | 说明 |
 | --- | --- |
@@ -202,13 +204,13 @@
 
 > 四块库存变化均服从同一 **6A SSOT**：Business Fact → Shared InventoryLedgerCommand → immutable InventoryMovement → StockProjection（全局红线扫描：**0 个业务 route 直接写 InventoryMovement/StockProjection** ✅）。
 
-**未开始（HOLD）**：Reservation（ReservedQty/availableQty）/ Costing（FIFO/移动平均）——后续独立阶段（CTO #8726 明令不进入 6B）。
+**未开始（HOLD）**：Reservation（ReservedQty/availableQty）/ Costing（FIFO/移动平均）——后续独立阶段（CTO #8726 明令不进入 6B；CTO Directive 2026-08-12 重申 HOLD，解除需 CTO 单独指令）。
 
 > Item 的 2C 字段（安全库存/MOQ/最小包装/采购周期）在此直接复用。
 
 ---
 
-## 9. Sprint 7：Finance（财务）⬜
+## 9. Sprint 7：Finance（财务）⬜ HOLD（until AP foundation，CTO Directive 2026-08-12）
 
 | 模块 | 说明 |
 | --- | --- |
@@ -272,7 +274,7 @@
 | M1 | Sprint 1 完成 | Release v0.1.0-alpha ✅ |
 | M2 | Sprint 2 完成 | Release v0.2.0-alpha ✅（main 冻结） |
 | M3 | Sprint 3 完成 | Release v0.5.0-alpha ✅（3A ✅ v0.3.0-alpha；3B ✅ v0.4.0-alpha；3C ✅ v0.5.0-alpha，3C-1~3C-5 全部完成，PR #5-#11 合并） |
-| M4 | Sprint 4-6 完成 | 进销存闭环可用（Sprint 4 ✅ **v0.6.0-alpha**，2026-08-08；Sprint 5 ✅ 已合并；Sprint 6 仅 **Ledger Foundation ✅**（Transfer/Count/Conversion/Reservation/Costing 未完成）——M4 未完全达成，待后续独立阶段） |
+| M4 | Sprint 4-6 完成 | 进销存闭环可用（Sprint 4 ✅ **v0.6.0-alpha**，2026-08-08；Sprint 5 ✅ FINAL（PR #19/#20 已合并）；Sprint 6 ✅ FINAL（6A PR #21 `67c031d` + 6B PR #22 `874e060` 已合并 main）；Reservation / Costing 属 HOLD 独立阶段） |
 | M5 | Sprint 7 完成 | 财务闭环可用 |
 | M6 | Sprint 8-10 完成 | 数据驱动 + 移动化 |
 
@@ -280,6 +282,7 @@
 
 | 日期 | 变更 | 说明 |
 | --- | --- | --- |
+| 2026-08-12 | 更新 v1.19 | **Post-6B 双轨执行 Gate 治理同步（CTO Directive 2026-08-12，baseline main @ `874e060`）**：5A/5B/6A/6B → FINAL（PR #19/#20/#21/#22 均已合并 main）；5C-1 Supplier Invoice / AP → ACTIVE（PR #23）；Frontend Operations → ACTIVE（PR #24，Iteration 1 十模块 List 工作台）；Inventory Read Model → PLANNED（Query Contract 设计先行，实现 HOLD）；Reservation / Costing / Sprint 7 GL / BI / OA / Mobile → HOLD（解除需 CTO 单独指令）；文档治理：仓库根 AGENTS.md（CI-First 全仓规则）+ DEVELOPMENT_STANDARD.md Local Workflow 第 4 步修正（本地静态审阅 → push → GitHub CI）+ CTO Directive 存档 docs/reviews/CTO_Directive_Post6B_Dual_Track_Execution_Gate_2026-08-12.md |
 | 2026-08-09 | 更新 v1.18 | **Sprint 5A Purchase Requisition & Purchase Order Foundation 完成**（PR #19 待 CTO Final Review：Schema/Migration 0021（纯增量）+ Migration 0022（Snapshot 唯一约束 [purchaseOrderId, snapshotType, revisionNo] 修复 + PO Header +purchaserId/departmentId）/ Seed+RBAC（7 权限模块）/ PR API（Create/Query/PATCH/Submit/Convert）/ PO API（Direct+Convert 双入口、价格双通道 SUPPLIER_PRICE_SNAPSHOT/MANUAL、金额服务端 Decimal 聚合、REQUISITION 行级溯源）/ Submit→Workflow→Confirm→Cancel（**APPROVED ≠ CONFIRMED 锁死**，只有 CONFIRMED PO 才是 5B GR 唯一来源；Confirm 事务 FOR UPDATE 行锁并发幂等；Cancel DRAFT/APPROVED 可取消、SUBMITTED 409 先 Withdraw、CONFIRMED+ 409 禁止）/ EVENTS v1.14→v1.17 / QA+Test Cases / OpenAPI 完整补齐 / AGENTS.md Verification Policy（禁止本地高资源验证，CI 为验证事实源）；CTO Reviews：Phase 3 ✅ / Phase 4A ✅ / Phase 4B 98/100（Blocking 0，2 Verification Items 本地取证通过）；CI 全绿 @ d8d4beb；Sprint 5 状态 🔄（5A ✅，5B/5C 未开始）；整体成熟度约 94-96%）；分支治理（CTO #6575）：远程删除 codex×2 + feature/sprint4-sales（归档 tag `archive/sprint4-sales-final`），远程仅剩 main + feature/sprint5-purchase |
 | 2026-08-08 | 更新 v1.17 | **Linier ERP v0.6.0-alpha 发布完成**（annotated tag `v0.6.0-alpha` 指向 `a5d8214`——Release Gate 通过的最终 release commit，后续 post-release 文档 commit 不修改该 Tag；GitHub **Pre-release** 已创建：Linier ERP v0.6.0-alpha — Sales & Finance O2C Foundation，id=367214703；Release Gate：Sprint 4 O2C Total Acceptance **PASS → RELEASE CANDIDATE**（9/9 节点、6/6 系统级不变量、Blocking Issues = 0），证据 docs/reviews/Sprint4_O2C_Total_Acceptance.md；RELEASE_NOTES v0.6.0-alpha 段冻结（汇总 Sprint 4A-4E-3 + Known Limitations 6 项）；版本治理：以 Git Tag 为发布事实源，package.json 不随本版修改）；Sprint 4 已发布（4A ✅ 4B ✅ 4C ✅ 4D ✅ 4E-1 ✅ 4E-2 ✅ 4E-3 ✅ + v0.6.0-alpha）；整体成熟度约 92%；**下一步：Sprint 5（Purchase 采购）规划** |
 | 2026-08-08 | 更新 v1.16 | Sprint 4E-3 Credit Note / Debit Note Foundation 完成并合并（PR #18 squash merge `675923c`；CTO Final Review **99/100 APPROVE & MERGE，Blocking 0**——4 项核验全 PASS：① 事件机制（AuditLog=事件总线落地前正式承载层，与 EVENTS.md 一致）② 并发累计防超调锁序安全 ③ 负 AR 门禁锁内生效（Receipt Allocation/WriteOff Apply）④ Schema/Migration 事实链一致；Review Cover 16 项 Checklist APPROVED & MERGED）；Sprint 4 状态 **✅ COMPLETE**（4A ✅ 4B ✅ 4C ✅ 4D ✅ 4E-1 ✅ 4E-2 ✅ 4E-3 ✅——Quotation→SO→Delivery→Invoice→AR→Receipt→Allocation/Reversal→WriteOff→CN/DN 销售财务 O2C 主链完整闭环）；Credit/Debit Note 模块 ✅；保留 feature/sprint4-sales；待 Sprint 4 Sales+Finance 总验收后统一发布新 Alpha Tag；整体成熟度上调至约 92% |
