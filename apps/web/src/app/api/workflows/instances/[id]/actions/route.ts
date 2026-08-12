@@ -15,6 +15,7 @@ import { syncPurchaseRequisitionApproval } from '@/lib/purchase-requisition/work
 import { syncPurchaseOrderApproval } from '@/lib/purchase-order/workflow-sync';
 import { syncInventoryTransferApproval } from '@/lib/inventory-transfer/workflow-sync';
 import { syncInventoryAdjustmentApproval } from '@/lib/inventory-adjustment/workflow-sync';
+import { syncSupplierInvoiceApproval } from '@/lib/supplier-invoice/workflow-sync';
 
 export const dynamic = 'force-dynamic';
 
@@ -470,6 +471,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   ) {
     await syncInventoryAdjustmentApproval({
       adjustmentId: instance.businessId,
+      workflowStatus: result.afterStatus,
+      actorId: user!.id,
+    });
+  }
+
+  // Sprint 5C-1B：SupplierInvoice 审批终态回写（Approval 与 Match 分层——CTO #9238/#9247）
+  // **红线：审批只固化 approvedMatchRunId/approvedMatchRevision + documentStatus=APPROVED，绝不 UPDATE MatchRun**
+  // （Approval references MatchRun，不 mutates——#8901）；REJECTED → 保持 MATCHED（可重新 Match 追加 revision）；
+  // **stale 校验（#9247 细节③）**：sync 内校验 workflow 触发时绑定的 run identity == invoice.currentMatchRun
+  // 且 documentStatus == MATCHED，不一致 fail closed（re-match 后旧审批不得批准新 snapshot）
+  if (
+    instance.businessType === 'supplier-invoice' &&
+    (result.afterStatus === 'COMPLETED' || result.afterStatus === 'REJECTED')
+  ) {
+    await syncSupplierInvoiceApproval({
+      invoiceId: instance.businessId,
       workflowStatus: result.afterStatus,
       actorId: user!.id,
     });

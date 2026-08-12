@@ -78,6 +78,8 @@ tags:
   - name: Inventory Adjustments
   # Sprint 6B-4 — Inventory Conversion / Repack（同 item 转换，CTO #8658 授权）
   - name: Inventory Conversions
+  # Sprint 5C-1A — Supplier Invoice Foundation（RECEIPT_BASED 首版，CTO #9048/#9083）
+  - name: Supplier Invoices
 
 paths:
   # ==========================================================================
@@ -11700,6 +11702,305 @@ paths:
         "409":
           description: Conflict（已 EXECUTED / 已取消 / 版本冲突）
 
+  # ==========================================================================
+  # Sprint 5C-1A — Supplier Invoice Foundation（CTO #9048 Schema FINAL APPROVED + #9083 API 指令）
+  # RECEIPT_BASED：PO Line + POSTED WHR Line 双溯源必填；Create/PATCH/Submit 三次来源链验证；
+  # 金额全部服务端 Decimal；Submit 只 DRAFT→SUBMITTED（不生成 MatchRun/GRIR/ApLiabilityFact）。
+  # ==========================================================================
+  /api/supplier-invoices:
+    get:
+      tags: [Supplier Invoices]
+      summary: List supplier invoices (分页 + invoiceNo/supplierId/documentStatus/dateFrom/dateTo 过滤)
+      operationId: listSupplierInvoices
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: invoiceNo
+          in: query
+          schema: { type: string }
+        - name: supplierId
+          in: query
+          schema: { type: string }
+        - name: documentStatus
+          in: query
+          schema: { type: string }
+        - name: dateFrom
+          in: query
+          schema: { type: string, format: date }
+        - name: dateTo
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierInvoiceListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Supplier Invoices]
+      summary: Create supplier invoice (DRAFT；创建即取号 SINV；RECEIPT_BASED 三重 Gate 第一次验证；金额服务端计算)
+      description: |
+        创建供应商发票（DRAFT）。**创建即取号 SINV**（P1 Final，Sequence 缺失 fail closed 500）。
+        **RECEIPT_BASED 三重 Gate（红线 1，第一次验证）**：每行 WHR header 必须 POSTED + WHR Line ↔ PO Line ↔
+        Item ↔ Supplier 来源链一致 + 开票数量 ≤ 已入库数量（helpers.verifyReceiptBasedSourceChain）。
+        **金额全部服务端 Decimal 计算**（不信任客户端头金额/行金额；schema 不收金额；行 netAmount=quantity×unitPrice、
+        taxAmount=netAmount×taxRate/100、nonRecoverableTaxAmount；头 net/tax/gross 聚合）。
+        重复供应商发票号：API 预检 409 + DB 组合 UNIQUE @@unique([supplierId, supplierInvoiceNo]) 最终防线。
+        状态 documentStatus=DRAFT / settlementStatus=UNPAID；DRAFT 不产生 AP/GRIR/MatchRun（5C-1B/1C）。
+        权限：supplier-invoice:create。
+      operationId: createSupplierInvoice
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierInvoiceCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierInvoiceResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Conflict（供应商发票号重复 / 版本冲突）
+        "500":
+          description: Internal（SINV Sequence 缺失 fail closed / 其他）
+
+  /api/supplier-invoices/{id}:
+    get:
+      tags: [Supplier Invoices]
+      summary: Get supplier invoice detail (Header + Supplier + Lines 双溯源)
+      operationId: getSupplierInvoice
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierInvoiceResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Supplier Invoices]
+      summary: Update supplier invoice (仅 DRAFT；CAS version；行整体替换；RECEIPT_BASED 三重 Gate 第二次验证)
+      description: |
+        更新供应商发票（**仅 DRAFT**；CAS id+version+status=DRAFT）。supplierId/supplierInvoiceNo/currency/
+        exchangeRate 不可编辑（创建时锁定）。行整体替换 → **第二次 RECEIPT_BASED 三重 Gate（红线 1）**——重新验证
+        WHR POSTED + 来源链一致 + 数量 ≤ 已入库；**来源链验证 + CAS 更新 + 行替换同一事务**。
+        **金额重新服务端 Decimal 计算**（不信任客户端）。DRAFT 变更仅 AuditLog（不发领域事件）。
+        权限：supplier-invoice:edit。
+      operationId: updateSupplierInvoice
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierInvoiceUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierInvoiceResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（非 DRAFT / 版本冲突）
+
+  /api/supplier-invoices/{id}/submit:
+    post:
+      tags: [Supplier Invoices]
+      summary: Submit supplier invoice (DRAFT → SUBMITTED；RECEIPT_BASED 三重 Gate 第三次验证；SUBMITTED ≠ POSTED)
+      description: |
+        提交供应商发票（DRAFT → SUBMITTED）。**第三次 RECEIPT_BASED 三重 Gate（红线 1）**：状态迁移前重新验证
+        每行 WHR POSTED + WHR Line ↔ PO Line ↔ Item ↔ Supplier 来源链一致 + 数量 ≤ 已入库
+        （创建/编辑后来源事实异常变化也不会带入后续 Match 阶段）。
+        **SUBMITTED ≠ POSTED**：submit 只做状态迁移，**不创建 MatchRun / GRIR / ApLiabilityFact**（5C-1B/1C），
+        不写 postedAt/postedById。SUBMITTED 仅 AuditLog（SupplierInvoiceCreated 注册位保持 ⏳——EVENTS v1.31）。
+        权限：supplier-invoice:edit。
+      operationId: submitSupplierInvoice
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierInvoiceVersionRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierInvoiceResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（非 DRAFT / 版本冲突）
+
+  /api/supplier-invoices/{id}/match:
+    post:
+      tags: [Supplier Invoices]
+      summary: Immutable 3-Way Match（SUBMITTED/MATCHED → MATCHED，追加 immutable revision；Match/Approval 分层）
+      description: |
+        **Immutable 3-Way Match（CTO #9238/#9247）**：SUBMITTED/MATCHED → MATCHED（追加 immutable revision）。
+        Match Engine（runMatch）事务内固定顺序：FOR UPDATE 锁 SupplierInvoice header（唯一串行点）→ 重读状态/current run →
+        状态门禁（SUBMITTED/MATCHED 可进；APPROVED/POSTED/CANCELLED 禁直接 re-match → 409 MATCH_NOT_MATCHABLE）→
+        CAS version → 锁内算 next revision（max+1）→ 来源链重验（WHR POSTED + 链一致 + Item ACTIVE + 累计守恒）→
+        服务端 snapshot 计算（poQty/receiptQty/invoiceQty/poUnitPrice/invoiceUnitPrice/qtyVariance/priceVariance/
+        taxVariance/result/disposition——**客户端不得上传计算结果**）→ 创建 MatchRun + MatchLines（immutable，DB trigger 兜底）→
+        更新 current projection（header.currentMatchRunId + lines currentMatchRunId/currentMatchStatus/matchedQty/variance*）→
+        CAS documentStatus → MATCHED（version+1）。
+        **Match API 自己不写 approvedMatchRunId/approvedMatchRevision**（Approval 单独接 Workflow——#9238；
+        Match 成功后 maybeTrigger 把 matchRunId+revision 绑定进 workflow business context——#9247 细节③）。
+        红线：不创建 GrirRecord/ApLiabilityFact/ApOpenItem；不写 postedAt/postedById；不接 CN/DN。
+        权限：supplier-invoice:edit。
+      operationId: matchSupplierInvoice
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierInvoiceVersionRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierInvoiceMatchResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（非 MATCHABLE / 版本冲突）
+
+
+  /api/supplier-invoices/{id}/post:
+    post:
+      tags: [Supplier Invoices]
+      summary: Supplier Invoice POST（APPROVED → POSTED；GRIR CONSUME + AP Liability-OpenItem 同事务闭环）
+      description: |
+        **Supplier Invoice POST / GRIR / AP Vertical Slice（CTO #9678，六条不变量锁死）**。
+        POST 是一个事务闭环（postSupplierInvoice，同事务全有或全无）：
+        FOR UPDATE 锁 SupplierInvoice → APPROVED Gate（POSTED → 409 ALREADY_POSTED 幂等拒绝）→
+        approved MatchRun 精确重验（不变量①：approvedMatchRunId + approvedMatchRevision 必须真实存在、
+        属于本 invoice、与审批 immutable snapshot 一致——**不得仅看 currentMatchStatus**）→
+        来源事实重验（WHR POSTED + 链一致 + Item ACTIVE + 累计守恒；**deterministic WHR Line lock order**——
+        不变量②，与 PurchaseReturn REVERSAL 串行竞争同一 remaining GRIR）→ remaining GRIR 重算 →
+        **全额满足校验（不变量③：不足 409 fail closed，禁止 partial POST）** → CONSUME（GRIR/PO snapshot
+        basis——不变量④：unitPrice/taxRate 取 ACCRUAL snapshot，不得用发票价格改写 GRIR basis）→
+        ApLiabilityFact + ApOpenItem（发票事实金额——不变量⑤：gross/net/inputVat/nonRecoverableTax 服务端聚合；
+        openAmount 初始 = grossAmount，settlementStatus=UNPAID，只读 projection）→ CAS POSTED + postedAt/PostedById
+        （不变量⑥ 原子性）。
+        **maker-checker（服务层）**：Poster ≠ Creator（硬性）；Approval actor 可解析则双重校验（Poster ≠
+        Approval actor）。幂等：已 POSTED → 409；DB partial UNIQUE + sourceKey UNIQUE +
+        ApLiabilityFact.supplierInvoiceId UNIQUE 最终防线。
+        **边界提前固化**：历史退货已降低 remaining GRIR 导致无法完整 consume → POST 拒绝（GRIR_INSUFFICIENT 409），
+        不制造负 GRIR，不在 5C-1C 偷做 CN/DN（5C-2 处理）。
+        红线：不写库存成本/GL/Costing/Reservation/InventoryMovement/StockProjection。
+        权限：supplier-invoice:edit（对齐 submit/match 先例）；maker-checker 服务层强制。
+      operationId: postSupplierInvoice
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierInvoiceVersionRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierInvoicePostResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict（非 APPROVED / 已 POSTED / 版本冲突 / maker-checker / 审批快照不一致 / GRIR 不足）
+
 components:
   securitySchemes:
     bearerAuth:
@@ -18539,3 +18840,204 @@ components:
                 properties:
                   inserted: { type: boolean, description: true=新入账 / false=五元幂等重放 }
                   movementNo: { type: string, description: 入账流水号 MV-xxxxxx }
+
+    SupplierInvoiceLineCreate:
+      type: object
+      required: [purchaseOrderLineId, warehouseReceiptLineId, quantity, unitPrice, taxRate]
+      description: 供应商发票行（双溯源必填——PO Line + POSTED WHR Line；**不收金额**——服务端计算）
+      properties:
+        purchaseOrderLineId: { type: string, description: 溯源 PO Line（不变量① 承诺来源） }
+        warehouseReceiptLineId: { type: string, description: 溯源入库行（数量匹配基准；必须来自 POSTED WHR——红线 1） }
+        quantity: { type: number, description: 开票数量（> 0；≤ 已入库数量——红线 1） }
+        unitPrice: { type: number, description: 单价（> 0；与 PO 快照单价比对） }
+        taxRate: { type: number, description: 税率快照（0-100 百分比；DB CHECK 兜底） }
+        vatRecoverable: { type: boolean, default: true, description: P9 Final：true → Input VAT；false → nonRecoverableTaxAmount }
+        remark: { type: string }
+
+    SupplierInvoiceCreate:
+      type: object
+      required: [supplierId, supplierInvoiceNo, invoiceDate, receivedDate, lines]
+      description: 供应商发票创建（DRAFT；创建即取号 SINV——P1 Final；**不收头金额**——服务端聚合）
+      properties:
+        supplierId: { type: string }
+        supplierInvoiceNo: { type: string, description: 供应商发票号（供应商侧唯一；不变量② 与 supplierId 组合唯一） }
+        invoiceDate: { type: string, format: date }
+        receivedDate: { type: string, format: date }
+        currency: { type: string, default: "CNY" }
+        exchangeRate: { type: number, default: 1, description: 创建时快照 FX（P2 Final） }
+        paymentDueDate: { type: string, format: date }
+        remark: { type: string }
+        lines:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/SupplierInvoiceLineCreate" }
+
+    SupplierInvoiceUpdate:
+      type: object
+      required: [version]
+      description: 供应商发票更新（仅 DRAFT；CAS version；行整体替换；supplierId/supplierInvoiceNo/currency/exchangeRate 不可编辑）
+      properties:
+        version: { type: integer, minimum: 1 }
+        invoiceDate: { type: string, format: date }
+        receivedDate: { type: string, format: date }
+        paymentDueDate: { type: [string, "null"], format: date }
+        remark: { type: [string, "null"] }
+        lines:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/SupplierInvoiceLineCreate" }
+
+    SupplierInvoiceVersionRequest:
+      type: object
+      required: [version]
+      description: 通用 version 乐观锁请求（submit）
+      properties:
+        version: { type: integer, minimum: 1 }
+
+    SupplierInvoice:
+      type: object
+      description: 供应商发票（RECEIPT_BASED 首版；DRAFT/SUBMITTED——Match/Approval/POST 属 5C-1B/1C）
+      properties:
+        id: { type: string }
+        invoiceNo: { type: string, description: 发票单号（SINV-xxxxxx） }
+        supplierInvoiceNo: { type: string }
+        supplierId: { type: string }
+        invoiceDate: { type: string, format: date }
+        receivedDate: { type: string, format: date }
+        currency: { type: string }
+        exchangeRate: { type: string, description: Decimal 字符串（创建时快照 FX） }
+        documentStatus: { type: string, enum: [DRAFT, SUBMITTED, MATCHED, APPROVED, POSTED, CANCELLED] }
+        settlementStatus: { type: string, enum: [UNPAID, PARTIALLY_PAID, PAID] }
+        netAmount: { type: string, description: 不含税总额（Decimal 字符串，服务端聚合） }
+        taxAmount: { type: string, description: 税额合计（Decimal 字符串） }
+        grossAmount: { type: string, description: 含税总额 = net + tax（Decimal 字符串） }
+        paymentDueDate: { type: [string, "null"], format: date }
+        version: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    SupplierInvoiceLine:
+      type: object
+      description: 供应商发票行（双溯源；金额服务端计算）
+      properties:
+        id: { type: string }
+        supplierInvoiceId: { type: string }
+        purchaseOrderLineId: { type: string }
+        warehouseReceiptLineId: { type: string }
+        itemId: { type: [string, "null"] }
+        lineNo: { type: integer }
+        quantity: { type: string, description: 开票数量（Decimal 字符串） }
+        unitPrice: { type: string, description: 单价（Decimal 字符串） }
+        netAmount: { type: string, description: 行净额 = quantity × unitPrice（Decimal 字符串，服务端） }
+        taxRate: { type: string, description: 税率快照（Decimal 字符串） }
+        taxAmount: { type: string, description: 行税额 = netAmount × taxRate / 100（Decimal 字符串，服务端） }
+        vatRecoverable: { type: boolean }
+        nonRecoverableTaxAmount: { type: string, description: vatRecoverable=false → = taxAmount（P9 Final，Decimal 字符串） }
+
+    SupplierInvoiceResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            invoice:
+              type: object
+              properties:
+                id: { type: string }
+                invoiceNo: { type: string }
+                supplierInvoiceNo: { type: string }
+                supplierId: { type: string }
+                documentStatus: { type: string }
+                settlementStatus: { type: string }
+                netAmount: { type: string }
+                taxAmount: { type: string }
+                grossAmount: { type: string }
+                lines:
+                  type: array
+                  items: { $ref: "#/components/schemas/SupplierInvoiceLine" }
+
+    SupplierInvoiceListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            total: { type: integer }
+            page: { type: integer }
+            pageSize: { type: integer }
+            items:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string }
+                  invoiceNo: { type: string }
+                  supplierInvoiceNo: { type: string }
+                  supplierId: { type: string }
+                  documentStatus: { type: string }
+                  settlementStatus: { type: string }
+                  grossAmount: { type: string }
+
+    SupplierInvoiceMatchResponse:
+      type: object
+      required: [success, data]
+      description: 5C-1B Immutable 3-Way Match 响应（Match/Approval 分层——CTO #9238/#9247）
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            invoice:
+              type: object
+              properties:
+                id: { type: string }
+                invoiceNo: { type: string }
+                documentStatus: { type: string }
+                currentMatchRunId: { type: [string, "null"], description: 当前投影（历史走 immutable MatchRun） }
+                lines:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      currentMatchStatus: { type: string, enum: [MATCHED, VARIANCE, PENDING] }
+                      currentMatchRunId: { type: [string, "null"] }
+                      matchedQty: { type: string, description: = min(invoiceQty, 可用入库量)（Decimal 字符串，服务端） }
+                      varianceQty: { type: string }
+                      variancePrice: { type: string }
+                      varianceTax: { type: string }
+            matchRun:
+              type: object
+              description: immutable MatchRun（DB trigger 禁止后续 UPDATE/DELETE）
+              properties:
+                id: { type: string }
+                runNo: { type: integer }
+                revision: { type: integer, description: 不可变快照标识（Approval 引用） }
+                result: { type: string, enum: [MATCHED, VARIANCE] }
+                disposition: { type: string, enum: [ACCEPT, REJECT, HOLD, CREATE_CN_DN] }
+                runAt: { type: string, format: date-time }
+                runById: { type: [string, "null"] }
+                lines:
+                  type: array
+                  description: immutable MatchLines（snapshot 全服务端生成）
+                  items:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      supplierInvoiceLineId: { type: string }
+                      purchaseOrderLineId: { type: string }
+                      warehouseReceiptLineId: { type: string }
+                      poQty: { type: string }
+                      receiptQty: { type: string }
+                      invoiceQty: { type: string }
+                      poUnitPrice: { type: string }
+                      invoiceUnitPrice: { type: string }
+                      qtyVariance: { type: string }
+                      priceVariance: { type: string }
+                      taxVariance: { type: string }
+                      result: { type: string, enum: [MATCHED, VARIANCE] }
+                      disposition: { type: string, enum: [ACCEPT, REJECT, HOLD, CREATE_CN_DN] }
