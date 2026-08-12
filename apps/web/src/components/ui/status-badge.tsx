@@ -20,6 +20,11 @@ const STATUS_META: Record<string, { label: string; className: string }> = {
   POSTED: { label: "已过账", className: "bg-teal-100 text-teal-700" },
   // PurchaseReturn（5B）
   RETURNED: { label: "已退货", className: "bg-rose-100 text-rose-700" },
+  // Inspection（5B，result 枚举）
+  QUALIFIED: { label: "合格", className: "bg-green-100 text-green-700" },
+  PARTIAL: { label: "部分合格", className: "bg-amber-100 text-amber-700" },
+  REJECTED: { label: "拒收", className: "bg-red-100 text-red-700" },
+  PENDING: { label: "待检", className: "bg-blue-100 text-blue-700" },
   // StockCount（6B）
   COUNTING: { label: "盘点中", className: "bg-blue-100 text-blue-700" },
   COMPLETED: { label: "已完成", className: "bg-teal-100 text-teal-700" },
