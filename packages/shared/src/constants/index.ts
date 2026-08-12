@@ -39,6 +39,31 @@ export const PERMISSIONS = {
   PROJECT_VISIT_WRITE: "project-visit:write",
   PROJECT_RISK_READ: "project-risk:read",
   PROJECT_RISK_WRITE: "project-risk:write",
+  // Sprint 5A/5B：采购执行工作台（前端消费层对齐 FINAL 契约——权限码与 seed 注册一致）
+  PURCHASE_REQUISITION_READ: "purchase-requisition:view",
+  PURCHASE_REQUISITION_WRITE: "purchase-requisition:write",
+  PURCHASE_ORDER_READ: "purchase-order:view",
+  PURCHASE_ORDER_WRITE: "purchase-order:write",
+  PURCHASE_RECEIPT_READ: "purchase-receipt:view",
+  PURCHASE_RECEIPT_WRITE: "purchase-receipt:write",
+  INSPECTION_READ: "inspection:view",
+  INSPECTION_WRITE: "inspection:write",
+  WAREHOUSE_RECEIPT_READ: "warehouse-receipt:view",
+  WAREHOUSE_RECEIPT_WRITE: "warehouse-receipt:write",
+  PURCHASE_RETURN_READ: "purchase-return:view",
+  PURCHASE_RETURN_WRITE: "purchase-return:write",
+  // Sprint 6A/6B：库存工作台（前端消费层对齐 FINAL 契约）
+  // 注：Inventory Ledger / Stock Projection **无 FINAL Read API**（6A 只暴露 Consumer contract，
+  //     未发布 InventoryMovement/StockProjection 只读端点）——inventory-ledger:view **不是已存在的
+  //     生产权限事实**（CTO #8845 Contract Blocking）。正式 Query API Gate 前不声明该权限码。
+  INVENTORY_TRANSFER_READ: "inventory-transfer:view",
+  INVENTORY_TRANSFER_WRITE: "inventory-transfer:write",
+  STOCK_COUNT_READ: "stock-count:view",
+  STOCK_COUNT_WRITE: "stock-count:write",
+  INVENTORY_ADJUSTMENT_READ: "inventory-adjustment:view",
+  INVENTORY_ADJUSTMENT_WRITE: "inventory-adjustment:write",
+  INVENTORY_CONVERSION_READ: "inventory-conversion:view",
+  INVENTORY_CONVERSION_WRITE: "inventory-conversion:write",
 } as const;
 
 /** 主数据模块（供菜单/权限路由复用） */

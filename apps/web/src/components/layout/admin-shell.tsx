@@ -23,6 +23,17 @@ const NAV_ITEMS: ReadonlyArray<{ href: string; label: string; permission: Permis
   { href: "/departments", label: "部门管理", permission: PERMISSIONS.USER_READ },
   { href: "/roles", label: "角色权限", permission: PERMISSIONS.ROLE_READ },
   { href: "/audit-logs", label: "操作日志", permission: PERMISSIONS.AUDIT_READ },
+  // Track A Frontend Iteration 1 — reference + Commit A/B（剩余模块入口随 Commit C 加入）
+  { href: "/purchasing/requisitions", label: "采购申请", permission: PERMISSIONS.PURCHASE_REQUISITION_READ },
+  { href: "/purchasing/orders", label: "采购订单", permission: PERMISSIONS.PURCHASE_ORDER_READ },
+  { href: "/purchasing/receipts", label: "到货收货", permission: PERMISSIONS.PURCHASE_RECEIPT_READ },
+  { href: "/purchasing/inspections", label: "质检记录", permission: PERMISSIONS.INSPECTION_READ },
+  { href: "/purchasing/warehouse-receipts", label: "仓库收货", permission: PERMISSIONS.WAREHOUSE_RECEIPT_READ },
+  { href: "/purchasing/returns", label: "采购退货", permission: PERMISSIONS.PURCHASE_RETURN_READ },
+  { href: "/inventory/transfers", label: "库存调拨", permission: PERMISSIONS.INVENTORY_TRANSFER_READ },
+  { href: "/inventory/stock-counts", label: "库存盘点", permission: PERMISSIONS.STOCK_COUNT_READ },
+  { href: "/inventory/adjustments", label: "库存调整", permission: PERMISSIONS.INVENTORY_ADJUSTMENT_READ },
+  { href: "/inventory/conversions", label: "库存转换", permission: PERMISSIONS.INVENTORY_CONVERSION_READ },
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
