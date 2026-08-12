@@ -156,3 +156,43 @@ Migration 0027 部署时数据库可能已有 `WarehouseReceipt.status=POSTED` /
   remaining GRIR / 创建 CONSUME（grir-helpers 复用同一 remaining 计算口径）；
 - 否则并发时 Return 读 remaining=100 / Invoice POST 也读 remaining=100 → reversal 80 + consume 80
   → 累计超过 accrual（超 consume / 负 GRIR）——1C1/1C2 实现必须遵守此锁序。
+
+## 8. Supplier Invoice POST / GRIR CONSUME / AP Liability-OpenItem（CTO #9678 5C-1C1/1C2/1C3）
+
+### 8.1 背景
+
+5C-1C0（Accounting Readiness：Match tax basis + GRIR ACCRUAL/REVERSAL producer + 0028 historical
+backfill）已 FINAL APPROVED（CTO #9678 99/100，Blocking 0）。现在真正实现 **APPROVED → POSTED**
+事务闭环：POSTED + 每行 GRIR CONSUME + 一票 ApLiabilityFact + ApOpenItem 初始投影 **同事务全有或全无**。
+
+### 8.2 事务顺序（CTO #9678 锁死）
+
+`FOR UPDATE 锁 SupplierInvoice → APPROVED Gate（POSTED → 409 幂等）→ approved MatchRun 精确重验
+（不变量①）→ maker-checker（Poster ≠ Creator，approval actor 可解析则双重校验）→ 来源事实重验
+（verifyReceiptBasedSourceChain 复用，含 deterministic WHR Line lock order——不变量②）→ remaining
+GRIR 重算（ΣACCRUAL - ΣREVERSAL - ΣCONSUME，对同一 WHR Line）→ 全额满足校验（不变量③，fail closed）
+→ CONSUME（GRIR/PO snapshot basis——不变量④）→ ApLiabilityFact + ApOpenItem（发票事实金额——
+不变量⑤）→ CAS POSTED + postedAt/postedById（不变量⑥）→ 事务提交 → events/audit`
+
+### 8.3 关键不变量（CTO #9678 六条）
+
+| #    | 不变量                                       | 实现                                                                                                                                                                                                                                                                                                         |
+| ---- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| P-M1 | **批准快照精确一致（①）**                    | postSupplierInvoice 显式重验 `approvedMatchRunId + approvedMatchRevision` 三列 FK 命中 SupplierInvoiceMatchRun(id, supplierInvoiceId, revision)——POST 不得仅看 currentMatchStatus；引用缺失/不一致 → 409 APPROVAL_SNAPSHOT_INVALID                                                                           |
+| P-M2 | **WHR Line 锁序与 Return 共用（②）**         | verifyReceiptBasedSourceChain 内部 collect WHR ids → 去重排序 → `ORDER BY id FOR UPDATE` → 锁内重算 remaining → CONSUME；与 C0-C REVERSAL 完全同一锁序，串行竞争同一余额                                                                                                                                     |
+| P-M3 | **全额满足，禁止 partial POST（③）**         | 每行 remaining ≥ 本行 approved invoice qty；不足 → 409 GRIR_INSUFFICIENT + details（lineId/required/remaining）→ **整事务回滚，Invoice 保持 APPROVED**；无"能 consume 多少就 consume 多少"                                                                                                                   |
+| P-M4 | **CONSUME 金额 GRIR/PO snapshot basis（④）** | CONSUME.unitPrice/taxRate 取对应 ACCRUAL snapshot（非发票价格）；baseAmount = quantity × accrual unitPrice；发票与 PO 价格差异属已审批采购价格差异，不得改写 GRIR basis 掩盖                                                                                                                                 |
+| P-M5 | **AP Liability 发票事实金额（⑤）**           | ApLiabilityFact.grossAmount/netAmount = 发票服务端聚合；inputVatAmount = Σ 行 vatRecoverable=true 的 taxAmount；nonRecoverableTaxAmount = Σ 行 vatRecoverable=false 的 taxAmount；一票一个（supplierInvoiceId UNIQUE）；ApOpenItem.openAmount 初始 = grossAmount、settlementStatus=UNPAID（只读 projection） |
+| P-M6 | **POST 原子性（⑥）**                         | POSTED + 所有 CONSUME + ApLiabilityFact + ApOpenItem 同事务；任一 source/余额/maker-checker/unique/idempotency 异常 → 回滚保持 APPROVED；CAS version+1                                                                                                                                                       |
+| P-M7 | **maker-checker 服务层**                     | Poster ≠ Creator（硬性）+ Poster ≠ Approval actor（从 WorkflowInstance APPROVE action / Approver(APPROVED) 解析，可解析则双重校验）——route 层无绕过                                                                                                                                                          |
+| P-M8 | **幂等/终态**                                | POST 成功后重复 POST → 409 ALREADY_POSTED；不重复生成 Liability/Consume（DB partial UNIQUE + sourceKey UNIQUE + ApLiabilityFact.supplierInvoiceId UNIQUE 最终防线）                                                                                                                                          |
+
+### 8.4 边界（CTO #9678 提前固化）
+
+- 历史退货已降低 remaining GRIR 导致当前发票无法完整 consume → **POST 必须拒绝**（GRIR_INSUFFICIENT
+  409），**不得制造负 GRIR，不得在 5C-1C 偷做 CN/DN**；用户应修正发票/来源；已形成 AP 后的后续退货
+  差额继续留给 5C-2（Supplier CN/DN）。
+- 事件：POST 事务提交后 best-effort 发布 `SupplierInvoicePosted`（发票事实金额 + liabilityId/openItemId
+  - consumeCount，**不含 projection 余额**）+ `GrirConsumed`（consume 终态行数组）——EVENTS v1.33。
+- 红线延续：5C-2 CN/DN/Payment、GL、Costing、Reservation、InventoryMovement/StockProjection 零写入；
+  Migration 0027/0028 均不得再改。

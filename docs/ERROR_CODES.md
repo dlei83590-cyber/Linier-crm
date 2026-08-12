@@ -1,7 +1,7 @@
 # ERROR_CODES 错误码注册表
 
-- 版本：v1.0
-- 日期：2026-08-05
+- 版本：v1.1
+- 日期：2026-08-12
 - 维护者：CIO（JINZA）｜审核：CTO
 - 关联：[API_GUIDELINES.md](./API_GUIDELINES.md) ｜ `apps/web/src/lib/api/errors.ts`（ERROR_CODES 常量）
 
@@ -101,15 +101,38 @@
 | FILE_004 | 413 | 文件超过大小限制 |
 | AUDIT_001 | 403 | 无审计日志查看权限（仅 SUPER_ADMIN/ADMIN） |
 
-## 8. 注册规则
+## 8. 采购供应链（SUPPLIER_INVOICE）——Sprint 5C-1C Supplier Invoice POST / GRIR CONSUME / AP Liability-OpenItem
+
+> 注册范围：POST 端点（`/api/supplier-invoices/{id}/post`）实际使用码（CTO #9678 六条不变量 + #9757/#9781 精确更新 + 2026-08-12 B1/P2002 收紧）。
+> 命名与 `apps/web/src/lib/api/errors.ts` ERROR_CODES 常量一致（描述性名，非旧式 `{DOMAIN}_{SEQ}`）。
+> P2002 分类：Phase B 内唯一约束冲突仅在确认 Invoice=POSTED 时返回 ALREADY_POSTED；否则为 invariant conflict（500）——不伪装成已过账。
+
+| code | HTTP | 说明 |
+| --- | --- | --- |
+| SUPPLIER_INVOICE_NOT_FOUND | 404 | 供应商发票不存在 |
+| SUPPLIER_INVOICE_NO_LINES | 400 | 发票至少需要一条有效行 |
+| SUPPLIER_INVOICE_WHR_NOT_POSTED | 400 | 入库行所属 WHR 必须已 POSTED（来源事实重验） |
+| SUPPLIER_INVOICE_SOURCE_CHAIN_MISMATCH | 400 | WHR Line ↔ PO Line ↔ Item ↔ Supplier 来源链不一致 |
+| SUPPLIER_INVOICE_ITEM_INVALID | 400 | 物料不存在/已停用（来源事实重验） |
+| SUPPLIER_INVOICE_QUANTITY_INVALID | 400 | 开票数量必须 > 0 且 ≤ 已入库数量 |
+| SUPPLIER_INVOICE_CUMULATIVE_QTY_EXCEEDED | 400 | 累计开票数量超过已入库数量（含其他发票占用） |
+| SUPPLIER_INVOICE_NOT_APPROVED | 409 | 仅 APPROVED 状态可过账（APPROVED ≠ POSTED） |
+| SUPPLIER_INVOICE_ALREADY_POSTED | 409 | 仅确认 Invoice=POSTED 时返回：幂等拒绝，不重复生成 Liability/Consume |
+| SUPPLIER_INVOICE_APPROVAL_SNAPSHOT_INVALID | 409 | 审批快照引用（approvedMatchRunId/Revision）缺失或与审批 immutable snapshot 不一致 |
+| SUPPLIER_INVOICE_MAKER_CHECKER | 409 | maker-checker：过账人不得 = 创建人/审批人 |
+| SUPPLIER_INVOICE_GRIR_INSUFFICIENT | 409 | 剩余 GRIR 不足以全额消耗（禁止 partial POST，fail closed） |
+| VERSION_CONFLICT | 409 | POST 终态 CAS 失败（事务回滚，Invoice 保持 APPROVED；B1 throw 映射） |
+
+## 9. 注册规则
 
 1. 新错误码：`{DOMAIN}_{三位序号}`，追加到对应域表格
 2. 同步更新 `apps/web/src/lib/api/errors.ts` 的 `ERROR_CODES` 常量
 3. 前端国际化文件按 code 提供文案（预留 i18n 目录）
 4. 删除/修改已发布错误码属于 Breaking Change，必须走版本升级（ADR）
 
-## 9. 变更记录
+## 10. 变更记录
 
 | 日期 | 版本 | 说明 |
 | --- | --- | --- |
+| 2026-08-12 | v1.1 | 新增「采购供应链（SUPPLIER_INVOICE）」段（Sprint 5C-1C POST 端点实际使用码 + B1/P2002 分类语义） |
 | 2026-08-05 | v1.0 | 初始注册（通用/认证/主数据/项目/工作流/平台配置/平台能力） |
