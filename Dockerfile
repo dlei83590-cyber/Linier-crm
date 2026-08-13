@@ -23,6 +23,15 @@ COPY --from=deps /app/ ./
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
+# Build-time release metadata (P0.5): inlined by next build into the
+# client bundle; APP_VERSION 由 next.config.ts 从 root package.json 读取。
+# 通过 --build-arg 注入真实 GIT_SHA/BUILD_ID/DEPLOYMENT_ENV。
+ARG NEXT_PUBLIC_GIT_SHA=unknown
+ARG NEXT_PUBLIC_BUILD_ID=unknown
+ARG NEXT_PUBLIC_DEPLOYMENT_ENV=production
+ENV NEXT_PUBLIC_GIT_SHA=$NEXT_PUBLIC_GIT_SHA
+ENV NEXT_PUBLIC_BUILD_ID=$NEXT_PUBLIC_BUILD_ID
+ENV NEXT_PUBLIC_DEPLOYMENT_ENV=$NEXT_PUBLIC_DEPLOYMENT_ENV
 # Generate Prisma Client before building so next build's type check
 # can resolve @prisma/client types (matches the CI Build job)
 RUN corepack enable pnpm && pnpm db:generate && pnpm build
