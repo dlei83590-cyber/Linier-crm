@@ -62,7 +62,6 @@ function WarehouseReceiptCreateForm() {
   const [locations, setLocations] = useState<WarehouseLocationOption[]>([]);
   const [locationId, setLocationId] = useState("");
   const [remark, setRemark] = useState("");
-  const [receiptLines, setReceiptLines] = useState<ReceiptDetailLine[]>([]);
   const [inspectionMap, setInspectionMap] = useState<Record<string, InspectionOption[]>>({});
   const [lines, setLines] = useState<WhrLine[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -105,7 +104,6 @@ function WarehouseReceiptCreateForm() {
     (receiptId: string) => {
       const controller = new AbortController();
       setPurchaseReceiptId(receiptId);
-      setReceiptLines([]);
       setInspectionMap({});
       setLines([]);
       if (!receiptId) return;
@@ -114,7 +112,6 @@ function WarehouseReceiptCreateForm() {
       })
         .then((body) => {
           const detailLines = body.data.lines ?? [];
-          setReceiptLines(detailLines);
           setLines(
             detailLines.map((l) => ({
               purchaseReceiptLineId: l.id,
@@ -129,7 +126,6 @@ function WarehouseReceiptCreateForm() {
           );
         })
         .catch(() => {
-          setReceiptLines([]);
           setLines([]);
         });
       return () => controller.abort();

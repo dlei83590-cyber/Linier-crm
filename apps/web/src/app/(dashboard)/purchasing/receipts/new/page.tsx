@@ -13,12 +13,6 @@ interface PurchaseOrderOption {
   supplier?: { name: string | null } | null;
 }
 
-interface POOptionItem {
-  id: string;
-  code: string | null;
-  name: string | null;
-}
-
 interface PODetailLine {
   id: string;
   lineNo: number;
@@ -50,7 +44,6 @@ function PurchaseReceiptCreateForm() {
   const [purchaseOrderId, setPurchaseOrderId] = useState("");
   const [warehouseId, setWarehouseId] = useState("");
   const [remark, setRemark] = useState("");
-  const [poLines, setPoLines] = useState<PODetailLine[]>([]);
   const [lines, setLines] = useState<ReceiptLine[]>([]);
   const [dirty, setDirty] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -95,7 +88,6 @@ function PurchaseReceiptCreateForm() {
     (poId: string) => {
       const controller = new AbortController();
       setPurchaseOrderId(poId);
-      setPoLines([]);
       setLines([]);
       if (!poId) return;
       apiFetch<{ lines?: PODetailLine[] }>(`/api/purchase-orders/${poId}`, {
@@ -103,7 +95,6 @@ function PurchaseReceiptCreateForm() {
       })
         .then((body) => {
           const detailLines = body.data.lines ?? [];
-          setPoLines(detailLines);
           setLines(
             detailLines.map((l) => ({
               purchaseOrderLineId: l.id,
@@ -115,7 +106,6 @@ function PurchaseReceiptCreateForm() {
           );
         })
         .catch(() => {
-          setPoLines([]);
           setLines([]);
         });
       return () => controller.abort();

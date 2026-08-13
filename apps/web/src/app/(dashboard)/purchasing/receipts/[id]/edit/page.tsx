@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
@@ -46,7 +46,6 @@ interface ReceiptEditLine {
 function PurchaseReceiptEditForm() {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
-  const router = useRouter();
 
   const [detail, setDetail] = useState<ReceiptDetail | null>(null);
   const [loading, setLoading] = useState(true);
