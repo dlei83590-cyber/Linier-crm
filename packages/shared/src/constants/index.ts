@@ -180,6 +180,13 @@ export const PERMISSION_MODULES = [
   "item-attachment",
   // Sprint 5A：Purchase Requisition 业务事实（动作映射：create→purchase-requisition:create（创建即取号）；submit→purchase-requisition:edit（复用统一 RBAC，不新造 submit 体系——对齐 5A/5B 拍板）；approve→purchase-requisition:approve（Workflow 审批）；cancel DRAFT→purchase-requisition:close；line 仅 view/edit——见 SEED_RESTRICTED_ACTION_PERMISSIONS；与 seed.ts SEED_ACTION_MODULES 保持一致）
   "purchase-requisition",
+  // Sprint 5A：Purchase Order 业务事实（动作映射：create→purchase-order:create（创建即取号）；submit→purchase-order:edit（复用统一 RBAC，不新造 submit 体系——对齐 5A/5B 拍板）；approve→purchase-order:approve（Workflow 审批）；cancel DRAFT→purchase-order:close；line 仅 view/edit、revision/snapshot 只读 view——见 SEED_RESTRICTED_ACTION_PERMISSIONS；与 seed.ts SEED_ACTION_MODULES 保持一致）
+  "purchase-order",
+  // Sprint 5B：Goods Receipt Inbound 业务事实（动作映射：create→purchase-receipt:create / inspection:create / warehouse-receipt:create / purchase-return:create（创建即取号）；普通收货/退货不走审批（P1b Final）；approve→purchase-receipt:approve / purchase-return:approve（超收/特殊退货审批）；cancel DRAFT→*:close；warehouse-location 与各 line 仅 view/edit——见 SEED_RESTRICTED_ACTION_PERMISSIONS；与 seed.ts SEED_ACTION_MODULES 保持一致）
+  "purchase-receipt",
+  "inspection",
+  "warehouse-receipt",
+  "purchase-return",
   // Sprint 6B：Inventory Operations 模块（Transfer 业务事实——动作映射：create→inventory-transfer:create（创建即取号）；submit→inventory-transfer:edit（复用统一 RBAC，不新造 submit 体系——对齐 5A/5B 拍板）；approve→inventory-transfer:approve（Workflow 审批）；execute→inventory-transfer:edit（对齐 5B post→:edit 先例）；cancel DRAFT/SUBMITTED→inventory-transfer:close；line 仅 view/edit——见 SEED_RESTRICTED_ACTION_PERMISSIONS）
   "inventory-transfer",
   // Sprint 6B-3：Stock Count 业务事实（动作映射：create→stock-count:create（创建即取号）；录入行/complete→stock-count:edit（对齐 execute→:edit 先例）；cancel→stock-count:close；line 仅 view/edit——见 SEED_RESTRICTED_ACTION_PERMISSIONS；**Count 本身不产生 Movement，差异经 Adjustment 审批后落账**）
