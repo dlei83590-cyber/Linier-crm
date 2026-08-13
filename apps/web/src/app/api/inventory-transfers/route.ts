@@ -6,6 +6,7 @@ import { ERROR_CODES, type ErrorCode } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
 import { inventoryTransferCreateSchema } from '@/lib/api/schemas';
 import { nextTransferNo, transferLineDedupeKey, InventoryTransferSequenceMissingError } from '@/lib/inventory-transfer/helpers';
+import { handleServerError } from "@/lib/api/server-error";
 
 export const dynamic = 'force-dynamic';
 
@@ -16,37 +17,43 @@ export async function GET(request: NextRequest) {
   if (denied) return denied;
   requestLog(request, user?.id, 'inventory-transfer.list');
 
-  const { searchParams } = new URL(request.url);
-  const { page, pageSize, skip, take } = parsePagination(searchParams);
-  const transferNo = searchParams.get('transferNo')?.trim();
-  const sourceWarehouseId = searchParams.get('sourceWarehouseId')?.trim();
-  const destinationWarehouseId = searchParams.get('destinationWarehouseId')?.trim();
-  const status = searchParams.get('status')?.trim();
+  try {
 
-  const where = {
-    deletedAt: null,
-    ...(transferNo ? { transferNo: { contains: transferNo, mode: 'insensitive' as const } } : {}),
-    ...(sourceWarehouseId ? { sourceWarehouseId } : {}),
-    ...(destinationWarehouseId ? { destinationWarehouseId } : {}),
-    ...(status ? { status: status as never } : {}),
-  };
+    const { searchParams } = new URL(request.url);
+    const { page, pageSize, skip, take } = parsePagination(searchParams);
+    const transferNo = searchParams.get('transferNo')?.trim();
+    const sourceWarehouseId = searchParams.get('sourceWarehouseId')?.trim();
+    const destinationWarehouseId = searchParams.get('destinationWarehouseId')?.trim();
+    const status = searchParams.get('status')?.trim();
 
-  const [total, items] = await Promise.all([
-    prisma.inventoryTransfer.count({ where }),
-    prisma.inventoryTransfer.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take,
-      include: {
-        sourceWarehouse: { select: { id: true, code: true, name: true } },
-        destinationWarehouse: { select: { id: true, code: true, name: true } },
-        _count: { select: { lines: true } },
-      },
-    }),
-  ]);
+    const where = {
+      deletedAt: null,
+      ...(transferNo ? { transferNo: { contains: transferNo, mode: 'insensitive' as const } } : {}),
+      ...(sourceWarehouseId ? { sourceWarehouseId } : {}),
+      ...(destinationWarehouseId ? { destinationWarehouseId } : {}),
+      ...(status ? { status: status as never } : {}),
+    };
 
-  return ok({ total, page, pageSize, items });
+    const [total, items] = await Promise.all([
+      prisma.inventoryTransfer.count({ where }),
+      prisma.inventoryTransfer.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+        include: {
+          sourceWarehouse: { select: { id: true, code: true, name: true } },
+          destinationWarehouse: { select: { id: true, code: true, name: true } },
+          _count: { select: { lines: true } },
+        },
+      }),
+    ]);
+
+    return ok({ total, page, pageSize, items });
+  } catch (error) {
+    return handleServerError(request, user?.id, "inventory-transfer.list", error);
+  }
+
 }
 
 /**

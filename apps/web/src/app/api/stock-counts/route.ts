@@ -6,6 +6,7 @@ import { ERROR_CODES } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
 import { stockCountCreateSchema } from '@/lib/api/schemas';
 import { nextCountNo, StockCountSequenceMissingError } from '@/lib/stock-count/helpers';
+import { handleServerError } from "@/lib/api/server-error";
 
 export const dynamic = 'force-dynamic';
 
@@ -16,32 +17,38 @@ export async function GET(request: NextRequest) {
   if (denied) return denied;
   requestLog(request, user?.id, 'stock-count.list');
 
-  const { searchParams } = new URL(request.url);
-  const { page, pageSize, skip, take } = parsePagination(searchParams);
-  const countNo = searchParams.get('countNo')?.trim();
-  const status = searchParams.get('status')?.trim();
+  try {
 
-  const where = {
-    deletedAt: null,
-    ...(countNo ? { countNo: { contains: countNo, mode: 'insensitive' as const } } : {}),
-    ...(status ? { status: status as never } : {}),
-  };
+    const { searchParams } = new URL(request.url);
+    const { page, pageSize, skip, take } = parsePagination(searchParams);
+    const countNo = searchParams.get('countNo')?.trim();
+    const status = searchParams.get('status')?.trim();
 
-  const [total, items] = await Promise.all([
-    prisma.stockCount.count({ where }),
-    prisma.stockCount.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take,
-      include: {
-        countedBy: { select: { id: true, name: true, email: true } },
-        _count: { select: { lines: true } },
-      },
-    }),
-  ]);
+    const where = {
+      deletedAt: null,
+      ...(countNo ? { countNo: { contains: countNo, mode: 'insensitive' as const } } : {}),
+      ...(status ? { status: status as never } : {}),
+    };
 
-  return ok({ total, page, pageSize, items });
+    const [total, items] = await Promise.all([
+      prisma.stockCount.count({ where }),
+      prisma.stockCount.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+        include: {
+          countedBy: { select: { id: true, name: true, email: true } },
+          _count: { select: { lines: true } },
+        },
+      }),
+    ]);
+
+    return ok({ total, page, pageSize, items });
+  } catch (error) {
+    return handleServerError(request, user?.id, "stock-count.list", error);
+  }
+
 }
 
 /**

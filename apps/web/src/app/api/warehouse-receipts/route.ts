@@ -11,6 +11,7 @@ import {
   computeInspectionUsedQty,
   computeInspectionAvailableQty,
 } from '@/lib/warehouse-receipt/helpers';
+import { handleServerError } from "@/lib/api/server-error";
 
 export const dynamic = 'force-dynamic';
 
@@ -21,38 +22,44 @@ export async function GET(request: NextRequest) {
   if (denied) return denied;
   requestLog(request, user?.id, 'warehouse-receipt.list');
 
-  const { searchParams } = new URL(request.url);
-  const { page, pageSize, skip, take } = parsePagination(searchParams);
-  const code = searchParams.get('code')?.trim();
-  const purchaseReceiptId = searchParams.get('purchaseReceiptId')?.trim();
-  const warehouseId = searchParams.get('warehouseId')?.trim();
-  const status = searchParams.get('status')?.trim();
+  try {
 
-  const where = {
-    deletedAt: null,
-    ...(code ? { code: { contains: code, mode: 'insensitive' as const } } : {}),
-    ...(purchaseReceiptId ? { purchaseReceiptId } : {}),
-    ...(warehouseId ? { warehouseId } : {}),
-    ...(status ? { status: status as never } : {}),
-  };
+    const { searchParams } = new URL(request.url);
+    const { page, pageSize, skip, take } = parsePagination(searchParams);
+    const code = searchParams.get('code')?.trim();
+    const purchaseReceiptId = searchParams.get('purchaseReceiptId')?.trim();
+    const warehouseId = searchParams.get('warehouseId')?.trim();
+    const status = searchParams.get('status')?.trim();
 
-  const [total, items] = await Promise.all([
-    prisma.warehouseReceipt.count({ where }),
-    prisma.warehouseReceipt.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take,
-      include: {
-        purchaseReceipt: { select: { id: true, code: true, status: true } },
-        warehouse: { select: { id: true, code: true, name: true } },
-        location: { select: { id: true, code: true, name: true } },
-        _count: { select: { lines: true } },
-      },
-    }),
-  ]);
+    const where = {
+      deletedAt: null,
+      ...(code ? { code: { contains: code, mode: 'insensitive' as const } } : {}),
+      ...(purchaseReceiptId ? { purchaseReceiptId } : {}),
+      ...(warehouseId ? { warehouseId } : {}),
+      ...(status ? { status: status as never } : {}),
+    };
 
-  return ok({ total, page, pageSize, items });
+    const [total, items] = await Promise.all([
+      prisma.warehouseReceipt.count({ where }),
+      prisma.warehouseReceipt.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+        include: {
+          purchaseReceipt: { select: { id: true, code: true, status: true } },
+          warehouse: { select: { id: true, code: true, name: true } },
+          location: { select: { id: true, code: true, name: true } },
+          _count: { select: { lines: true } },
+        },
+      }),
+    ]);
+
+    return ok({ total, page, pageSize, items });
+  } catch (error) {
+    return handleServerError(request, user?.id, "warehouse-receipt.list", error);
+  }
+
 }
 
 /**

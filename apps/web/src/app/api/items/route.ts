@@ -6,6 +6,7 @@ import { ok, failValidation, failConflict, parsePagination } from "@/lib/api/res
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { z } from "zod";
+import { handleServerError } from "@/lib/api/server-error";
 
 export const dynamic = "force-dynamic";
 
@@ -45,47 +46,53 @@ export async function GET(request: NextRequest) {
   if (denied) return denied;
   requestLog(request, user?.id, "item.list");
 
-  const { searchParams } = new URL(request.url);
-  const { page, pageSize, skip, take } = parsePagination(searchParams);
-  const code = searchParams.get("code")?.trim();
-  const name = searchParams.get("name")?.trim();
-  const itemType = searchParams.get("itemType")?.trim();
-  const status = searchParams.get("status")?.trim();
-  const categoryId = searchParams.get("categoryId")?.trim();
+  try {
 
-  const where = {
-    deletedAt: null,
-    ...(code ? { code: { contains: code } } : {}),
-    ...(name ? { name: { contains: name } } : {}),
-    ...(itemType ? { itemType: itemType as ItemType } : {}),
-    ...(status ? { status: status as ItemStatus } : {}),
-    ...(categoryId ? { categoryId } : {}),
-  };
+    const { searchParams } = new URL(request.url);
+    const { page, pageSize, skip, take } = parsePagination(searchParams);
+    const code = searchParams.get("code")?.trim();
+    const name = searchParams.get("name")?.trim();
+    const itemType = searchParams.get("itemType")?.trim();
+    const status = searchParams.get("status")?.trim();
+    const categoryId = searchParams.get("categoryId")?.trim();
 
-  const [total, items] = await Promise.all([
-    prisma.item.count({ where }),
-    prisma.item.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      skip,
-      take,
-      include: {
-        category: { select: { id: true, code: true, name: true, level: true } },
-        stockUom: { select: { id: true, code: true, name: true, symbol: true } },
-        _count: {
-          select: {
-            specifications: { where: { deletedAt: null } },
-            costs: { where: { deletedAt: null } },
-            supplierItems: { where: { deletedAt: null } },
-            revisions: { where: { deletedAt: null } },
-            tags: { where: { deletedAt: null } },
+    const where = {
+      deletedAt: null,
+      ...(code ? { code: { contains: code } } : {}),
+      ...(name ? { name: { contains: name } } : {}),
+      ...(itemType ? { itemType: itemType as ItemType } : {}),
+      ...(status ? { status: status as ItemStatus } : {}),
+      ...(categoryId ? { categoryId } : {}),
+    };
+
+    const [total, items] = await Promise.all([
+      prisma.item.count({ where }),
+      prisma.item.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take,
+        include: {
+          category: { select: { id: true, code: true, name: true, level: true } },
+          stockUom: { select: { id: true, code: true, name: true, symbol: true } },
+          _count: {
+            select: {
+              specifications: { where: { deletedAt: null } },
+              costs: { where: { deletedAt: null } },
+              supplierItems: { where: { deletedAt: null } },
+              revisions: { where: { deletedAt: null } },
+              tags: { where: { deletedAt: null } },
+            },
           },
         },
-      },
-    }),
-  ]);
+      }),
+    ]);
 
-  return ok(items, { page, pageSize, total });
+    return ok(items, { page, pageSize, total });
+  } catch (error) {
+    return handleServerError(request, user?.id, "item.list", error);
+  }
+
 }
 
 /** POST /api/items（创建 Item Master） */

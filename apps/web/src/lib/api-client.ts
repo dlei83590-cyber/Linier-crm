@@ -18,12 +18,14 @@ import { getAuthToken, notifyUnauthorized } from "@/lib/auth-token";
 export class ApiClientError extends Error {
   readonly status: number;
   readonly code?: string;
+  readonly requestId?: string;
 
-  constructor(status: number, message: string, code?: string) {
+  constructor(status: number, message: string, code?: string, requestId?: string) {
     super(message);
     this.name = "ApiClientError";
     this.status = status;
     this.code = code;
+    this.requestId = requestId;
   }
 }
 
@@ -57,7 +59,7 @@ export interface ApiSuccessEnvelope<T> {
 
 interface ApiFailureShape {
   success?: boolean;
-  error?: { code?: string; message?: string };
+  error?: { code?: string; message?: string; details?: { requestId?: string } };
 }
 
 /** 判断是否 same-origin /api/* 请求（仅这类请求统一附加 Bearer token） */
@@ -105,6 +107,7 @@ export async function apiFetch<T>(
       res.status,
       body?.error?.message ?? `请求失败（${res.status}）`,
       body?.error?.code,
+      body?.error?.details?.requestId,
     );
   }
 
