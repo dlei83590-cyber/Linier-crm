@@ -835,8 +835,14 @@ async function main() {
   }
 
   // Test user bootstrap（可选，仅当 SEED_TEST_EMAIL + SEED_TEST_PASSWORD 均提供时创建/更新，幂等）
+  // P0 Security（CTO Review 23:34）：**production 禁止 test bootstrap** —— 防止生产自动产生测试账户
   const testEmail = process.env.SEED_TEST_EMAIL;
   const testPassword = process.env.SEED_TEST_PASSWORD;
+  if (process.env.NODE_ENV === "production" && (testEmail || testPassword)) {
+    throw new Error(
+      "[seed] test-user bootstrap is forbidden in production (remove SEED_TEST_EMAIL / SEED_TEST_PASSWORD)",
+    );
+  }
   if (testEmail && testPassword) {
     const testPasswordHash = await hash(testPassword, 12);
     const testUser = await prisma.user.upsert({
@@ -850,11 +856,26 @@ async function main() {
         departmentId: engineering.id,
       },
     });
+    // P0 Security（CTO Review 23:34）：Test User 不得默认 SUPER_ADMIN —— 默认 MEMBER；
+    // 最高 ADMIN 且必须显式 opt-in（SEED_TEST_ROLE=ADMIN）；SUPER_ADMIN 一律拒绝。
+    // 同时清除历史遗留的 SUPER_ADMIN 关联（确保 test user 永不保留超级权限）。
     if (superAdminRoleId) {
+      await prisma.userRole.deleteMany({
+        where: { userId: testUser.id, roleId: superAdminRoleId },
+      });
+    }
+    const testRoleCode = (process.env.SEED_TEST_ROLE ?? "MEMBER").toUpperCase();
+    if (testRoleCode !== "MEMBER" && testRoleCode !== "ADMIN") {
+      throw new Error(
+        `[seed] SEED_TEST_ROLE must be MEMBER or ADMIN (got ${testRoleCode}); SUPER_ADMIN is not allowed for test users`,
+      );
+    }
+    const testRoleId = roleMap.get(testRoleCode);
+    if (testRoleId) {
       await prisma.userRole.upsert({
-        where: { userId_roleId: { userId: testUser.id, roleId: superAdminRoleId } },
+        where: { userId_roleId: { userId: testUser.id, roleId: testRoleId } },
         update: {},
-        create: { userId: testUser.id, roleId: superAdminRoleId },
+        create: { userId: testUser.id, roleId: testRoleId },
       });
     }
   }
