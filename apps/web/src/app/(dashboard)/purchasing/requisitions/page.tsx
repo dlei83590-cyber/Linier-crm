@@ -1,14 +1,15 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import Link from "next/link";
-import { PERMISSIONS } from "@nilier-crm/shared";
-import { PermissionGuard } from "@/components/guard/permission-guard";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { Pagination } from "@/components/ui/pagination";
-import { EmptyRow, ErrorRow, LoadingRow } from "@/components/ui/list-states";
-import { useListQuery } from "@/lib/use-list-query";
-import { formatDate } from "@/lib/format";
+import { useState } from 'react';
+import Link from 'next/link';
+import { hasPermission, PERMISSIONS, type RoleCode } from '@nilier-crm/shared';
+import { useSession } from '@/lib/session-context';
+import { PermissionGuard } from '@/components/guard/permission-guard';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { Pagination } from '@/components/ui/pagination';
+import { EmptyRow, ErrorRow, LoadingRow } from '@/components/ui/list-states';
+import { useListQuery } from '@/lib/use-list-query';
+import { formatDate } from '@/lib/format';
 
 interface RequisitionRow {
   id: string;
@@ -20,16 +21,20 @@ interface RequisitionRow {
   _count?: { lines: number };
 }
 
-const STATUS_OPTIONS = ["DRAFT", "SUBMITTED", "APPROVED", "CONVERTED", "CANCELLED"] as const;
-
+const STATUS_OPTIONS = ['DRAFT', 'SUBMITTED', 'APPROVED', 'CONVERTED', 'CANCELLED'] as const;
 
 function RequisitionList() {
-  const [codeInput, setCodeInput] = useState("");
-  const [statusInput, setStatusInput] = useState("");
+  const { state } = useSession();
+  const canCreate =
+    state.status === 'authenticated' &&
+    state.user !== null &&
+    hasPermission(state.user.roles as RoleCode[], 'purchase-requisition:create');
+  const [codeInput, setCodeInput] = useState('');
+  const [statusInput, setStatusInput] = useState('');
   const [filters, setFilters] = useState<{ code?: string; status?: string }>({});
 
   const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<RequisitionRow>("/api/purchase-requisitions", filters);
+    useListQuery<RequisitionRow>('/api/purchase-requisitions', filters);
 
   const applyFilter = () => {
     const next: { code?: string; status?: string } = {};
@@ -40,8 +45,8 @@ function RequisitionList() {
   };
 
   const resetFilter = () => {
-    setCodeInput("");
-    setStatusInput("");
+    setCodeInput('');
+    setStatusInput('');
     setFilters({});
     setPage(1);
   };
@@ -50,19 +55,27 @@ function RequisitionList() {
     <div className="rounded-lg border border-slate-200 bg-white">
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 p-4">
         <h1 className="mr-4 text-lg font-semibold text-slate-800">采购申请</h1>
+        {canCreate && (
+          <Link
+            href="/purchasing/requisitions/new"
+            className="bg-brand-600 hover:bg-brand-700 rounded-md px-3 py-1.5 text-sm font-medium text-white"
+          >
+            新建
+          </Link>
+        )}
         <input
           value={codeInput}
           onChange={(e) => setCodeInput(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") applyFilter();
+            if (e.key === 'Enter') applyFilter();
           }}
           placeholder="按单号搜索"
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+          className="focus:border-brand-500 rounded-md border border-slate-200 px-3 py-1.5 text-sm focus:outline-none"
         />
         <select
           value={statusInput}
           onChange={(e) => setStatusInput(e.target.value)}
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+          className="focus:border-brand-500 rounded-md border border-slate-200 px-3 py-1.5 text-sm focus:outline-none"
         >
           <option value="">全部状态</option>
           {STATUS_OPTIONS.map((s) => (
@@ -74,7 +87,7 @@ function RequisitionList() {
         <button
           type="button"
           onClick={applyFilter}
-          className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+          className="bg-brand-600 hover:bg-brand-700 rounded-md px-3 py-1.5 text-sm font-medium text-white"
         >
           查询
         </button>
@@ -114,8 +127,8 @@ function RequisitionList() {
                   <td className="px-4 py-3">
                     <StatusBadge status={item.status} />
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{item.requester?.name ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-600">{item.department?.name ?? "—"}</td>
+                  <td className="px-4 py-3 text-slate-600">{item.requester?.name ?? '—'}</td>
+                  <td className="px-4 py-3 text-slate-600">{item.department?.name ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{item._count?.lines ?? 0}</td>
                   <td className="px-4 py-3 text-slate-600">{formatDate(item.createdAt)}</td>
                   <td className="px-4 py-3">
