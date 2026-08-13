@@ -1,8 +1,10 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { AUTH_UNAUTHORIZED_EVENT, TOKEN_KEY, clearAuthToken, getAuthToken } from "@/lib/auth-token";
 
-export const TOKEN_KEY = "linier_crm_token";
+// 兼容既有导入方（login 等）：TOKEN_KEY 单一来源 = lib/auth-token
+export { TOKEN_KEY };
 
 export interface SessionUser {
   id: string;
@@ -30,7 +32,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<SessionState>({ status: "loading", user: null });
 
   const refresh = useCallback(async () => {
-    const token = window.localStorage.getItem(TOKEN_KEY);
+    const token = getAuthToken();
     if (!token) {
       setState({ status: "unauthenticated", user: null });
       return;
@@ -44,13 +46,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         data?: SessionUser;
       } | null;
       if (!res.ok || !body?.success || !body.data) {
-        window.localStorage.removeItem(TOKEN_KEY);
+        clearAuthToken();
         setState({ status: "unauthenticated", user: null });
         return;
       }
       setState({ status: "authenticated", user: body.data });
     } catch {
-      window.localStorage.removeItem(TOKEN_KEY);
+      clearAuthToken();
       setState({ status: "unauthenticated", user: null });
     }
   }, []);
@@ -59,8 +61,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     void refresh();
   }, [refresh]);
 
+  // 统一 401 收敛：apiFetch 在 401 时 dispatch AUTH_UNAUTHORIZED_EVENT，
+  // 这里统一清 token + 置 unauthenticated —— 不让每个 List/Edit 页各自处理。
+  useEffect(() => {
+    const onUnauthorized = () => {
+      clearAuthToken();
+      setState({ status: "unauthenticated", user: null });
+    };
+    window.addEventListener(AUTH_UNAUTHORIZED_EVENT, onUnauthorized);
+    return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, onUnauthorized);
+  }, []);
+
   const logout = useCallback(() => {
-    window.localStorage.removeItem(TOKEN_KEY);
+    clearAuthToken();
     setState({ status: "unauthenticated", user: null });
   }, []);
 
