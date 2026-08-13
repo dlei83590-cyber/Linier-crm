@@ -100,7 +100,10 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
   // ===== 采购财务（5C-1 已 Accounting Baseline → Supplier Invoice hold/后续 ready；5C-2 CN/DN+Payment 继续 HOLD，菜单可出现在分类下但不可点击——F2-6）=====
   { id: "supplier-invoices", domain: "supplier-ap", label: "供应商发票", route: "/supplier-invoices", permission: PERMISSIONS.SUPPLIER_INVOICE_READ, availability: "hold", order: 1 },
   { id: "ap-open-items", domain: "supplier-ap", label: "应付未结项", route: "/supplier-ap/open-items", permission: null, availability: "hold", order: 2 },
-  { id: "supplier-cn-dn", domain: "supplier-ap", label: "供应商贷项/借项", route: "/supplier-ap/credit-debit-notes", permission: PERMISSIONS.CREDIT_DEBIT_NOTE_READ, availability: "hold", order: 3 },
+  // Supplier CN/DN（5C-2 HOLD）：不得复用 4E-3 销售 AR CN/DN 权限（CREDIT_DEBIT_NOTE_READ 对应销售侧事实）；
+  // seed 尚无独立 supplier CN/DN permission，5C-2 未定义 → permission=null（与 AP Open Items / Payment 一致），
+  // 待 5C-2 Design/Schema/API 定义后再换正式 permission constant（不虚构 supplier-credit-debit-note:view）
+  { id: "supplier-cn-dn", domain: "supplier-ap", label: "供应商贷项/借项", route: "/supplier-ap/credit-debit-notes", permission: null, availability: "hold", order: 3 },
   { id: "payment-allocation", domain: "supplier-ap", label: "付款核销", route: "/supplier-ap/payments", permission: null, availability: "hold", order: 4 },
 
   // ===== 基础资料（当前 Placeholder → hold；F2-2 Master Data 开放）=====
