@@ -18,6 +18,22 @@ import type { NextConfig } from "next";
  * "unknown"/"dev"/空值视为占位符（isMeaningful 拒绝），避免 Dockerfile 默认值
  * 遮蔽真实平台变量。
  */
+
+/**
+ * ERP Release SSOT（P0 Incident R3）：RELEASE_VERSION manifest
+ * 内容与 GitHub Release / Git Tag 同步（当前 v0.6.0-alpha）。
+ * - Docker build 不需要 .git、不依赖外部网络（manifest 在 repo 内，COPY 进镜像）
+ * - 发布新 Git Tag 时同步更新 RELEASE_VERSION
+ * - package.json version（0.2.0-alpha）= 内部 Web app 版本，**不是** ERP Release 版本
+ */
+function releaseVersion(): string {
+  try {
+    return readFileSync(new URL("../../RELEASE_VERSION", import.meta.url), "utf-8").trim();
+  } catch {
+    return "unknown";
+  }
+}
+
 function rootVersion(): string {
   try {
     const pkg = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf-8"));
@@ -66,6 +82,7 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: false,
   },
   env: {
+    NEXT_PUBLIC_RELEASE_VERSION: process.env.NEXT_PUBLIC_RELEASE_VERSION ?? releaseVersion(),
     NEXT_PUBLIC_APP_VERSION: rootVersion(),
     NEXT_PUBLIC_GIT_SHA: gitSha(),
     NEXT_PUBLIC_BUILD_ID: buildId(),
