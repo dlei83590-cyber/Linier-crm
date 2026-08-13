@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { hasPermission, PERMISSIONS, type PermissionCode, type RoleCode, APP_NAME, APP_VERSION } from "@nilier-crm/shared";
+import { hasPermission, PERMISSIONS, type PermissionCode, type RoleCode, APP_NAME } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 
 const NAV_ITEMS: ReadonlyArray<{ href: string; label: string; permission: PermissionCode | null }> = [
@@ -143,12 +143,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <main className="min-w-0 flex-1 p-4 md:p-6">{children}</main>
       </div>
 
-      {/* Footer */}
+      {/* Footer — 只消费 build-time 注入的 NEXT_PUBLIC_*（SSOT = root package.json，见 next.config.ts） */}
       <footer className="border-t border-slate-200 bg-white px-4 py-3 text-center text-xs text-slate-400">
-        <p>{APP_NAME} · {APP_VERSION}</p>
+        <p>{APP_NAME} · {process.env.NEXT_PUBLIC_APP_VERSION ?? "-"}</p>
         <p className="mt-0.5">
           Build: {process.env.NEXT_PUBLIC_BUILD_ID ?? "-"} · Git Commit: {process.env.NEXT_PUBLIC_GIT_SHA ?? "-"} ·
-          Deployment: {process.env.NEXT_PUBLIC_DEPLOYMENT_URL ?? "-"}
+          Deployment: {process.env.NEXT_PUBLIC_DEPLOYMENT_ENV ?? "-"}
         </p>
       </footer>
     </div>
