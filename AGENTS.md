@@ -65,12 +65,14 @@
 
 （依据 CTO Directive 2026-08-12 Post-6B 双轨执行 Gate 与 2026-08-13 CI-First Enforcement / 阶段重排；ROADMAP 更新后必须同步本节。）
 
-- **Track A Frontend Tier 1 Reference（Batch 1/2）— CLOSED**：Purchase Requisition / Inventory Transfer（PR #27）、Inspection / Purchase Return（PR #32）Create + DRAFT Edit 均已合入 main；统一认证传输 `apiFetch` + Bearer（PR #34）已合入。
-- **Master-Data Read API（P0）— MERGED（PR #33）**：`GET /api/warehouses`、`/api/warehouse-locations`、`/api/unit-of-measures` 只读端点 + `warehouse`/`warehouse-location` RBAC registry 注册；Batch 3/4 selector 依赖已解除。
-- **Frontend Release Metadata + Dashboard Stale Cleanup（P0.5）— ACTIVE（PR #35）**：version SSOT = root `package.json`；build-time 注入 `APP_VERSION/GIT_SHA/BUILD_ID/DEPLOYMENT_ENV`（Footer + Dashboard System Overview 只消费构建注入值）；Dashboard 删除 Sprint 编号卡与静态“认证服务：正常”等健康状态声称（产品 UI 不承担 ROADMAP SSOT）。
-- **Batch 3（PO/Receipt/WHR）、Batch 4（Count/Adjustment/Conversion）— HOLD**：待 P0.5 落 main 后重新评估（Master-Data read API 已就绪）。
+- **Track A Frontend Tier 1 Reference（Batch 1/2）— CLOSED**：Purchase Requisition / Inventory Transfer（PR #27）、Inspection / Purchase Return（PR #32）Create + DRAFT Edit 均已合入 main。
+- **Frontend Auth Transport Contract Repair — CLOSED（PR #34）**：统一认证传输 `apiFetch` + Bearer（same-origin `/api/*` 自动附加 + 401 统一收敛）已合入。
+- **Master-Data Read API（P0）— CLOSED（PR #33）**：`GET /api/warehouses`、`/api/warehouse-locations`、`/api/unit-of-measures` 只读端点 + `warehouse`/`warehouse-location` RBAC registry 注册；Batch 3/4 selector 依赖已解除。
+- **Frontend Release Metadata + Dashboard Stale Cleanup（P0.5）— CLOSED（PR #35）**：version SSOT = root `package.json`；build-time 注入 `APP_VERSION/GIT_SHA/BUILD_ID/DEPLOYMENT_ENV`（生产来源 = 构建平台变量 Railway/GitHub，不依赖 .git）；Footer + Dashboard System Overview 只消费构建注入值；Dashboard 删除 Sprint 编号卡与静态“认证服务：正常”等健康状态声称。
+- **5C-1 Supplier Invoice / GRIR / AP Liability / AP Open Item — CLOSED / Accounting Baseline（PR #23 已合入）**。
+- **5C-2（Supplier Payment / AP Allocation / Payment Reversal / Supplier CN/DN / AP Write-Off / GL Posting）— HOLD**。
+- **Batch 3（PO/Receipt/WHR）、Batch 4（Count/Adjustment/Conversion）— HOLD pending next Gate**：P0.5 与 Governance CLOSED 后先做 Batch 3 Readiness Recheck（selector 映射 / 权限 / 返回 envelope），确认无新 contract gap 再解除 implementation HOLD。
 - **Tier 2/3（Submit/Approve/Confirm/Complete/Post/Execute/Return/Cancel 等）— HOLD**。
-- **5C-1 / Supplier Invoice / AP（原 Track B PR #23）— HOLD 待重排**：5C-2（Supplier Payment / AP Allocation / Payment Reversal / Supplier CN/DN / AP Write-Off / GL Posting）HOLD。
 - **GRIR 是不可变会计事实**：只允许 ACCRUAL / REVERSAL / CONSUME，禁止 `UPDATE GrirRecord SET quantity = ...`。
 - **WHR POST 与 GRIR ACCRUAL 必须同一事务**；Purchase Return（sourceRefType=WAREHOUSE_RECEIPT_LINE）必须产生 GRIR REVERSAL，且 Σ REVERSAL ≤ Σ ACCRUAL，任何并发路径不得制造负 GRIR。
 - **Invoice POST 同事务必须产生 GRIR CONSUME + AP Liability + AP Open Item**，禁止 partial success；金额一律 Server-side Decimal canonical 计算，禁止信任 client amount/tax/matched quantity。
