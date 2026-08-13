@@ -19,16 +19,26 @@ export const dynamic = "force-dynamic";
  */
 
 async function latestMigrationInRepo(): Promise<string | null> {
-  try {
-    const dir = path.join(process.cwd(), "prisma", "migrations");
-    const entries = await readdir(dir);
-    const names = entries
-      .filter((e) => !e.startsWith("migration_lock") && !e.startsWith("."))
-      .sort();
-    return names[names.length - 1] ?? null;
-  } catch {
-    return null;
+  // Next.js standalone 运行时会把 cwd 切到 server 目录（如 /app/apps/web），
+  // 而 prisma/migrations 位于仓库根（如 /app/prisma/migrations）。
+  // 从 cwd 向上逐级查找，兼容 standalone 容器与本地开发两种布局。
+  let dir = process.cwd();
+  for (let depth = 0; depth < 6; depth++) {
+    const candidate = path.join(dir, "prisma", "migrations");
+    try {
+      const entries = await readdir(candidate);
+      const names = entries
+        .filter((e) => !e.startsWith("migration_lock") && !e.startsWith("."))
+        .sort();
+      if (names.length > 0) return names[names.length - 1] ?? null;
+    } catch {
+      // 当前层级没有 prisma/migrations，继续向上一级
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
   }
+  return null;
 }
 
 export async function GET() {
