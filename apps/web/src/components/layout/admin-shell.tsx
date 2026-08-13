@@ -143,9 +143,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <main className="min-w-0 flex-1 p-4 md:p-6">{children}</main>
       </div>
 
-      {/* Footer — 只消费 build-time 注入的 NEXT_PUBLIC_*（SSOT = root package.json，见 next.config.ts） */}
+      {/* Footer — 发布版本 = ERP Release SSOT（RELEASE_VERSION manifest）；Web package version 不再展示为“系统版本” */}
       <footer className="border-t border-slate-200 bg-white px-4 py-3 text-center text-xs text-slate-400">
-        <p>{APP_NAME} · {process.env.NEXT_PUBLIC_APP_VERSION ?? "-"}</p>
+        <p>{APP_NAME} · {process.env.NEXT_PUBLIC_RELEASE_VERSION ?? "-"}</p>
         <p className="mt-0.5">
           Build: {process.env.NEXT_PUBLIC_BUILD_ID ?? "-"} · Git Commit: {process.env.NEXT_PUBLIC_GIT_SHA ?? "-"} ·
           Deployment: {process.env.NEXT_PUBLIC_DEPLOYMENT_ENV ?? "-"}
