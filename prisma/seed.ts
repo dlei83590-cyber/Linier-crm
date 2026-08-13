@@ -770,8 +770,17 @@ const SEED_PROMOTIONS = [
 ];
 
 async function main() {
-  const email = process.env.SEED_ADMIN_EMAIL ?? "admin@linier.com";
-  const password = process.env.SEED_ADMIN_PASSWORD ?? "ChangeMe123!";
+  // P0 Seed Credential Hardening（Phase S0）：
+  // - 正式 bootstrap 只走本文件（prisma/seed.ts）
+  // - Production admin 初始密码仅允许来自 SEED_ADMIN_PASSWORD
+  // - 环境变量缺失时 fail closed（禁止 fallback 到固定密码 / repo 明文口令）
+  const email = process.env.SEED_ADMIN_EMAIL;
+  const password = process.env.SEED_ADMIN_PASSWORD;
+  if (!email || !password) {
+    throw new Error(
+      "[seed] SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD are required (fail closed; no fallback credentials)",
+    );
+  }
   const passwordHash = await hash(password, 12);
   const defaultTaxRate = taxConfig.defaultRate; // 默认税率来自配置（默认 13），不写死
 
@@ -823,6 +832,31 @@ async function main() {
       update: {},
       create: { userId: user.id, roleId: superAdminRoleId },
     });
+  }
+
+  // Test user bootstrap（可选，仅当 SEED_TEST_EMAIL + SEED_TEST_PASSWORD 均提供时创建/更新，幂等）
+  const testEmail = process.env.SEED_TEST_EMAIL;
+  const testPassword = process.env.SEED_TEST_PASSWORD;
+  if (testEmail && testPassword) {
+    const testPasswordHash = await hash(testPassword, 12);
+    const testUser = await prisma.user.upsert({
+      where: { email: testEmail },
+      update: { passwordHash: testPasswordHash, name: "Test User", isActive: true },
+      create: {
+        email: testEmail,
+        passwordHash: testPasswordHash,
+        name: "Test User",
+        isActive: true,
+        departmentId: engineering.id,
+      },
+    });
+    if (superAdminRoleId) {
+      await prisma.userRole.upsert({
+        where: { userId_roleId: { userId: testUser.id, roleId: superAdminRoleId } },
+        update: {},
+        create: { userId: testUser.id, roleId: superAdminRoleId },
+      });
+    }
   }
 
   // Master data: units of measure

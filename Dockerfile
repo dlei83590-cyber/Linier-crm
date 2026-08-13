@@ -67,6 +67,11 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY --from=builder /app/node_modules ./node_modules
+# Workspace packages (config/shared/types/ui): seed.ts imports @nilier-crm/config
+# (taxConfig), and pnpm workspace node_modules symlinks resolve into ./packages.
+# Without these sources the runner's `pnpm db:seed` fails with
+# MODULE_NOT_FOUND @nilier-crm/config (observed on Railway redeploy).
+COPY --from=builder /app/packages ./packages
 
 # pnpm for Railway pre-deploy command (corepack shim; pinned to repo's packageManager)
 # Regenerate Prisma Client in the runner tree as well: guarantees the
