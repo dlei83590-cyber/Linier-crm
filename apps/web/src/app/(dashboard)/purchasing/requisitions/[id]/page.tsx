@@ -1,13 +1,14 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { useParams } from "next/navigation";
-import { PERMISSIONS } from "@nilier-crm/shared";
-import { PermissionGuard } from "@/components/guard/permission-guard";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { formatDate } from "@/lib/format";
-import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { hasPermission, PERMISSIONS, type RoleCode } from '@nilier-crm/shared';
+import { useSession } from '@/lib/session-context';
+import { PermissionGuard } from '@/components/guard/permission-guard';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { formatDate } from '@/lib/format';
+import { apiFetch, ApiClientError, describeStatus } from '@/lib/api-client';
 
 interface RequisitionDetail {
   id: string;
@@ -29,10 +30,14 @@ interface RequisitionDetail {
   }>;
 }
 
-
 function RequisitionDetailPage() {
   const params = useParams();
-  const id = typeof params.id === "string" ? params.id : "";
+  const id = typeof params.id === 'string' ? params.id : '';
+  const { state } = useSession();
+  const canEdit =
+    state.status === 'authenticated' &&
+    state.user !== null &&
+    hasPermission(state.user.roles as RoleCode[], 'purchase-requisition:edit');
   const [detail, setDetail] = useState<RequisitionDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | null>(null);
@@ -44,8 +49,10 @@ function RequisitionDetailPage() {
     apiFetch<RequisitionDetail>(`/api/purchase-requisitions/${id}`, { signal: controller.signal })
       .then((body) => setDetail(body.data))
       .catch((err: unknown) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(err instanceof ApiClientError ? err : new ApiClientError(0, "网络错误", "NETWORK_ERROR"));
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setError(
+          err instanceof ApiClientError ? err : new ApiClientError(0, '网络错误', 'NETWORK_ERROR'),
+        );
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -57,12 +64,22 @@ function RequisitionDetailPage() {
     <div className="rounded-lg border border-slate-200 bg-white">
       <div className="flex items-center justify-between border-b border-slate-200 p-4">
         <h1 className="text-lg font-semibold text-slate-800">采购申请详情</h1>
-        <Link
-          href="/purchasing/requisitions"
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-        >
-          返回列表
-        </Link>
+        <div className="flex items-center gap-2">
+          {detail?.status === 'DRAFT' && canEdit && (
+            <Link
+              href={`/purchasing/requisitions/${id}/edit`}
+              className="bg-brand-600 hover:bg-brand-700 rounded-md px-3 py-1.5 text-sm font-medium text-white"
+            >
+              编辑
+            </Link>
+          )}
+          <Link
+            href="/purchasing/requisitions"
+            className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+          >
+            返回列表
+          </Link>
+        </div>
       </div>
 
       {loading ? (
@@ -71,9 +88,12 @@ function RequisitionDetailPage() {
         <div className="p-6">
           <p className="text-sm text-red-600">
             {describeStatus(error.status)}：{error.message}
-            {error.code ? `（${error.code}）` : ""}
+            {error.code ? `（${error.code}）` : ''}
           </p>
-          <Link href="/purchasing/requisitions" className="mt-2 inline-block text-sm text-brand-600">
+          <Link
+            href="/purchasing/requisitions"
+            className="text-brand-600 mt-2 inline-block text-sm"
+          >
             返回列表
           </Link>
         </div>
@@ -92,11 +112,11 @@ function RequisitionDetailPage() {
             </div>
             <div>
               <p className="text-xs text-slate-500">申请人</p>
-              <p className="mt-1 text-slate-700">{detail.requester?.name ?? "—"}</p>
+              <p className="mt-1 text-slate-700">{detail.requester?.name ?? '—'}</p>
             </div>
             <div>
               <p className="text-xs text-slate-500">部门</p>
-              <p className="mt-1 text-slate-700">{detail.department?.name ?? "—"}</p>
+              <p className="mt-1 text-slate-700">{detail.department?.name ?? '—'}</p>
             </div>
             <div>
               <p className="text-xs text-slate-500">期望日期</p>
@@ -108,7 +128,7 @@ function RequisitionDetailPage() {
             </div>
             <div className="col-span-2">
               <p className="text-xs text-slate-500">备注</p>
-              <p className="mt-1 text-slate-700">{detail.remark ?? "—"}</p>
+              <p className="mt-1 text-slate-700">{detail.remark ?? '—'}</p>
             </div>
           </div>
 
@@ -128,11 +148,11 @@ function RequisitionDetailPage() {
                 <tr key={line.id}>
                   <td className="px-4 py-3 text-slate-600">{line.lineNo}</td>
                   <td className="px-4 py-3 text-slate-700">
-                    {line.item ? `${line.item.code ?? ""} ${line.item.name ?? ""}`.trim() : "—"}
+                    {line.item ? `${line.item.code ?? ''} ${line.item.name ?? ''}`.trim() : '—'}
                   </td>
                   <td className="px-4 py-3 text-slate-600">{line.description}</td>
                   <td className="px-4 py-3 text-slate-700">{line.quantity}</td>
-                  <td className="px-4 py-3 text-slate-600">{line.uom?.symbol ?? "—"}</td>
+                  <td className="px-4 py-3 text-slate-600">{line.uom?.symbol ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{formatDate(line.needDate)}</td>
                 </tr>
               ))}
