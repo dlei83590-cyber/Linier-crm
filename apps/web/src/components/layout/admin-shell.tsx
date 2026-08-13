@@ -36,8 +36,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     setMenuOpen(false);
   }, [pathname]);
 
-  const user = state.user;
-  const roles = (user?.roles ?? []) as RoleCode[];
+  const roles = (state.user?.roles ?? []) as RoleCode[];
 
   // 权限过滤后的可见模块
   const visibleModules = useMemo(
@@ -82,6 +81,16 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       return next;
     });
   };
+
+  if (state.status !== "authenticated" || !state.user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <p className="text-sm text-slate-400">加载中…</p>
+      </div>
+    );
+  }
+
+  const user = state.user;
 
   const sidebar = (
     <nav className="flex h-full flex-col gap-1 overflow-y-auto p-4">
