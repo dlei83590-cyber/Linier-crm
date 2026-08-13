@@ -187,6 +187,9 @@ export const PERMISSION_MODULES = [
   "inspection",
   "warehouse-receipt",
   "purchase-return",
+  // Master-Data Read API（D1）：warehouse / warehouse-location 主数据只读模块（seed SEED_ACTION_MODULES/SEED_RESTRICTED_ACTION_PERMISSIONS 已注册；read API 用 warehouse:view / warehouse-location:view）
+  "warehouse",
+  "warehouse-location",
   // Sprint 6B：Inventory Operations 模块（Transfer 业务事实——动作映射：create→inventory-transfer:create（创建即取号）；submit→inventory-transfer:edit（复用统一 RBAC，不新造 submit 体系——对齐 5A/5B 拍板）；approve→inventory-transfer:approve（Workflow 审批）；execute→inventory-transfer:edit（对齐 5B post→:edit 先例）；cancel DRAFT/SUBMITTED→inventory-transfer:close；line 仅 view/edit——见 SEED_RESTRICTED_ACTION_PERMISSIONS）
   "inventory-transfer",
   // Sprint 6B-3：Stock Count 业务事实（动作映射：create→stock-count:create（创建即取号）；录入行/complete→stock-count:edit（对齐 execute→:edit 先例）；cancel→stock-count:close；line 仅 view/edit——见 SEED_RESTRICTED_ACTION_PERMISSIONS；**Count 本身不产生 Movement，差异经 Adjustment 审批后落账**）
