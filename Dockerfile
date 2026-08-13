@@ -23,11 +23,16 @@ COPY --from=deps /app/ ./
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
-# Build-time release metadata (P0.5): inlined by next build into the
-# client bundle; APP_VERSION 由 next.config.ts 从 root package.json 读取。
-# 通过 --build-arg 注入真实 GIT_SHA/BUILD_ID/DEPLOYMENT_ENV。
-ARG NEXT_PUBLIC_GIT_SHA=unknown
-ARG NEXT_PUBLIC_BUILD_ID=unknown
+# Build-time release metadata (P0.5, CTO 16:45 fix):
+# - APP_VERSION 由 next.config.ts 从 root package.json 读取（SSOT）。
+# - 生产 GIT_SHA/BUILD_ID 的确定来源 = 构建环境平台变量（Railway 构建注入
+#   RAILWAY_GIT_COMMIT_SHA / RAILWAY_DEPLOYMENT_ID；GitHub Actions 注入
+#   GITHUB_SHA / GITHUB_RUN_ID），由 next.config.ts 在 next build 时直接读取。
+#   .dockerignore 排除 .git → 禁止依赖 git rev-parse 作为生产路径。
+# - 下方 ARG/ENV 仅为显式覆盖通道（--build-arg 传入时生效）；默认空值，
+#   避免把 "unknown" 占位符 bake 进镜像遮蔽平台变量。
+ARG NEXT_PUBLIC_GIT_SHA=
+ARG NEXT_PUBLIC_BUILD_ID=
 ARG NEXT_PUBLIC_DEPLOYMENT_ENV=production
 ENV NEXT_PUBLIC_GIT_SHA=$NEXT_PUBLIC_GIT_SHA
 ENV NEXT_PUBLIC_BUILD_ID=$NEXT_PUBLIC_BUILD_ID

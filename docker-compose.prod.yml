@@ -5,8 +5,10 @@ services:
       dockerfile: Dockerfile
       target: runner
       args:
-        NEXT_PUBLIC_GIT_SHA: ${NEXT_PUBLIC_GIT_SHA:-unknown}
-        NEXT_PUBLIC_BUILD_ID: ${NEXT_PUBLIC_BUILD_ID:-unknown}
+        # 生产 build metadata 由构建环境平台变量注入（Railway/GitHub），
+        # next.config.ts 构建时直接读取；此处仅作显式覆盖通道，默认空值。
+        NEXT_PUBLIC_GIT_SHA: ${NEXT_PUBLIC_GIT_SHA:-}
+        NEXT_PUBLIC_BUILD_ID: ${NEXT_PUBLIC_BUILD_ID:-}
         NEXT_PUBLIC_DEPLOYMENT_ENV: ${NEXT_PUBLIC_DEPLOYMENT_ENV:-production}
     container_name: nilier-crm-app
     ports:
