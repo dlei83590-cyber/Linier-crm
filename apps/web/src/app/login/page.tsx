@@ -2,7 +2,8 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { TOKEN_KEY, type SessionUser } from "@/lib/session-context";
+import { type SessionUser } from "@/lib/session-context";
+import { setAuthToken } from "@/lib/auth-token";
 
 interface LoginResponse {
   success: boolean;
@@ -41,7 +42,7 @@ export default function LoginPage() {
         return;
       }
 
-      window.localStorage.setItem(TOKEN_KEY, body.data.token);
+      setAuthToken(body.data.token);
       router.replace("/dashboard");
       router.refresh();
     } catch {
