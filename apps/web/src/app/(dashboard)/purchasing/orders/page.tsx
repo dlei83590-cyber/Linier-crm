@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { PERMISSIONS } from "@nilier-crm/shared";
+import { hasPermission, PERMISSIONS, type RoleCode } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
+import { useSession } from "@/lib/session-context";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Pagination } from "@/components/ui/pagination";
 import { EmptyRow, ErrorRow, LoadingRow } from "@/components/ui/list-states";
@@ -31,6 +32,11 @@ const STATUS_OPTIONS = [
 ] as const;
 
 function OrderList() {
+  const { state } = useSession();
+  const canCreate =
+    state.status === "authenticated" &&
+    state.user !== null &&
+    hasPermission(state.user.roles as RoleCode[], "purchase-order:create");
   const [codeInput, setCodeInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ code?: string; status?: string }>({});
@@ -92,6 +98,14 @@ function OrderList() {
         >
           重置
         </button>
+        {canCreate && (
+          <Link
+            href="/purchasing/orders/new"
+            className="ml-auto rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+          >
+            新建
+          </Link>
+        )}
       </div>
 
       <div className="overflow-x-auto">
