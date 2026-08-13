@@ -20,6 +20,7 @@ interface PODetailLine {
 
 interface PODetail {
   id: string;
+  code: string;
   version: number;
   status: string;
   supplierId: string;
