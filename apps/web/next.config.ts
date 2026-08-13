@@ -66,6 +66,7 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: false,
   },
   env: {
+    NEXT_PUBLIC_RELEASE_VERSION: process.env.NEXT_PUBLIC_RELEASE_VERSION ?? releaseVersion(),
     NEXT_PUBLIC_APP_VERSION: rootVersion(),
     NEXT_PUBLIC_GIT_SHA: gitSha(),
     NEXT_PUBLIC_BUILD_ID: buildId(),

@@ -6,8 +6,7 @@ export async function GET() {
   return NextResponse.json({
     status: "ok",
     service: "linier-crm",
-    version: "0.1.0-alpha",
+    version: process.env.NEXT_PUBLIC_RELEASE_VERSION ?? "unknown",
     timestamp: new Date().toISOString(),
-    database: "pending",
   });
 }
