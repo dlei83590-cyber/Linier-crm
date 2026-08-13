@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { PERMISSIONS } from "@nilier-crm/shared";
+import { hasPermission, PERMISSIONS, type RoleCode } from "@nilier-crm/shared";
+import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatDate } from "@/lib/format";
@@ -34,6 +35,11 @@ interface ReturnDetail {
 function ReturnDetailPage() {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
+  const { state } = useSession();
+  const canEdit =
+    state.status === "authenticated" &&
+    state.user !== null &&
+    hasPermission(state.user.roles as RoleCode[], "purchase-return:edit");
   const [detail, setDetail] = useState<ReturnDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | null>(null);
@@ -58,12 +64,22 @@ function ReturnDetailPage() {
     <div className="rounded-lg border border-slate-200 bg-white">
       <div className="flex items-center justify-between border-b border-slate-200 p-4">
         <h1 className="text-lg font-semibold text-slate-800">采购退货详情</h1>
-        <Link
-          href="/purchasing/returns"
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-        >
-          返回列表
-        </Link>
+        <div className="flex items-center gap-2">
+          {detail?.status === "DRAFT" && canEdit && (
+            <Link
+              href={`/purchasing/returns/${id}/edit`}
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+            >
+              编辑
+            </Link>
+          )}
+          <Link
+            href="/purchasing/returns"
+            className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+          >
+            返回列表
+          </Link>
+        </div>
       </div>
 
       {loading ? (
