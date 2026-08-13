@@ -70,10 +70,15 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
   { id: "project-visits", domain: "customer-project", label: "客户走访", route: "/project-visits", permission: PERMISSIONS.PROJECT_VISIT_READ, availability: "hold", order: 3 },
   { id: "project-risks", domain: "customer-project", label: "项目风险", route: "/project-risks", permission: PERMISSIONS.PROJECT_RISK_READ, availability: "hold", order: 4 },
 
-  // ===== 销售管理（后端有 Quotation/SO API，前端未开放 → hold；F2-4 开放）=====
-  // 权限码为真实 endpoint 码（quotation:view / sales-order:view），前端 PERMISSIONS 常量暂未导出
-  { id: "quotations", domain: "sales", label: "报价单", route: "/sales/quotations", permission: "quotation:view", availability: "hold", order: 1 },
-  { id: "sales-orders", domain: "sales", label: "销售订单", route: "/sales/orders", permission: "sales-order:view", availability: "hold", order: 2 },
+  // ===== 销售管理（后端有 Quotation/SO/Delivery/Invoice/AR/Receipt/CN-DN API，前端未开放 → hold；F2-4 开放）=====
+  // 权限码为真实 endpoint 码（quotation:view / sales-order:view / delivery:view / invoice:view / accounts-receivable:view / receipt:view / credit-debit-note:view）
+  { id: "quotations", domain: "sales", label: "报价单", route: "/sales/quotations", permission: PERMISSIONS.QUOTATION_READ, availability: "hold", order: 1 },
+  { id: "sales-orders", domain: "sales", label: "销售订单", route: "/sales/orders", permission: PERMISSIONS.SALES_ORDER_READ, availability: "hold", order: 2 },
+  { id: "deliveries", domain: "sales", label: "送货单", route: "/sales/deliveries", permission: PERMISSIONS.DELIVERY_READ, availability: "hold", order: 3 },
+  { id: "sales-invoices", domain: "sales", label: "销售发票", route: "/sales/invoices", permission: PERMISSIONS.INVOICE_READ, availability: "hold", order: 4 },
+  { id: "accounts-receivable", domain: "sales", label: "应收账款", route: "/sales/accounts-receivable", permission: PERMISSIONS.ACCOUNTS_RECEIVABLE_READ, availability: "hold", order: 5 },
+  { id: "receipt-allocation", domain: "sales", label: "收款核销", route: "/sales/receipts", permission: PERMISSIONS.RECEIPT_READ, availability: "hold", order: 6 },
+  { id: "credit-debit-notes", domain: "sales", label: "贷项/借项通知单", route: "/sales/credit-debit-notes", permission: PERMISSIONS.CREDIT_DEBIT_NOTE_READ, availability: "hold", order: 7 },
 
   // ===== 采购管理（现有最成熟工作台，ready）=====
   { id: "purchase-requisitions", domain: "purchasing", label: "采购申请", route: "/purchasing/requisitions", permission: PERMISSIONS.PURCHASE_REQUISITION_READ, availability: "ready", order: 1 },
@@ -83,15 +88,20 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
   { id: "warehouse-receipts", domain: "purchasing", label: "仓库收货", route: "/purchasing/warehouse-receipts", permission: PERMISSIONS.WAREHOUSE_RECEIPT_READ, availability: "ready", order: 5 },
   { id: "purchase-returns", domain: "purchasing", label: "采购退货", route: "/purchasing/returns", permission: PERMISSIONS.PURCHASE_RETURN_READ, availability: "ready", order: 6 },
 
-  // ===== 库存管理（现有成熟工作台 ready；Read Model 类 hold 不展示）=====
+  // ===== 库存管理（现有成熟工作台 ready；Read Model 类 hold 展示但不提供假入口——F2-7 后端 Read Model Gate 后开放）=====
   { id: "inventory-transfers", domain: "inventory", label: "库存调拨", route: "/inventory/transfers", permission: PERMISSIONS.INVENTORY_TRANSFER_READ, availability: "ready", order: 1 },
   { id: "stock-counts", domain: "inventory", label: "库存盘点", route: "/inventory/stock-counts", permission: PERMISSIONS.STOCK_COUNT_READ, availability: "ready", order: 2 },
   { id: "inventory-adjustments", domain: "inventory", label: "库存调整", route: "/inventory/adjustments", permission: PERMISSIONS.INVENTORY_ADJUSTMENT_READ, availability: "ready", order: 3 },
   { id: "inventory-conversions", domain: "inventory", label: "库存转换", route: "/inventory/conversions", permission: PERMISSIONS.INVENTORY_CONVERSION_READ, availability: "ready", order: 4 },
+  // Read Model（页面已存在但无 FINAL Read API → hold；inventory-ledger:view / stock-projection:view **非已存在权限事实**（CTO #8845），permission=null 避免伪造权限码
+  { id: "stock-projection", domain: "inventory", label: "库存展望", route: "/inventory/stock-projection", permission: null, availability: "hold", order: 5 },
+  { id: "inventory-ledger", domain: "inventory", label: "库存流水", route: "/inventory/ledger", permission: null, availability: "hold", order: 6 },
 
-  // ===== 采购财务（5C-1 已 Accounting Baseline；菜单可出现但 availability=hold，禁止可点击假功能；F2-6）=====
-  // 权限码为真实 endpoint 码（supplier-invoice:view），前端 PERMISSIONS 常量暂未导出
-  { id: "supplier-invoices", domain: "supplier-ap", label: "供应商发票", route: "/supplier-invoices", permission: "supplier-invoice:view", availability: "hold", order: 1 },
+  // ===== 采购财务（5C-1 已 Accounting Baseline → Supplier Invoice hold/后续 ready；5C-2 CN/DN+Payment 继续 HOLD，菜单可出现在分类下但不可点击——F2-6）=====
+  { id: "supplier-invoices", domain: "supplier-ap", label: "供应商发票", route: "/supplier-invoices", permission: PERMISSIONS.SUPPLIER_INVOICE_READ, availability: "hold", order: 1 },
+  { id: "ap-open-items", domain: "supplier-ap", label: "应付未结项", route: "/supplier-ap/open-items", permission: null, availability: "hold", order: 2 },
+  { id: "supplier-cn-dn", domain: "supplier-ap", label: "供应商贷项/借项", route: "/supplier-ap/credit-debit-notes", permission: PERMISSIONS.CREDIT_DEBIT_NOTE_READ, availability: "hold", order: 3 },
+  { id: "payment-allocation", domain: "supplier-ap", label: "付款核销", route: "/supplier-ap/payments", permission: null, availability: "hold", order: 4 },
 
   // ===== 基础资料（当前 Placeholder → hold；F2-2 Master Data 开放）=====
   { id: "items", domain: "master-data", label: "物料管理", route: "/items", permission: PERMISSIONS.ITEM_READ, availability: "hold", order: 1 },
@@ -101,6 +111,9 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
   { id: "unit-of-measures", domain: "master-data", label: "计量单位", route: "/unit-of-measures", permission: PERMISSIONS.UNIT_OF_MEASURE_READ, availability: "hold", order: 5 },
   { id: "commercial-terms", domain: "master-data", label: "商业条款", route: "/commercial-terms", permission: PERMISSIONS.COMMERCIAL_TERM_READ, availability: "hold", order: 6 },
   { id: "document-sequences", domain: "master-data", label: "单据序列", route: "/document-sequences", permission: PERMISSIONS.DOCUMENT_SEQUENCE_READ, availability: "hold", order: 7 },
+  // F2-2 Master Data 下一批：仓库/库位（Master-Data Read API 已就绪）
+  { id: "warehouses", domain: "master-data", label: "仓库", route: "/warehouses", permission: PERMISSIONS.WAREHOUSE_READ, availability: "hold", order: 8 },
+  { id: "warehouse-locations", domain: "master-data", label: "库位", route: "/warehouse-locations", permission: PERMISSIONS.WAREHOUSE_LOCATION_READ, availability: "hold", order: 9 },
 
   // ===== 系统管理（当前 Placeholder → hold；后续独立规划）=====
   { id: "users", domain: "system", label: "用户管理", route: "/users", permission: PERMISSIONS.USER_READ, availability: "hold", order: 1 },
