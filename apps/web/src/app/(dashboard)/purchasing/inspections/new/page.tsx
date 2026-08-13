@@ -46,11 +46,11 @@ function InspectionCreateForm() {
   // 数据源：已收货单列表（GET /api/purchase-receipts FINAL read API）+ 详情行（GET /api/purchase-receipts/{id}）
   useEffect(() => {
     const controller = new AbortController();
-    apiFetch<{ total: number; page: number; pageSize: number; items: ReceiptRow[] }>(
+    apiFetch<ReceiptRow[] | { total: number; page: number; pageSize: number; items: ReceiptRow[] }>(
       "/api/purchase-receipts?pageSize=100",
       { signal: controller.signal },
     )
-      .then((body) => setReceipts(body.data.items ?? []))
+      .then((body) => setReceipts(Array.isArray(body.data) ? body.data : (body.data.items ?? [])))
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
         setError(err instanceof ApiClientError ? err : new ApiClientError(0, "加载收货单失败", "NETWORK_ERROR"));

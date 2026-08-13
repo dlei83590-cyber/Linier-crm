@@ -6,12 +6,6 @@ import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 
-interface PurchaseOrderOption {
-  id: string;
-  code: string | null;
-  status: string | null;
-}
-
 const RETURN_TYPES = ["REJECTED_ON_RECEIPT", "RETURN_AFTER_STOCK_IN", "QUALITY_ISSUE"] as const;
 const SOURCE_REF_TYPES = ["RECEIPT_LINE", "WAREHOUSE_RECEIPT_LINE", "INSPECTION"] as const;
 const DISPOSITIONS = ["REPLACE_REQUIRED", "CREDIT_ONLY"] as const;

@@ -58,11 +58,11 @@ function PurchaseReturnCreateForm() {
   // 数据源：PO 下拉（GET /api/purchase-orders FINAL read API）；来源行 = 父单据详情 ID（见 CONTRACT GAP 标注）
   useEffect(() => {
     const controller = new AbortController();
-    apiFetch<{ total: number; page: number; pageSize: number; items: PurchaseOrderOption[] }>(
+    apiFetch<PurchaseOrderOption[] | { total: number; page: number; pageSize: number; items: PurchaseOrderOption[] }>(
       "/api/purchase-orders?pageSize=100",
       { signal: controller.signal },
     )
-      .then((body) => setPurchaseOrders(body.data.items ?? []))
+      .then((body) => setPurchaseOrders(Array.isArray(body.data) ? body.data : (body.data.items ?? [])))
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
         setError(err instanceof ApiClientError ? err : new ApiClientError(0, "加载采购订单失败", "NETWORK_ERROR"));
