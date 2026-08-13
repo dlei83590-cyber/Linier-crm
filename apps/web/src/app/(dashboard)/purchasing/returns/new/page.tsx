@@ -387,7 +387,7 @@ function PurchaseReturnCreateForm() {
 
         <div className="mt-2 rounded-md bg-amber-50 p-3 text-xs text-amber-700">
           CONTRACT GAP：来源行（收货行 / 入库行 / 质检）为父单据详情行 ID，当前无行级独立列表 API；来源 ID 可从对应父单据详情
-          GET（/api/purchase-receipts/{id}、/api/warehouse-receipts/{id}、/api/inspections/{id}）获取。服务端校验来源归属、POSTED
+          GET（/api/purchase-receipts/{'{id}'}、/api/warehouse-receipts/{'{id}'}、/api/inspections/{'{id}'}）获取。服务端校验来源归属、POSTED
           状态与可退余额（SSOT）。
         </div>
 
