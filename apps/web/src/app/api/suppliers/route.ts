@@ -6,6 +6,7 @@ import { ok, failValidation, failConflict, parsePagination } from "@/lib/api/res
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { z } from "zod";
+import { handleServerError } from "@/lib/api/server-error";
 
 export const dynamic = "force-dynamic";
 
@@ -28,44 +29,50 @@ export async function GET(request: NextRequest) {
   if (denied) return denied;
   requestLog(request, user?.id, "supplier.list");
 
-  const { searchParams } = new URL(request.url);
-  const { page, pageSize, skip, take } = parsePagination(searchParams);
-  const code = searchParams.get("code")?.trim();
-  const name = searchParams.get("name")?.trim();
-  const status = searchParams.get("status")?.trim();
-  const partnerId = searchParams.get("partnerId")?.trim();
-  const isPreferred = searchParams.get("isPreferred")?.trim();
+  try {
 
-  const where = {
-    deletedAt: null,
-    ...(code ? { code: { contains: code } } : {}),
-    ...(name ? { name: { contains: name } } : {}),
-    ...(status ? { status: status as SupplierStatus } : {}),
-    ...(partnerId ? { partnerId } : {}),
-    ...(isPreferred === "true" ? { isPreferred: true } : isPreferred === "false" ? { isPreferred: false } : {}),
-  };
+    const { searchParams } = new URL(request.url);
+    const { page, pageSize, skip, take } = parsePagination(searchParams);
+    const code = searchParams.get("code")?.trim();
+    const name = searchParams.get("name")?.trim();
+    const status = searchParams.get("status")?.trim();
+    const partnerId = searchParams.get("partnerId")?.trim();
+    const isPreferred = searchParams.get("isPreferred")?.trim();
 
-  const [total, items] = await Promise.all([
-    prisma.supplier.count({ where }),
-    prisma.supplier.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      skip,
-      take,
-      include: {
-        partner: { select: { id: true, code: true, name: true, uscc: true, type: true, bankName: true, bankAccount: true } },
-        _count: {
-          select: {
-            qualifications: { where: { deletedAt: null } },
-            certificates: { where: { deletedAt: null } },
-            settlements: { where: { deletedAt: null } },
+    const where = {
+      deletedAt: null,
+      ...(code ? { code: { contains: code } } : {}),
+      ...(name ? { name: { contains: name } } : {}),
+      ...(status ? { status: status as SupplierStatus } : {}),
+      ...(partnerId ? { partnerId } : {}),
+      ...(isPreferred === "true" ? { isPreferred: true } : isPreferred === "false" ? { isPreferred: false } : {}),
+    };
+
+    const [total, items] = await Promise.all([
+      prisma.supplier.count({ where }),
+      prisma.supplier.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take,
+        include: {
+          partner: { select: { id: true, code: true, name: true, uscc: true, type: true, bankName: true, bankAccount: true } },
+          _count: {
+            select: {
+              qualifications: { where: { deletedAt: null } },
+              certificates: { where: { deletedAt: null } },
+              settlements: { where: { deletedAt: null } },
+            },
           },
         },
-      },
-    }),
-  ]);
+      }),
+    ]);
 
-  return ok(items, { page, pageSize, total });
+    return ok(items, { page, pageSize, total });
+  } catch (error) {
+    return handleServerError(request, user?.id, "supplier.list", error);
+  }
+
 }
 
 /** POST /api/suppliers（创建供应商：partnerId 必填，校验 BP type=SUPPLIER/BOTH，自动写入 BusinessPartnerRole） */

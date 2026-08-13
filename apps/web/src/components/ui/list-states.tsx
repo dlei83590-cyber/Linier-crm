@@ -40,6 +40,9 @@ export function ErrorRow({
           {describeStatus(error.status)}：{error.message}
           {error.code ? `（${error.code}）` : ""}
         </p>
+        {error.requestId && (
+          <p className="mt-1 text-xs text-slate-400">requestId: {error.requestId}</p>
+        )}
         <button
           type="button"
           onClick={onRetry}

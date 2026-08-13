@@ -7,6 +7,7 @@ import { ERROR_CODES } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
 import { purchaseReceiptCreateSchema } from '@/lib/api/schemas';
 import { nextPurchaseReceiptCode } from '@/lib/purchase-receipt/helpers';
+import { handleServerError } from "@/lib/api/server-error";
 
 export const dynamic = 'force-dynamic';
 
@@ -17,48 +18,54 @@ export async function GET(request: NextRequest) {
   if (denied) return denied;
   requestLog(request, user?.id, 'purchase-receipt.list');
 
-  const { searchParams } = new URL(request.url);
-  const { page, pageSize, skip, take } = parsePagination(searchParams);
-  const code = searchParams.get('code')?.trim();
-  const purchaseOrderId = searchParams.get('purchaseOrderId')?.trim();
-  const supplierId = searchParams.get('supplierId')?.trim();
-  const status = searchParams.get('status')?.trim();
-  const dateFrom = searchParams.get('dateFrom')?.trim();
-  const dateTo = searchParams.get('dateTo')?.trim();
+  try {
 
-  const where = {
-    deletedAt: null,
-    ...(code ? { code: { contains: code, mode: 'insensitive' as const } } : {}),
-    ...(purchaseOrderId ? { purchaseOrderId } : {}),
-    ...(supplierId ? { supplierId } : {}),
-    ...(status ? { status: status as never } : {}),
-    ...(dateFrom || dateTo
-      ? {
-          receivedAt: {
-            ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-            ...(dateTo ? { lte: new Date(dateTo) } : {}),
-          },
-        }
-      : {}),
-  };
+    const { searchParams } = new URL(request.url);
+    const { page, pageSize, skip, take } = parsePagination(searchParams);
+    const code = searchParams.get('code')?.trim();
+    const purchaseOrderId = searchParams.get('purchaseOrderId')?.trim();
+    const supplierId = searchParams.get('supplierId')?.trim();
+    const status = searchParams.get('status')?.trim();
+    const dateFrom = searchParams.get('dateFrom')?.trim();
+    const dateTo = searchParams.get('dateTo')?.trim();
 
-  const [total, items] = await Promise.all([
-    prisma.purchaseReceipt.count({ where }),
-    prisma.purchaseReceipt.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take,
-      include: {
-        purchaseOrder: { select: { id: true, code: true, status: true } },
-        supplier: { select: { id: true, code: true, name: true } },
-        warehouse: { select: { id: true, code: true, name: true } },
-        _count: { select: { lines: true } },
-      },
-    }),
-  ]);
+    const where = {
+      deletedAt: null,
+      ...(code ? { code: { contains: code, mode: 'insensitive' as const } } : {}),
+      ...(purchaseOrderId ? { purchaseOrderId } : {}),
+      ...(supplierId ? { supplierId } : {}),
+      ...(status ? { status: status as never } : {}),
+      ...(dateFrom || dateTo
+        ? {
+            receivedAt: {
+              ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
+              ...(dateTo ? { lte: new Date(dateTo) } : {}),
+            },
+          }
+        : {}),
+    };
 
-  return ok(items, { page, pageSize, total });
+    const [total, items] = await Promise.all([
+      prisma.purchaseReceipt.count({ where }),
+      prisma.purchaseReceipt.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+        include: {
+          purchaseOrder: { select: { id: true, code: true, status: true } },
+          supplier: { select: { id: true, code: true, name: true } },
+          warehouse: { select: { id: true, code: true, name: true } },
+          _count: { select: { lines: true } },
+        },
+      }),
+    ]);
+
+    return ok(items, { page, pageSize, total });
+  } catch (error) {
+    return handleServerError(request, user?.id, "purchase-receipt.list", error);
+  }
+
 }
 
 /**

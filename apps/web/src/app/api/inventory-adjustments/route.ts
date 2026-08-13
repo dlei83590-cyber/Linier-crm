@@ -6,6 +6,7 @@ import { ERROR_CODES, type ErrorCode } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
 import { inventoryAdjustmentCreateSchema } from '@/lib/api/schemas';
 import {
+import { handleServerError } from "@/lib/api/server-error";
   nextAdjustmentNo,
   InventoryAdjustmentSequenceMissingError,
   adjustmentLineDedupeKey,
@@ -20,38 +21,44 @@ export async function GET(request: NextRequest) {
   if (denied) return denied;
   requestLog(request, user?.id, 'inventory-adjustment.list');
 
-  const { searchParams } = new URL(request.url);
-  const { page, pageSize, skip, take } = parsePagination(searchParams);
-  const adjustmentNo = searchParams.get('adjustmentNo')?.trim();
-  const status = searchParams.get('status')?.trim();
-  const reasonCode = searchParams.get('reasonCode')?.trim();
-  const sourceStockCountId = searchParams.get('sourceStockCountId')?.trim();
+  try {
 
-  const where = {
-    deletedAt: null,
-    ...(adjustmentNo ? { adjustmentNo: { contains: adjustmentNo, mode: 'insensitive' as const } } : {}),
-    ...(status ? { status: status as never } : {}),
-    ...(reasonCode ? { reasonCode } : {}),
-    ...(sourceStockCountId ? { sourceStockCountId } : {}),
-  };
+    const { searchParams } = new URL(request.url);
+    const { page, pageSize, skip, take } = parsePagination(searchParams);
+    const adjustmentNo = searchParams.get('adjustmentNo')?.trim();
+    const status = searchParams.get('status')?.trim();
+    const reasonCode = searchParams.get('reasonCode')?.trim();
+    const sourceStockCountId = searchParams.get('sourceStockCountId')?.trim();
 
-  const [total, items] = await Promise.all([
-    prisma.inventoryAdjustment.count({ where }),
-    prisma.inventoryAdjustment.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take,
-      include: {
-        sourceStockCount: { select: { id: true, countNo: true, status: true } },
-        approvedBy: { select: { id: true, name: true, email: true } },
-        appliedBy: { select: { id: true, name: true, email: true } },
-        _count: { select: { lines: true } },
-      },
-    }),
-  ]);
+    const where = {
+      deletedAt: null,
+      ...(adjustmentNo ? { adjustmentNo: { contains: adjustmentNo, mode: 'insensitive' as const } } : {}),
+      ...(status ? { status: status as never } : {}),
+      ...(reasonCode ? { reasonCode } : {}),
+      ...(sourceStockCountId ? { sourceStockCountId } : {}),
+    };
 
-  return ok({ total, page, pageSize, items });
+    const [total, items] = await Promise.all([
+      prisma.inventoryAdjustment.count({ where }),
+      prisma.inventoryAdjustment.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+        include: {
+          sourceStockCount: { select: { id: true, countNo: true, status: true } },
+          approvedBy: { select: { id: true, name: true, email: true } },
+          appliedBy: { select: { id: true, name: true, email: true } },
+          _count: { select: { lines: true } },
+        },
+      }),
+    ]);
+
+    return ok({ total, page, pageSize, items });
+  } catch (error) {
+    return handleServerError(request, user?.id, "inventory-adjustment.list", error);
+  }
+
 }
 
 /**
