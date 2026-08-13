@@ -16,7 +16,7 @@ function shortSha(sha: string | undefined): string {
 }
 
 const BUILD_CARDS = [
-  { label: "系统版本", value: process.env.NEXT_PUBLIC_APP_VERSION ?? "-" },
+  { label: "发布版本", value: process.env.NEXT_PUBLIC_RELEASE_VERSION ?? "-" },
   { label: "Git Commit", value: shortSha(process.env.NEXT_PUBLIC_GIT_SHA) },
   { label: "Build ID", value: process.env.NEXT_PUBLIC_BUILD_ID ?? "-" },
   { label: "部署环境", value: process.env.NEXT_PUBLIC_DEPLOYMENT_ENV ?? "-" },
