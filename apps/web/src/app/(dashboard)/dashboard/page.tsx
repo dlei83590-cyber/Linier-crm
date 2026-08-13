@@ -1,14 +1,17 @@
 "use client";
 
+import Link from "next/link";
+import { hasPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
+import { MODULES } from "@/lib/frontend/modules";
 
 /**
- * System Overview（P0.5 Release Metadata Cleanup）
+ * System Overview（P0.5 Release Metadata Cleanup + F2-0 IA v2）
  *
  * - 版本 / Git SHA / Build ID / 部署环境全部来自 build-time 注入的 NEXT_PUBLIC_*
  *   （SSOT = root package.json version，注入逻辑见 apps/web/next.config.ts）
- * - 删除历史硬编码："Sprint 1" 阶段卡、静态"认证服务：正常"/"基础设施：就绪"
- *   （无实时 health contract，不得声称实时状态；产品 UI 不承担 ROADMAP SSOT）
+ * - 模块快捷入口消费唯一 Module Registry（apps/web/src/lib/frontend/modules.ts），
+ *   仅展示 availability=ready 且有权限的模块；不再维护第二份菜单事实。
  */
 
 function shortSha(sha: string | undefined): string {
@@ -25,9 +28,16 @@ const BUILD_CARDS = [
 export default function DashboardPage() {
   const { state } = useSession();
   const user = state.user;
+  const roles = (user?.roles ?? []) as RoleCode[];
 
   const greeting =
     user?.roles?.includes("SUPER_ADMIN") ? "管理员" : user?.name ?? user?.email ?? "用户";
+
+  const readyModules = MODULES.filter(
+    (m) =>
+      m.availability === "ready" &&
+      (m.permission === null || hasPermission(roles, m.permission)),
+  );
 
   return (
     <div className="space-y-6">
@@ -49,9 +59,23 @@ export default function DashboardPage() {
 
       <div className="rounded-lg border border-slate-200 bg-white p-4">
         <h2 className="text-sm font-medium text-slate-700">模块导航</h2>
-        <p className="mt-2 text-sm text-slate-500">
-          菜单按权限框架自动显示：已开放的模块会出现在导航中，未授权模块不展示。
-        </p>
+        {readyModules.length > 0 ? (
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {readyModules.map((m) => (
+              <Link
+                key={m.id}
+                href={m.route}
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
+              >
+                {m.label}
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-2 text-sm text-slate-500">
+            暂无已开放的模块。
+          </p>
+        )}
       </div>
     </div>
   );

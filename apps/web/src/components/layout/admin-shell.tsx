@@ -1,46 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { hasPermission, PERMISSIONS, type PermissionCode, type RoleCode, APP_NAME } from "@nilier-crm/shared";
+import { hasPermission, APP_NAME, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
+import { MODULE_DOMAINS, MODULES, type FrontendModule, type ModuleDomain } from "@/lib/frontend/modules";
 
-const NAV_ITEMS: ReadonlyArray<{ href: string; label: string; permission: PermissionCode | null }> = [
-  { href: "/dashboard", label: "Dashboard", permission: null },
-  { href: "/items", label: "物料管理", permission: PERMISSIONS.ITEM_READ },
-  { href: "/business-partners", label: "往来单位", permission: PERMISSIONS.BUSINESS_PARTNER_READ },
-  { href: "/price-lists", label: "价格表", permission: PERMISSIONS.PRICE_LIST_READ },
-  { href: "/technical-standards", label: "技术标准", permission: PERMISSIONS.TECHNICAL_STANDARD_READ },
-  { href: "/unit-of-measures", label: "计量单位", permission: PERMISSIONS.UNIT_OF_MEASURE_READ },
-  { href: "/commercial-terms", label: "商业条款", permission: PERMISSIONS.COMMERCIAL_TERM_READ },
-  { href: "/document-sequences", label: "单据序列", permission: PERMISSIONS.DOCUMENT_SEQUENCE_READ },
-  { href: "/project-opportunities", label: "项目机会", permission: PERMISSIONS.PROJECT_OPPORTUNITY_READ },
-  { href: "/projects", label: "项目管理", permission: PERMISSIONS.PROJECT_READ },
-  { href: "/project-visits", label: "客户走访", permission: PERMISSIONS.PROJECT_VISIT_READ },
-  { href: "/project-risks", label: "项目风险", permission: PERMISSIONS.PROJECT_RISK_READ },
-  { href: "/users", label: "用户管理", permission: PERMISSIONS.USER_READ },
-  { href: "/departments", label: "部门管理", permission: PERMISSIONS.USER_READ },
-  { href: "/roles", label: "角色权限", permission: PERMISSIONS.ROLE_READ },
-  { href: "/audit-logs", label: "操作日志", permission: PERMISSIONS.AUDIT_READ },
-  // Track A Frontend Iteration 1 — reference + Commit A/B（剩余模块入口随 Commit C 加入）
-  { href: "/purchasing/requisitions", label: "采购申请", permission: PERMISSIONS.PURCHASE_REQUISITION_READ },
-  { href: "/purchasing/orders", label: "采购订单", permission: PERMISSIONS.PURCHASE_ORDER_READ },
-  { href: "/purchasing/receipts", label: "到货收货", permission: PERMISSIONS.PURCHASE_RECEIPT_READ },
-  { href: "/purchasing/inspections", label: "质检记录", permission: PERMISSIONS.INSPECTION_READ },
-  { href: "/purchasing/warehouse-receipts", label: "仓库收货", permission: PERMISSIONS.WAREHOUSE_RECEIPT_READ },
-  { href: "/purchasing/returns", label: "采购退货", permission: PERMISSIONS.PURCHASE_RETURN_READ },
-  { href: "/inventory/transfers", label: "库存调拨", permission: PERMISSIONS.INVENTORY_TRANSFER_READ },
-  { href: "/inventory/stock-counts", label: "库存盘点", permission: PERMISSIONS.STOCK_COUNT_READ },
-  { href: "/inventory/adjustments", label: "库存调整", permission: PERMISSIONS.INVENTORY_ADJUSTMENT_READ },
-  { href: "/inventory/conversions", label: "库存转换", permission: PERMISSIONS.INVENTORY_CONVERSION_READ },
-];
-
+/**
+ * Admin Shell — Frontend Productization Reset F2-0（IA v2）
+ *
+ * 导航唯一事实来源 = Module Registry（apps/web/src/lib/frontend/modules.ts）。
+ * 废除旧的一维 NAV_ITEMS 数组；Sidebar / 移动菜单均消费同一份 Registry。
+ *
+ * 规则：
+ * - 一级域分组（9 域，顺序见 MODULE_DOMAINS），可折叠；当前业务域自动展开
+ * - 无权限 item 不出现（permission 为 null 或 hasPermission 通过）
+ * - availability=hold 的 item 明确视觉区分（“尚未开放”），不可点击（禁止假功能）
+ * - 真实可用页面（ready）显示正常业务名称
+ */
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const { state, logout } = useSession();
   const pathname = usePathname();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState<ReadonlySet<ModuleDomain>>(new Set());
 
   useEffect(() => {
     if (state.status === "unauthenticated") {
@@ -52,33 +36,104 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     setMenuOpen(false);
   }, [pathname]);
 
-  if (state.status !== "authenticated" || !state.user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50">
-        <p className="text-sm text-slate-400">加载中…</p>
-      </div>
-    );
-  }
-
   const user = state.user;
+  const roles = (user?.roles ?? []) as RoleCode[];
 
-  const visibleItems = NAV_ITEMS.filter(
-    (item) => item.permission === null || hasPermission(user.roles as RoleCode[], item.permission)
+  // 权限过滤后的可见模块
+  const visibleModules = useMemo(
+    () =>
+      MODULES.filter(
+        (m) => m.permission === null || hasPermission(roles, m.permission),
+      ),
+    [roles],
   );
+
+  // 当前业务域（根据 pathname 匹配 route 前缀；未命中时默认展开第一个非空域）
+  const currentDomain = useMemo<ModuleDomain | null>(() => {
+    const matched = visibleModules.find(
+      (m) => pathname === m.route || pathname.startsWith(`${m.route}/`),
+    );
+    if (matched) return matched.domain;
+    return null;
+  }, [pathname, visibleModules]);
+
+  // 按域分组（仅保留有可见模块的域）
+  const groups = useMemo(() => {
+    const byDomain = new Map<ModuleDomain, FrontendModule[]>();
+    for (const m of visibleModules) {
+      const list = byDomain.get(m.domain) ?? [];
+      list.push(m);
+      byDomain.set(m.domain, list);
+    }
+    return MODULE_DOMAINS.map((d) => ({
+      domain: d,
+      modules: (byDomain.get(d.id) ?? []).sort((a, b) => a.order - b.order),
+    })).filter((g) => g.modules.length > 0);
+  }, [visibleModules]);
+
+  const isCollapsed = (domainId: ModuleDomain): boolean =>
+    domainId !== currentDomain && collapsed.has(domainId);
+
+  const toggleDomain = (domainId: ModuleDomain) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(domainId)) next.delete(domainId);
+      else next.add(domainId);
+      return next;
+    });
+  };
+
   const sidebar = (
-    <nav className="flex h-full flex-col gap-1 p-4">
-      {visibleItems.map((item) => {
-        const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+    <nav className="flex h-full flex-col gap-1 overflow-y-auto p-4">
+      {groups.map(({ domain, modules }) => {
+        const collapsedDomain = isCollapsed(domain.id);
         return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`rounded-md px-3 py-2 text-sm font-medium ${
-              active ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-            }`}
-          >
-            {item.label}
-          </Link>
+          <div key={domain.id} className="flex flex-col">
+            <button
+              type="button"
+              onClick={() => toggleDomain(domain.id)}
+              className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-100"
+            >
+              <span>{domain.label}</span>
+              <span className="text-xs text-slate-400">{collapsedDomain ? "▸" : "▾"}</span>
+            </button>
+            {!collapsedDomain && (
+              <div className="mt-1 flex flex-col gap-1 pl-2">
+                {modules.map((item) => {
+                  const active =
+                    pathname === item.route || pathname.startsWith(`${item.route}/`);
+                  if (item.availability === "hold") {
+                    // HOLD：明确视觉区分，不可点击（禁止假功能入口）
+                    return (
+                      <span
+                        key={item.id}
+                        className="flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium text-slate-300"
+                        aria-disabled="true"
+                      >
+                        <span>{item.label}</span>
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-400">
+                          尚未开放
+                        </span>
+                      </span>
+                    );
+                  }
+                  return (
+                    <Link
+                      key={item.id}
+                      href={item.route}
+                      className={`rounded-md px-3 py-2 text-sm font-medium ${
+                        active
+                          ? "bg-brand-50 text-brand-700"
+                          : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         );
       })}
     </nav>
