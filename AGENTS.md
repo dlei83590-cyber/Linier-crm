@@ -32,6 +32,7 @@
 - MUST NOT 为"提前确认 CI 会不会过"而运行等价的高负载验证。
 - MUST NOT 将 Railway/部署成功视为 CI 验证成功。
 - MUST NOT 因 CI 失败而扩大修改范围或顺手重构无关代码。
+- **MUST NOT 触碰本地开发服务器进程/端口/缓存（2026-08-13 CI-First Enforcement）**：禁止启动、停止、重启、kill 或替换任何现有本地开发服务器；禁止因端口占用执行 `kill` / `pkill` / `killall`；禁止清理 `.next`、node_modules、缓存、PID、socket 来"修复环境"；禁止为验证页面而访问/操纵本地运行服务；禁止因 CI failure 在本地复现整个 CI pipeline。即使发现本地服务器异常，也只报告环境事实，不得自行修复运行环境。
 
 本地只允许代码编辑、静态阅读以及必要的轻量检查，例如：
 
@@ -62,10 +63,14 @@
 
 ## 3. 当前阶段边界
 
-（依据 CTO Directive 2026-08-12 Post-6B 双轨执行 Gate；ROADMAP 更新后必须同步本节。）
+（依据 CTO Directive 2026-08-12 Post-6B 双轨执行 Gate 与 2026-08-13 CI-First Enforcement / 阶段重排；ROADMAP 更新后必须同步本节。）
 
-- **双轨执行**：Track A = Frontend Operations（PR #24，Iteration 1：10 模块 List/Search/Filter/Pagination/Status 工作台，不做完整 CRUD）；Track B = Supplier Invoice / AP（PR #23，5C-1）。
-- **5C-1 ACTIVE（PR #23）**：只建立 Supplier Invoice / 3-Way Match / GRIR / AP Liability / AP Open Item。5C-2（Supplier Payment / AP Allocation / Payment Reversal / Supplier CN/DN / AP Write-Off / GL Posting）HOLD。
+- **Track A Frontend Tier 1 Reference（Batch 1/2）— CLOSED**：Purchase Requisition / Inventory Transfer（PR #27）、Inspection / Purchase Return（PR #32）Create + DRAFT Edit 均已合入 main；统一认证传输 `apiFetch` + Bearer（PR #34）已合入。
+- **Master-Data Read API（P0）— MERGED（PR #33）**：`GET /api/warehouses`、`/api/warehouse-locations`、`/api/unit-of-measures` 只读端点 + `warehouse`/`warehouse-location` RBAC registry 注册；Batch 3/4 selector 依赖已解除。
+- **Frontend Release Metadata + Dashboard Stale Cleanup（P0.5）— ACTIVE（PR #35）**：version SSOT = root `package.json`；build-time 注入 `APP_VERSION/GIT_SHA/BUILD_ID/DEPLOYMENT_ENV`（Footer + Dashboard System Overview 只消费构建注入值）；Dashboard 删除 Sprint 编号卡与静态“认证服务：正常”等健康状态声称（产品 UI 不承担 ROADMAP SSOT）。
+- **Batch 3（PO/Receipt/WHR）、Batch 4（Count/Adjustment/Conversion）— HOLD**：待 P0.5 落 main 后重新评估（Master-Data read API 已就绪）。
+- **Tier 2/3（Submit/Approve/Confirm/Complete/Post/Execute/Return/Cancel 等）— HOLD**。
+- **5C-1 / Supplier Invoice / AP（原 Track B PR #23）— HOLD 待重排**：5C-2（Supplier Payment / AP Allocation / Payment Reversal / Supplier CN/DN / AP Write-Off / GL Posting）HOLD。
 - **GRIR 是不可变会计事实**：只允许 ACCRUAL / REVERSAL / CONSUME，禁止 `UPDATE GrirRecord SET quantity = ...`。
 - **WHR POST 与 GRIR ACCRUAL 必须同一事务**；Purchase Return（sourceRefType=WAREHOUSE_RECEIPT_LINE）必须产生 GRIR REVERSAL，且 Σ REVERSAL ≤ Σ ACCRUAL，任何并发路径不得制造负 GRIR。
 - **Invoice POST 同事务必须产生 GRIR CONSUME + AP Liability + AP Open Item**，禁止 partial success；金额一律 Server-side Decimal canonical 计算，禁止信任 client amount/tax/matched quantity。
