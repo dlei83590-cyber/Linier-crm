@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { PERMISSIONS } from "@nilier-crm/shared";
+import { hasPermission, PERMISSIONS, type RoleCode } from "@nilier-crm/shared";
+import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Pagination } from "@/components/ui/pagination";
@@ -30,6 +31,11 @@ const MODE_OPTIONS = ["SKIP", "SPOT", "FULL"] as const;
 const RESULT_OPTIONS = ["QUALIFIED", "PARTIAL", "REJECTED", "PENDING"] as const;
 
 function InspectionList() {
+  const { state } = useSession();
+  const canCreate =
+    state.status === "authenticated" &&
+    state.user !== null &&
+    hasPermission(state.user.roles as RoleCode[], "inspection:create");
   const [modeInput, setModeInput] = useState("");
   const [resultInput, setResultInput] = useState("");
   const [filters, setFilters] = useState<{ inspectionMode?: string; result?: string }>({});
@@ -56,6 +62,14 @@ function InspectionList() {
     <div className="rounded-lg border border-slate-200 bg-white">
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 p-4">
         <h1 className="mr-4 text-lg font-semibold text-slate-800">质检记录</h1>
+        {canCreate && (
+          <Link
+            href="/purchasing/inspections/new"
+            className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+          >
+            新建
+          </Link>
+        )}
         <select
           value={modeInput}
           onChange={(e) => setModeInput(e.target.value)}

@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { PERMISSIONS } from "@nilier-crm/shared";
+import { hasPermission, PERMISSIONS, type RoleCode } from "@nilier-crm/shared";
+import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Pagination } from "@/components/ui/pagination";
@@ -23,6 +24,11 @@ interface ReturnRow {
 const STATUS_OPTIONS = ["DRAFT", "RETURNED", "CANCELLED"] as const;
 
 function ReturnList() {
+  const { state } = useSession();
+  const canCreate =
+    state.status === "authenticated" &&
+    state.user !== null &&
+    hasPermission(state.user.roles as RoleCode[], "purchase-return:create");
   const [codeInput, setCodeInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ code?: string; status?: string }>({});
@@ -49,6 +55,14 @@ function ReturnList() {
     <div className="rounded-lg border border-slate-200 bg-white">
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 p-4">
         <h1 className="mr-4 text-lg font-semibold text-slate-800">采购退货</h1>
+        {canCreate && (
+          <Link
+            href="/purchasing/returns/new"
+            className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+          >
+            新建
+          </Link>
+        )}
         <input
           value={codeInput}
           onChange={(e) => setCodeInput(e.target.value)}
