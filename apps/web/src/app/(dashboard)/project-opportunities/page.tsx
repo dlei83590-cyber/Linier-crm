@@ -10,7 +10,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { PERMISSIONS } from "@nilier-crm/shared";
+import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
+import { useSession } from "@/lib/session-context";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
@@ -71,6 +72,11 @@ const STAGE_TONE_MAP: Record<string, "success" | "neutral" | "warning" | "danger
 };
 
 function OpportunityList() {
+  const { state } = useSession();
+  const canCreate =
+    state.status === "authenticated" &&
+    state.user !== null &&
+    hasPermission(state.user.roles as RoleCode[], actionPermission("project-opportunity", "create"));
   const [codeInput, setCodeInput] = useState("");
   const [nameInput, setNameInput] = useState("");
   const [stageInput, setStageInput] = useState("");
@@ -101,6 +107,16 @@ function OpportunityList() {
       <EntityListWorkspace<OpportunityRow>
         title="项目机会"
         description="线索 → 准入 → 方案 → 报价阶段商机管理"
+        headerActions={
+          canCreate ? (
+            <Link
+              href="/project-opportunities/new"
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+            >
+              + 新建机会
+            </Link>
+          ) : undefined
+        }
         filters={
           <>
             <input
