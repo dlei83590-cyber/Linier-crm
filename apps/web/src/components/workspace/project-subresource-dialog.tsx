@@ -17,7 +17,8 @@
  * B2-1B 的 Risk / Visit / Product / Tag 可复用此壳。
  */
 import type { ReactNode } from "react";
-import { ApiClientError, describeStatus } from "@/lib/api-client";
+import { describeStatus } from "@/lib/api-client";
+import type { ApiClientError } from "@/lib/api-client";
 
 export interface ProjectSubresourceDialogProps {
   open: boolean;

@@ -653,6 +653,9 @@ function ProjectDetailPage() {
 
   return (
     <AppPage>
+      {refreshing && (
+        <div className="mb-4 text-xs text-ink-muted">正在刷新…</div>
+      )}
       {refreshError && (
         <div className="border-amber-200 mb-4 rounded-md border bg-amber-50 p-3 text-sm text-amber-700">
           <p>
