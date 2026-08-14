@@ -117,7 +117,6 @@ function ItemEditForm() {
   const [categories, setCategories] = useState<ItemOption[]>([]);
   const [uoms, setUoms] = useState<ItemOption[]>([]);
   const [selectorsLoading, setSelectorsLoading] = useState(true);
-  const [selectorsError, setSelectorsError] = useState<string | null>(null);
 
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
@@ -294,7 +293,6 @@ function ItemEditForm() {
             options={categories.map((c) => ({ value: c.id, label: c.name ?? c.code ?? "" }))}
             placeholder="请选择分类"
             loading={selectorsLoading}
-            error={selectorsError}
           />
         </Field>
         <Field label="品牌">
@@ -313,7 +311,6 @@ function ItemEditForm() {
             options={uoms.map((u) => ({ value: u.id, label: u.name ?? u.code ?? "" }))}
             placeholder="请选择"
             loading={selectorsLoading}
-            error={selectorsError}
           />
         </Field>
         <Field label="采购单位">
@@ -323,7 +320,6 @@ function ItemEditForm() {
             options={uoms.map((u) => ({ value: u.id, label: u.name ?? u.code ?? "" }))}
             placeholder="请选择"
             loading={selectorsLoading}
-            error={selectorsError}
           />
         </Field>
         <Field label="销售单位">
@@ -333,7 +329,6 @@ function ItemEditForm() {
             options={uoms.map((u) => ({ value: u.id, label: u.name ?? u.code ?? "" }))}
             placeholder="请选择"
             loading={selectorsLoading}
-            error={selectorsError}
           />
         </Field>
         <Field label="生命周期">

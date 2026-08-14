@@ -101,7 +101,6 @@ function PriceListEditForm() {
 
   const [policies, setPolicies] = useState<PolicyOption[]>([]);
   const [policiesLoading, setPoliciesLoading] = useState(true);
-  const [policiesError, setPoliciesError] = useState<string | null>(null);
 
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
@@ -241,7 +240,6 @@ function PriceListEditForm() {
             options={policies.map((p) => ({ value: p.id, label: p.name ?? p.code ?? "" }))}
             placeholder="请选择策略"
             loading={policiesLoading}
-            error={policiesError}
           />
         </Field>
         <Field label="币种">
