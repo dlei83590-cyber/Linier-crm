@@ -11,7 +11,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { PERMISSIONS } from "@nilier-crm/shared";
+import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
+import { useSession } from "@/lib/session-context";
 import { AppPage, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
@@ -48,6 +49,11 @@ function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 function InspectionDetailPage() {
+  const { state } = useSession();
+  const canEdit =
+    state.status === "authenticated" &&
+    state.user !== null &&
+    hasPermission(state.user.roles as RoleCode[], actionPermission("inspection", "edit"));
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
   const [detail, setDetail] = useState<InspectionDetail | null>(null);
@@ -101,6 +107,16 @@ function InspectionDetailPage() {
         title={`质检记录详情 — ${detail.inspectionMode}`}
         backHref="/purchasing/inspections"
         status={detail.result}
+        actions={
+          detail.result === "PENDING" && canEdit ? (
+            <Link
+              href={`/purchasing/inspections/${id}/edit`}
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+            >
+              编辑
+            </Link>
+          ) : undefined
+        }
         summary={
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <InfoItem label="质检模式" value={detail.inspectionMode} />

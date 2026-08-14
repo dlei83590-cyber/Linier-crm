@@ -10,7 +10,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { PERMISSIONS } from "@nilier-crm/shared";
+import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
+import { useSession } from "@/lib/session-context";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
@@ -25,9 +26,14 @@ interface TransferRow {
   _count?: { lines: number };
 }
 
-const STATUS_OPTIONS = ["DRAFT", "SUBMITTED", "EXECUTED", "CANCELLED"] as const;
+const STATUS_OPTIONS = ["DRAFT", "SUBMITTED", "APPROVED", "EXECUTED", "CANCELLED"] as const;
 
 function TransferList() {
+  const { state } = useSession();
+  const canCreate =
+    state.status === "authenticated" &&
+    state.user !== null &&
+    hasPermission(state.user.roles as RoleCode[], actionPermission("inventory-transfer", "create"));
   const [noInput, setNoInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ transferNo?: string; status?: string }>({});
@@ -55,6 +61,16 @@ function TransferList() {
       <EntityListWorkspace<TransferRow>
         title="库存调拨"
         description="库存调拨工作台"
+        headerActions={
+          canCreate ? (
+            <Link
+              href="/inventory/transfers/new"
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+            >
+              + 新建调拨
+            </Link>
+          ) : undefined
+        }
         filters={
           <>
             <input
