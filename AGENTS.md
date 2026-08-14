@@ -194,3 +194,22 @@
 - **下一步**：只给一个最接近当前 Gate 的下一动作。
 
 不要用本地服务器输出作为验证证据。不要伪造未执行的测试结果。不要把代码静态检查表述成测试通过。
+
+## 8. Agent Commit Rule（Server Safe Mode）
+
+AI/OpenClaw commits MUST bypass local Husky/lint-staged hooks:
+
+```shell
+HUSKY=0 git commit -m "..."
+```
+
+Reason: local hooks are local validation and violate Remote-CI-Only execution mode.
+
+This does NOT weaken quality gates: GitHub CI remains mandatory before merge.
+
+- 本地只允许低资源静态操作（编辑 / git status / git diff / git add 明确文件 / git log / git show / 窄范围 grep / fetch / branch / commit / push）。
+- 禁止本地运行 build / test / type-check / lint / lint-staged / eslint / tsc / turbo / Prisma / Docker / dev server / 全仓 formatter。
+- 禁止为 commit 自动执行的本地质量 Gate（Husky pre-commit validation）。
+- 禁止 kill / pkill / killall / systemctl restart / pm2 restart / rm -rf .next / rm -rf node_modules。发现服务器资源异常时只汇报 SERVER_RESOURCE_ANOMALY — STOP。
+- 人类开发者本地环境是否继续使用 Husky 不受影响；不需要删除 `.husky/pre-commit`，只规定 AI/服务器执行账户 bypass hook。
+- CI 失败修复：只读 GitHub 失败 job 的第一个真实 error → 定位相关文件 → 静态修改 → `HUSKY=0 git commit` → push → 再等 CI，一次只修第一个 root cause。
