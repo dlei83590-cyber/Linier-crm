@@ -61,15 +61,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (locked.version !== parsed.data.version) {
       return { error: failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试") };
     }
+    // 3. CLOSED fail-closed（CTO #12316）：已结项项目禁止任何 stage mutation。
+    //    不能依赖 isLegalTransition —— 其首行 `if (from === to) return true` 会让 CLOSED → CLOSED 通过，
+    //    造成无业务变化但 version+1 的写。此 Gate 在锁后 + version CAS 后显式封死。
+    if (locked.stage === "CLOSED") {
+      return { error: failConflict(ERROR_CODES.CONFLICT, "项目已结项") };
+    }
 
     const fromStage = locked.stage as ProjectStage;
     const toStage = parsed.data.targetStage as ProjectStage;
-    // CLOSED 项目无法合法流转（isLegalTransition 天然拒绝），锁后权威 stage 判定
     if (!isLegalTransition(fromStage, toStage)) {
       return { error: failConflict(ERROR_CODES.CONFLICT, `非法阶段流转：${fromStage} → ${toStage}（仅允许正向推进/暂停/失败/结项）`) };
     }
 
-    // 3. 同一 tx 内更新 stage + version+1（与 Gate 串行化，TOCTOU 消除）
+    // 4. 同一 tx 内更新 stage + version+1（与 Gate 串行化，TOCTOU 消除）
     const updated = await tx.project.update({
       where: { id },
       data: {
