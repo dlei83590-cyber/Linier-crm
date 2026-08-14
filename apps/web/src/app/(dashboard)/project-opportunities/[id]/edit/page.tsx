@@ -172,11 +172,13 @@ function OpportunityEditForm() {
     setReloadKey((k) => k + 1);
   };
 
-  const numOrUndefined = (v: string): number | undefined => {
+  // backend PATCH nullable().optional()：字段不存在 = 不修改；null = 清空现有值。
+  // Edit 必须区分「未修改」与「用户主动清空」：blank → null（清空），非 blank → number。
+  const numOrNull = (v: string): number | null => {
     const t = v.trim();
-    if (t === "") return undefined;
+    if (t === "") return null;
     const n = Number(t);
-    return Number.isNaN(n) ? undefined : n;
+    return Number.isNaN(n) ? null : n;
   };
 
   const handleSave = () => {
@@ -201,13 +203,13 @@ function OpportunityEditForm() {
     const payload: Record<string, unknown> = {
       name: name.trim(),
       ownerId: ownerId.trim() || null,
-      customerInvestment: numOrUndefined(customerInvestment),
-      expectedRevenue: numOrUndefined(expectedRevenue),
-      expectedCost: numOrUndefined(expectedCost),
-      grossProfit: numOrUndefined(grossProfit),
-      expenseBudget: numOrUndefined(expenseBudget),
-      salesTarget: numOrUndefined(salesTarget),
-      successProbability: numOrUndefined(successProbability),
+      customerInvestment: numOrNull(customerInvestment),
+      expectedRevenue: numOrNull(expectedRevenue),
+      expectedCost: numOrNull(expectedCost),
+      grossProfit: numOrNull(grossProfit),
+      expenseBudget: numOrNull(expenseBudget),
+      salesTarget: numOrNull(salesTarget),
+      successProbability: numOrNull(successProbability),
       paymentStatus: paymentStatus || undefined,
       competitors: competitors.length > 0 ? competitors : null,
       description: description.trim() || null,
