@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { PERMISSIONS } from "@nilier-crm/shared";
+import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
+import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatDate } from "@/lib/format";
@@ -35,6 +36,12 @@ interface WarehouseReceiptDetail {
 function WarehouseReceiptDetailPage() {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
+  // F2-3 Batch B2：最小入口（不重构 Detail）——DRAFT 且有 edit 权限才显示编辑
+  const { state } = useSession();
+  const canEdit =
+    state.status === "authenticated" &&
+    state.user !== null &&
+    hasPermission(state.user.roles as RoleCode[], actionPermission("warehouse-receipt", "edit"));
   const [detail, setDetail] = useState<WarehouseReceiptDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | null>(null);
@@ -59,12 +66,22 @@ function WarehouseReceiptDetailPage() {
     <div className="rounded-lg border border-slate-200 bg-white">
       <div className="flex items-center justify-between border-b border-slate-200 p-4">
         <h1 className="text-lg font-semibold text-slate-800">仓库收货详情</h1>
-        <Link
-          href="/purchasing/warehouse-receipts"
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-        >
-          返回列表
-        </Link>
+        <div className="flex items-center gap-2">
+          {detail?.status === "DRAFT" && canEdit ? (
+            <Link
+              href={`/purchasing/warehouse-receipts/${id}/edit`}
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+            >
+              编辑
+            </Link>
+          ) : null}
+          <Link
+            href="/purchasing/warehouse-receipts"
+            className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+          >
+            返回列表
+          </Link>
+        </div>
       </div>
 
       {loading ? (
