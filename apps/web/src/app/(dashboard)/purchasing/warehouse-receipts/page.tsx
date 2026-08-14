@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { PERMISSIONS } from "@nilier-crm/shared";
+import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
+import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Pagination } from "@/components/ui/pagination";
@@ -24,6 +25,13 @@ interface WarehouseReceiptRow {
 const STATUS_OPTIONS = ["DRAFT", "POSTED", "CANCELLED"] as const;
 
 function WarehouseReceiptList() {
+  // F2-3 Batch B2：最小入口（不重构 List）——拥有 warehouse-receipt:create 才显示新建
+  const { state } = useSession();
+  const canCreate =
+    state.status === "authenticated" &&
+    state.user !== null &&
+    hasPermission(state.user.roles as RoleCode[], actionPermission("warehouse-receipt", "create"));
+
   const [codeInput, setCodeInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ code?: string; status?: string }>({});
@@ -50,6 +58,14 @@ function WarehouseReceiptList() {
     <div className="rounded-lg border border-slate-200 bg-white">
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 p-4">
         <h1 className="mr-4 text-lg font-semibold text-slate-800">仓库收货</h1>
+        {canCreate ? (
+          <Link
+            href="/purchasing/warehouse-receipts/new"
+            className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+          >
+            + 新建入库单
+          </Link>
+        ) : null}
         <input
           value={codeInput}
           onChange={(e) => setCodeInput(e.target.value)}

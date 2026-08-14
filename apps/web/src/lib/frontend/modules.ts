@@ -380,7 +380,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD },
     order: 4,
   },
-  // warehouse-receipts：main 只有 list/detail（Create/Edit 在 PR #38 未入 main）→ ui create/edit false
+  // warehouse-receipts：Batch B2 selective port 已交付 Create/DRAFT Edit（双 source identity：purchaseReceiptLineId + inspectionId 保留）→ ui create/edit true；Tier 2/3 保持 false
   {
     id: 'warehouse-receipts',
     domain: 'purchasing',
@@ -388,7 +388,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/purchasing/warehouse-receipts',
     permission: PERMISSIONS.WAREHOUSE_RECEIPT_READ,
     availability: 'ready',
-    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL },
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD },
     order: 5,
   },
   // purchase-returns：main 已有 list/detail/new/edit → ui create/edit true
