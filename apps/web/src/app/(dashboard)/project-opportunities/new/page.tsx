@@ -78,7 +78,6 @@ function Field({
 
 function OpportunityCreateForm() {
   const router = useRouter();
-  const { state } = useSession();
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [selectorsLoading, setSelectorsLoading] = useState(true);
 

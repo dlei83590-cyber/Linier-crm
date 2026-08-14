@@ -103,11 +103,6 @@ function ProjectEditForm() {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
   const router = useRouter();
-  const { state } = useSession();
-  const canEdit =
-    state.status === "authenticated" &&
-    state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("project", "edit"));
 
   const [name, setName] = useState("");
   const [priority, setPriority] = useState("");
