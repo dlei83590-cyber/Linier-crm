@@ -50,6 +50,20 @@ export const PERMISSIONS = {
   WAREHOUSE_RECEIPT_WRITE: "warehouse-receipt:write",
   PURCHASE_RETURN_READ: "purchase-return:view",
   PURCHASE_RETURN_WRITE: "purchase-return:write",
+  // Sprint 4A/4B：销售报价/订单（前端 Registry 消费层对齐真实 endpoint 码；与 seed SEED_ACTION_MODULES 一致）
+  QUOTATION_READ: "quotation:view",
+  SALES_ORDER_READ: "sales-order:view",
+  // Sprint 4C/4D/4E：销售执行域（Delivery / Invoice / AR / Receipt-Allocation / CN-DN，与 seed 模块一致）
+  DELIVERY_READ: "delivery:view",
+  INVOICE_READ: "invoice:view",
+  ACCOUNTS_RECEIVABLE_READ: "accounts-receivable:view",
+  RECEIPT_READ: "receipt:view",
+  CREDIT_DEBIT_NOTE_READ: "credit-debit-note:view",
+  // Sprint 5C-1：供应商发票
+  SUPPLIER_INVOICE_READ: "supplier-invoice:view",
+  // Master-Data Read API（D1）：warehouse / warehouse-location 主数据只读（read API 用 warehouse:view / warehouse-location:view）
+  WAREHOUSE_READ: "warehouse:view",
+  WAREHOUSE_LOCATION_READ: "warehouse-location:view",
   // Sprint 6A/6B：库存工作台（前端消费层对齐 FINAL 契约）
   // 注：Inventory Ledger / Stock Projection **无 FINAL Read API**（6A 只暴露 Consumer contract，
   //     未发布 InventoryMovement/StockProjection 只读端点）——inventory-ledger:view **不是已存在的
