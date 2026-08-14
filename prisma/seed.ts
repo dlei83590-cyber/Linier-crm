@@ -770,8 +770,17 @@ const SEED_PROMOTIONS = [
 ];
 
 async function main() {
-  const email = process.env.SEED_ADMIN_EMAIL ?? "admin@linier.com";
-  const password = process.env.SEED_ADMIN_PASSWORD ?? "ChangeMe123!";
+  // P0 Seed Credential Hardening（Phase S0）：
+  // - 正式 bootstrap 只走本文件（prisma/seed.ts）
+  // - Production admin 初始密码仅允许来自 SEED_ADMIN_PASSWORD
+  // - 环境变量缺失时 fail closed（禁止 fallback 到固定密码 / repo 明文口令）
+  const email = process.env.SEED_ADMIN_EMAIL;
+  const password = process.env.SEED_ADMIN_PASSWORD;
+  if (!email || !password) {
+    throw new Error(
+      "[seed] SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD are required (fail closed; no fallback credentials)",
+    );
+  }
   const passwordHash = await hash(password, 12);
   const defaultTaxRate = taxConfig.defaultRate; // 默认税率来自配置（默认 13），不写死
 
@@ -823,6 +832,59 @@ async function main() {
       update: {},
       create: { userId: user.id, roleId: superAdminRoleId },
     });
+  }
+
+  // Test user bootstrap（可选，仅当 SEED_TEST_EMAIL + SEED_TEST_PASSWORD 均提供时创建/更新，幂等）
+  // P0 Security（CTO Review 23:34 / 23:57）：**先校验全部配置，再执行任何 DB mutation**
+  // （invalid config 不得先改库再失败，禁止部分变更）
+  // 1) production 禁止 test bootstrap（fail closed）
+  // 2) Test User 角色仅允许 MEMBER（默认）| ADMIN（SEED_TEST_ROLE=ADMIN 显式 opt-in）；SUPER_ADMIN 一律拒绝
+  const testEmail = process.env.SEED_TEST_EMAIL;
+  const testPassword = process.env.SEED_TEST_PASSWORD;
+  if (process.env.NODE_ENV === "production" && (testEmail || testPassword)) {
+    throw new Error(
+      "[seed] test-user bootstrap is forbidden in production (remove SEED_TEST_EMAIL / SEED_TEST_PASSWORD)",
+    );
+  }
+  const testRoleCode = (process.env.SEED_TEST_ROLE ?? "MEMBER").toUpperCase();
+  if (testEmail && testPassword && testRoleCode !== "MEMBER" && testRoleCode !== "ADMIN") {
+    throw new Error(
+      `[seed] SEED_TEST_ROLE must be MEMBER or ADMIN (got ${testRoleCode}); SUPER_ADMIN is not allowed for test users`,
+    );
+  }
+  if (testEmail && testPassword) {
+    const testPasswordHash = await hash(testPassword, 12);
+    const testUser = await prisma.user.upsert({
+      where: { email: testEmail },
+      update: { passwordHash: testPasswordHash, name: "Test User", isActive: true },
+      create: {
+        email: testEmail,
+        passwordHash: testPasswordHash,
+        name: "Test User",
+        isActive: true,
+        departmentId: engineering.id,
+      },
+    });
+    // 角色精确归一化（CTO Review 23:57）：删除 test user 的 bootstrap 管理角色集合
+    // （SUPER_ADMIN / ADMIN / MEMBER），再只赋予目标角色 —— 保证：
+    // 默认 MEMBER 真的是 MEMBER；ADMIN 只有显式 opt-in；从 ADMIN 降回 MEMBER 真正降权；
+    // 已激活的 test user 永不残留管理角色。只收敛 bootstrap 管理角色集合，不删除其他业务角色。
+    const bootstrapRoleIds = ["SUPER_ADMIN", "ADMIN", "MEMBER"]
+      .map((code) => roleMap.get(code))
+      .filter((id): id is string => Boolean(id));
+    if (bootstrapRoleIds.length > 0) {
+      await prisma.userRole.deleteMany({
+        where: { userId: testUser.id, roleId: { in: bootstrapRoleIds } },
+      });
+    }
+    const testRoleId = roleMap.get(testRoleCode);
+    if (testRoleId) {
+      await prisma.userRole.upsert({
+        where: { userId_roleId: { userId: testUser.id, roleId: testRoleId } },
+        update: {},
+        create: { userId: testUser.id, roleId: testRoleId },
+      });
+    }
   }
 
   // Master data: units of measure
