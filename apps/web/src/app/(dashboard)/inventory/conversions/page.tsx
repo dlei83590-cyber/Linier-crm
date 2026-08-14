@@ -1,12 +1,17 @@
 "use client";
 
+/**
+ * Inventory Conversions — 库存转换列表页（F2-3 Batch C2 Consolidation，CTO #11888）
+ *
+ * 由旧式自绘 table/filter 迁移至统一 Workspace：
+ * AppPage → EntityListWorkspace → StatusBadge / ErrorPanel / common toolbar。
+ * 不改 backend / 状态机 / action；useListQuery + filters 原样保留。
+ */
 import { useState } from "react";
 import Link from "next/link";
-import { PERMISSIONS } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { Pagination } from "@/components/ui/pagination";
-import { EmptyRow, ErrorRow, LoadingRow } from "@/components/ui/list-states";
+import { PERMISSIONS } from "@nilier-crm/shared";
+import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
 
@@ -23,7 +28,7 @@ interface ConversionRow {
 const STATUS_OPTIONS = ["DRAFT", "SUBMITTED", "EXECUTED", "CANCELLED"] as const;
 
 function ConversionList() {
-  const [conversionNoInput, setConversionNoInput] = useState("");
+  const [noInput, setNoInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ conversionNo?: string; status?: string }>({});
 
@@ -32,107 +37,118 @@ function ConversionList() {
 
   const applyFilter = () => {
     const next: { conversionNo?: string; status?: string } = {};
-    if (conversionNoInput.trim()) next.conversionNo = conversionNoInput.trim();
+    if (noInput.trim()) next.conversionNo = noInput.trim();
     if (statusInput) next.status = statusInput;
     setFilters(next);
     setPage(1);
   };
 
   const resetFilter = () => {
-    setConversionNoInput("");
+    setNoInput("");
     setStatusInput("");
     setFilters({});
     setPage(1);
   };
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white">
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 p-4">
-        <h1 className="mr-4 text-lg font-semibold text-slate-800">库存转换</h1>
-        <input
-          value={conversionNoInput}
-          onChange={(e) => setConversionNoInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") applyFilter();
-          }}
-          placeholder="按转换单号搜索"
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
-        />
-        <select
-          value={statusInput}
-          onChange={(e) => setStatusInput(e.target.value)}
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
-        >
-          <option value="">全部状态</option>
-          {STATUS_OPTIONS.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          onClick={applyFilter}
-          className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
-        >
-          查询
-        </button>
-        <button
-          type="button"
-          onClick={resetFilter}
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-        >
-          重置
-        </button>
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500">
-            <tr>
-              <th className="px-4 py-3">转换单号</th>
-              <th className="px-4 py-3">状态</th>
-              <th className="px-4 py-3">物料</th>
-              <th className="px-4 py-3">基准单位</th>
-              <th className="px-4 py-3">行数</th>
-              <th className="px-4 py-3">创建时间</th>
-              <th className="px-4 py-3">操作</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {loading ? (
-              <LoadingRow colSpan={7} />
-            ) : error ? (
-              <ErrorRow colSpan={7} error={error} onRetry={refresh} />
-            ) : items.length === 0 ? (
-              <EmptyRow colSpan={7} />
-            ) : (
-              items.map((item) => (
-                <tr key={item.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-800">{item.conversionNo}</td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={item.status} />
-                  </td>
-                  <td className="px-4 py-3 text-slate-700">
-                    {item.item ? `${item.item.code ?? ""} ${item.item.name ?? ""}`.trim() : "—"}
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">{item.baseUom?.symbol ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-600">{item._count?.lines ?? 0}</td>
-                  <td className="px-4 py-3 text-slate-600">{formatDate(item.createdAt)}</td>
-                  <td className="px-4 py-3">
-                    <Link href={`/inventory/conversions/${item.id}`} className="text-brand-600 hover:text-brand-700">
-                      查看
-                    </Link>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
-    </div>
+    <AppPage>
+      <EntityListWorkspace<ConversionRow>
+        title="库存转换"
+        description="库存转换工作台"
+        filters={
+          <>
+            <input
+              value={noInput}
+              onChange={(e) => setNoInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") applyFilter();
+              }}
+              placeholder="按转换单号搜索"
+              className="w-40 rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+            />
+            <select
+              value={statusInput}
+              onChange={(e) => setStatusInput(e.target.value)}
+              className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+            >
+              <option value="">全部状态</option>
+              {STATUS_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </>
+        }
+        toolbarActions={
+          <>
+            <button
+              type="button"
+              onClick={applyFilter}
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+            >
+              查询
+            </button>
+            <button
+              type="button"
+              onClick={resetFilter}
+              className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-slate-50"
+            >
+              重置
+            </button>
+          </>
+        }
+        columns={[
+          {
+            key: "conversionNo",
+            header: "转换单号",
+            render: (row) => (
+              <Link
+                href={`/inventory/conversions/${row.id}`}
+                className="font-medium text-brand-600 hover:underline"
+              >
+                {row.conversionNo}
+              </Link>
+            ),
+          },
+          {
+            key: "status",
+            header: "状态",
+            render: (row) => <StatusBadge status={row.status} />,
+          },
+          {
+            key: "item",
+            header: "物料",
+            render: (row) =>
+              row.item ? `${row.item.code ?? ""} ${row.item.name ?? ""}`.trim() : "—",
+          },
+          {
+            key: "baseUom",
+            header: "基准单位",
+            render: (row) => row.baseUom?.symbol ?? "—",
+          },
+          {
+            key: "lines",
+            header: "行数",
+            render: (row) => String(row._count?.lines ?? 0),
+          },
+          {
+            key: "createdAt",
+            header: "创建时间",
+            render: (row) => formatDate(row.createdAt),
+          },
+        ]}
+        rows={items}
+        rowKey={(row) => row.id}
+        loading={loading}
+        error={error}
+        onRetry={refresh}
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        onPageChange={setPage}
+      />
+    </AppPage>
   );
 }
 

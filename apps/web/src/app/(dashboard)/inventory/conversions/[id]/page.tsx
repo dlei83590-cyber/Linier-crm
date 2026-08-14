@@ -1,13 +1,20 @@
 "use client";
 
+/**
+ * Inventory Conversions — 库存转换详情页（F2-3 Batch C2 Consolidation，CTO #11888）
+ *
+ * 由旧式布局迁移至统一 Workspace：
+ * AppPage → EntityDetailWorkspace（Header Summary → Status → Actions → Sections）。
+ * 不改 backend / 状态机 / action。
+ */
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { PERMISSIONS } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { PERMISSIONS } from "@nilier-crm/shared";
+import { AppPage, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
-import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 
 interface ConversionDetail {
   id: string;
@@ -34,6 +41,15 @@ interface ConversionDetail {
   }>;
 }
 
+function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-xs text-ink-muted">{label}</p>
+      <p className="mt-0.5 text-sm text-ink-primary">{value ?? "—"}</p>
+    </div>
+  );
+}
+
 function ConversionDetailPage() {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
@@ -49,7 +65,9 @@ function ConversionDetailPage() {
       .then((body) => setDetail(body.data))
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(err instanceof ApiClientError ? err : new ApiClientError(0, "网络错误", "NETWORK_ERROR"));
+        setError(
+          err instanceof ApiClientError ? err : new ApiClientError(0, "网络错误", "NETWORK_ERROR"),
+        );
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -57,111 +75,95 @@ function ConversionDetailPage() {
     return () => controller.abort();
   }, [id]);
 
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white">
-      <div className="flex items-center justify-between border-b border-slate-200 p-4">
-        <h1 className="text-lg font-semibold text-slate-800">库存转换详情</h1>
-        <Link
-          href="/inventory/conversions"
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-        >
+  if (loading) {
+    return (
+      <AppPage>
+        <div className="border-border bg-surface rounded-lg border p-6 text-sm text-ink-muted">
+          加载中…
+        </div>
+      </AppPage>
+    );
+  }
+
+  if (error || !detail) {
+    return (
+      <AppPage>
+        <ErrorPanel error={error} />
+        <Link href="/inventory/conversions" className="mt-3 inline-block text-sm text-brand-600 hover:underline">
           返回列表
         </Link>
-      </div>
+      </AppPage>
+    );
+  }
 
-      {loading ? (
-        <div className="p-6 text-sm text-slate-400">加载中…</div>
-      ) : error ? (
-        <div className="p-6">
-          <p className="text-sm text-red-600">
-            {describeStatus(error.status)}：{error.message}
-            {error.code ? `（${error.code}）` : ""}
-          </p>
-          <Link href="/inventory/conversions" className="mt-2 inline-block text-sm text-brand-600">
-            返回列表
-          </Link>
-        </div>
-      ) : detail ? (
-        <div className="p-4">
-          <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-slate-50 p-4 text-sm md:grid-cols-4">
-            <div>
-              <p className="text-xs text-slate-500">转换单号</p>
-              <p className="mt-1 font-medium text-slate-800">{detail.conversionNo}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">状态</p>
-              <p className="mt-1">
-                <StatusBadge status={detail.status} />
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">物料</p>
-              <p className="mt-1 text-slate-700">
-                {detail.item ? `${detail.item.code ?? ""} ${detail.item.name ?? ""}`.trim() : "—"}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">基准单位</p>
-              <p className="mt-1 text-slate-700">{detail.baseUom?.symbol ?? "—"}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">执行人</p>
-              <p className="mt-1 text-slate-700">{detail.executedBy?.name ?? "—"}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">执行时间</p>
-              <p className="mt-1 text-slate-700">{formatDate(detail.executedAt)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">Movement Group</p>
-              <p className="mt-1 text-slate-700">{detail.movementGroupId ?? "—"}</p>
-            </div>
-            <div className="col-span-2">
-              <p className="text-xs text-slate-500">备注</p>
-              <p className="mt-1 text-slate-700">{detail.remark ?? "—"}</p>
-            </div>
+  return (
+    <AppPage>
+      <EntityDetailWorkspace
+        title={`库存转换详情 — ${detail.conversionNo}`}
+        backHref="/inventory/conversions"
+        status={detail.status}
+        summary={
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <InfoItem label="转换单号" value={detail.conversionNo} />
+            <InfoItem
+              label="物料"
+              value={detail.item ? `${detail.item.code ?? ""} ${detail.item.name ?? ""}`.trim() : null}
+            />
+            <InfoItem label="基准单位" value={detail.baseUom?.symbol} />
+            <InfoItem label="执行人" value={detail.executedBy?.name} />
+            <InfoItem label="执行时间" value={formatDate(detail.executedAt)} />
+            <InfoItem label="Movement Group" value={detail.movementGroupId} />
+            <InfoItem label="创建时间" value={formatDate(detail.createdAt)} />
+            <InfoItem label="备注" value={detail.remark} />
           </div>
-
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500">
-              <tr>
-                <th className="px-4 py-3">行角色</th>
-                <th className="px-4 py-3">物料</th>
-                <th className="px-4 py-3">数量</th>
-                <th className="px-4 py-3">单位</th>
-                <th className="px-4 py-3">换算率</th>
-                <th className="px-4 py-3">基准数量</th>
-                <th className="px-4 py-3">仓库</th>
-                <th className="px-4 py-3">库位</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {(detail.lines ?? []).map((line) => (
-                <tr key={line.id}>
-                  <td className="px-4 py-3 text-slate-600">{line.lineRole}</td>
-                  <td className="px-4 py-3 text-slate-700">
-                    {line.item ? `${line.item.code ?? ""} ${line.item.name ?? ""}`.trim() : "—"}
-                  </td>
-                  <td className="px-4 py-3 text-slate-700">{line.quantity}</td>
-                  <td className="px-4 py-3 text-slate-600">{line.uom?.symbol ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-600">{line.uomToBaseRate}</td>
-                  <td className="px-4 py-3 text-slate-700">{line.baseQuantity}</td>
-                  <td className="px-4 py-3 text-slate-600">{line.warehouse?.name ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-600">{line.location?.name ?? "—"}</td>
-                </tr>
-              ))}
-              {(detail.lines ?? []).length === 0 && (
+        }
+      >
+        <section className="border-border rounded-md border p-4">
+          <h2 className="text-ink-primary mb-3 text-sm font-semibold">
+            转换行（{detail.lines?.length ?? 0}）
+          </h2>
+          <div className="overflow-x-auto">
+            <table className="divide-border min-w-full divide-y text-sm">
+              <thead className="bg-slate-50 text-left text-xs font-medium text-ink-secondary">
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-400">
-                    暂无明细行
-                  </td>
+                  <th className="px-3 py-2 font-medium">行角色</th>
+                  <th className="px-3 py-2 font-medium">物料</th>
+                  <th className="px-3 py-2 font-medium">数量</th>
+                  <th className="px-3 py-2 font-medium">单位</th>
+                  <th className="px-3 py-2 font-medium">换算率</th>
+                  <th className="px-3 py-2 font-medium">基准数量</th>
+                  <th className="px-3 py-2 font-medium">仓库</th>
+                  <th className="px-3 py-2 font-medium">库位</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
-    </div>
+              </thead>
+              <tbody className="divide-border divide-y">
+                {(detail.lines ?? []).map((line) => (
+                  <tr key={line.id}>
+                    <td className="px-3 py-2 text-ink-secondary">{line.lineRole}</td>
+                    <td className="px-3 py-2 text-ink-primary">
+                      {line.item ? `${line.item.code ?? ""} ${line.item.name ?? ""}`.trim() : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-ink-primary">{line.quantity}</td>
+                    <td className="px-3 py-2 text-ink-secondary">{line.uom?.symbol ?? "—"}</td>
+                    <td className="px-3 py-2 text-ink-secondary">{line.uomToBaseRate}</td>
+                    <td className="px-3 py-2 text-ink-primary">{line.baseQuantity}</td>
+                    <td className="px-3 py-2 text-ink-secondary">{line.warehouse?.name ?? "—"}</td>
+                    <td className="px-3 py-2 text-ink-secondary">{line.location?.name ?? "—"}</td>
+                  </tr>
+                ))}
+                {(detail.lines ?? []).length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-8 text-center text-sm text-ink-muted">
+                      暂无明细行
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </EntityDetailWorkspace>
+    </AppPage>
   );
 }
 
