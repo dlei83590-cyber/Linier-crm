@@ -44,3 +44,6 @@ prisma/*.db-journal
 *.pem
 *.key
 *.crt
+
+# Next.js
+next-env.d.ts
