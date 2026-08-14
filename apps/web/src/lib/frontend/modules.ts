@@ -347,7 +347,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CRUD },
     order: 1,
   },
-  // purchase-orders：main 只有 list/detail（Create/Edit 在 PR #38 未入 main）→ ui create/edit false
+  // purchase-orders：Batch A selective port 已交付 Create/DRAFT Edit（PR #38 业务逻辑入新 Workspace）→ ui create/edit true；Tier 2/3 保持 false
   {
     id: 'purchase-orders',
     domain: 'purchasing',
@@ -355,7 +355,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/purchasing/orders',
     permission: PERMISSIONS.PURCHASE_ORDER_READ,
     availability: 'ready',
-    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL },
+    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CRUD },
     order: 2,
   },
   // purchase-receipts：main 只有 list/detail → ui create/edit false

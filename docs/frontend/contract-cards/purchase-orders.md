@@ -4,7 +4,7 @@
 - 判定：**迁移**（Backend FINAL + Frontend Existing）
 - 归属 Wave：F2-3
 - Backend Contract：list / detail / create / edit / workflow / factActions（事实基线：apps/web/src/app/api 实际路由）
-- Current Frontend：list / detail / ~create / ~edit / ~workflow / ~factActions（事实基线：apps/web/src/app/(dashboard) 实际页面；Tier 2/3 HARD HOLD）
+- Current Frontend：list / detail / create / edit / ~workflow / ~factActions（事实基线：apps/web/src/app/(dashboard) 实际页面；Tier 2/3 HARD HOLD）
 
 ## API（事实来源：apps/web/src/app/api 实际路由）
 
@@ -35,22 +35,23 @@
 
 - 409：version 冲突 / 状态不允许动作
 
-## Frontend Current State（ui 层事实，2026-08-14）
+## Frontend Current State（ui 层事实，2026-08-14 / F2-3 Batch A 更新）
 
-| 能力              | 状态                     |
-| ----------------- | ------------------------ |
-| List              | ✅（列表页已在 main）    |
-| Detail            | ✅（详情页已在 main）    |
-| Create            | ⏸️ new 页面未入 main     |
-| Edit              | ⏸️ edit 页面未入 main    |
-| Submit / Workflow | HOLD（Tier 2 HARD HOLD） |
-| Fact Actions      | HOLD（Tier 3 HARD HOLD） |
+| 能力              | 状态                                  |
+| ----------------- | ------------------------------------- |
+| List              | ✅（列表页已在 main）                 |
+| Detail            | ✅（详情页已在 main）                 |
+| Create            | ✅（Batch A selective port 已交付）   |
+| Edit              | ✅（DRAFT Edit，CAS version，Batch A）|
+| Submit / Workflow | HOLD（Tier 2 HARD HOLD）              |
+| Fact Actions      | HOLD（Tier 3 HARD HOLD）              |
 
 ## Current UI
 
-- 成熟列表页 + 详情页（真实 API 消费，非占位）
+- 列表页 + 详情页（现有，真实 API 消费）；Create / DRAFT Edit 已由 Batch A 以新 Workspace（EntityFormWorkspace + ReferenceSelector + LineEditor + useDirtyStateGuard + isVersionConflict）交付
+- 权限使用 shared constants（PERMISSIONS / actionPermission），未复制裸字符串
 
 ## Gap
 
-- 接入统一 Workspace（EntityListWorkspace / EntityDetailWorkspace / EntityFormWorkspace / StatusBadge / ErrorPanel / ReferenceSelector / LineEditor）
-- 保留现有业务逻辑；Create/Edit 从旧 PR #38 选择性吸收
+- List/Detail 迁移统一 Workspace（EntityListWorkspace / EntityDetailWorkspace）→ Batch C
+- Submit / Approve / Confirm / Cancel / Convert → HOLD（Tier 2/3；后续 Wave 按契约开放）
