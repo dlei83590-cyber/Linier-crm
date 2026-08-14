@@ -19,7 +19,6 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import {
   AppPage,
   EntityFormWorkspace,
-  ReferenceSelector,
   LineEditor,
   ErrorPanel,
   type LineColumn,
@@ -117,7 +116,6 @@ function PurchaseOrderEditForm() {
 
   const [items, setItems] = useState<ItemOption[]>([]);
   const [uoms, setUoms] = useState<UomOption[]>([]);
-  const [selectorsLoading, setSelectorsLoading] = useState(true);
 
   const [detail, setDetail] = useState<PODetail | null>(null);
   const [notEditable, setNotEditable] = useState(false);
@@ -188,12 +186,10 @@ function PurchaseOrderEditForm() {
       .then(([itemBody, uomBody]) => {
         setItems(itemBody.data);
         setUoms(uomBody.data);
-        setSelectorsLoading(false);
       })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
         setLoadError(err instanceof ApiClientError ? err : new ApiClientError(0, "加载数据源失败", "NETWORK_ERROR"));
-        setSelectorsLoading(false);
       });
     return () => controller.abort();
   }, []);
