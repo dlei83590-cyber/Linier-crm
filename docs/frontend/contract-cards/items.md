@@ -1,10 +1,10 @@
 # Contract Card — 物料管理
 
 - 模块：`items`（基础资料 · 物料管理）
-- 判定：**可开发**（Backend FINAL + Frontend Missing）
+- 判定：**Ready（F2-2 Wave 1 已交付）**（Backend FINAL + Frontend Existing）
 - 归属 Wave：F2-2 Wave 1
 - Backend Contract：list / detail / create / edit / ~workflow / ~factActions（事实基线：apps/web/src/app/api 实际路由）
-- Current Frontend：~list / ~detail / ~create / ~edit / ~workflow / ~factActions（事实基线：apps/web/src/app/(dashboard) 实际页面；Tier 2/3 HARD HOLD）
+- Current Frontend：list / detail / create / edit / ~workflow / ~factActions（事实基线：apps/web/src/app/(dashboard) 实际页面；Tier 2/3 HARD HOLD）
 
 ## API（事实来源：apps/web/src/app/api 实际路由）
 
@@ -48,8 +48,12 @@
 
 ## Current UI
 
+- 真实列表页（EntityListWorkspace）+ 详情页（EntityDetailWorkspace + 审计）+ 新建/编辑表单（EntityFormWorkspace + ReferenceSelector + CAS version）
+
 - 占位页（PlaceholderPage「尚未开放」），无列表/表单
 
 ## Gap
+
+- - 无剩余 Gap；审计已通过 /api/audit-logs（entityType=item）接入
 
 - 列表页（EntityListWorkspace）、详情（EntityDetailWorkspace）、Create/Edit 表单（EntityFormWorkspace + LineEditor）全部缺失 → F2-2 实现
