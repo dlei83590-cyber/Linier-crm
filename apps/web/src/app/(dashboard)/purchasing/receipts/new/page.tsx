@@ -274,6 +274,7 @@ function ReceiptCreateForm() {
           rejectedOnReceiptQty: "0",
         })}
         addLabel="添加行"
+        disableAdd
         emptyMessage="请先选择采购订单（从 PO 来源行生成）"
       />
     </EntityFormWorkspace>

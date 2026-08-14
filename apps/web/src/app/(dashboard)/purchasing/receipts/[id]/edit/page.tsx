@@ -340,6 +340,7 @@ function ReceiptEditForm() {
             rejectedOnReceiptQty: "0",
           })}
           addLabel="添加行"
+          disableAdd
         />
       </EntityFormWorkspace>
     </AppPage>

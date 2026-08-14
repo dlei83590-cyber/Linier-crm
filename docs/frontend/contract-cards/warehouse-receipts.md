@@ -55,3 +55,4 @@
 
 - List/Detail 迁移统一 Workspace（EntityListWorkspace / EntityDetailWorkspace）→ Batch C
 - Post（过账，触发 6A InventoryMovement）→ HOLD（Tier 3；后续 Wave 按契约开放）
+- **source-bound 纪律（CTO Batch B Review #11876）**：WHR 行必须来自 authoritative Receipt Line + 合法 Inspection 候选（purchaseReceiptLineId + inspectionId 双 source identity 不可为空/不可任意）；Create/Edit 均禁止 arbitrary add line（disableAdd）

@@ -396,6 +396,7 @@ function WhrCreateForm() {
           expDate: "",
         })}
         addLabel="添加行"
+        disableAdd
         emptyMessage="请先选择来源收货单（仅 WAREHOUSE 来源行可入库）"
       />
     </EntityFormWorkspace>

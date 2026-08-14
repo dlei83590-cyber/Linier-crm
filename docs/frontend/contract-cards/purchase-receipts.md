@@ -55,3 +55,4 @@
 
 - List/Detail 迁移统一 Workspace（EntityListWorkspace / EntityDetailWorkspace）→ Batch C
 - Receive（收货事实）/ Cancel → HOLD（Tier 3；后续 Wave 按契约开放）
+- **source-bound 纪律（CTO Batch B Review #11876）**：Receipt 行必须来自 authoritative PO Line；Create/Edit 均禁止 arbitrary add line（disableAdd）—— 如需追加 PO Line 应实现正式「从剩余 PO lines 选择并自动绑定 purchaseOrderLineId」的 selector，而非 generic empty row

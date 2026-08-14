@@ -459,6 +459,7 @@ function WhrEditForm() {
             expDate: "",
           })}
           addLabel="添加行"
+          disableAdd
         />
       </EntityFormWorkspace>
     </AppPage>
