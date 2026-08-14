@@ -116,6 +116,8 @@ function ItemCreateForm() {
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiClientError | null>(null);
+  // F2-2 UX Hardening ①：Dirty-State Guard（填写内容后离开需确认）
+  const [dirty, setDirty] = useState(false);
 
   // Selector 数据源：分类 + 计量单位（GET 已 FINAL）
   useEffect(() => {
@@ -191,6 +193,8 @@ function ItemCreateForm() {
       mode="create"
       submitting={submitting}
       error={error}
+      dirty={dirty}
+      onDirty={() => setDirty(true)}
       onSave={handleSave}
       onCancel={() => router.push("/items")}
     >

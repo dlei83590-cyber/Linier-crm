@@ -55,5 +55,6 @@
 ## Gap
 
 - - 无剩余 Gap；审计已通过 /api/audit-logs（entityType=item）接入
+- UX Hardening（CTO #11660）：Dirty-State Guard（useDirtyStateGuard）+ 409 CAS 冲突专用面板（isVersionConflict + 重新加载）已接入
 
 - 列表页（EntityListWorkspace）、详情（EntityDetailWorkspace）、Create/Edit 表单（EntityFormWorkspace + LineEditor）全部缺失 → F2-2 实现

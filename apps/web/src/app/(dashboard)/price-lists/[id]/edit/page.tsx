@@ -120,6 +120,10 @@ function PriceListEditForm() {
   const [loadFailed, setLoadFailed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiClientError | null>(null);
+  // F2-2 UX Hardening ①：Dirty-State Guard（修改后离开需确认）
+  const [dirty, setDirty] = useState(false);
+  // F2-2 UX Hardening ②：409 CAS 后重新加载（重新 GET → 更新 version → 重置 dirty）
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -144,6 +148,8 @@ function PriceListEditForm() {
         setVersion(d.version);
         setPolicies(policyBody.data);
         setPoliciesLoading(false);
+        // 重新加载最新数据后：重置 dirty（409 reload 或首次加载均适用）
+        setDirty(false);
       })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -153,7 +159,15 @@ function PriceListEditForm() {
         setLoadFailed(true);
       });
     return () => controller.abort();
-  }, [id]);
+  }, [id, reloadKey]);
+
+  // F2-2 UX Hardening ②：409 VERSION_CONFLICT 后重新加载最新数据
+  const handleReload = () => {
+    setError(null);
+    setLoadFailed(false);
+    setDirty(false);
+    setReloadKey((k) => k + 1);
+  };
 
   const handleSave = () => {
     if (submitting) return;
@@ -204,6 +218,9 @@ function PriceListEditForm() {
       mode="edit"
       submitting={submitting}
       error={error}
+      dirty={dirty}
+      onDirty={() => setDirty(true)}
+      onReload={handleReload}
       onSave={handleSave}
       onCancel={() => router.push(`/price-lists/${id}`)}
     >

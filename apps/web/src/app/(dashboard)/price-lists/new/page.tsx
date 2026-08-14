@@ -101,6 +101,8 @@ function PriceListCreateForm() {
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiClientError | null>(null);
+  // F2-2 UX Hardening ①：Dirty-State Guard（填写内容后离开需确认）
+  const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -160,6 +162,8 @@ function PriceListCreateForm() {
       mode="create"
       submitting={submitting}
       error={error}
+      dirty={dirty}
+      onDirty={() => setDirty(true)}
       onSave={handleSave}
       onCancel={() => router.push("/price-lists")}
     >

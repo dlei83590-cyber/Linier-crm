@@ -54,5 +54,6 @@
 ## Gap
 
 - - 无剩余 Gap；版本/伙伴价格等子域页面按后续 Wave 规划
+- UX Hardening（CTO #11660）：Dirty-State Guard（useDirtyStateGuard）+ 409 CAS 冲突专用面板（isVersionConflict + 重新加载）已接入
 
 - 列表/详情/Create/Edit 全部缺失 → F2-2 实现（版本/伙伴价格等子域可后续 Wave 补充）
