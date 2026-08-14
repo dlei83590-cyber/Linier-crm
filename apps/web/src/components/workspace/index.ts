@@ -32,6 +32,9 @@ export type { StateAction, StateActionTone } from './state-action-bar';
 
 export { ConfirmActionDialog } from './confirm-action-dialog';
 
+export { ProjectSubresourceDialog } from './project-subresource-dialog';
+export type { ProjectSubresourceDialogProps } from './project-subresource-dialog';
+
 export { ErrorPanel, ERROR_STATUS_MESSAGES } from './error-panel';
 
 export { AuditTimeline } from './audit-timeline';

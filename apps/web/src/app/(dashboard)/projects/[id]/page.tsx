@@ -12,15 +12,36 @@
  * - transition/close/acceptance（Tier 3 factActions）保持 HOLD
  * - Project Risks/Visits/Milestones/Tasks 不重开为 Sidebar 平级模块（归属本 Workspace Tabs）
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
-import { AppPage, EntityDetailWorkspace, StatusBadge, ErrorPanel } from "@/components/workspace";
+import {
+  AppPage,
+  EntityDetailWorkspace,
+  StatusBadge,
+  ErrorPanel,
+  ConfirmActionDialog,
+  ProjectSubresourceDialog,
+} from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
+import {
+  StakeholderFields,
+  MemberFields,
+  MilestoneFields,
+  TaskFields,
+  EMPTY_STAKEHOLDER_FORM,
+  EMPTY_MEMBER_FORM,
+  EMPTY_MILESTONE_FORM,
+  EMPTY_TASK_FORM,
+  type StakeholderFormValue,
+  type MemberFormValue,
+  type MilestoneFormValue,
+  type TaskFormValue,
+} from "./subresource-fields";
 
 interface ProjectDetail {
   id: string;
@@ -44,6 +65,7 @@ interface ProjectDetail {
   closure?: { id: string; closedAt: string | null; reason: string | null } | null;
   stakeholders?: Array<{
     id: string;
+    version: number;
     role: string;
     name: string;
     title?: string | null;
@@ -54,6 +76,7 @@ interface ProjectDetail {
   }>;
   members?: Array<{
     id: string;
+    version: number;
     name: string;
     roleInProject?: string | null;
     joinedAt?: string | null;
@@ -61,6 +84,7 @@ interface ProjectDetail {
   }>;
   milestones?: Array<{
     id: string;
+    version: number;
     name: string;
     status: string;
     plannedDate?: string | null;
@@ -70,10 +94,13 @@ interface ProjectDetail {
   }>;
   tasks?: Array<{
     id: string;
+    version: number;
     name: string;
     status: string;
     priority?: string | null;
     dueDate?: string | null;
+    milestoneId?: string | null;
+    description?: string | null;
   }>;
   products?: Array<{
     id: string;
@@ -149,6 +176,12 @@ interface ProjectDetail {
   };
 }
 
+/** B2-1A：子资源 row 类型（aggregate GET 返回完整 Prisma row，含 version 供 PATCH CAS） */
+type StakeholderRow = NonNullable<ProjectDetail["stakeholders"]>[number];
+type MemberRow = NonNullable<ProjectDetail["members"]>[number];
+type MilestoneRow = NonNullable<ProjectDetail["milestones"]>[number];
+type TaskRow = NonNullable<ProjectDetail["tasks"]>[number];
+
 const STAGE_LABELS: Record<string, string> = {
   LEAD: "线索",
   QUALIFIED: "准入",
@@ -216,6 +249,13 @@ const STAKEHOLDER_ROLE_LABELS: Record<string, string> = {
   PURCHASER: "采购人",
   DECISION_MAKER: "决策人",
   END_USER: "使用人",
+};
+
+const SUBRESOURCE_LABELS: Record<string, string> = {
+  stakeholder: "关系人",
+  member: "成员",
+  milestone: "里程碑",
+  task: "任务",
 };
 
 const VISIT_TYPE_LABELS: Record<string, string> = {
@@ -311,23 +351,74 @@ function EmptyRow({ colSpan, text }: { colSpan: number; text: string }) {
 
 function ProjectDetailPage() {
   const { state } = useSession();
+  const roles =
+    state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
   const canEdit =
     state.status === "authenticated" &&
     state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("project", "edit"));
+    hasPermission(roles, actionPermission("project", "edit"));
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<ApiClientError | null>(null);
+  const [refreshError, setRefreshError] = useState<ApiClientError | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
+
+  // B2-1A dialog 状态（资源 + mode + id + authoritative version 分离；表单 state 各自独立）
+  const [stakeholderDialog, setStakeholderDialog] = useState<{
+    open: boolean;
+    mode: "create" | "edit";
+    id: string | null;
+    version: number | null;
+  }>({ open: false, mode: "create", id: null, version: null });
+  const [memberDialog, setMemberDialog] = useState<{
+    open: boolean;
+    mode: "create" | "edit";
+    id: string | null;
+    version: number | null;
+  }>({ open: false, mode: "create", id: null, version: null });
+  const [milestoneDialog, setMilestoneDialog] = useState<{
+    open: boolean;
+    mode: "create" | "edit";
+    id: string | null;
+    version: number | null;
+  }>({ open: false, mode: "create", id: null, version: null });
+  const [taskDialog, setTaskDialog] = useState<{
+    open: boolean;
+    mode: "create" | "edit";
+    id: string | null;
+    version: number | null;
+  }>({ open: false, mode: "create", id: null, version: null });
+  const [stakeholderForm, setStakeholderForm] =
+    useState<StakeholderFormValue>(EMPTY_STAKEHOLDER_FORM);
+  const [memberForm, setMemberForm] = useState<MemberFormValue>(EMPTY_MEMBER_FORM);
+  const [milestoneForm, setMilestoneForm] = useState<MilestoneFormValue>(EMPTY_MILESTONE_FORM);
+  const [taskForm, setTaskForm] = useState<TaskFormValue>(EMPTY_TASK_FORM);
+  const [saving, setSaving] = useState(false);
+  const [dialogError, setDialogError] = useState<ApiClientError | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    resource: "stakeholder" | "member" | "milestone" | "task";
+    id: string;
+    name: string;
+  } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const loadProject = useCallback(
+    async (signal?: AbortSignal): Promise<void> => {
+      const body = await apiFetch<ProjectDetail>(`/api/projects/${id}`, signal ? { signal } : undefined);
+      setDetail(body.data);
+      setError(null);
+      setRefreshError(null);
+    },
+    [id],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
-    setError(null);
-    apiFetch<ProjectDetail>(`/api/projects/${id}`, { signal: controller.signal })
-      .then((body) => setDetail(body.data))
+    setInitialLoading(true);
+    loadProject(controller.signal)
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
         setError(
@@ -335,12 +426,388 @@ function ProjectDetailPage() {
         );
       })
       .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+        if (!controller.signal.aborted) setInitialLoading(false);
       });
     return () => controller.abort();
-  }, [id]);
+  }, [loadProject]);
 
-  if (loading) {
+  // mutation 成功后 background refresh：保留已显示数据，不整页 loading；失败显示 refreshError
+  const reloadProject = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadProject();
+    } catch (err) {
+      const apiErr =
+        err instanceof ApiClientError ? err : new ApiClientError(0, "网络错误", "NETWORK_ERROR");
+      setRefreshError(apiErr);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadProject]);
+
+  // 日期转换 helper（B2-1A-2，CTO #12452）：Member/Milestone/Task 共用；blank→null，有值转 ISO datetime
+  const dateToIsoOrNull = (v: string): string | null =>
+    v === "" ? null : new Date(`${v}T00:00:00.000Z`).toISOString();
+
+  const openStakeholderCreate = () => {
+    setStakeholderForm(EMPTY_STAKEHOLDER_FORM);
+    setDialogError(null);
+    setStakeholderDialog({ open: true, mode: "create", id: null, version: null });
+  };
+  const openStakeholderEdit = (s: StakeholderRow) => {
+    setStakeholderForm({
+      role: s.role,
+      name: s.name,
+      title: s.title ?? "",
+      department: s.department ?? "",
+      phone: s.phone ?? "",
+      email: s.email ?? "",
+      note: s.note ?? "",
+    });
+    setDialogError(null);
+    setStakeholderDialog({ open: true, mode: "edit", id: s.id, version: s.version });
+  };
+  const closeStakeholderDialog = () =>
+    setStakeholderDialog({ open: false, mode: "create", id: null, version: null });
+
+  const openMemberCreate = () => {
+    setMemberForm(EMPTY_MEMBER_FORM);
+    setDialogError(null);
+    setMemberDialog({ open: true, mode: "create", id: null, version: null });
+  };
+  const openMemberEdit = (m: MemberRow) => {
+    setMemberForm({
+      name: m.name,
+      roleInProject: m.roleInProject ?? "",
+      joinedAt: m.joinedAt ? m.joinedAt.slice(0, 10) : "",
+      leftAt: m.leftAt ? m.leftAt.slice(0, 10) : "",
+    });
+    setDialogError(null);
+    setMemberDialog({ open: true, mode: "edit", id: m.id, version: m.version });
+  };
+  const closeMemberDialog = () =>
+    setMemberDialog({ open: false, mode: "create", id: null, version: null });
+
+  const openMilestoneCreate = () => {
+    setMilestoneForm(EMPTY_MILESTONE_FORM);
+    setDialogError(null);
+    setMilestoneDialog({ open: true, mode: "create", id: null, version: null });
+  };
+  const openMilestoneEdit = (m: MilestoneRow) => {
+    setMilestoneForm({
+      name: m.name,
+      plannedDate: m.plannedDate ? m.plannedDate.slice(0, 10) : "",
+      actualDate: m.actualDate ? m.actualDate.slice(0, 10) : "",
+      status: m.status as MilestoneFormValue["status"],
+      deliverable: m.deliverable ?? "",
+      delayReason: m.delayReason ?? "",
+    });
+    setDialogError(null);
+    setMilestoneDialog({ open: true, mode: "edit", id: m.id, version: m.version });
+  };
+  const closeMilestoneDialog = () =>
+    setMilestoneDialog({ open: false, mode: "create", id: null, version: null });
+
+  const openTaskCreate = () => {
+    setTaskForm(EMPTY_TASK_FORM);
+    setDialogError(null);
+    setTaskDialog({ open: true, mode: "create", id: null, version: null });
+  };
+  const openTaskEdit = (t: TaskRow) => {
+    setTaskForm({
+      milestoneId: t.milestoneId ?? "",
+      name: t.name,
+      dueDate: t.dueDate ? t.dueDate.slice(0, 10) : "",
+      status: t.status as TaskFormValue["status"],
+      priority: (t.priority ?? "") as TaskFormValue["priority"],
+      description: t.description ?? "",
+    });
+    setDialogError(null);
+    setTaskDialog({ open: true, mode: "edit", id: t.id, version: t.version });
+  };
+  const closeTaskDialog = () =>
+    setTaskDialog({ open: false, mode: "create", id: null, version: null });
+
+  const submitStakeholder = async () => {
+    if (!stakeholderDialog.open) return;
+    setSaving(true);
+    setDialogError(null);
+    try {
+      const payload = {
+        role: stakeholderForm.role,
+        name: stakeholderForm.name,
+        title: stakeholderForm.title === "" ? null : stakeholderForm.title,
+        department: stakeholderForm.department === "" ? null : stakeholderForm.department,
+        phone: stakeholderForm.phone === "" ? null : stakeholderForm.phone,
+        email: stakeholderForm.email === "" ? null : stakeholderForm.email,
+        note: stakeholderForm.note === "" ? null : stakeholderForm.note,
+      };
+      if (stakeholderDialog.mode === "create") {
+        await apiFetch(`/api/projects/${id}/stakeholders`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } else if (stakeholderDialog.id && stakeholderDialog.version != null) {
+        await apiFetch(`/api/projects/${id}/stakeholders/${stakeholderDialog.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, version: stakeholderDialog.version }),
+        });
+      }
+      closeStakeholderDialog();
+      await reloadProject();
+    } catch (err) {
+      setDialogError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "保存失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // CAS stale reload：单资源 GET → 只覆盖 form + authoritative version + 清 stale error；不自动 PATCH
+  const reloadStakeholder = async () => {
+    if (!stakeholderDialog.open || !stakeholderDialog.id) return;
+    setSaving(true);
+    try {
+      const body = await apiFetch<StakeholderRow>(
+        `/api/projects/${id}/stakeholders/${stakeholderDialog.id}`,
+      );
+      const s = body.data;
+      setStakeholderForm({
+        role: s.role,
+        name: s.name,
+        title: s.title ?? "",
+        department: s.department ?? "",
+        phone: s.phone ?? "",
+        email: s.email ?? "",
+        note: s.note ?? "",
+      });
+      setStakeholderDialog({ open: true, mode: "edit", id: s.id, version: s.version });
+      setDialogError(null);
+    } catch (err) {
+      setDialogError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "重新加载失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const submitMember = async () => {
+    if (!memberDialog.open) return;
+    setSaving(true);
+    setDialogError(null);
+    try {
+      const payload = {
+        name: memberForm.name,
+        roleInProject: memberForm.roleInProject === "" ? null : memberForm.roleInProject,
+        joinedAt: dateToIsoOrNull(memberForm.joinedAt),
+        leftAt: dateToIsoOrNull(memberForm.leftAt),
+      };
+      // UI 不暴露 userId：Edit payload 不发送 userId → 保留旧关联（CTO #12368）
+      if (memberDialog.mode === "create") {
+        await apiFetch(`/api/projects/${id}/members`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } else if (memberDialog.id && memberDialog.version != null) {
+        await apiFetch(`/api/projects/${id}/members/${memberDialog.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, version: memberDialog.version }),
+        });
+      }
+      closeMemberDialog();
+      await reloadProject();
+    } catch (err) {
+      setDialogError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "保存失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reloadMember = async () => {
+    if (!memberDialog.open || !memberDialog.id) return;
+    setSaving(true);
+    try {
+      const body = await apiFetch<MemberRow>(`/api/projects/${id}/members/${memberDialog.id}`);
+      const m = body.data;
+      setMemberForm({
+        name: m.name,
+        roleInProject: m.roleInProject ?? "",
+        joinedAt: m.joinedAt ? m.joinedAt.slice(0, 10) : "",
+        leftAt: m.leftAt ? m.leftAt.slice(0, 10) : "",
+      });
+      setMemberDialog({ open: true, mode: "edit", id: m.id, version: m.version });
+      setDialogError(null);
+    } catch (err) {
+      setDialogError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "重新加载失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const submitMilestone = async () => {
+    if (!milestoneDialog.open) return;
+    setSaving(true);
+    setDialogError(null);
+    try {
+      const payload = {
+        name: milestoneForm.name,
+        plannedDate: dateToIsoOrNull(milestoneForm.plannedDate),
+        actualDate: dateToIsoOrNull(milestoneForm.actualDate),
+        status: milestoneForm.status,
+        deliverable: milestoneForm.deliverable === "" ? null : milestoneForm.deliverable,
+        delayReason: milestoneForm.delayReason === "" ? null : milestoneForm.delayReason,
+      };
+      // COMPLETED 的 Domain Event 语义留在 backend：UI 只发送 status，不自动填 actualDate（CTO #12446）
+      if (milestoneDialog.mode === "create") {
+        await apiFetch(`/api/projects/${id}/milestones`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } else if (milestoneDialog.id && milestoneDialog.version != null) {
+        await apiFetch(`/api/projects/${id}/milestones/${milestoneDialog.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, version: milestoneDialog.version }),
+        });
+      }
+      closeMilestoneDialog();
+      await reloadProject();
+    } catch (err) {
+      setDialogError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "保存失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reloadMilestone = async () => {
+    if (!milestoneDialog.open || !milestoneDialog.id) return;
+    setSaving(true);
+    try {
+      const body = await apiFetch<MilestoneRow>(
+        `/api/projects/${id}/milestones/${milestoneDialog.id}`,
+      );
+      const m = body.data;
+      setMilestoneForm({
+        name: m.name,
+        plannedDate: m.plannedDate ? m.plannedDate.slice(0, 10) : "",
+        actualDate: m.actualDate ? m.actualDate.slice(0, 10) : "",
+        status: m.status as MilestoneFormValue["status"],
+        deliverable: m.deliverable ?? "",
+        delayReason: m.delayReason ?? "",
+      });
+      setMilestoneDialog({ open: true, mode: "edit", id: m.id, version: m.version });
+      setDialogError(null);
+    } catch (err) {
+      setDialogError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "重新加载失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const submitTask = async () => {
+    if (!taskDialog.open) return;
+    setSaving(true);
+    setDialogError(null);
+    try {
+      // assigneeId 不开放：Create/Edit 均不发送（PATCH 不发即保留旧关联，CTO #12446）
+      const payload = {
+        milestoneId: taskForm.milestoneId === "" ? null : taskForm.milestoneId,
+        name: taskForm.name,
+        dueDate: dateToIsoOrNull(taskForm.dueDate),
+        status: taskForm.status,
+        priority: taskForm.priority === "" ? null : taskForm.priority,
+        description: taskForm.description === "" ? null : taskForm.description,
+      };
+      if (taskDialog.mode === "create") {
+        await apiFetch(`/api/projects/${id}/tasks`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } else if (taskDialog.id && taskDialog.version != null) {
+        await apiFetch(`/api/projects/${id}/tasks/${taskDialog.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, version: taskDialog.version }),
+        });
+      }
+      closeTaskDialog();
+      await reloadProject();
+    } catch (err) {
+      setDialogError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "保存失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reloadTask = async () => {
+    if (!taskDialog.open || !taskDialog.id) return;
+    setSaving(true);
+    try {
+      const body = await apiFetch<TaskRow>(`/api/projects/${id}/tasks/${taskDialog.id}`);
+      const t = body.data;
+      setTaskForm({
+        milestoneId: t.milestoneId ?? "",
+        name: t.name,
+        dueDate: t.dueDate ? t.dueDate.slice(0, 10) : "",
+        status: t.status as TaskFormValue["status"],
+        priority: (t.priority ?? "") as TaskFormValue["priority"],
+        description: t.description ?? "",
+      });
+      setTaskDialog({ open: true, mode: "edit", id: t.id, version: t.version });
+      setDialogError(null);
+    } catch (err) {
+      setDialogError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "重新加载失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      if (deleteTarget.resource === "stakeholder") {
+        await apiFetch(`/api/projects/${id}/stakeholders/${deleteTarget.id}`, { method: "DELETE" });
+      } else if (deleteTarget.resource === "member") {
+        await apiFetch(`/api/projects/${id}/members/${deleteTarget.id}`, { method: "DELETE" });
+      } else if (deleteTarget.resource === "milestone") {
+        await apiFetch(`/api/projects/${id}/milestones/${deleteTarget.id}`, { method: "DELETE" });
+      } else {
+        await apiFetch(`/api/projects/${id}/tasks/${deleteTarget.id}`, { method: "DELETE" });
+      }
+      setDeleteTarget(null);
+      await reloadProject();
+    } catch (err) {
+      setDeleteTarget(null);
+      setError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "删除失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  if (initialLoading) {
     return (
       <AppPage>
         <div className="border-border bg-surface rounded-lg border p-6 text-sm text-ink-muted">
@@ -361,8 +828,73 @@ function ProjectDetailPage() {
     );
   }
 
+  // B2-1A 三层按钮 Gate：capabilities + 细粒度 permission + stage !== CLOSED（不复用项目级 canEdit，CTO #12350/#12401）
+  const canManageStakeholders = detail.capabilities.stakeholders;
+  const canAddStakeholder =
+    canManageStakeholders &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-stakeholder", "create"));
+  const canEditStakeholder =
+    canManageStakeholders &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-stakeholder", "edit"));
+  const canDeleteStakeholder =
+    canManageStakeholders &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-stakeholder", "delete"));
+  const canManageMembers = detail.capabilities.members;
+  const canAddMember =
+    canManageMembers &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-member", "create"));
+  const canEditMember =
+    canManageMembers &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-member", "edit"));
+  const canDeleteMember =
+    canManageMembers &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-member", "delete"));
+  const canManageMilestones = detail.capabilities.milestones;
+  const canAddMilestone =
+    canManageMilestones &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-milestone", "create"));
+  const canEditMilestone =
+    canManageMilestones &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-milestone", "edit"));
+  const canDeleteMilestone =
+    canManageMilestones &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-milestone", "delete"));
+  const canManageTasks = detail.capabilities.tasks;
+  const canAddTask =
+    canManageTasks &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-task", "create"));
+  const canEditTask =
+    canManageTasks &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-task", "edit"));
+  const canDeleteTask =
+    canManageTasks &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-task", "delete"));
+
   return (
     <AppPage>
+      {refreshing && (
+        <div className="mb-4 text-xs text-ink-muted">正在刷新…</div>
+      )}
+      {refreshError && (
+        <div className="border-amber-200 mb-4 rounded-md border bg-amber-50 p-3 text-sm text-amber-700">
+          <p>
+            刷新失败（已保留当前数据）：{refreshError.message}
+            {refreshError.code ? `（${refreshError.code}）` : ""}
+          </p>
+        </div>
+      )}
       <EntityDetailWorkspace
         title={`项目管理详情 — ${detail.code}`}
         backHref="/projects"
@@ -484,8 +1016,30 @@ function ProjectDetailPage() {
 
           {activeTab === "stakeholders" && (
             <section className="border-border rounded-md border p-4">
-              <SectionTitle>项目关系人（{detail.stakeholders?.length ?? 0}）</SectionTitle>
-              <Table headers={["角色", "姓名", "职务", "部门", "电话", "邮箱", "备注"]}>
+              <div className="mb-3 flex items-center justify-between">
+                <SectionTitle>项目关系人（{detail.stakeholders?.length ?? 0}）</SectionTitle>
+                {canAddStakeholder && (
+                  <button
+                    type="button"
+                    onClick={openStakeholderCreate}
+                    className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                  >
+                    添加关系人
+                  </button>
+                )}
+              </div>
+              <Table
+                headers={[
+                  "角色",
+                  "姓名",
+                  "职务",
+                  "部门",
+                  "电话",
+                  "邮箱",
+                  "备注",
+                  ...(canEditStakeholder || canDeleteStakeholder ? ["操作"] : []),
+                ]}
+              >
                 {(detail.stakeholders ?? []).map((s) => (
                   <tr key={s.id}>
                     <td className="px-3 py-2 text-ink-secondary">
@@ -497,10 +1051,36 @@ function ProjectDetailPage() {
                     <td className="px-3 py-2 text-ink-secondary">{s.phone ?? "—"}</td>
                     <td className="px-3 py-2 text-ink-secondary">{s.email ?? "—"}</td>
                     <td className="px-3 py-2 text-ink-secondary">{s.note ?? "—"}</td>
+                    {(canEditStakeholder || canDeleteStakeholder) && (
+                      <td className="px-3 py-2">
+                        <div className="flex gap-2">
+                          {canEditStakeholder && (
+                            <button
+                              type="button"
+                              onClick={() => openStakeholderEdit(s)}
+                              className="text-brand-600 text-sm hover:underline"
+                            >
+                              编辑
+                            </button>
+                          )}
+                          {canDeleteStakeholder && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDeleteTarget({ resource: "stakeholder", id: s.id, name: s.name })
+                              }
+                              className="text-sm text-red-600 hover:underline"
+                            >
+                              删除
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
                 {(detail.stakeholders ?? []).length === 0 && (
-                  <EmptyRow colSpan={7} text="暂无关系人" />
+                  <EmptyRow colSpan={canEditStakeholder || canDeleteStakeholder ? 8 : 7} text="暂无关系人" />
                 )}
               </Table>
             </section>
@@ -508,18 +1088,63 @@ function ProjectDetailPage() {
 
           {activeTab === "members" && (
             <section className="border-border rounded-md border p-4">
-              <SectionTitle>项目成员（{detail.members?.length ?? 0}）</SectionTitle>
-              <Table headers={["姓名", "项目内角色", "加入时间", "离开时间"]}>
+              <div className="mb-3 flex items-center justify-between">
+                <SectionTitle>项目成员（{detail.members?.length ?? 0}）</SectionTitle>
+                {canAddMember && (
+                  <button
+                    type="button"
+                    onClick={openMemberCreate}
+                    className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                  >
+                    添加成员
+                  </button>
+                )}
+              </div>
+              <Table
+                headers={[
+                  "姓名",
+                  "项目内角色",
+                  "加入时间",
+                  "离开时间",
+                  ...(canEditMember || canDeleteMember ? ["操作"] : []),
+                ]}
+              >
                 {(detail.members ?? []).map((m) => (
                   <tr key={m.id}>
                     <td className="px-3 py-2 text-ink-primary">{m.name}</td>
                     <td className="px-3 py-2 text-ink-secondary">{m.roleInProject ?? "—"}</td>
                     <td className="px-3 py-2 text-ink-secondary">{formatDate(m.joinedAt)}</td>
                     <td className="px-3 py-2 text-ink-secondary">{formatDate(m.leftAt)}</td>
+                    {(canEditMember || canDeleteMember) && (
+                      <td className="px-3 py-2">
+                        <div className="flex gap-2">
+                          {canEditMember && (
+                            <button
+                              type="button"
+                              onClick={() => openMemberEdit(m)}
+                              className="text-brand-600 text-sm hover:underline"
+                            >
+                              编辑
+                            </button>
+                          )}
+                          {canDeleteMember && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDeleteTarget({ resource: "member", id: m.id, name: m.name })
+                              }
+                              className="text-sm text-red-600 hover:underline"
+                            >
+                              删除
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
                 {(detail.members ?? []).length === 0 && (
-                  <EmptyRow colSpan={4} text="暂无成员" />
+                  <EmptyRow colSpan={canEditMember || canDeleteMember ? 5 : 4} text="暂无成员" />
                 )}
               </Table>
             </section>
@@ -527,8 +1152,29 @@ function ProjectDetailPage() {
 
           {activeTab === "milestones" && (
             <section className="border-border rounded-md border p-4">
-              <SectionTitle>里程碑（{detail.milestones?.length ?? 0}）</SectionTitle>
-              <Table headers={["名称", "状态", "计划日期", "实际日期", "交付成果", "延期原因"]}>
+              <div className="mb-3 flex items-center justify-between">
+                <SectionTitle>里程碑（{detail.milestones?.length ?? 0}）</SectionTitle>
+                {canAddMilestone && (
+                  <button
+                    type="button"
+                    onClick={openMilestoneCreate}
+                    className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                  >
+                    添加里程碑
+                  </button>
+                )}
+              </div>
+              <Table
+                headers={[
+                  "名称",
+                  "状态",
+                  "计划日期",
+                  "实际日期",
+                  "交付成果",
+                  "延期原因",
+                  ...(canEditMilestone || canDeleteMilestone ? ["操作"] : []),
+                ]}
+              >
                 {(detail.milestones ?? []).map((m) => (
                   <tr key={m.id}>
                     <td className="px-3 py-2 text-ink-primary">{m.name}</td>
@@ -542,10 +1188,39 @@ function ProjectDetailPage() {
                     <td className="px-3 py-2 text-ink-secondary">{formatDate(m.actualDate)}</td>
                     <td className="px-3 py-2 text-ink-secondary">{m.deliverable ?? "—"}</td>
                     <td className="px-3 py-2 text-ink-secondary">{m.delayReason ?? "—"}</td>
+                    {(canEditMilestone || canDeleteMilestone) && (
+                      <td className="px-3 py-2">
+                        <div className="flex gap-2">
+                          {canEditMilestone && (
+                            <button
+                              type="button"
+                              onClick={() => openMilestoneEdit(m)}
+                              className="text-brand-600 text-sm hover:underline"
+                            >
+                              编辑
+                            </button>
+                          )}
+                          {canDeleteMilestone && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDeleteTarget({ resource: "milestone", id: m.id, name: m.name })
+                              }
+                              className="text-sm text-red-600 hover:underline"
+                            >
+                              删除
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
                 {(detail.milestones ?? []).length === 0 && (
-                  <EmptyRow colSpan={6} text="暂无里程碑" />
+                  <EmptyRow
+                    colSpan={canEditMilestone || canDeleteMilestone ? 7 : 6}
+                    text="暂无里程碑"
+                  />
                 )}
               </Table>
             </section>
@@ -553,8 +1228,27 @@ function ProjectDetailPage() {
 
           {activeTab === "tasks" && (
             <section className="border-border rounded-md border p-4">
-              <SectionTitle>任务（{detail.tasks?.length ?? 0}）</SectionTitle>
-              <Table headers={["名称", "状态", "优先级", "截止日期"]}>
+              <div className="mb-3 flex items-center justify-between">
+                <SectionTitle>任务（{detail.tasks?.length ?? 0}）</SectionTitle>
+                {canAddTask && (
+                  <button
+                    type="button"
+                    onClick={openTaskCreate}
+                    className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                  >
+                    添加任务
+                  </button>
+                )}
+              </div>
+              <Table
+                headers={[
+                  "名称",
+                  "状态",
+                  "优先级",
+                  "截止日期",
+                  ...(canEditTask || canDeleteTask ? ["操作"] : []),
+                ]}
+              >
                 {(detail.tasks ?? []).map((t) => (
                   <tr key={t.id}>
                     <td className="px-3 py-2 text-ink-primary">{t.name}</td>
@@ -565,9 +1259,37 @@ function ProjectDetailPage() {
                       {t.priority ? PRIORITY_LABELS[t.priority] ?? t.priority : "—"}
                     </td>
                     <td className="px-3 py-2 text-ink-secondary">{formatDate(t.dueDate)}</td>
+                    {(canEditTask || canDeleteTask) && (
+                      <td className="px-3 py-2">
+                        <div className="flex gap-2">
+                          {canEditTask && (
+                            <button
+                              type="button"
+                              onClick={() => openTaskEdit(t)}
+                              className="text-brand-600 text-sm hover:underline"
+                            >
+                              编辑
+                            </button>
+                          )}
+                          {canDeleteTask && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDeleteTarget({ resource: "task", id: t.id, name: t.name })
+                              }
+                              className="text-sm text-red-600 hover:underline"
+                            >
+                              删除
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
-                {(detail.tasks ?? []).length === 0 && <EmptyRow colSpan={4} text="暂无任务" />}
+                {(detail.tasks ?? []).length === 0 && (
+                  <EmptyRow colSpan={canEditTask || canDeleteTask ? 5 : 4} text="暂无任务" />
+                )}
               </Table>
             </section>
           )}
@@ -749,6 +1471,94 @@ function ProjectDetailPage() {
           )}
         </div>
       </EntityDetailWorkspace>
+
+      {/* B2-1A：共享 Dialog（Stakeholders / Members / Milestones / Tasks）+ Delete 确认（CTO #12350/#12368/#12422/#12446/#12452） */}
+      <ProjectSubresourceDialog
+        open={stakeholderDialog.open}
+        mode={stakeholderDialog.mode}
+        title={stakeholderDialog.mode === "create" ? "添加关系人" : "编辑关系人"}
+        saving={saving}
+        error={dialogError}
+        onSubmit={submitStakeholder}
+        onReload={reloadStakeholder}
+        onClose={closeStakeholderDialog}
+      >
+        <StakeholderFields
+          value={stakeholderForm}
+          onChange={setStakeholderForm}
+          roleLabels={STAKEHOLDER_ROLE_LABELS}
+        />
+      </ProjectSubresourceDialog>
+
+      <ProjectSubresourceDialog
+        open={memberDialog.open}
+        mode={memberDialog.mode}
+        title={memberDialog.mode === "create" ? "添加成员" : "编辑成员"}
+        saving={saving}
+        error={dialogError}
+        onSubmit={submitMember}
+        onReload={reloadMember}
+        onClose={closeMemberDialog}
+      >
+        <MemberFields value={memberForm} onChange={setMemberForm} />
+      </ProjectSubresourceDialog>
+
+      <ProjectSubresourceDialog
+        open={milestoneDialog.open}
+        mode={milestoneDialog.mode}
+        title={milestoneDialog.mode === "create" ? "添加里程碑" : "编辑里程碑"}
+        saving={saving}
+        error={dialogError}
+        onSubmit={submitMilestone}
+        onReload={reloadMilestone}
+        onClose={closeMilestoneDialog}
+      >
+        <MilestoneFields
+          value={milestoneForm}
+          onChange={setMilestoneForm}
+          statusLabels={MILESTONE_STATUS_LABELS}
+        />
+      </ProjectSubresourceDialog>
+
+      <ProjectSubresourceDialog
+        open={taskDialog.open}
+        mode={taskDialog.mode}
+        title={taskDialog.mode === "create" ? "添加任务" : "编辑任务"}
+        saving={saving}
+        error={dialogError}
+        onSubmit={submitTask}
+        onReload={reloadTask}
+        onClose={closeTaskDialog}
+      >
+        <TaskFields
+          value={taskForm}
+          onChange={setTaskForm}
+          statusLabels={TASK_STATUS_LABELS}
+          priorityLabels={PRIORITY_LABELS}
+          milestoneOptions={(detail.milestones ?? []).map((m) => ({ id: m.id, name: m.name }))}
+          unavailableMilestone={
+            taskDialog.mode === "edit" &&
+            taskForm.milestoneId !== "" &&
+            !(detail.milestones ?? []).some((m) => m.id === taskForm.milestoneId)
+              ? { id: taskForm.milestoneId, label: "原关联里程碑不可用" }
+              : null
+          }
+        />
+      </ProjectSubresourceDialog>
+
+      <ConfirmActionDialog
+        open={deleteTarget !== null}
+        title={
+          deleteTarget
+            ? `删除${SUBRESOURCE_LABELS[deleteTarget.resource] ?? deleteTarget.resource}「${deleteTarget.name}」？`
+            : ""
+        }
+        tone="danger"
+        confirmLabel="删除"
+        busy={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </AppPage>
   );
 }
