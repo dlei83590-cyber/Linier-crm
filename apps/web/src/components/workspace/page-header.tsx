@@ -14,6 +14,8 @@ interface PageHeaderProps {
   /** 返回列表链接（提供则显示返回入口） */
   backHref?: string;
   backLabel?: string;
+  /** 返回点击确认（返回 false 阻止导航；Dirty-State Guard 用） */
+  onBackClick?: () => boolean;
   /** 右侧操作区（动作按钮等） */
   actions?: React.ReactNode;
 }
@@ -23,6 +25,7 @@ export function PageHeader({
   description,
   backHref,
   backLabel = '返回列表',
+  onBackClick,
   actions,
 }: PageHeaderProps) {
   return (
@@ -31,6 +34,9 @@ export function PageHeader({
         {backHref ? (
           <Link
             href={backHref}
+            onClick={(e) => {
+              if (onBackClick && !onBackClick()) e.preventDefault();
+            }}
             className="text-brand-600 mb-1 inline-block text-sm hover:underline"
           >
             ← {backLabel}

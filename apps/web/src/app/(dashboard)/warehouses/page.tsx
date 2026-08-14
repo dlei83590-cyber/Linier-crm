@@ -1,55 +1,50 @@
 "use client";
 
 /**
- * Unit of Measures — 计量单位列表页（F2-2 Master Data Workspaces）
+ * Warehouses — 仓库列表页（F2-2 Master Data Workspaces）
  *
- * 依据 Contract Card（unit-of-measures.md）：backend 仅 GET list FINAL →
- * 本 Wave 只实现 List（无 Detail/Create/Edit contract，不越界补后端）。
+ * 依据 Contract Card（warehouses.md）：backend 仅 GET list FINAL → 本 Wave 实现 List。
+ * 关联体验：每行提供「查看库位」入口 → /warehouse-locations?warehouseId={id}
+ * （warehouse-locations GET 支持 warehouseId 筛选，不新增后端 API）。
  */
 import { useState } from "react";
+import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { PERMISSIONS } from "@nilier-crm/shared";
-import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
+import { AppPage, EntityListWorkspace } from "@/components/workspace";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
 
-interface UomRow {
+interface WarehouseRow {
   id: string;
   code: string;
   name: string;
-  symbol: string | null;
+  type: string | null;
+  address: string | null;
   isActive: boolean;
-  approvalStatus: string | null;
   createdAt: string;
 }
 
-const APPROVAL_LABELS: Record<string, string> = {
-  DRAFT: "草稿",
-  SUBMITTED: "已提交",
-  APPROVED: "已批准",
-  REJECTED: "已拒绝",
-};
-
-const APPROVAL_TONE_MAP: Record<string, "neutral" | "info" | "success" | "danger"> = {
-  DRAFT: "neutral",
-  SUBMITTED: "info",
-  APPROVED: "success",
-  REJECTED: "danger",
-};
-
-function UomList() {
+function WarehouseList() {
   const [codeInput, setCodeInput] = useState("");
   const [nameInput, setNameInput] = useState("");
+  const [typeInput, setTypeInput] = useState("");
   const [activeInput, setActiveInput] = useState("");
-  const [filters, setFilters] = useState<{ code?: string; name?: string; isActive?: string }>({});
+  const [filters, setFilters] = useState<{
+    code?: string;
+    name?: string;
+    type?: string;
+    isActive?: string;
+  }>({});
 
   const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<UomRow>("/api/unit-of-measures", filters);
+    useListQuery<WarehouseRow>("/api/warehouses", filters);
 
   const applyFilter = () => {
-    const next: { code?: string; name?: string; isActive?: string } = {};
+    const next: { code?: string; name?: string; type?: string; isActive?: string } = {};
     if (codeInput.trim()) next.code = codeInput.trim();
     if (nameInput.trim()) next.name = nameInput.trim();
+    if (typeInput.trim()) next.type = typeInput.trim();
     if (activeInput) next.isActive = activeInput;
     setFilters(next);
     setPage(1);
@@ -58,6 +53,7 @@ function UomList() {
   const resetFilter = () => {
     setCodeInput("");
     setNameInput("");
+    setTypeInput("");
     setActiveInput("");
     setFilters({});
     setPage(1);
@@ -65,9 +61,9 @@ function UomList() {
 
   return (
     <AppPage>
-      <EntityListWorkspace<UomRow>
-        title="计量单位"
-        description="计量单位主数据（只读：后端当前仅开放列表契约）"
+      <EntityListWorkspace<WarehouseRow>
+        title="仓库"
+        description="仓库主数据（只读：后端当前仅开放列表契约；库位从仓库行进入）"
         filters={
           <>
             <input
@@ -87,6 +83,15 @@ function UomList() {
               }}
               placeholder="按名称搜索"
               className="w-40 rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+            />
+            <input
+              value={typeInput}
+              onChange={(e) => setTypeInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") applyFilter();
+              }}
+              placeholder="按类型搜索"
+              className="w-32 rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
             />
             <select
               value={activeInput}
@@ -120,21 +125,8 @@ function UomList() {
         columns={[
           { key: "code", header: "编码" },
           { key: "name", header: "名称" },
-          { key: "symbol", header: "符号", render: (row) => row.symbol ?? "—" },
-          {
-            key: "approvalStatus",
-            header: "审批状态",
-            render: (row) =>
-              row.approvalStatus ? (
-                <StatusBadge
-                  status={row.approvalStatus}
-                  label={APPROVAL_LABELS[row.approvalStatus] ?? row.approvalStatus}
-                  toneMap={APPROVAL_TONE_MAP}
-                />
-              ) : (
-                "—"
-              ),
-          },
+          { key: "type", header: "类型", render: (row) => row.type ?? "—" },
+          { key: "address", header: "地址", render: (row) => row.address ?? "—" },
           {
             key: "isActive",
             header: "启用",
@@ -144,6 +136,18 @@ function UomList() {
             key: "createdAt",
             header: "创建时间",
             render: (row) => formatDate(row.createdAt),
+          },
+          {
+            key: "locations",
+            header: "库位",
+            render: (row) => (
+              <Link
+                href={`/warehouse-locations?warehouseId=${row.id}`}
+                className="text-sm font-medium text-brand-600 hover:underline"
+              >
+                查看库位 →
+              </Link>
+            ),
           },
         ]}
         rows={items}
@@ -162,8 +166,8 @@ function UomList() {
 
 export default function Page() {
   return (
-    <PermissionGuard permission={PERMISSIONS.UNIT_OF_MEASURE_READ}>
-      <UomList />
+    <PermissionGuard permission={PERMISSIONS.WAREHOUSE_READ}>
+      <WarehouseList />
     </PermissionGuard>
   );
 }

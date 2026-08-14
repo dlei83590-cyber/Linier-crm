@@ -1,10 +1,10 @@
 # Contract Card — 仓库
 
 - 模块：`warehouses`（基础资料 · 仓库）
-- 判定：**可开发（list only）**（Backend FINAL + Frontend Missing）
+- 判定：**Ready（list only，F2-2 Wave 1 已交付）**（Backend FINAL + Frontend Existing）
 - 归属 Wave：F2-2 Wave 1
 - Backend Contract：list / ~detail / ~create / ~edit / ~workflow / ~factActions（事实基线：apps/web/src/app/api 实际路由）
-- Current Frontend：~list / ~detail / ~create / ~edit / ~workflow / ~factActions（事实基线：apps/web/src/app/(dashboard) 实际页面；Tier 2/3 HARD HOLD）
+- Current Frontend：list / ~detail / ~create / ~edit / ~workflow / ~factActions（事实基线：apps/web/src/app/(dashboard) 实际页面；Tier 2/3 HARD HOLD）
 
 ## API（事实来源：apps/web/src/app/api 实际路由）
 
@@ -44,9 +44,13 @@
 
 ## Current UI
 
+- 真实列表页（EntityListWorkspace，code/name/type/isActive 筛选）+ 行内「查看库位 →」入口（/warehouse-locations?warehouseId=）
+
 - 占位页（PlaceholderPage「尚未开放」）
 
 ## Gap
+
+- - Warehouse Detail 仍 **HOLD**（后端无 /{id} 路由）；库位关联已通过 warehouseId 筛选实现（不新增后端 API）
 
 - 列表页缺失 → F2-2 实现 List（EntityListWorkspace）
 - Warehouse Detail → Locations 关联体验：Detail 需后端 `/{id}` 路由，**HOLD**（Backend Contract Missing）

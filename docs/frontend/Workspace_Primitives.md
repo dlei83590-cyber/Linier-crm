@@ -24,6 +24,10 @@
 | `EntityDetailWorkspace` | Header(状态+操作) → Summary → Sections → Audit     | `status?`、`actions?`、`summary?`、`audit?`                            |
 | `EntityFormWorkspace`   | Header → Sections/Lines → Validation → Save/Cancel | `mode`、`submitting`、`error?`、`onSave`、`onCancel`                   |
 
+> **F2-2 UX Hardening（CTO #11660，全表单统一）**：
+> - **Dirty-State Guard**：传 `dirty`（Create 页填写内容后即 true）+ `onDirty`（内容容器 onInput 冒泡自动标记）→ 自动挂 beforeunload + Cancel/Back 显式确认（共享 `useDirtyStateGuard`，`apps/web/src/lib/use-dirty-state-guard.ts`）
+> - **409 VERSION_CONFLICT**：传 `onReload`（重新 GET → 更新 version → 重置 dirty）→ 显示专用 conflict 面板（「该记录已被其他操作更新，请重新加载最新数据后再编辑。」+ 重新加载按钮），不再只当普通 ErrorPanel；禁止 silent retry / 自动覆盖 / 自动重新 PATCH（共享 `isVersionConflict`，`apps/web/src/lib/api-client.ts`）
+
 ## 3. 选择器
 
 | 原语                | 职责                                            | 说明                                                   |

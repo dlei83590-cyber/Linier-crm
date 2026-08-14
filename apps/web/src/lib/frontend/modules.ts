@@ -515,19 +515,19 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     order: 4,
   },
 
-  // ===== 基础资料（当前 Placeholder → hold；F2-2 Master Data 开放）=====
-  // items / price-lists：contract CRUD FINAL（无审批流）→ F2-2 可开发；ui 全 false（占位页）
+  // ===== 基础资料（F2-2 Wave 1 已交付 → ready；契约缺失项保持 hold）=====
+  // items / price-lists：contract CRUD FINAL；main 已有 list/detail/new/edit → ui CRUD 开放
   {
     id: 'items',
     domain: 'master-data',
     label: '物料管理',
     route: '/items',
     permission: PERMISSIONS.ITEM_READ,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_CRUD, ui: UI_NONE },
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_DETAIL_CRUD },
     order: 1,
   },
-  // business-partners：后端尚无统一 read/write API（仅 /{id}/roles 子资源）→ 契约缺失
+  // business-partners：后端尚无统一 read/write API（仅 /{id}/roles 子资源）→ 契约缺失，保持 HOLD
   {
     id: 'business-partners',
     domain: 'master-data',
@@ -544,8 +544,8 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     label: '价格表',
     route: '/price-lists',
     permission: PERMISSIONS.PRICE_LIST_READ,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_CRUD, ui: UI_NONE },
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_DETAIL_CRUD },
     order: 3,
   },
   {
@@ -558,15 +558,15 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
     order: 4,
   },
-  // unit-of-measures：GET 列表 FINAL（无 detail/create/edit 路由）
+  // unit-of-measures：GET 列表 FINAL；main 已有列表页 → ui list 开放（无 detail/create/edit 路由）
   {
     id: 'unit-of-measures',
     domain: 'master-data',
     label: '计量单位',
     route: '/unit-of-measures',
     permission: PERMISSIONS.UNIT_OF_MEASURE_READ,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_NONE },
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_LIST },
     order: 5,
   },
   {
@@ -589,15 +589,15 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
     order: 7,
   },
-  // F2-2 Master Data 下一批：仓库/库位（Master-Data Read API 已就绪，GET 列表 FINAL）
+  // F2-2 Wave 1：仓库/库位（GET 列表 FINAL；main 已有列表页 → ui list 开放；Detail 待后端 /{id} 契约）
   {
     id: 'warehouses',
     domain: 'master-data',
     label: '仓库',
     route: '/warehouses',
     permission: PERMISSIONS.WAREHOUSE_READ,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_NONE },
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_LIST },
     order: 8,
   },
   {
@@ -606,8 +606,8 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     label: '库位',
     route: '/warehouse-locations',
     permission: PERMISSIONS.WAREHOUSE_LOCATION_READ,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_NONE },
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_LIST },
     order: 9,
   },
 

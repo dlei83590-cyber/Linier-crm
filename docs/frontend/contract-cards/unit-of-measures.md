@@ -1,10 +1,10 @@
 # Contract Card — 计量单位
 
 - 模块：`unit-of-measures`（基础资料 · 计量单位）
-- 判定：**可开发（list only）**（Backend FINAL + Frontend Missing）
+- 判定：**Ready（list only，F2-2 Wave 1 已交付）**（Backend FINAL + Frontend Existing）
 - 归属 Wave：F2-2 Wave 1
 - Backend Contract：list / ~detail / ~create / ~edit / ~workflow / ~factActions（事实基线：apps/web/src/app/api 实际路由）
-- Current Frontend：~list / ~detail / ~create / ~edit / ~workflow / ~factActions（事实基线：apps/web/src/app/(dashboard) 实际页面；Tier 2/3 HARD HOLD）
+- Current Frontend：list / ~detail / ~create / ~edit / ~workflow / ~factActions（事实基线：apps/web/src/app/(dashboard) 实际页面；Tier 2/3 HARD HOLD）
 
 ## API（事实来源：apps/web/src/app/api 实际路由）
 
@@ -44,9 +44,13 @@
 
 ## Current UI
 
+- 真实列表页（EntityListWorkspace，code/name/isActive 筛选）
+
 - 占位页（PlaceholderPage「尚未开放」）
 
 ## Gap
+
+- - Detail/Create/Edit 仍 **HOLD**（后端无 /{id} 与 POST/PATCH 路由，待后端契约扩展）
 
 - 列表页缺失 → F2-2 实现 List（EntityListWorkspace）
 - Create/Edit：**HOLD**（Backend Contract Missing，待后端 read/write 扩展）
