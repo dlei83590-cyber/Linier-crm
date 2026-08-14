@@ -55,3 +55,4 @@
 
 - List/Detail 迁移统一 Workspace（EntityListWorkspace / EntityDetailWorkspace）→ Batch C
 - Submit / Approve / Confirm / Cancel / Convert → HOLD（Tier 2/3；后续 Wave 按契约开放）
+- **DRAFT Edit 支持 DIRECT 与 REQUISITION 两种来源 PO**；REQUISITION 的 source identity（sourcePurchaseRequisitionLineId）全链保留且不可变（item 锁定、禁无来源新增行；backend PATCH gate：PURCHASE_ORDER_SOURCE_LINE_REQUIRED / INVALID）

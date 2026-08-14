@@ -42,11 +42,13 @@ interface UomOption {
 interface PODetail {
   id: string;
   code: string;
+  sourceType?: string | null;
   status: string;
   currency?: string | null;
   expectedDeliveryDate?: string | null;
   remark?: string | null;
   version: number;
+  requisition?: { id: string; code: string | null } | null;
   supplier?: { id: string; code: string | null; name: string | null } | null;
   lines?: Array<{
     id: string;
@@ -57,6 +59,8 @@ interface PODetail {
     priceReason?: string | null;
     item?: { id: string; code: string | null; name: string | null } | null;
     uom?: { id: string; code: string | null; symbol: string | null } | null;
+    // REQUISITION 来源行：backend PATCH gate 要求每行携带 sourcePurchaseRequisitionLineId
+    sourcePurchaseRequisitionLine?: { id: string; lineNo: number; itemId: string } | null;
   }>;
 }
 
@@ -68,6 +72,8 @@ interface POEditLineRow extends LineRow {
   priceSource: string;
   unitPrice: string;
   priceReason: string;
+  /** REQUISITION 来源 PO：必须保留（PATCH 回传；Direct 为 null） */
+  sourcePurchaseRequisitionLineId: string | null;
 }
 
 const emptyLine = (): POEditLineRow => ({
@@ -79,6 +85,7 @@ const emptyLine = (): POEditLineRow => ({
   priceSource: "SUPPLIER_PRICE_SNAPSHOT",
   unitPrice: "",
   priceReason: "",
+  sourcePurchaseRequisitionLineId: null,
 });
 
 const PRICE_SOURCE_OPTIONS = [
@@ -149,7 +156,8 @@ function PurchaseOrderEditForm() {
         setNotEditable(false);
         setVersion(d.version);
         setRemark(d.remark ?? "");
-        setExpectedDeliveryDate(d.expectedDeliveryDate ?? "");
+        // type=date 需要 YYYY-MM-DD（API 返回 ISO datetime）
+        setExpectedDeliveryDate(d.expectedDeliveryDate ? d.expectedDeliveryDate.slice(0, 10) : "");
         setLines(
           (d.lines ?? []).map((l) => ({
             id: l.id,
@@ -160,6 +168,8 @@ function PurchaseOrderEditForm() {
             priceSource: l.priceSource === "MANUAL" ? "MANUAL" : "SUPPLIER_PRICE_SNAPSHOT",
             unitPrice: l.unitPrice ?? "",
             priceReason: l.priceReason ?? "",
+            // REQUISITION 来源行：保留 source identity（PATCH 需回传）
+            sourcePurchaseRequisitionLineId: l.sourcePurchaseRequisitionLine?.id ?? null,
           })),
         );
         // 重新加载最新数据后：重置 dirty（reload 成功才清）
@@ -247,6 +257,10 @@ function PurchaseOrderEditForm() {
           ...(l.priceSource === "MANUAL"
             ? { unitPrice: Number(l.unitPrice), priceReason: l.priceReason.trim() }
             : {}),
+          // REQUISITION 来源 PO：backend PATCH gate 要求每行显式携带 source id
+          ...(detail?.sourceType === "REQUISITION" && l.sourcePurchaseRequisitionLineId
+            ? { sourcePurchaseRequisitionLineId: l.sourcePurchaseRequisitionLineId }
+            : {}),
         })),
         changeReason: changeReason.trim(),
       }),
@@ -258,6 +272,9 @@ function PurchaseOrderEditForm() {
       });
   };
 
+  // REQUISITION 来源 PO：item 锁定（backend 要求 item == source PR Line item）+ 禁任意新增行；Direct 保持自由
+  const isRequisition = detail?.sourceType === "REQUISITION";
+
   const lineColumns: LineColumn<POEditLineRow>[] = [
     {
       key: "itemId",
@@ -268,6 +285,7 @@ function PurchaseOrderEditForm() {
         label: `${i.code ?? ""} · ${i.name ?? ""}`.trim(),
       })),
       placeholder: "请选择物料",
+      disabled: isRequisition,
     },
     { key: "description", header: "描述", type: "text", placeholder: "可选" },
     { key: "quantity", header: "数量 *", type: "number", placeholder: "> 0" },
@@ -390,6 +408,7 @@ function PurchaseOrderEditForm() {
           }}
           onAdd={emptyLine}
           addLabel="添加行"
+          disableAdd={isRequisition}
         />
       </EntityFormWorkspace>
     </AppPage>

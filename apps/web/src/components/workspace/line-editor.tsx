@@ -26,6 +26,8 @@ export interface LineColumn<T extends LineRow> {
   options?: ReferenceOption[];
   placeholder?: string;
   align?: 'left' | 'right';
+  /** 列级禁用（如 REQUISITION 来源行锁定 item；行内编辑禁用但保留展示） */
+  disabled?: boolean;
   /** readonly / 自定义渲染（优先于 type） */
   render?: (row: T) => React.ReactNode;
 }
@@ -40,6 +42,8 @@ interface LineEditorProps<T extends LineRow> {
   onRemove?: (row: T) => void;
   addLabel?: string;
   disabled?: boolean;
+  /** 禁用新增行按钮（如 REQUISITION 来源行禁 arbitrary add line） */
+  disableAdd?: boolean;
   density?: Density;
   emptyMessage?: string;
 }
@@ -58,6 +62,7 @@ export function LineEditor<T extends LineRow>({
   onRemove,
   addLabel = '新增行',
   disabled = false,
+  disableAdd = false,
   density = 'default',
   emptyMessage = '暂无行数据',
 }: LineEditorProps<T>) {
@@ -82,7 +87,7 @@ export function LineEditor<T extends LineRow>({
         <button
           type="button"
           onClick={() => onChange([...lines, onAdd()])}
-          disabled={disabled}
+          disabled={disabled || disableAdd}
           className="border-border bg-surface text-ink-primary rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           + {addLabel}
@@ -144,11 +149,12 @@ export function LineEditor<T extends LineRow>({
                       );
                     }
                     if (col.type === 'select') {
+                      const colDisabled = disabled || col.disabled === true;
                       return (
                         <td key={col.key} className="px-3 py-1">
                           <select
                             value={value}
-                            disabled={disabled}
+                            disabled={colDisabled}
                             onChange={(e) => updateCell(row, col.key, e.target.value)}
                             className={`${CONTROL_CLASS} py-1`}
                           >
@@ -168,7 +174,7 @@ export function LineEditor<T extends LineRow>({
                           type={col.type === 'number' ? 'number' : 'text'}
                           value={value}
                           placeholder={col.placeholder}
-                          disabled={disabled}
+                          disabled={disabled || col.disabled === true}
                           onChange={(e) => updateCell(row, col.key, e.target.value)}
                           className={`${CONTROL_CLASS} py-1 ${align}`}
                         />
