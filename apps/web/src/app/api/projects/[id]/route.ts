@@ -4,6 +4,7 @@ import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/l
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
+import { hasPermission, type RoleCode } from "@nilier-crm/shared";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +27,7 @@ const projectUpdateSchema = z
  * 实现：PATCH 内先查 ProjectClosure，若已结项直接 409 拒绝全部关键字段更新。
  */
 
-/** GET /api/projects/:id（详情含全部子资源计数与阶段信息） */
+/** GET /api/projects/:id（详情；子资源按各自 view 权限条件投影，CTO #12122 aggregate read permission hardening） */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await authenticate(request);
   const denied = requirePermission(user, "project:view");
@@ -34,28 +35,71 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   requestLog(request, user?.id, "project.get");
 
   const { id } = await params;
+
+  // 子资源能力投影：与独立子资源 API 的 view 权限一致（事实基线见 apps/web/src/app/api/projects/[id]/*/route.ts）
+  const roles = (user?.roles ?? []) as RoleCode[];
+  const capabilities = {
+    stakeholders: hasPermission(roles, "project-stakeholder:view"),
+    members: hasPermission(roles, "project-member:view"),
+    milestones: hasPermission(roles, "project-milestone:view"),
+    tasks: hasPermission(roles, "project-task:view"),
+    budgets: hasPermission(roles, "project-budget:view"),
+    expenses: hasPermission(roles, "project-expense:view"),
+    products: hasPermission(roles, "project-product:view"),
+    risks: hasPermission(roles, "project-risk:view"),
+    visits: hasPermission(roles, "project-visit:view"),
+    progresses: hasPermission(roles, "project-progress:view"),
+    acceptances: hasPermission(roles, "project-acceptance:view"),
+    closure: hasPermission(roles, "project-closure:view"),
+    tags: hasPermission(roles, "project-tag:view"),
+  };
+
   const project = await prisma.project.findFirst({
     where: { id, deletedAt: null },
     include: {
       customer: { select: { id: true, code: true, name: true, type: true } },
       opportunity: { select: { id: true, code: true, name: true, stage: true } },
-      stakeholders: { where: { deletedAt: null }, orderBy: [{ role: "asc" }, { createdAt: "asc" }] },
-      members: { where: { deletedAt: null }, orderBy: { createdAt: "asc" } },
-      milestones: { where: { deletedAt: null }, orderBy: [{ plannedDate: "asc" }] },
-      tasks: { where: { deletedAt: null }, orderBy: { createdAt: "asc" } },
-      budgets: { where: { deletedAt: null }, orderBy: { createdAt: "asc" } },
-      expenses: { where: { deletedAt: null }, orderBy: { createdAt: "desc" } },
-      products: { where: { deletedAt: null }, include: { item: { select: { id: true, code: true, name: true, model: true } } } },
-      risks: { where: { deletedAt: null }, orderBy: { createdAt: "desc" } },
-      visits: { where: { deletedAt: null }, orderBy: { visitedAt: "desc" } },
-      progresses: { where: { deletedAt: null }, orderBy: { recordedAt: "desc" } },
-      acceptances: { where: { deletedAt: null }, orderBy: { createdAt: "asc" } },
-      closure: true,
-      tags: { where: { deletedAt: null }, include: { tag: { select: { id: true, code: true, name: true, color: true } } } },
+      ...(capabilities.stakeholders
+        ? { stakeholders: { where: { deletedAt: null }, orderBy: [{ role: "asc" }, { createdAt: "asc" }] } }
+        : {}),
+      ...(capabilities.members
+        ? { members: { where: { deletedAt: null }, orderBy: { createdAt: "asc" } } }
+        : {}),
+      ...(capabilities.milestones
+        ? { milestones: { where: { deletedAt: null }, orderBy: [{ plannedDate: "asc" }] } }
+        : {}),
+      ...(capabilities.tasks
+        ? { tasks: { where: { deletedAt: null }, orderBy: { createdAt: "asc" } } }
+        : {}),
+      ...(capabilities.budgets
+        ? { budgets: { where: { deletedAt: null }, orderBy: { createdAt: "asc" } } }
+        : {}),
+      ...(capabilities.expenses
+        ? { expenses: { where: { deletedAt: null }, orderBy: { createdAt: "desc" } } }
+        : {}),
+      ...(capabilities.products
+        ? { products: { where: { deletedAt: null }, include: { item: { select: { id: true, code: true, name: true, model: true } } } } }
+        : {}),
+      ...(capabilities.risks
+        ? { risks: { where: { deletedAt: null }, orderBy: { createdAt: "desc" } } }
+        : {}),
+      ...(capabilities.visits
+        ? { visits: { where: { deletedAt: null }, orderBy: { visitedAt: "desc" } } }
+        : {}),
+      ...(capabilities.progresses
+        ? { progresses: { where: { deletedAt: null }, orderBy: { recordedAt: "desc" } } }
+        : {}),
+      ...(capabilities.acceptances
+        ? { acceptances: { where: { deletedAt: null }, orderBy: { createdAt: "asc" } } }
+        : {}),
+      ...(capabilities.closure ? { closure: true } : {}),
+      ...(capabilities.tags
+        ? { tags: { where: { deletedAt: null }, include: { tag: { select: { id: true, code: true, name: true, color: true } } } } }
+        : {}),
     },
   });
   if (!project) return failNotFound(ERROR_CODES.NOT_FOUND, "项目不存在");
-  return ok(project);
+  return ok({ ...project, capabilities });
 }
 
 /** PATCH /api/projects/:id（乐观锁 version；禁止改 stage/结项锁定字段；转换自机会的项目禁改 customerId） */
