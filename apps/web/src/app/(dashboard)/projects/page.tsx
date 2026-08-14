@@ -10,7 +10,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { PERMISSIONS } from "@nilier-crm/shared";
+import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
+import { useSession } from "@/lib/session-context";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
@@ -80,6 +81,11 @@ const PRIORITY_LABELS: Record<string, string> = {
 };
 
 function ProjectList() {
+  const { state } = useSession();
+  const canCreate =
+    state.status === "authenticated" &&
+    state.user !== null &&
+    hasPermission(state.user.roles as RoleCode[], actionPermission("project", "create"));
   const [codeInput, setCodeInput] = useState("");
   const [nameInput, setNameInput] = useState("");
   const [stageInput, setStageInput] = useState("");
@@ -118,6 +124,16 @@ function ProjectList() {
       <EntityListWorkspace<ProjectRow>
         title="项目管理"
         description="试样 / 测试 / 小批量 / 批量供货阶段项目"
+        headerActions={
+          canCreate ? (
+            <Link
+              href="/projects/new"
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+            >
+              + 新建项目
+            </Link>
+          ) : undefined
+        }
         filters={
           <>
             <input

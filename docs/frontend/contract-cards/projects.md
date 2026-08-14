@@ -1,10 +1,10 @@
 # Contract Card — 项目管理
 
 - 模块：`projects`（客户与项目 · 项目管理）
-- 判定：**已开放（List/Detail Ready）**（Backend FINAL + Frontend List/Detail 已交付）
-- 归属 Wave：F2-4（F2-4A1 List/Detail 完成；F2-4A2 Create/Edit 表单、F2-4B Tabs 待后续）
+- 判定：**已开放（CRUD Ready）**（Backend FINAL + Frontend List/Detail/Create/Edit 已交付）
+- 归属 Wave：F2-4（F2-4A1 List/Detail + F2-4A2 Create/Edit 完成；F2-4B Tabs 待后续）
 - Backend Contract：list / detail / create / edit / ~workflow / factActions（事实基线：apps/web/src/app/api 实际路由）
-- Current Frontend：list ✅ / detail ✅ / create 待 F2-4A2 / edit 待 F2-4A2 / workflow HOLD / factActions HOLD（事实基线：apps/web/src/app/(dashboard) 实际页面；Tier 2/3 HARD HOLD）
+- Current Frontend：list ✅ / detail ✅ / create ✅ / edit ✅ / workflow HOLD / factActions HOLD（事实基线：apps/web/src/app/(dashboard) 实际页面；Tier 2/3 HARD HOLD；Transition/Close/Acceptance 保持 HOLD）
 
 ## API（事实来源：apps/web/src/app/api 实际路由）
 

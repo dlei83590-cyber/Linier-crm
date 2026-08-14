@@ -12,7 +12,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { PERMISSIONS } from "@nilier-crm/shared";
+import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
+import { useSession } from "@/lib/session-context";
 import { AppPage, EntityDetailWorkspace, StatusBadge, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
@@ -136,6 +137,11 @@ function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 function ProjectDetailPage() {
+  const { state } = useSession();
+  const canEdit =
+    state.status === "authenticated" &&
+    state.user !== null &&
+    hasPermission(state.user.roles as RoleCode[], actionPermission("project", "edit"));
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
@@ -189,6 +195,16 @@ function ProjectDetailPage() {
         status={detail.stage}
         statusLabel={STAGE_LABELS[detail.stage] ?? detail.stage}
         statusTone={STAGE_TONE_MAP[detail.stage] ?? "neutral"}
+        actions={
+          canEdit && !detail.closure ? (
+            <Link
+              href={`/projects/${id}/edit`}
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+            >
+              编辑
+            </Link>
+          ) : undefined
+        }
         summary={
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <InfoItem label="项目编号" value={detail.code} />
