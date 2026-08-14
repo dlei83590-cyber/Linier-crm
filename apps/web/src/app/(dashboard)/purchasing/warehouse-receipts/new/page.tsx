@@ -23,7 +23,6 @@ import {
   AppPage,
   EntityFormWorkspace,
   ReferenceSelector,
-  DependentSelector,
   LineEditor,
   type LineColumn,
   type LineRow,
