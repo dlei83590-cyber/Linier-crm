@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifySessionToken } from "@/lib/auth";
 import { hasPermission, type PermissionCode, type RoleCode } from "@nilier-crm/shared";
+import { failConflict } from "@/lib/api/response";
+import { ERROR_CODES } from "@/lib/api/errors";
 
 export interface SessionUser {
   id: string;
@@ -54,6 +56,23 @@ export function requirePermission(user: SessionUser | null, permission: Permissi
       { success: false, error: { code: "FORBIDDEN", message: "Insufficient permission" } },
       { status: 403 },
     );
+  }
+  return null;
+}
+
+/**
+ * B2-0（CTO #12201）：项目子资源写操作前置校验——CLOSED 项目 fail-closed。
+ * 统一承担：project 存在 + deletedAt IS NULL + stage !== "CLOSED"。
+ * 返回 null = 可写；返回 NextResponse = 拒绝（调用方直接 return）。
+ * 不改 Schema/Migration；所有第一批子资源 POST/PATCH/DELETE 必须接入。
+ */
+export async function assertProjectWritable(projectId: string): Promise<NextResponse | null> {
+  const project = await prisma.project.findFirst({ where: { id: projectId, deletedAt: null } });
+  if (!project) {
+    return failConflict(ERROR_CODES.NOT_FOUND, "项目不存在");
+  }
+  if (project.stage === "CLOSED") {
+    return failConflict(ERROR_CODES.CONFLICT, "项目已结项，不允许修改项目子资源");
   }
   return null;
 }

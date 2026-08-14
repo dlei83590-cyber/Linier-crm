@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
+import { authenticate, requirePermission, requestMeta, writeAuditLog, assertProjectWritable } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
@@ -41,6 +41,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   const { id, mid } = await params;
   const meta = requestMeta(request);
+  const writableErr = await assertProjectWritable(id);
+  if (writableErr) return writableErr;
   const parsed = memberUpdateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
@@ -84,6 +86,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   const { id, mid } = await params;
   const meta = requestMeta(request);
+  const writableErr = await assertProjectWritable(id);
+  if (writableErr) return writableErr;
 
   const existing = await prisma.projectMember.findFirst({ where: { id: mid, projectId: id, deletedAt: null } });
   if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "成员不存在");

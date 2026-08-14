@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import type { VisitType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
+import { authenticate, requirePermission, requestMeta, writeAuditLog, assertProjectWritable } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, parsePagination } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
@@ -62,8 +62,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const parsed = visitCreateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
-  const project = await prisma.project.findFirst({ where: { id, deletedAt: null } });
-  if (!project) return failConflict(ERROR_CODES.NOT_FOUND, "项目不存在");
+  const writableErr = await assertProjectWritable(id);
+  if (writableErr) return writableErr;
 
   const created = await prisma.projectVisit.create({
     data: {

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
+import { authenticate, requirePermission, requestMeta, writeAuditLog, assertProjectWritable } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
@@ -45,6 +45,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   const { id, pid } = await params;
   const meta = requestMeta(request);
+  const writableErr = await assertProjectWritable(id);
+  if (writableErr) return writableErr;
   const parsed = productUpdateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
@@ -87,6 +89,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   const { id, pid } = await params;
   const meta = requestMeta(request);
+  const writableErr = await assertProjectWritable(id);
+  if (writableErr) return writableErr;
 
   const existing = await prisma.projectProduct.findFirst({ where: { id: pid, projectId: id, deletedAt: null } });
   if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "项目产品不存在");
