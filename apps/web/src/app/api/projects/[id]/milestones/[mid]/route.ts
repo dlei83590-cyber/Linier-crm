@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import type { MilestoneStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
+import { authenticate, requirePermission, requestMeta, writeAuditLog, assertProjectWritable } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
@@ -46,14 +46,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const parsed = milestoneUpdateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
-  const { version, ...updates } = parsed.data;
-  const existing = await prisma.projectMilestone.findFirst({ where: { id: mid, projectId: id, deletedAt: null } });
-  if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "里程碑不存在");
-  if (existing.version !== version) {
-    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  }
+  const txResult = await prisma.$transaction(async (tx) => {
+    const gate = await assertProjectWritable(tx, id);
+    if (!gate.ok) return { error: gate.response };
 
-  const updated = await prisma.projectMilestone.update({
+
+    const { version, ...updates } = parsed.data;
+    const existing = await tx.projectMilestone.findFirst({ where: { id: mid, projectId: id, deletedAt: null } });
+    if (!existing) return { error: failNotFound(ERROR_CODES.NOT_FOUND, "里程碑不存在") };
+    if (existing.version !== version) {
+      return { error: failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试") };
+    }
+
+  const updated = await tx.projectMilestone.update({
     where: { id: mid },
     data: {
       ...updates,
@@ -64,6 +69,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       updatedById: user!.id,
     },
   });
+    return { updated, existing };
+  });
+  if ("error" in txResult) return txResult.error;
+  const { updated, existing } = txResult;
 
   await writeAuditLog({
     actorId: user?.id,
@@ -90,13 +99,20 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   const { id, mid } = await params;
   const meta = requestMeta(request);
 
-  const existing = await prisma.projectMilestone.findFirst({ where: { id: mid, projectId: id, deletedAt: null } });
-  if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "里程碑不存在");
+  const txResult = await prisma.$transaction(async (tx) => {
+    const gate = await assertProjectWritable(tx, id);
+    if (!gate.ok) return { error: gate.response };
 
-  await prisma.projectMilestone.update({
+    const existing = await tx.projectMilestone.findFirst({ where: { id: mid, projectId: id, deletedAt: null } });
+    if (!existing) return { error: failNotFound(ERROR_CODES.NOT_FOUND, "里程碑不存在") };
+
+  await tx.projectMilestone.update({
     where: { id: mid },
     data: { deletedAt: new Date(), isActive: false, updatedById: user?.id ?? null },
   });
+    return { ok: true };
+  });
+  if ("error" in txResult) return txResult.error;
 
   await writeAuditLog({
     actorId: user?.id,
