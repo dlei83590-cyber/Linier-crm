@@ -214,27 +214,27 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     order: 1,
   },
 
-  // ===== 客户与项目（后端有能力、前端未开放 → hold；F2-4 开放）=====
-  // project-opportunities：contract CRUD + convert（事实动作，无审批流）；ui 全 false（占位页）
+  // ===== 客户与项目（F2-4 开放）=====
+  // project-opportunities：contract CRUD + convert（事实动作，无审批流）；ui CRUD（F2-4A2）；convert Tier 3 HOLD
   {
     id: 'project-opportunities',
     domain: 'customer-project',
     label: '项目机会',
     route: '/project-opportunities',
     permission: PERMISSIONS.PROJECT_OPPORTUNITY_READ,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_NONE },
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD },
     order: 1,
   },
-  // projects：contract CRUD + close/transition/acceptance；ui 全 false
+  // projects：contract CRUD + close/transition/acceptance；ui CRUD（F2-4A2）；transition/close Tier 3 HOLD
   {
     id: 'projects',
     domain: 'customer-project',
     label: '项目管理',
     route: '/projects',
     permission: PERMISSIONS.PROJECT_READ,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_NONE },
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD },
     order: 2,
   },
   // project-visits / project-risks：后端无 read API 路由（契约缺失）

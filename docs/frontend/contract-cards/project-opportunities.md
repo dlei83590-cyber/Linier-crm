@@ -1,10 +1,10 @@
 # Contract Card — 项目机会
 
 - 模块：`project-opportunities`（客户与项目 · 项目机会）
-- 判定：**可开发**（Backend FINAL + Frontend Missing）
-- 归属 Wave：F2-4
+- 判定：**已开放（CRUD Ready）**（Backend FINAL + Frontend List/Detail/Create/Edit 已交付）
+- 归属 Wave：F2-4（F2-4A1 List/Detail + F2-4A2 Create/Edit 完成；Tier 2/3 待后续）
 - Backend Contract：list / detail / create / edit / ~workflow / factActions（事实基线：apps/web/src/app/api 实际路由）
-- Current Frontend：~list / ~detail / ~create / ~edit / ~workflow / ~factActions（事实基线：apps/web/src/app/(dashboard) 实际页面；Tier 2/3 HARD HOLD）
+- Current Frontend：list ✅ / detail ✅ / create ✅ / edit ✅ / workflow HOLD / factActions HOLD（事实基线：apps/web/src/app/(dashboard) 实际页面；Tier 2/3 HARD HOLD；Convert 唯一入口保持 HOLD；Edit 支持清空 nullable 商业预测字段——blank 持久化为 null）
 
 ## API（事实来源：apps/web/src/app/api 实际路由）
 
