@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
+import { authenticate, requirePermission, requestMeta, writeAuditLog, lockProjectHeader } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound, failServer } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
@@ -41,38 +41,42 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (deniedApprove) return deniedApprove;
   }
 
-  const existing = await prisma.project.findFirst({ where: { id, deletedAt: null } });
-  if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "项目不存在");
-  if (existing.version !== parsed.data.version) {
-    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  }
-  if (existing.stage === "CLOSED") {
-    return failConflict(ERROR_CODES.CONFLICT, "项目已结项");
-  }
-
-  // 结项检查（CTO #3C5：默认强制阻断）
-  const [openTasks, openRisks, acceptances] = await Promise.all([
-    prisma.projectTask.count({ where: { projectId: id, deletedAt: null, status: { notIn: ["DONE", "CANCELLED"] } } }),
-    prisma.projectRisk.count({ where: { projectId: id, deletedAt: null, status: { not: "CLOSED" } } }),
-    prisma.projectAcceptance.findMany({ where: { projectId: id, deletedAt: null }, select: { result: true } }),
-  ]);
-
-  const hasAcceptancePassed = acceptances.some((a) => a.result === "PASSED");
-  const hasReceivable = existing.paymentStatus !== "PAID" || (existing.receivableBalance?.greaterThan(0) ?? false);
-
-  const issues: string[] = [];
-  if (openTasks > 0) issues.push(`存在 ${openTasks} 个未完成任务`);
-  if (openRisks > 0) issues.push(`存在 ${openRisks} 个未关闭风险`);
-  if (!hasAcceptancePassed) issues.push("项目尚未验收通过");
-  if (hasReceivable) issues.push("存在未完成回款或应收余额");
-
-  if (issues.length > 0 && !force) {
-    return failConflict(ERROR_CODES.CONFLICT, `结项被阻断：${issues.join("；")}（如需强制结项，请提供 force=true + 原因，并需 project:close + project:approve 权限）`);
-  }
-
   try {
     const result = await prisma.$transaction(async (tx) => {
-      // 创建结项记录（记录操作者和原因）
+      // 1. Project header FOR UPDATE（同一锁纪律：Project → Child，防死锁；与子资源写共用锁序）
+      const locked = await lockProjectHeader(tx, id);
+      if (!locked) return { error: failNotFound(ERROR_CODES.NOT_FOUND, "项目不存在") };
+      // 2. version CAS（锁后权威版本）
+      if (locked.version !== parsed.data.version) {
+        return { error: failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试") };
+      }
+      // 3. 已结项
+      if (locked.stage === "CLOSED") {
+        return { error: failConflict(ERROR_CODES.CONFLICT, "项目已结项") };
+      }
+
+      // 4-7. 同一 tx 内结项检查（CTO #3C5：默认强制阻断；锁序 Project → Child）
+      const [openTasks, openRisks, acceptances] = await Promise.all([
+        tx.projectTask.count({ where: { projectId: id, deletedAt: null, status: { notIn: ["DONE", "CANCELLED"] } } }),
+        tx.projectRisk.count({ where: { projectId: id, deletedAt: null, status: { not: "CLOSED" } } }),
+        tx.projectAcceptance.findMany({ where: { projectId: id, deletedAt: null }, select: { result: true } }),
+      ]);
+
+      const hasAcceptancePassed = acceptances.some((a) => a.result === "PASSED");
+      const hasReceivable = locked.paymentStatus !== "PAID" || Number(locked.receivableBalance ?? 0) > 0;
+
+      const issues: string[] = [];
+      if (openTasks > 0) issues.push(`存在 ${openTasks} 个未完成任务`);
+      if (openRisks > 0) issues.push(`存在 ${openRisks} 个未关闭风险`);
+      if (!hasAcceptancePassed) issues.push("项目尚未验收通过");
+      if (hasReceivable) issues.push("存在未完成回款或应收余额");
+
+      // 8. 非 force 且有 blocker → 业务冲突
+      if (issues.length > 0 && !force) {
+        return { error: failConflict(ERROR_CODES.CONFLICT, `结项被阻断：${issues.join("；")}（如需强制结项，请提供 force=true + 原因，并需 project:close + project:approve 权限）`) };
+      }
+
+      // 9. 创建结项记录（记录操作者和原因）
       const createdClosure = await tx.projectClosure.create({
         data: {
           projectId: id,
@@ -85,13 +89,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         },
       });
 
-      // 更新项目状态：CLOSED + version+1
+      // 10. 更新项目状态：CLOSED + version+1（与 Gate 同事务串行化，TOCTOU 消除）
       const updatedProject = await tx.project.update({
         where: { id },
         data: { stage: "CLOSED", version: { increment: 1 }, updatedById: user!.id },
       });
 
-      // 强制结项必须写 ProjectProgress 备注（CTO #3C5）
+      // 11. 强制结项必须写 ProjectProgress 备注（CTO #3C5）
       if (force) {
         await tx.projectProgress.create({
           data: {
@@ -104,15 +108,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         });
       }
 
-      return { createdClosure, updatedProject };
+      return { createdClosure, updatedProject, locked };
     });
+
+    if ("error" in result) return result.error;
 
     await writeAuditLog({
       actorId: user?.id,
       action: force ? "project.force-close" : "project.close",
       entityType: "project",
       entityId: id,
-      beforeData: { stage: existing.stage, paymentStatus: existing.paymentStatus, receivableBalance: existing.receivableBalance },
+      beforeData: { stage: result.locked.stage, paymentStatus: result.locked.paymentStatus, receivableBalance: result.locked.receivableBalance },
       afterData: { stage: "CLOSED", reason: parsed.data.reason, force, closedBy: user?.id },
       ...meta,
     });

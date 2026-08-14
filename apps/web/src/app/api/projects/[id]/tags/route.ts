@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
+import { authenticate, requirePermission, requestMeta, writeAuditLog, assertProjectWritable } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, parsePagination } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
@@ -53,20 +53,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const parsed = tagCreateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
-  const project = await prisma.project.findFirst({ where: { id, deletedAt: null } });
-  if (!project) return failConflict(ERROR_CODES.NOT_FOUND, "项目不存在");
+  const txResult = await prisma.$transaction(async (tx) => {
+    const gate = await assertProjectWritable(tx, id);
+    if (!gate.ok) return { error: gate.response };
 
-  const tag = await prisma.tag.findFirst({ where: { id: parsed.data.tagId, deletedAt: null, enabled: true } });
-  if (!tag) return failConflict(ERROR_CODES.NOT_FOUND, "标签不存在或已停用");
+  const tag = await tx.tag.findFirst({ where: { id: parsed.data.tagId, deletedAt: null, enabled: true } });
+  if (!tag) return { error: failConflict(ERROR_CODES.NOT_FOUND, "标签不存在或已停用") };
 
-  const existing = await prisma.projectTag.findUnique({
+  const existing = await tx.projectTag.findUnique({
     where: { projectId_tagId: { projectId: id, tagId: parsed.data.tagId } },
   });
   if (existing && !existing.deletedAt) {
-    return failConflict(ERROR_CODES.CONFLICT, "该标签已绑定此项目");
+    return { error: failConflict(ERROR_CODES.CONFLICT, "该标签已绑定此项目") };
   }
 
-  const created = await prisma.projectTag.create({
+  const created = await tx.projectTag.create({
     data: {
       projectId: id,
       tagId: parsed.data.tagId,
@@ -75,6 +76,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       updatedById: user!.id,
     },
   });
+    return { created };
+  });
+  if ("error" in txResult) return txResult.error;
+  const created = txResult.created;
 
   await writeAuditLog({
     actorId: user?.id,

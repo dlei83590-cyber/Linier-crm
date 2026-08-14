@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import type { MilestoneStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
+import { authenticate, requirePermission, requestMeta, writeAuditLog, assertProjectWritable } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, parsePagination } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
@@ -61,10 +61,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const parsed = milestoneCreateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
-  const project = await prisma.project.findFirst({ where: { id, deletedAt: null } });
-  if (!project) return failConflict(ERROR_CODES.NOT_FOUND, "项目不存在");
+  const txResult = await prisma.$transaction(async (tx) => {
+    const gate = await assertProjectWritable(tx, id);
+    if (!gate.ok) return { error: gate.response };
 
-  const created = await prisma.projectMilestone.create({
+  const created = await tx.projectMilestone.create({
     data: {
       projectId: id,
       name: parsed.data.name,
@@ -78,6 +79,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       updatedById: user!.id,
     },
   });
+    return { created };
+  });
+  if ("error" in txResult) return txResult.error;
+  const created = txResult.created;
 
   await writeAuditLog({
     actorId: user?.id,
