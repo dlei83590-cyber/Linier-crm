@@ -8,7 +8,8 @@
  * 以下必须 readonly：code / customer / opportunity / stage / expectedContractAmount /
  * expectedProfit / expectedGrossMarginRate / paymentStatus
  * stage 绝不能通过 Edit 表单直接修改（只能走 /projects/:id/transition，本轮 HOLD）。
- * closure != null → backend PATCH 返回 409 → 前端直接显示「项目已结项，不可编辑」。
+ * closure 可见性不影响结项判断：结项由 stage === "CLOSED" 决定（CTO #12142，无 project-closure:view 时
+ * backend 不返回 closure 字段，但 stage 始终返回；backend 结项同事务把 stage 置为 CLOSED，PATCH 返回 409）。
  * 复用 EntityFormWorkspace + dirty guard + version CAS + isVersionConflict；reload 成功后才 clear dirty。
  */
 import { useEffect, useState } from "react";
@@ -153,7 +154,9 @@ function ProjectEditForm() {
         setExpectedProfit(d.expectedProfit ?? "");
         setExpectedGrossMarginRate(d.expectedGrossMarginRate ?? "");
         setPaymentStatus(d.paymentStatus);
-        setClosed(Boolean(d.closure));
+        // CTO #12142：结项判断不依赖 closure 可见性（无 project-closure:view 时 backend 不返回 closure 字段）；
+        // 项目正式结项时 backend 同事务把 stage 更新为 CLOSED，stage 始终返回。
+        setClosed(d.stage === "CLOSED");
         setVersion(d.version);
         setLoading(false);
         // 重新加载最新数据后：重置 dirty（409 reload 或首次加载均适用）
