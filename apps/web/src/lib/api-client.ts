@@ -121,5 +121,6 @@ export async function apiFetch<T>(
  * 继续在旧表单上编辑可能再次失败。禁止 silent retry / 自动覆盖 / 自动重新 PATCH。
  */
 export function isVersionConflict(error: ApiClientError | null | undefined): boolean {
-  return error?.status === 409;
+  // 必须精确匹配：VERSION_CONFLICT（CAS 乐观锁）≠ 业务 CONFLICT（重复编码/状态冲突等）
+  return error?.status === 409 && error.code === "VERSION_CONFLICT";
 }

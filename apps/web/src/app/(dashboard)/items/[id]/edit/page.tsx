@@ -208,9 +208,9 @@ function ItemEditForm() {
 
   // F2-2 UX Hardening ②：409 VERSION_CONFLICT 后重新加载最新数据（重新 GET → 更新 version → 重置 dirty）
   const handleReload = () => {
+    // 保持 dirty=true 直到 GET 成功：reload 失败时未保存修改仍需离开确认
     setError(null);
     setLoadFailed(false);
-    setDirty(false);
     setReloadKey((k) => k + 1);
   };
 
