@@ -1,13 +1,18 @@
 "use client";
 
+/**
+ * Inspections — 质检记录列表页（F2-3 Batch C1 Consolidation，CTO #11888）
+ *
+ * 由旧式自绘 table/filter 迁移至统一 Workspace：
+ * AppPage → EntityListWorkspace → StatusBadge / ErrorPanel / common toolbar。
+ * 保留「+ 新建质检」入口（如有）；不改 backend / 状态机 / action。
+ */
 import { useState } from "react";
 import Link from "next/link";
-import { hasPermission, PERMISSIONS, type RoleCode } from "@nilier-crm/shared";
+import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { Pagination } from "@/components/ui/pagination";
-import { EmptyRow, ErrorRow, LoadingRow } from "@/components/ui/list-states";
+import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
 
@@ -28,14 +33,13 @@ interface InspectionRow {
 }
 
 const MODE_OPTIONS = ["SKIP", "SPOT", "FULL"] as const;
-const RESULT_OPTIONS = ["QUALIFIED", "PARTIAL", "REJECTED", "PENDING"] as const;
 
 function InspectionList() {
   const { state } = useSession();
   const canCreate =
     state.status === "authenticated" &&
     state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], "inspection:create");
+    hasPermission(state.user.roles as RoleCode[], actionPermission("inspection", "create"));
   const [modeInput, setModeInput] = useState("");
   const [resultInput, setResultInput] = useState("");
   const [filters, setFilters] = useState<{ inspectionMode?: string; result?: string }>({});
@@ -59,114 +63,121 @@ function InspectionList() {
   };
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white">
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 p-4">
-        <h1 className="mr-4 text-lg font-semibold text-slate-800">质检记录</h1>
-        {canCreate && (
-          <Link
-            href="/purchasing/inspections/new"
-            className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
-          >
-            新建
-          </Link>
-        )}
-        <select
-          value={modeInput}
-          onChange={(e) => setModeInput(e.target.value)}
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
-        >
-          <option value="">全部质检模式</option>
-          {MODE_OPTIONS.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-        <select
-          value={resultInput}
-          onChange={(e) => setResultInput(e.target.value)}
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
-        >
-          <option value="">全部结果</option>
-          {RESULT_OPTIONS.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          onClick={applyFilter}
-          className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
-        >
-          查询
-        </button>
-        <button
-          type="button"
-          onClick={resetFilter}
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-        >
-          重置
-        </button>
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500">
-            <tr>
-              <th className="px-4 py-3">收货单</th>
-              <th className="px-4 py-3">行号</th>
-              <th className="px-4 py-3">物料</th>
-              <th className="px-4 py-3">质检模式</th>
-              <th className="px-4 py-3">结果</th>
-              <th className="px-4 py-3">合格数量</th>
-              <th className="px-4 py-3">拒收数量</th>
-              <th className="px-4 py-3">质检人</th>
-              <th className="px-4 py-3">创建时间</th>
-              <th className="px-4 py-3">操作</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {loading ? (
-              <LoadingRow colSpan={10} />
-            ) : error ? (
-              <ErrorRow colSpan={10} error={error} onRetry={refresh} />
-            ) : items.length === 0 ? (
-              <EmptyRow colSpan={10} />
-            ) : (
-              items.map((item) => (
-                <tr key={item.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-800">
-                    {item.purchaseReceiptLine?.purchaseReceipt?.code ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">{item.purchaseReceiptLine?.lineNo ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-700">
-                    {item.purchaseReceiptLine?.item
-                      ? `${item.purchaseReceiptLine.item.code ?? ""} ${item.purchaseReceiptLine.item.name ?? ""}`.trim()
-                      : "—"}
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">{item.inspectionMode}</td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={item.result} />
-                  </td>
-                  <td className="px-4 py-3 text-slate-700">{item.qualifiedQty}</td>
-                  <td className="px-4 py-3 text-slate-700">{item.rejectedQty}</td>
-                  <td className="px-4 py-3 text-slate-600">{item.inspectedBy?.name ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-600">{formatDate(item.createdAt)}</td>
-                  <td className="px-4 py-3">
-                    <Link href={`/purchasing/inspections/${item.id}`} className="text-brand-600 hover:text-brand-700">
-                      查看
-                    </Link>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
-    </div>
+    <AppPage>
+      <EntityListWorkspace<InspectionRow>
+        title="质检记录"
+        description="质检记录工作台"
+        headerActions={
+          canCreate ? (
+            <Link
+              href="/purchasing/inspections/new"
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+            >
+              + 新建质检
+            </Link>
+          ) : undefined
+        }
+        filters={
+          <>
+            <select
+              value={modeInput}
+              onChange={(e) => setModeInput(e.target.value)}
+              className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+            >
+              <option value="">全部模式</option>
+              {MODE_OPTIONS.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+            <select
+              value={resultInput}
+              onChange={(e) => setResultInput(e.target.value)}
+              className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+            >
+              <option value="">全部结果</option>
+              <option value="QUALIFIED">合格</option>
+              <option value="PARTIAL">部分合格</option>
+              <option value="REJECTED">拒收</option>
+              <option value="PENDING">待检</option>
+            </select>
+          </>
+        }
+        toolbarActions={
+          <>
+            <button
+              type="button"
+              onClick={applyFilter}
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+            >
+              查询
+            </button>
+            <button
+              type="button"
+              onClick={resetFilter}
+              className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-slate-50"
+            >
+              重置
+            </button>
+          </>
+        }
+        columns={[
+          {
+            key: "receipt",
+            header: "收货单",
+            render: (row) => (
+              <Link
+                href={`/purchasing/inspections/${row.id}`}
+                className="font-medium text-brand-600 hover:underline"
+              >
+                {row.purchaseReceiptLine?.purchaseReceipt?.code ?? "—"}
+              </Link>
+            ),
+          },
+          {
+            key: "lineNo",
+            header: "行号",
+            render: (row) => String(row.purchaseReceiptLine?.lineNo ?? "—"),
+          },
+          {
+            key: "item",
+            header: "物料",
+            render: (row) =>
+              row.purchaseReceiptLine?.item
+                ? `${row.purchaseReceiptLine.item.code ?? ""} ${row.purchaseReceiptLine.item.name ?? ""}`.trim()
+                : "—",
+          },
+          { key: "inspectionMode", header: "质检模式", render: (row) => row.inspectionMode },
+          {
+            key: "result",
+            header: "结果",
+            render: (row) => <StatusBadge status={row.result} />,
+          },
+          { key: "qualifiedQty", header: "合格数量", render: (row) => row.qualifiedQty },
+          { key: "rejectedQty", header: "拒收数量", render: (row) => row.rejectedQty },
+          {
+            key: "inspectedBy",
+            header: "质检人",
+            render: (row) => row.inspectedBy?.name ?? "—",
+          },
+          {
+            key: "createdAt",
+            header: "创建时间",
+            render: (row) => formatDate(row.createdAt),
+          },
+        ]}
+        rows={items}
+        rowKey={(row) => row.id}
+        loading={loading}
+        error={error}
+        onRetry={refresh}
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        onPageChange={setPage}
+      />
+    </AppPage>
   );
 }
 

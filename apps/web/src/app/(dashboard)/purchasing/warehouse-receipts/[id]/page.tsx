@@ -1,14 +1,21 @@
 "use client";
 
+/**
+ * Warehouse Receipts — 仓库收货详情页（F2-3 Batch C1 Consolidation，CTO #11888）
+ *
+ * 由旧式布局迁移至统一 Workspace：
+ * AppPage → EntityDetailWorkspace（Header Summary → Status → Actions → Sections）。
+ * 保留 Batch B2 的 DRAFT 编辑入口；不改 backend / 状态机 / action。
+ */
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { AppPage, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
-import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 
 interface WarehouseReceiptDetail {
   id: string;
@@ -33,10 +40,18 @@ interface WarehouseReceiptDetail {
   }>;
 }
 
+function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-xs text-ink-muted">{label}</p>
+      <p className="mt-0.5 text-sm text-ink-primary">{value ?? "—"}</p>
+    </div>
+  );
+}
+
 function WarehouseReceiptDetailPage() {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
-  // F2-3 Batch B2：最小入口（不重构 Detail）——DRAFT 且有 edit 权限才显示编辑
   const { state } = useSession();
   const canEdit =
     state.status === "authenticated" &&
@@ -54,7 +69,9 @@ function WarehouseReceiptDetailPage() {
       .then((body) => setDetail(body.data))
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(err instanceof ApiClientError ? err : new ApiClientError(0, "网络错误", "NETWORK_ERROR"));
+        setError(
+          err instanceof ApiClientError ? err : new ApiClientError(0, "网络错误", "NETWORK_ERROR"),
+        );
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -62,117 +79,103 @@ function WarehouseReceiptDetailPage() {
     return () => controller.abort();
   }, [id]);
 
+  if (loading) {
+    return (
+      <AppPage>
+        <div className="border-border bg-surface rounded-lg border p-6 text-sm text-ink-muted">
+          加载中…
+        </div>
+      </AppPage>
+    );
+  }
+
+  if (error || !detail) {
+    return (
+      <AppPage>
+        <ErrorPanel error={error} />
+        <Link href="/purchasing/warehouse-receipts" className="mt-3 inline-block text-sm text-brand-600 hover:underline">
+          返回列表
+        </Link>
+      </AppPage>
+    );
+  }
+
   return (
-    <div className="rounded-lg border border-slate-200 bg-white">
-      <div className="flex items-center justify-between border-b border-slate-200 p-4">
-        <h1 className="text-lg font-semibold text-slate-800">仓库收货详情</h1>
-        <div className="flex items-center gap-2">
-          {detail?.status === "DRAFT" && canEdit ? (
+    <AppPage>
+      <EntityDetailWorkspace
+        title={`仓库收货详情 — ${detail.code}`}
+        backHref="/purchasing/warehouse-receipts"
+        status={detail.status}
+        actions={
+          detail.status === "DRAFT" && canEdit ? (
             <Link
               href={`/purchasing/warehouse-receipts/${id}/edit`}
               className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
             >
               编辑
             </Link>
-          ) : null}
-          <Link
-            href="/purchasing/warehouse-receipts"
-            className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-          >
-            返回列表
-          </Link>
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="p-6 text-sm text-slate-400">加载中…</div>
-      ) : error ? (
-        <div className="p-6">
-          <p className="text-sm text-red-600">
-            {describeStatus(error.status)}：{error.message}
-            {error.code ? `（${error.code}）` : ""}
-          </p>
-          <Link href="/purchasing/warehouse-receipts" className="mt-2 inline-block text-sm text-brand-600">
-            返回列表
-          </Link>
-        </div>
-      ) : detail ? (
-        <div className="p-4">
-          <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-slate-50 p-4 text-sm md:grid-cols-4">
-            <div>
-              <p className="text-xs text-slate-500">入库单号</p>
-              <p className="mt-1 font-medium text-slate-800">{detail.code}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">状态</p>
-              <p className="mt-1">
-                <StatusBadge status={detail.status} />
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">来源收货单</p>
-              <p className="mt-1 text-slate-700">{detail.purchaseReceipt?.code ?? "—"}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">仓库</p>
-              <p className="mt-1 text-slate-700">{detail.warehouse?.name ?? "—"}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">库位</p>
-              <p className="mt-1 text-slate-700">{detail.location?.name ?? "—"}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">过账人</p>
-              <p className="mt-1 text-slate-700">{detail.postedBy?.name ?? "—"}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">过账时间</p>
-              <p className="mt-1 text-slate-700">{formatDate(detail.postedAt)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">创建时间</p>
-              <p className="mt-1 text-slate-700">{formatDate(detail.createdAt)}</p>
-            </div>
-            <div className="col-span-2">
-              <p className="text-xs text-slate-500">备注</p>
-              <p className="mt-1 text-slate-700">{detail.remark ?? "—"}</p>
-            </div>
+          ) : undefined
+        }
+        summary={
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <InfoItem label="入库单号" value={detail.code} />
+            <InfoItem
+              label="来源收货单"
+              value={
+                detail.purchaseReceipt?.code
+                  ? `${detail.purchaseReceipt.code}${detail.purchaseReceipt.status ? `（${detail.purchaseReceipt.status}）` : ""}`
+                  : null
+              }
+            />
+            <InfoItem label="仓库" value={detail.warehouse?.name} />
+            <InfoItem label="库位" value={detail.location?.name} />
+            <InfoItem label="过账人" value={detail.postedBy?.name} />
+            <InfoItem label="过账时间" value={formatDate(detail.postedAt)} />
+            <InfoItem label="创建时间" value={formatDate(detail.createdAt)} />
+            <InfoItem label="备注" value={detail.remark} />
           </div>
-
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500">
-              <tr>
-                <th className="px-4 py-3">物料</th>
-                <th className="px-4 py-3">数量</th>
-                <th className="px-4 py-3">单位</th>
-                <th className="px-4 py-3">批次</th>
-                <th className="px-4 py-3">序列号数</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {(detail.lines ?? []).map((line) => (
-                <tr key={line.id}>
-                  <td className="px-4 py-3 text-slate-700">
-                    {line.item ? `${line.item.code ?? ""} ${line.item.name ?? ""}`.trim() : "—"}
-                  </td>
-                  <td className="px-4 py-3 text-slate-700">{line.quantity}</td>
-                  <td className="px-4 py-3 text-slate-600">{line.uom?.symbol ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-600">{line.batchNo ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-600">{line.serialNos?.length ?? 0}</td>
-                </tr>
-              ))}
-              {(detail.lines ?? []).length === 0 && (
+        }
+      >
+        <section className="border-border rounded-md border p-4">
+          <h2 className="text-ink-primary mb-3 text-sm font-semibold">
+            入库行（{detail.lines?.length ?? 0}）
+          </h2>
+          <div className="overflow-x-auto">
+            <table className="divide-border min-w-full divide-y text-sm">
+              <thead className="bg-slate-50 text-left text-xs font-medium text-ink-secondary">
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-400">
-                    暂无明细行
-                  </td>
+                  <th className="px-3 py-2 font-medium">物料</th>
+                  <th className="px-3 py-2 font-medium">数量</th>
+                  <th className="px-3 py-2 font-medium">单位</th>
+                  <th className="px-3 py-2 font-medium">批次</th>
+                  <th className="px-3 py-2 font-medium">序列号数</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
-    </div>
+              </thead>
+              <tbody className="divide-border divide-y">
+                {(detail.lines ?? []).map((line) => (
+                  <tr key={line.id}>
+                    <td className="px-3 py-2 text-ink-primary">
+                      {line.item ? `${line.item.code ?? ""} ${line.item.name ?? ""}`.trim() : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-ink-primary">{line.quantity}</td>
+                    <td className="px-3 py-2 text-ink-secondary">{line.uom?.symbol ?? "—"}</td>
+                    <td className="px-3 py-2 text-ink-secondary">{line.batchNo ?? "—"}</td>
+                    <td className="px-3 py-2 text-ink-secondary">{line.serialNos?.length ?? 0}</td>
+                  </tr>
+                ))}
+                {(detail.lines ?? []).length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-3 py-8 text-center text-sm text-ink-muted">
+                      暂无明细行
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </EntityDetailWorkspace>
+    </AppPage>
   );
 }
 
