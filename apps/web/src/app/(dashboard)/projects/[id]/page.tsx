@@ -131,6 +131,22 @@ interface ProjectDetail {
     id: string;
     tag?: { id: string; code: string | null; name: string | null; color: string | null } | null;
   }>;
+  /** 子资源读权限能力投影（backend aggregate read permission hardening，CTO #12122/#12142） */
+  capabilities: {
+    stakeholders: boolean;
+    members: boolean;
+    milestones: boolean;
+    tasks: boolean;
+    budgets: boolean;
+    expenses: boolean;
+    products: boolean;
+    risks: boolean;
+    visits: boolean;
+    progresses: boolean;
+    acceptances: boolean;
+    closure: boolean;
+    tags: boolean;
+  };
 }
 
 const STAGE_LABELS: Record<string, string> = {
@@ -354,7 +370,7 @@ function ProjectDetailPage() {
         statusLabel={STAGE_LABELS[detail.stage] ?? detail.stage}
         statusTone={STAGE_TONE_MAP[detail.stage] ?? "neutral"}
         actions={
-          canEdit && !detail.closure ? (
+          canEdit && detail.stage !== "CLOSED" ? (
             <Link
               href={`/projects/${id}/edit`}
               className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
@@ -409,9 +425,14 @@ function ProjectDetailPage() {
           </div>
         }
       >
-        {/* Tabs 导航（F2-4B1 只读 Workspace Tabs） */}
+        {/* Tabs 导航（F2-4B1 capability-aware：capability=false 的 Tab 不出现；组合 Tab 按 OR） */}
         <div className="border-border flex flex-wrap gap-1 border-b">
-          {TABS.map((t) => (
+          {TABS.filter((t) => {
+            if (t.key === "overview") return true; // 核心事实始终可见
+            if (t.key === "financial") return detail.capabilities.budgets || detail.capabilities.expenses || detail.capabilities.progresses;
+            if (t.key === "acceptance") return detail.capabilities.acceptances || detail.capabilities.closure;
+            return detail.capabilities[t.key]; // 单资源 Tab：capability=false → 不出现
+          }).map((t) => (
             <button
               key={t.key}
               type="button"
@@ -612,89 +633,95 @@ function ProjectDetailPage() {
 
           {activeTab === "financial" && (
             <div className="space-y-6">
-              <section className="border-border rounded-md border p-4">
-                <SectionTitle>预算（{detail.budgets?.length ?? 0}）</SectionTitle>
-                <Table headers={["科目", "金额", "币种", "备注"]}>
-                  {(detail.budgets ?? []).map((b) => (
-                    <tr key={b.id}>
-                      <td className="px-3 py-2 text-ink-primary">{b.category}</td>
-                      <td className="px-3 py-2 text-ink-primary">{b.amount}</td>
-                      <td className="px-3 py-2 text-ink-secondary">{b.currency}</td>
-                      <td className="px-3 py-2 text-ink-secondary">{b.note ?? "—"}</td>
-                    </tr>
-                  ))}
-                  {(detail.budgets ?? []).length === 0 && <EmptyRow colSpan={4} text="暂无预算" />}
-                </Table>
-              </section>
-              <section className="border-border rounded-md border p-4">
-                <SectionTitle>费用（{detail.expenses?.length ?? 0}）</SectionTitle>
-                <Table headers={["科目", "金额", "币种", "发生时间", "备注"]}>
-                  {(detail.expenses ?? []).map((e) => (
-                    <tr key={e.id}>
-                      <td className="px-3 py-2 text-ink-primary">{e.category}</td>
-                      <td className="px-3 py-2 text-ink-primary">{e.amount}</td>
-                      <td className="px-3 py-2 text-ink-secondary">{e.currency}</td>
-                      <td className="px-3 py-2 text-ink-secondary">{formatDate(e.incurredAt)}</td>
-                      <td className="px-3 py-2 text-ink-secondary">{e.note ?? "—"}</td>
-                    </tr>
-                  ))}
-                  {(detail.expenses ?? []).length === 0 && <EmptyRow colSpan={5} text="暂无费用" />}
-                </Table>
-              </section>
-              <section className="border-border rounded-md border p-4">
-                <SectionTitle>进度记录（{detail.progresses?.length ?? 0}）</SectionTitle>
-                <Table headers={["记录时间", "进度", "进展说明"]}>
-                  {(detail.progresses ?? []).map((p) => (
-                    <tr key={p.id}>
-                      <td className="px-3 py-2 text-ink-secondary">{formatDate(p.recordedAt)}</td>
-                      <td className="px-3 py-2 text-ink-primary">{p.progressPercent}%</td>
-                      <td className="px-3 py-2 text-ink-secondary">{p.summary}</td>
-                    </tr>
-                  ))}
-                  {(detail.progresses ?? []).length === 0 && (
-                    <EmptyRow colSpan={3} text="暂无进度记录" />
-                  )}
-                </Table>
-              </section>
+              {detail.capabilities.budgets && (
+                <section className="border-border rounded-md border p-4">
+                  <SectionTitle>预算（{detail.budgets?.length ?? 0}）</SectionTitle>
+                  <Table headers={["科目", "金额", "币种", "备注"]}>
+                    {(detail.budgets ?? []).map((b) => (
+                      <tr key={b.id}>
+                        <td className="px-3 py-2 text-ink-primary">{b.category}</td>
+                        <td className="px-3 py-2 text-ink-primary">{b.amount}</td>
+                        <td className="px-3 py-2 text-ink-secondary">{b.currency}</td>
+                        <td className="px-3 py-2 text-ink-secondary">{b.note ?? "—"}</td>
+                      </tr>
+                    ))}
+                    {(detail.budgets ?? []).length === 0 && <EmptyRow colSpan={4} text="暂无预算" />}
+                  </Table>
+                </section>
+              )}
+              {detail.capabilities.expenses && (
+                <section className="border-border rounded-md border p-4">
+                  <SectionTitle>费用（{detail.expenses?.length ?? 0}）</SectionTitle>
+                  <Table headers={["科目", "金额", "币种", "发生时间", "备注"]}>
+                    {(detail.expenses ?? []).map((e) => (
+                      <tr key={e.id}>
+                        <td className="px-3 py-2 text-ink-primary">{e.category}</td>
+                        <td className="px-3 py-2 text-ink-primary">{e.amount}</td>
+                        <td className="px-3 py-2 text-ink-secondary">{e.currency}</td>
+                        <td className="px-3 py-2 text-ink-secondary">{formatDate(e.incurredAt)}</td>
+                        <td className="px-3 py-2 text-ink-secondary">{e.note ?? "—"}</td>
+                      </tr>
+                    ))}
+                    {(detail.expenses ?? []).length === 0 && <EmptyRow colSpan={5} text="暂无费用" />}
+                  </Table>
+                </section>
+              )}
+              {detail.capabilities.progresses && (
+                <section className="border-border rounded-md border p-4">
+                  <SectionTitle>进度记录（{detail.progresses?.length ?? 0}）</SectionTitle>
+                  <Table headers={["记录时间", "进度", "进展说明"]}>
+                    {(detail.progresses ?? []).map((p) => (
+                      <tr key={p.id}>
+                        <td className="px-3 py-2 text-ink-secondary">{formatDate(p.recordedAt)}</td>
+                        <td className="px-3 py-2 text-ink-primary">{p.progressPercent}%</td>
+                        <td className="px-3 py-2 text-ink-secondary">{p.summary}</td>
+                      </tr>
+                    ))}
+                    {(detail.progresses ?? []).length === 0 && (
+                      <EmptyRow colSpan={3} text="暂无进度记录" />
+                    )}
+                  </Table>
+                </section>
+              )}
             </div>
           )}
 
           {activeTab === "acceptance" && (
             <div className="space-y-6">
-              <section className="border-border rounded-md border p-4">
-                <SectionTitle>验收项（{detail.acceptances?.length ?? 0}）</SectionTitle>
-                <Table headers={["验收项", "计划日期", "实际日期", "结果", "结果说明"]}>
-                  {(detail.acceptances ?? []).map((a) => (
-                    <tr key={a.id}>
-                      <td className="px-3 py-2 text-ink-primary">{a.name}</td>
-                      <td className="px-3 py-2 text-ink-secondary">{formatDate(a.expectedDate)}</td>
-                      <td className="px-3 py-2 text-ink-secondary">{formatDate(a.actualDate)}</td>
-                      <td className="px-3 py-2">
-                        <StatusBadge
-                          status={a.result}
-                          label={ACCEPTANCE_RESULT_LABELS[a.result] ?? a.result}
-                          tone={ACCEPTANCE_TONE_MAP[a.result] ?? "neutral"}
-                        />
-                      </td>
-                      <td className="px-3 py-2 text-ink-secondary">{a.resultNote ?? "—"}</td>
-                    </tr>
-                  ))}
-                  {(detail.acceptances ?? []).length === 0 && (
-                    <EmptyRow colSpan={5} text="暂无验收项" />
-                  )}
-                </Table>
-              </section>
-              <section className="border-border rounded-md border p-4">
-                <SectionTitle>结项</SectionTitle>
-                {detail.closure ? (
+              {detail.capabilities.acceptances && (
+                <section className="border-border rounded-md border p-4">
+                  <SectionTitle>验收项（{detail.acceptances?.length ?? 0}）</SectionTitle>
+                  <Table headers={["验收项", "计划日期", "实际日期", "结果", "结果说明"]}>
+                    {(detail.acceptances ?? []).map((a) => (
+                      <tr key={a.id}>
+                        <td className="px-3 py-2 text-ink-primary">{a.name}</td>
+                        <td className="px-3 py-2 text-ink-secondary">{formatDate(a.expectedDate)}</td>
+                        <td className="px-3 py-2 text-ink-secondary">{formatDate(a.actualDate)}</td>
+                        <td className="px-3 py-2">
+                          <StatusBadge
+                            status={a.result}
+                            label={ACCEPTANCE_RESULT_LABELS[a.result] ?? a.result}
+                            tone={ACCEPTANCE_TONE_MAP[a.result] ?? "neutral"}
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-ink-secondary">{a.resultNote ?? "—"}</td>
+                      </tr>
+                    ))}
+                    {(detail.acceptances ?? []).length === 0 && (
+                      <EmptyRow colSpan={5} text="暂无验收项" />
+                    )}
+                  </Table>
+                </section>
+              )}
+              {detail.capabilities.closure && detail.closure && (
+                <section className="border-border rounded-md border p-4">
+                  <SectionTitle>结项</SectionTitle>
                   <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                     <InfoItem label="结项时间" value={formatDate(detail.closure.closedAt)} />
                     <InfoItem label="结项原因" value={detail.closure.reason} />
                   </div>
-                ) : (
-                  <p className="text-sm text-ink-muted">项目尚未结项</p>
-                )}
-              </section>
+                </section>
+              )}
             </div>
           )}
 
