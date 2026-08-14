@@ -3,7 +3,8 @@
 - 模块：`accounts-receivable`（销售管理 · 应收账款）
 - 判定：**可开发（只读）**（Backend FINAL + Frontend Missing）
 - 归属 Wave：F2-5
-- 能力（Registry）：list / detail（create / edit / workflow / factActions 无）
+- Backend Contract：list / detail / ~create / ~edit / ~workflow / ~factActions（事实基线：apps/web/src/app/api 实际路由）
+- Current Frontend：~list / ~detail / ~create / ~edit / ~workflow / ~factActions（事实基线：apps/web/src/app/(dashboard) 实际页面；Tier 2/3 HARD HOLD）
 
 ## API（事实来源：apps/web/src/app/api 实际路由）
 
@@ -31,6 +32,17 @@
 ## Error Codes
 
 - 404：不存在；403：权限不足
+
+## Frontend Current State（ui 层事实，2026-08-14）
+
+| 能力              | 状态                           |
+| ----------------- | ------------------------------ |
+| List              | ⏸️ 未开放（占位页/入口未开放） |
+| Detail            | ⏸️ 未开放（占位页/入口未开放） |
+| Create            | ⏸️ new 页面未入 main           |
+| Edit              | ⏸️ edit 页面未入 main          |
+| Submit / Workflow | HOLD（Tier 2 HARD HOLD）       |
+| Fact Actions      | HOLD（Tier 3 HARD HOLD）       |
 
 ## Current UI
 

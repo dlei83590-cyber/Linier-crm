@@ -3,7 +3,8 @@
 - 模块：`inventory-transfers`（库存管理 · 库存调拨）
 - 判定：**迁移**（Backend FINAL + Frontend Existing）
 - 归属 Wave：F2-3
-- 能力（Registry）：list / detail / create / edit / workflow / factActions
+- Backend Contract：list / detail / create / edit / workflow / factActions（事实基线：apps/web/src/app/api 实际路由）
+- Current Frontend：list / detail / create / edit / ~workflow / ~factActions（事实基线：apps/web/src/app/(dashboard) 实际页面；Tier 2/3 HARD HOLD）
 
 ## API（事实来源：apps/web/src/app/api 实际路由）
 
@@ -32,6 +33,17 @@
 ## Error Codes
 
 - 409：状态不允许 execute / version 冲突
+
+## Frontend Current State（ui 层事实，2026-08-14）
+
+| 能力              | 状态                     |
+| ----------------- | ------------------------ |
+| List              | ✅（列表页已在 main）    |
+| Detail            | ✅（详情页已在 main）    |
+| Create            | ✅（new 页面已在 main）  |
+| Edit              | ✅（edit 页面已在 main） |
+| Submit / Workflow | HOLD（Tier 2 HARD HOLD） |
+| Fact Actions      | HOLD（Tier 3 HARD HOLD） |
 
 ## Current UI
 

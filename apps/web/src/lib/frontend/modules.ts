@@ -1,7 +1,7 @@
 import { PERMISSIONS, type PermissionCode } from '@nilier-crm/shared';
 
 /**
- * Frontend Module Registry（Frontend Productization Reset — F2-0 IA v2 + F2-1 Capability 层）
+ * Frontend Module Registry（Frontend Productization Reset — F2-0 IA v2 + F2-1 Capability 双层模型）
  *
  * 唯一菜单事实来源：Sidebar / 移动菜单 / Dashboard 快捷入口一律消费本 Registry，
  * 禁止再维护多份 NAV_ITEMS 之类的一维菜单数组。
@@ -13,27 +13,33 @@ import { PERMISSIONS, type PermissionCode } from '@nilier-crm/shared';
  * - route：现有 URL（本阶段不改 URL，避免 IA 重构制造 redirect 风险）
  * - permission：真实 endpoint 权限码；null = 所有登录用户可见
  * - availability：ready（真实可用）/ preview（预览）/ hold（未开放）
- * - capabilities：模块操作能力层（F2-1）——availability 决定是否开放入口，
- *   capabilities 决定开放后具体有哪些操作；禁止靠人工记忆"模块做到哪一步"
+ * - capabilities：**双层能力模型（CTO F2-1 Review 94/100 修正）**
+ *   - contract：Backend FINAL contract 是否存在（事实基线 = apps/web/src/app/api 实际路由）
+ *   - ui：当前 main 上 Frontend 真正开放了什么（**唯一允许 Sidebar / Dashboard /
+ *     Workspace / action rendering 消费的层**）
+ *   禁止把两层合并判断；ui 层缺失的能力不允许前端声明为已开放。
  * - icon：预留图标名（可选）
  * - order：域内排序
  *
- * capabilities 事实基线：apps/web/src/app/api 实际路由（2026-08-14 核验），
- * 只声明真实存在的端点能力；契约缺失的模块一律 NONE。
+ * ui 层事实基线（2026-08-14 核验 apps/web/src/app/(dashboard) 实际页面）：
+ * - 有列表页 + 详情页 → ui.list / ui.detail = true
+ * - 有 new / [id]/edit 页面 → ui.create / ui.edit = true（Create/Edit 未入 main 的模块必须 false）
+ * - Tier 2 workflow / Tier 3 factActions → ui 一律 false（HARD HOLD）
+ * - 占位页（PlaceholderPage「尚未开放」）不算开放 → ui 全 false
  */
 
 export type ModuleAvailability = 'ready' | 'preview' | 'hold';
 
 export type ModuleDomain =
   | 'workbench'
-  | 'customer-project'
   | 'sales'
   | 'purchasing'
   | 'inventory'
   | 'supplier-ap'
   | 'master-data'
   | 'system'
-  | 'reports';
+  | 'reports'
+  | 'customer-project';
 
 export interface ModuleDomainDef {
   id: ModuleDomain;
@@ -43,14 +49,14 @@ export interface ModuleDomainDef {
 
 /** F2-1 Capability 层：模块操作能力 */
 export type ModuleCapability =
-  | 'list' // 列表查询 API
-  | 'detail' // 详情 API
-  | 'create' // 创建 API
-  | 'edit' // 编辑 API
-  | 'workflow' // 审批/提交流（submit → workflow）
-  | 'factActions'; // 事实动作（post/confirm/execute/apply/convert/receive/return/issue/allocate 等）
+  | 'list' // 列表查询
+  | 'detail' // 详情
+  | 'create' // 创建
+  | 'edit' // 编辑
+  | 'workflow' // 审批/提交流（Tier 2 HARD HOLD）
+  | 'factActions'; // 事实动作（post/confirm/execute/apply/convert 等，Tier 3 HARD HOLD）
 
-export interface ModuleCapabilities {
+export interface CapabilityFlags {
   list: boolean;
   detail: boolean;
   create: boolean;
@@ -59,8 +65,15 @@ export interface ModuleCapabilities {
   factActions: boolean;
 }
 
-/** 能力组合常量（声明用，避免每个模块手写六项） */
-const CAP_NONE: ModuleCapabilities = {
+/** 双层能力模型：contract = 后端契约事实；ui = 前端已开放事实（CTO F2-1 Review） */
+export interface ModuleCapabilities {
+  contract: CapabilityFlags;
+  ui: CapabilityFlags;
+}
+
+// ===== contract 层常量（Backend FINAL contract 事实，按 API routes 核验）=====
+/** 无后端契约 */
+const CONTRACT_NONE: CapabilityFlags = {
   list: false,
   detail: false,
   create: false,
@@ -69,7 +82,7 @@ const CAP_NONE: ModuleCapabilities = {
   factActions: false,
 };
 /** 主数据型：CRUD 无审批流无事实动作 */
-const CAP_CRUD: ModuleCapabilities = {
+const CONTRACT_CRUD: CapabilityFlags = {
   list: true,
   detail: true,
   create: true,
@@ -77,8 +90,8 @@ const CAP_CRUD: ModuleCapabilities = {
   workflow: false,
   factActions: false,
 };
-/** 单据型：CRUD + 事实动作（无提交审批流） */
-const CAP_CRUD_ACTIONS: ModuleCapabilities = {
+/** 单据型：CRUD + 事实动作（无 submit 审批流） */
+const CONTRACT_CRUD_ACTIONS: CapabilityFlags = {
   list: true,
   detail: true,
   create: true,
@@ -87,7 +100,7 @@ const CAP_CRUD_ACTIONS: ModuleCapabilities = {
   factActions: true,
 };
 /** 单据型：CRUD + 提交审批流 + 事实动作 */
-const CAP_FULL: ModuleCapabilities = {
+const CONTRACT_FULL: CapabilityFlags = {
   list: true,
   detail: true,
   create: true,
@@ -96,7 +109,7 @@ const CAP_FULL: ModuleCapabilities = {
   factActions: true,
 };
 /** 只读列表 */
-const CAP_LIST_ONLY: ModuleCapabilities = {
+const CONTRACT_LIST_ONLY: CapabilityFlags = {
   list: true,
   detail: false,
   create: false,
@@ -105,7 +118,7 @@ const CAP_LIST_ONLY: ModuleCapabilities = {
   factActions: false,
 };
 /** 列表 + 详情（只读模型） */
-const CAP_LIST_DETAIL: ModuleCapabilities = {
+const CONTRACT_LIST_DETAIL: CapabilityFlags = {
   list: true,
   detail: true,
   create: false,
@@ -114,13 +127,51 @@ const CAP_LIST_DETAIL: ModuleCapabilities = {
   factActions: false,
 };
 /** 列表 + 详情 + 创建（收款：无编辑，有 allocate/void 事实动作） */
-const CAP_LIST_DETAIL_CREATE_ACTIONS: ModuleCapabilities = {
+const CONTRACT_LIST_DETAIL_CREATE_ACTIONS: CapabilityFlags = {
   list: true,
   detail: true,
   create: true,
   edit: false,
   workflow: false,
   factActions: true,
+};
+
+// ===== ui 层常量（当前 main 前端实际开放，CTO F2-1 Review 语义锁死）=====
+/** 前端未开放任何能力 */
+const UI_NONE: CapabilityFlags = {
+  list: false,
+  detail: false,
+  create: false,
+  edit: false,
+  workflow: false,
+  factActions: false,
+};
+/** 仅列表页 */
+const UI_LIST: CapabilityFlags = {
+  list: true,
+  detail: false,
+  create: false,
+  edit: false,
+  workflow: false,
+  factActions: false,
+};
+/** 列表页 + 详情页 */
+const UI_LIST_DETAIL: CapabilityFlags = {
+  list: true,
+  detail: true,
+  create: false,
+  edit: false,
+  workflow: false,
+  factActions: false,
+};
+/** 列表 + 详情 + Create/Edit 页面（new + [id]/edit 已在 main） */
+const UI_LIST_DETAIL_CRUD: CapabilityFlags = {
+  list: true,
+  detail: true,
+  create: true,
+  edit: true,
+  workflow: false,
+  factActions: false,
 };
 
 export interface FrontendModule {
@@ -130,7 +181,7 @@ export interface FrontendModule {
   route: string;
   permission: PermissionCode | null;
   availability: ModuleAvailability;
-  /** F2-1：模块操作能力层（availability 与 capability 分离） */
+  /** F2-1：双层能力模型（contract 与 ui 分离，禁止合并判断） */
   capabilities: ModuleCapabilities;
   icon?: string;
   order: number;
@@ -151,6 +202,7 @@ export const MODULE_DOMAINS: ReadonlyArray<ModuleDomainDef> = [
 
 export const MODULES: ReadonlyArray<FrontendModule> = [
   // ===== 工作台 =====
+  // dashboard：聚合页已在 main（ui.list）；contract 侧以 dashboard API 为准
   {
     id: 'dashboard',
     domain: 'workbench',
@@ -158,12 +210,12 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/dashboard',
     permission: null,
     availability: 'ready',
-    capabilities: CAP_LIST_ONLY,
+    capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_LIST },
     order: 1,
   },
 
   // ===== 客户与项目（后端有能力、前端未开放 → hold；F2-4 开放）=====
-  // project-opportunities：CRUD + convert（事实动作，无审批流）
+  // project-opportunities：contract CRUD + convert（事实动作，无审批流）；ui 全 false（占位页）
   {
     id: 'project-opportunities',
     domain: 'customer-project',
@@ -171,10 +223,10 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/project-opportunities',
     permission: PERMISSIONS.PROJECT_OPPORTUNITY_READ,
     availability: 'hold',
-    capabilities: CAP_CRUD_ACTIONS,
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_NONE },
     order: 1,
   },
-  // projects：CRUD + close/transition/acceptance（事实动作）
+  // projects：contract CRUD + close/transition/acceptance；ui 全 false
   {
     id: 'projects',
     domain: 'customer-project',
@@ -182,7 +234,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/projects',
     permission: PERMISSIONS.PROJECT_READ,
     availability: 'hold',
-    capabilities: CAP_CRUD_ACTIONS,
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_NONE },
     order: 2,
   },
   // project-visits / project-risks：后端无 read API 路由（契约缺失）
@@ -193,7 +245,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/project-visits',
     permission: PERMISSIONS.PROJECT_VISIT_READ,
     availability: 'hold',
-    capabilities: CAP_NONE,
+    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
     order: 3,
   },
   {
@@ -203,7 +255,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/project-risks',
     permission: PERMISSIONS.PROJECT_RISK_READ,
     availability: 'hold',
-    capabilities: CAP_NONE,
+    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
     order: 4,
   },
 
@@ -216,7 +268,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/sales/quotations',
     permission: PERMISSIONS.QUOTATION_READ,
     availability: 'hold',
-    capabilities: CAP_FULL,
+    capabilities: { contract: CONTRACT_FULL, ui: UI_NONE },
     order: 1,
   },
   // sales-orders：confirm/cancel 为事实动作，无 submit 审批流
@@ -227,7 +279,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/sales/orders',
     permission: PERMISSIONS.SALES_ORDER_READ,
     availability: 'hold',
-    capabilities: CAP_CRUD_ACTIONS,
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_NONE },
     order: 2,
   },
   {
@@ -237,7 +289,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/sales/deliveries',
     permission: PERMISSIONS.DELIVERY_READ,
     availability: 'hold',
-    capabilities: CAP_CRUD_ACTIONS,
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_NONE },
     order: 3,
   },
   {
@@ -247,7 +299,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/sales/invoices',
     permission: PERMISSIONS.INVOICE_READ,
     availability: 'hold',
-    capabilities: CAP_CRUD_ACTIONS,
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_NONE },
     order: 4,
   },
   // accounts-receivable：只读模型（list/detail/aging），无 create/edit
@@ -258,7 +310,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/sales/accounts-receivable',
     permission: PERMISSIONS.ACCOUNTS_RECEIVABLE_READ,
     availability: 'hold',
-    capabilities: CAP_LIST_DETAIL,
+    capabilities: { contract: CONTRACT_LIST_DETAIL, ui: UI_NONE },
     order: 5,
   },
   // receipt-allocation：收款创建 + allocate/void 事实动作，无编辑
@@ -269,7 +321,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/sales/receipts',
     permission: PERMISSIONS.RECEIPT_READ,
     availability: 'hold',
-    capabilities: CAP_LIST_DETAIL_CREATE_ACTIONS,
+    capabilities: { contract: CONTRACT_LIST_DETAIL_CREATE_ACTIONS, ui: UI_NONE },
     order: 6,
   },
   {
@@ -279,11 +331,12 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/sales/credit-debit-notes',
     permission: PERMISSIONS.CREDIT_DEBIT_NOTE_READ,
     availability: 'hold',
-    capabilities: CAP_FULL,
+    capabilities: { contract: CONTRACT_FULL, ui: UI_NONE },
     order: 7,
   },
 
   // ===== 采购管理（现有最成熟工作台，ready）=====
+  // requisitions：main 已有 list/detail/new/edit 页面 → ui create/edit true
   {
     id: 'purchase-requisitions',
     domain: 'purchasing',
@@ -291,9 +344,10 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/purchasing/requisitions',
     permission: PERMISSIONS.PURCHASE_REQUISITION_READ,
     availability: 'ready',
-    capabilities: CAP_FULL,
+    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CRUD },
     order: 1,
   },
+  // purchase-orders：main 只有 list/detail（Create/Edit 在 PR #38 未入 main）→ ui create/edit false
   {
     id: 'purchase-orders',
     domain: 'purchasing',
@@ -301,9 +355,10 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/purchasing/orders',
     permission: PERMISSIONS.PURCHASE_ORDER_READ,
     availability: 'ready',
-    capabilities: CAP_FULL,
+    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL },
     order: 2,
   },
+  // purchase-receipts：main 只有 list/detail → ui create/edit false
   {
     id: 'purchase-receipts',
     domain: 'purchasing',
@@ -311,9 +366,10 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/purchasing/receipts',
     permission: PERMISSIONS.PURCHASE_RECEIPT_READ,
     availability: 'ready',
-    capabilities: CAP_CRUD_ACTIONS,
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL },
     order: 3,
   },
+  // inspections：main 已有 list/detail/new/edit → ui create/edit true
   {
     id: 'inspections',
     domain: 'purchasing',
@@ -321,9 +377,10 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/purchasing/inspections',
     permission: PERMISSIONS.INSPECTION_READ,
     availability: 'ready',
-    capabilities: CAP_CRUD_ACTIONS,
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD },
     order: 4,
   },
+  // warehouse-receipts：main 只有 list/detail（Create/Edit 在 PR #38 未入 main）→ ui create/edit false
   {
     id: 'warehouse-receipts',
     domain: 'purchasing',
@@ -331,9 +388,10 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/purchasing/warehouse-receipts',
     permission: PERMISSIONS.WAREHOUSE_RECEIPT_READ,
     availability: 'ready',
-    capabilities: CAP_CRUD_ACTIONS,
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL },
     order: 5,
   },
+  // purchase-returns：main 已有 list/detail/new/edit → ui create/edit true
   {
     id: 'purchase-returns',
     domain: 'purchasing',
@@ -341,11 +399,12 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/purchasing/returns',
     permission: PERMISSIONS.PURCHASE_RETURN_READ,
     availability: 'ready',
-    capabilities: CAP_CRUD_ACTIONS,
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD },
     order: 6,
   },
 
   // ===== 库存管理（现有成熟工作台 ready；Read Model 类 hold 展示但不提供假入口——F2-7 后端 Read Model Gate 后开放）=====
+  // transfers：main 已有 list/detail/new/edit → ui create/edit true
   {
     id: 'inventory-transfers',
     domain: 'inventory',
@@ -353,9 +412,10 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/inventory/transfers',
     permission: PERMISSIONS.INVENTORY_TRANSFER_READ,
     availability: 'ready',
-    capabilities: CAP_FULL,
+    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CRUD },
     order: 1,
   },
+  // stock-counts：main 只有 list/detail → ui create/edit false
   {
     id: 'stock-counts',
     domain: 'inventory',
@@ -363,9 +423,10 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/inventory/stock-counts',
     permission: PERMISSIONS.STOCK_COUNT_READ,
     availability: 'ready',
-    capabilities: CAP_CRUD_ACTIONS,
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL },
     order: 2,
   },
+  // adjustments：main 只有 list/detail → ui create/edit false
   {
     id: 'inventory-adjustments',
     domain: 'inventory',
@@ -373,9 +434,10 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/inventory/adjustments',
     permission: PERMISSIONS.INVENTORY_ADJUSTMENT_READ,
     availability: 'ready',
-    capabilities: CAP_FULL,
+    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL },
     order: 3,
   },
+  // conversions：main 只有 list/detail → ui create/edit false
   {
     id: 'inventory-conversions',
     domain: 'inventory',
@@ -383,7 +445,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/inventory/conversions',
     permission: PERMISSIONS.INVENTORY_CONVERSION_READ,
     availability: 'ready',
-    capabilities: CAP_FULL,
+    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL },
     order: 4,
   },
   // Read Model（页面已存在但无 FINAL Read API → hold；inventory-ledger:view / stock-projection:view **非已存在权限事实**（CTO #8845），permission=null 避免伪造权限码
@@ -394,7 +456,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/inventory/stock-projection',
     permission: null,
     availability: 'hold',
-    capabilities: CAP_NONE,
+    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
     order: 5,
   },
   {
@@ -404,7 +466,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/inventory/ledger',
     permission: null,
     availability: 'hold',
-    capabilities: CAP_NONE,
+    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
     order: 6,
   },
 
@@ -416,7 +478,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/supplier-invoices',
     permission: PERMISSIONS.SUPPLIER_INVOICE_READ,
     availability: 'hold',
-    capabilities: CAP_FULL,
+    capabilities: { contract: CONTRACT_FULL, ui: UI_NONE },
     order: 1,
   },
   {
@@ -426,7 +488,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/supplier-ap/open-items',
     permission: null,
     availability: 'hold',
-    capabilities: CAP_NONE,
+    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
     order: 2,
   },
   // Supplier CN/DN（5C-2 HOLD）：不得复用 4E-3 销售 AR CN/DN 权限（CREDIT_DEBIT_NOTE_READ 对应销售侧事实）；
@@ -439,7 +501,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/supplier-ap/credit-debit-notes',
     permission: null,
     availability: 'hold',
-    capabilities: CAP_NONE,
+    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
     order: 3,
   },
   {
@@ -449,12 +511,12 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/supplier-ap/payments',
     permission: null,
     availability: 'hold',
-    capabilities: CAP_NONE,
+    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
     order: 4,
   },
 
   // ===== 基础资料（当前 Placeholder → hold；F2-2 Master Data 开放）=====
-  // items / price-lists：CRUD FINAL（无审批流）→ F2-2 可开发
+  // items / price-lists：contract CRUD FINAL（无审批流）→ F2-2 可开发；ui 全 false（占位页）
   {
     id: 'items',
     domain: 'master-data',
@@ -462,7 +524,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/items',
     permission: PERMISSIONS.ITEM_READ,
     availability: 'hold',
-    capabilities: CAP_CRUD,
+    capabilities: { contract: CONTRACT_CRUD, ui: UI_NONE },
     order: 1,
   },
   // business-partners：后端尚无统一 read/write API（仅 /{id}/roles 子资源）→ 契约缺失
@@ -473,7 +535,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/business-partners',
     permission: PERMISSIONS.BUSINESS_PARTNER_READ,
     availability: 'hold',
-    capabilities: CAP_NONE,
+    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
     order: 2,
   },
   {
@@ -483,7 +545,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/price-lists',
     permission: PERMISSIONS.PRICE_LIST_READ,
     availability: 'hold',
-    capabilities: CAP_CRUD,
+    capabilities: { contract: CONTRACT_CRUD, ui: UI_NONE },
     order: 3,
   },
   {
@@ -493,7 +555,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/technical-standards',
     permission: PERMISSIONS.TECHNICAL_STANDARD_READ,
     availability: 'hold',
-    capabilities: CAP_NONE,
+    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
     order: 4,
   },
   // unit-of-measures：GET 列表 FINAL（无 detail/create/edit 路由）
@@ -504,7 +566,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/unit-of-measures',
     permission: PERMISSIONS.UNIT_OF_MEASURE_READ,
     availability: 'hold',
-    capabilities: CAP_LIST_ONLY,
+    capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_NONE },
     order: 5,
   },
   {
@@ -514,7 +576,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/commercial-terms',
     permission: PERMISSIONS.COMMERCIAL_TERM_READ,
     availability: 'hold',
-    capabilities: CAP_NONE,
+    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
     order: 6,
   },
   {
@@ -524,7 +586,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/document-sequences',
     permission: PERMISSIONS.DOCUMENT_SEQUENCE_READ,
     availability: 'hold',
-    capabilities: CAP_NONE,
+    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
     order: 7,
   },
   // F2-2 Master Data 下一批：仓库/库位（Master-Data Read API 已就绪，GET 列表 FINAL）
@@ -535,7 +597,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/warehouses',
     permission: PERMISSIONS.WAREHOUSE_READ,
     availability: 'hold',
-    capabilities: CAP_LIST_ONLY,
+    capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_NONE },
     order: 8,
   },
   {
@@ -545,7 +607,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/warehouse-locations',
     permission: PERMISSIONS.WAREHOUSE_LOCATION_READ,
     availability: 'hold',
-    capabilities: CAP_LIST_ONLY,
+    capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_NONE },
     order: 9,
   },
 
@@ -557,7 +619,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/users',
     permission: PERMISSIONS.USER_READ,
     availability: 'hold',
-    capabilities: CAP_NONE,
+    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
     order: 1,
   },
   {
@@ -567,7 +629,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/departments',
     permission: PERMISSIONS.USER_READ,
     availability: 'hold',
-    capabilities: CAP_NONE,
+    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
     order: 2,
   },
   {
@@ -577,10 +639,10 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/roles',
     permission: PERMISSIONS.ROLE_READ,
     availability: 'hold',
-    capabilities: CAP_NONE,
+    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
     order: 3,
   },
-  // audit-logs：list/detail API FINAL（前端未开放入口）
+  // audit-logs：contract list/detail API FINAL；ui 全 false（占位页，入口未开放）
   {
     id: 'audit-logs',
     domain: 'system',
@@ -588,7 +650,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/audit-logs',
     permission: PERMISSIONS.AUDIT_READ,
     availability: 'hold',
-    capabilities: CAP_LIST_DETAIL,
+    capabilities: { contract: CONTRACT_LIST_DETAIL, ui: UI_NONE },
     order: 4,
   },
 
@@ -600,7 +662,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/reports',
     permission: null,
     availability: 'hold',
-    capabilities: CAP_NONE,
+    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
     order: 1,
   },
 ];
@@ -622,15 +684,26 @@ export function modulesByDomain(): Map<ModuleDomain, FrontendModule[]> {
 }
 
 /**
- * F2-1 — 取模块能力集（不存在时返回全 false，禁止静默假设任何操作可用）。
- * capabilities 是"后端契约事实"：契约缺失的模块即使 availability 变更也不得开放操作。
+ * F2-1 — 取模块双层能力（不存在时返回全 false 兜底）。
+ * 禁止把 contract 与 ui 合并判断；两层的语义不同，消费方不同。
  */
 export function moduleCapabilities(moduleId: string): ModuleCapabilities {
   const entry = MODULES.find((m) => m.id === moduleId);
-  return entry ? entry.capabilities : CAP_NONE;
+  if (entry) return entry.capabilities;
+  return { contract: CONTRACT_NONE, ui: UI_NONE };
 }
 
-/** F2-1 — 模块是否具备某项能力 */
+/** F2-1 — 后端契约能力（Backend FINAL contract 是否存在；可据 API routes 核验） */
+export function contractCapabilities(moduleId: string): CapabilityFlags {
+  return moduleCapabilities(moduleId).contract;
+}
+
+/** F2-1 — 前端已开放能力（**唯一允许 UI 消费的层**：Sidebar / Dashboard / Workspace / action rendering） */
+export function uiCapabilities(moduleId: string): CapabilityFlags {
+  return moduleCapabilities(moduleId).ui;
+}
+
+/** F2-1 — 模块 UI 是否已开放某项能力（消费 ui 层，禁止用 contract 层替代） */
 export function hasCapability(moduleId: string, capability: ModuleCapability): boolean {
-  return moduleCapabilities(moduleId)[capability];
+  return uiCapabilities(moduleId)[capability];
 }

@@ -3,7 +3,8 @@
 - 模块：`purchase-receipts`（采购管理 · 到货收货）
 - 判定：**迁移**（Backend FINAL + Frontend Existing）
 - 归属 Wave：F2-3
-- 能力（Registry）：list / detail / create / edit / factActions（workflow 无）
+- Backend Contract：list / detail / create / edit / ~workflow / factActions（事实基线：apps/web/src/app/api 实际路由）
+- Current Frontend：list / detail / ~create / ~edit / ~workflow / ~factActions（事实基线：apps/web/src/app/(dashboard) 实际页面；Tier 2/3 HARD HOLD）
 
 ## API（事实来源：apps/web/src/app/api 实际路由）
 
@@ -32,6 +33,17 @@
 ## Error Codes
 
 - 409：状态不允许 receive / version 冲突
+
+## Frontend Current State（ui 层事实，2026-08-14）
+
+| 能力              | 状态                     |
+| ----------------- | ------------------------ |
+| List              | ✅（列表页已在 main）    |
+| Detail            | ✅（详情页已在 main）    |
+| Create            | ⏸️ new 页面未入 main     |
+| Edit              | ⏸️ edit 页面未入 main    |
+| Submit / Workflow | HOLD（Tier 2 HARD HOLD） |
+| Fact Actions      | HOLD（Tier 3 HARD HOLD） |
 
 ## Current UI
 

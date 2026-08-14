@@ -3,7 +3,8 @@
 - 模块：`{module id}`（{一级域} · {模块名}）
 - 判定：**{可开发 | 迁移 | HOLD}**（{Backend FINAL + Frontend Missing/Existing | Backend Contract Missing}）
 - 归属 Wave：{F2-x / 未排期}
-- 能力（Registry）：list / detail / create / edit / workflow / factActions
+- Backend Contract：{list / detail / create / edit / workflow / factActions 按实际后端路由填}（事实基线：apps/web/src/app/api）
+- Current Frontend：{ui 层按实际页面填；Tier 2/3 一律 HOLD}（事实基线：apps/web/src/app/(dashboard)）
 
 ## API（事实来源：apps/web/src/app/api 实际路由）
 

@@ -13,6 +13,20 @@
 | **迁移**   | Backend FINAL + Frontend Existing（成熟页面）       | 接入统一 Workspace / Registry，保留业务逻辑，不推倒重写 |
 | **HOLD**   | Backend Contract Missing（无 FINAL read/write API） | 不开放任何操作；导航显示"尚未开放"                      |
 
+## 双层能力语义（CTO F2-1 Review 94/100 修正）
+
+每张卡片与 Module Registry 一样区分两层，**禁止合并判断**：
+
+- **Backend Contract**：后端 FINAL contract 是否存在（按 `apps/web/src/app/api` 实际路由核验）——回答"后端能做什么"
+- **Current Frontend（ui）**：当前 main 上 Frontend 真正开放了什么（按 `apps/web/src/app/(dashboard)` 实际页面核验）——**唯一允许 Sidebar / Dashboard / Workspace / action rendering 消费的层**
+
+铁律：
+
+1. Tier 2 workflow / Tier 3 factActions → ui 一律 false（HARD HOLD）
+2. PR #38 未入 main 的 PO / Receipt / WHR Create/Edit → ui create/edit false
+3. 只有当前 main 实际已有页面才能 ui=true（占位页不算开放）
+4. HOLD 模块即使 backend contract 完整，ui 仍可全 false
+
 ## 总索引（2026-08-14 核验，API 事实来自 apps/web/src/app/api 实际路由）
 
 ### 可开发（Backend FINAL + Frontend Missing）
@@ -60,6 +74,7 @@ stock-projection、inventory-ledger、ap-open-items、supplier-cn-dn、payment-a
 ## 维护规则
 
 1. 每个 Wave 开始前：复核对应模块卡片（API / 状态机 / 错误码是否与后端一致）
-2. 后端契约变更（新增/删除端点）→ 同步更新卡片 + Registry `capabilities`
-3. 页面完成后：Current UI / Gap 两栏更新，判定从"可开发"流转为"迁移"或"Ready"
-4. 卡片与代码冲突时：以 `apps/web/src/app/api` 实际路由为准，更新卡片
+2. 后端契约变更（新增/删除端点）→ 同步更新卡片 Backend Contract + Registry `contract` 层
+3. 前端页面变更（新增/删除页面）→ 同步更新卡片 Frontend Current State + Registry `ui` 层
+4. 页面完成后：Current UI / Gap 两栏更新，判定从"可开发"流转为"迁移"或"Ready"
+5. 卡片与代码冲突时：以 `apps/web/src/app/api`（contract）与 `apps/web/src/app/(dashboard)`（ui）实际事实为准，更新卡片
