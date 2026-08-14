@@ -15,9 +15,9 @@
 
 ## 第一批：普通 CRUD（8 子资源）契约事实
 
-全部具备：POST/PATCH（除 Tags）/DELETE 独立路由；`*:view/create/edit/delete` 四权限码（除 Tags 无 edit）；**version CAS（VERSION_CONFLICT + version increment）**；**软删除（deletedAt: new Date()）**；**writeAuditLog** 审计。
+全部具备：POST/PATCH（除 Tags）/DELETE 独立路由；`*:view/create/edit/delete` 四权限码（除 Tags 无 edit）；**PATCH 使用 version CAS（VERSION_CONFLICT + version increment）；DELETE 当前不使用 CAS，按资源 id + permission 软删除（deletedAt: new Date()）**；**writeAuditLog** 审计。
 
-| 子资源 | POST 必填 | PATCH 权限 | DELETE 权限 | version CAS | 软删除 | side effect |
+| 子资源 | POST 必填 | PATCH 权限 | DELETE 权限 | PATCH CAS | 软删除 | side effect |
 |--------|-----------|-----------|-------------|-------------|--------|-------------|
 | Stakeholders | role（枚举）+ name | `project-stakeholder:edit` | `project-stakeholder:delete` | ✅ | ✅ | audit log |
 | Members | name（userId 可空） | `project-member:edit` | `project-member:delete` | ✅ | ✅ | audit log |
@@ -32,7 +32,7 @@
 
 ## 第二批：财务/进度类（3 子资源）契约事实
 
-| 子资源 | POST schema | 权限 | version CAS | 说明 |
+| 子资源 | POST schema | 权限 | PATCH CAS | 说明 |
 |--------|-------------|------|-------------|------|
 | Budgets | category 必填 + amount 非负必填 + currency/note 可选 | `project-budget:*` | ✅ | 金额事实，字段口径简单 |
 | Expenses | category 必填 + amount 非负必填 + currency/incurredAt/note 可选 | `project-expense:*` | ✅ | 金额事实 |
@@ -49,7 +49,7 @@
 
 ## 全局发现（B2 开发注意）
 
-- **子资源写路径无显式项目 CLOSED 禁写**：POST/PATCH route 内均查 `project.findFirst`（存在性）但未见 `stage === "CLOSED"` / `projectClosure` 检查 → 前端 B2 按钮须以 `detail.stage !== "CLOSED"` 为项目状态 Gate（与 B1 收口纪律一致），并提示 backend 后续可考虑统一 Gate
+- **子资源写路径无显式项目 CLOSED 禁写**：POST/PATCH route 内均查 `project.findFirst`（存在性）但未见 `stage === "CLOSED"` / `projectClosure` 检查（Task 等即使在 CLOSED Project 也可被 API 客户端直接修改/删除）→ **B2 UI 前置 Blocking：必须先完成 backend CLOSED write gate**（B2-0 Backend Integrity PR，CLOSED Project 所有子资源 mutation fail-closed），前端按钮再以 `detail.stage !== "CLOSED"` 为项目状态 Gate（defense-in-depth，非二选一）
 - **权限模型**：子资源写操作必须同时满足 `detail.capabilities[resource]`（read capability）+ 对应 `actionPermission("project-<resource>", "create|edit|delete")` + 项目状态；禁止退化为 `project:edit` 单一判断
 
 ## 当前状态
