@@ -49,9 +49,11 @@
 
 ## 全局发现（B2 开发注意）
 
-- **子资源写路径无显式项目 CLOSED 禁写**：POST/PATCH route 内均查 `project.findFirst`（存在性）但未见 `stage === "CLOSED"` / `projectClosure` 检查（Task 等即使在 CLOSED Project 也可被 API 客户端直接修改/删除）→ **B2 UI 前置 Blocking：必须先完成 backend CLOSED write gate**（B2-0 Backend Integrity PR，CLOSED Project 所有子资源 mutation fail-closed），前端按钮再以 `detail.stage !== "CLOSED"` 为项目状态 Gate（defense-in-depth，非二选一）
+- **子资源写路径项目 CLOSED 禁写（B2-0 已实现）**：~~POST/PATCH route 内均查 `project.findFirst`（存在性）但未见 `stage === "CLOSED"` 检查~~ → **B2-0 transactional aggregate write gate 已实现（PR #55 @ `ec52da6`）**：`assertProjectWritable(tx, projectId)` 与 mutation 同事务串行化（`lockProjectHeader` FOR UPDATE，锁序 Project → Child），CLOSED Project 所有子资源 mutation fail-closed（409 CONFLICT）；close/transition 亦接入同一锁纪律。前端按钮仍以 `detail.stage !== "CLOSED"` 为项目状态 Gate（defense-in-depth，非二选一）
 - **权限模型**：子资源写操作必须同时满足 `detail.capabilities[resource]`（read capability）+ 对应 `actionPermission("project-<resource>", "create|edit|delete")` + 项目状态；禁止退化为 `project:edit` 单一判断
 
 ## 当前状态
 
-STOP — 提交 **CTO F2-4B2 Audit Review**；通过后按批次实施（第一批 → 第二批），HARD HOLD 不启动。
+- B2-0 Backend Integrity Gate：**已实现**（PR #55 @ `ec52da6`，CI 全绿）——transactional aggregate write gate（FOR UPDATE + 同事务串行化），等 CTO B2-0 Final Re-review
+- F2-4B2 写 UI：**HOLD**（B2-0 FINAL 后才启动 B2-1：B2-1A Stakeholders/Members/Milestones/Tasks → B2-1B Risks/Visits/Products/Tags）
+- 第二批 / HARD HOLD 不启动
