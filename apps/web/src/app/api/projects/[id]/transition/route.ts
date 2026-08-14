@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import type { ProjectStage } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
+import { authenticate, requirePermission, requestMeta, writeAuditLog, lockProjectHeader } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
@@ -53,38 +53,48 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const parsed = transitionSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
-  const existing = await prisma.project.findFirst({ where: { id, deletedAt: null } });
-  if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "项目不存在");
-  if (existing.version !== parsed.data.version) {
-    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  }
+  const result = await prisma.$transaction(async (tx) => {
+    // 1. Project header FOR UPDATE（同一锁序：Project → Child，防死锁；与 close / 子资源写共用锁纪律）
+    const locked = await lockProjectHeader(tx, id);
+    if (!locked) return { error: failNotFound(ERROR_CODES.NOT_FOUND, "项目不存在") };
+    // 2. version CAS（锁后权威版本）
+    if (locked.version !== parsed.data.version) {
+      return { error: failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试") };
+    }
 
-  const fromStage = existing.stage as ProjectStage;
-  const toStage = parsed.data.targetStage as ProjectStage;
-  if (!isLegalTransition(fromStage, toStage)) {
-    return failConflict(ERROR_CODES.CONFLICT, `非法阶段流转：${fromStage} → ${toStage}（仅允许正向推进/暂停/失败/结项）`);
-  }
+    const fromStage = locked.stage as ProjectStage;
+    const toStage = parsed.data.targetStage as ProjectStage;
+    // CLOSED 项目无法合法流转（isLegalTransition 天然拒绝），锁后权威 stage 判定
+    if (!isLegalTransition(fromStage, toStage)) {
+      return { error: failConflict(ERROR_CODES.CONFLICT, `非法阶段流转：${fromStage} → ${toStage}（仅允许正向推进/暂停/失败/结项）`) };
+    }
 
-  const updated = await prisma.project.update({
-    where: { id },
-    data: {
-      stage: toStage,
-      version: { increment: 1 },
-      updatedById: user!.id,
-    },
+    // 3. 同一 tx 内更新 stage + version+1（与 Gate 串行化，TOCTOU 消除）
+    const updated = await tx.project.update({
+      where: { id },
+      data: {
+        stage: toStage,
+        version: { increment: 1 },
+        updatedById: user!.id,
+      },
+    });
+
+    return { updated, fromStage };
   });
+
+  if ("error" in result) return result.error;
 
   await writeAuditLog({
     actorId: user?.id,
     action: "project.transition",
     entityType: "project",
     entityId: id,
-    beforeData: { stage: fromStage },
-    afterData: { stage: toStage, remark: parsed.data.remark ?? null },
+    beforeData: { stage: result.fromStage },
+    afterData: { stage: result.updated.stage, remark: parsed.data.remark ?? null },
     ...meta,
   });
 
   // Domain Event：ProjectStageChanged（事件总线 Sprint 4 前落地；此处 AuditLog + EVENTS.md 注册为准）
 
-  return ok({ id, fromStage, toStage, remark: parsed.data.remark ?? null, stage: updated.stage });
+  return ok({ id, fromStage: result.fromStage, toStage: result.updated.stage, remark: parsed.data.remark ?? null, stage: result.updated.stage });
 }

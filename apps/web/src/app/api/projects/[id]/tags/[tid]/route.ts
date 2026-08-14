@@ -16,16 +16,21 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   const { id, tid } = await params;
   const meta = requestMeta(request);
-  const writableErr = await assertProjectWritable(id);
-  if (writableErr) return writableErr;
 
-  const existing = await prisma.projectTag.findFirst({ where: { id: tid, projectId: id, deletedAt: null } });
-  if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "项目标签绑定不存在");
+  const txResult = await prisma.$transaction(async (tx) => {
+    const gate = await assertProjectWritable(tx, id);
+    if (!gate.ok) return { error: gate.response };
 
-  await prisma.projectTag.update({
+    const existing = await tx.projectTag.findFirst({ where: { id: tid, projectId: id, deletedAt: null } });
+    if (!existing) return { error: failNotFound(ERROR_CODES.NOT_FOUND, "项目标签绑定不存在") };
+
+  await tx.projectTag.update({
     where: { id: tid },
     data: { deletedAt: new Date(), isActive: false, updatedById: user?.id ?? null },
   });
+    return { ok: true };
+  });
+  if ("error" in txResult) return txResult.error;
 
   await writeAuditLog({
     actorId: user?.id,

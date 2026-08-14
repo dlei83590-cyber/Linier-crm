@@ -45,27 +45,34 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   const { id, pid } = await params;
   const meta = requestMeta(request);
-  const writableErr = await assertProjectWritable(id);
-  if (writableErr) return writableErr;
   const parsed = productUpdateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
-  const { version, ...updates } = parsed.data;
-  const existing = await prisma.projectProduct.findFirst({ where: { id: pid, projectId: id, deletedAt: null } });
-  if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "项目产品不存在");
-  if (existing.version !== version) {
-    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  }
+  const txResult = await prisma.$transaction(async (tx) => {
+    const gate = await assertProjectWritable(tx, id);
+    if (!gate.ok) return { error: gate.response };
+
+
+    const { version, ...updates } = parsed.data;
+    const existing = await tx.projectProduct.findFirst({ where: { id: pid, projectId: id, deletedAt: null } });
+    if (!existing) return { error: failNotFound(ERROR_CODES.NOT_FOUND, "项目产品不存在") };
+    if (existing.version !== version) {
+      return { error: failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试") };
+    }
 
   if (updates.priceSnapshotId) {
-    const snapshot = await prisma.quotationPriceSnapshot.findFirst({ where: { id: updates.priceSnapshotId } });
-    if (!snapshot) return failConflict(ERROR_CODES.NOT_FOUND, "价格快照不存在");
+      const snapshot = await tx.quotationPriceSnapshot.findFirst({ where: { id: updates.priceSnapshotId } });
+    if (!snapshot) return { error: failConflict(ERROR_CODES.NOT_FOUND, "价格快照不存在") };
   }
 
-  const updated = await prisma.projectProduct.update({
+  const updated = await tx.projectProduct.update({
     where: { id: pid },
     data: { ...updates, version: { increment: 1 }, updatedById: user!.id },
   });
+    return { updated, existing };
+  });
+  if ("error" in txResult) return txResult.error;
+  const { updated, existing } = txResult;
 
   await writeAuditLog({
     actorId: user?.id,
@@ -89,16 +96,21 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   const { id, pid } = await params;
   const meta = requestMeta(request);
-  const writableErr = await assertProjectWritable(id);
-  if (writableErr) return writableErr;
 
-  const existing = await prisma.projectProduct.findFirst({ where: { id: pid, projectId: id, deletedAt: null } });
-  if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "项目产品不存在");
+  const txResult = await prisma.$transaction(async (tx) => {
+    const gate = await assertProjectWritable(tx, id);
+    if (!gate.ok) return { error: gate.response };
 
-  await prisma.projectProduct.update({
+    const existing = await tx.projectProduct.findFirst({ where: { id: pid, projectId: id, deletedAt: null } });
+    if (!existing) return { error: failNotFound(ERROR_CODES.NOT_FOUND, "项目产品不存在") };
+
+  await tx.projectProduct.update({
     where: { id: pid },
     data: { deletedAt: new Date(), isActive: false, updatedById: user?.id ?? null },
   });
+    return { ok: true };
+  });
+  if ("error" in txResult) return txResult.error;
 
   await writeAuditLog({
     actorId: user?.id,

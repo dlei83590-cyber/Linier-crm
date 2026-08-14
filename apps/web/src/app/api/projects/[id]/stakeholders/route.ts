@@ -62,10 +62,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const parsed = stakeholderCreateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
-  const writableErr = await assertProjectWritable(id);
-  if (writableErr) return writableErr;
+  const txResult = await prisma.$transaction(async (tx) => {
+    const gate = await assertProjectWritable(tx, id);
+    if (!gate.ok) return { error: gate.response };
 
-  const created = await prisma.projectStakeholder.create({
+  const created = await tx.projectStakeholder.create({
     data: {
       projectId: id,
       role: parsed.data.role as StakeholderRole,
@@ -80,6 +81,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       updatedById: user!.id,
     },
   });
+    return { created };
+  });
+  if ("error" in txResult) return txResult.error;
+  const created = txResult.created;
 
   await writeAuditLog({
     actorId: user?.id,

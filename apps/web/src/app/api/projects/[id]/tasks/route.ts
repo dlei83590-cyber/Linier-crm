@@ -69,15 +69,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const parsed = taskCreateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
-  const writableErr = await assertProjectWritable(id);
-  if (writableErr) return writableErr;
+  const txResult = await prisma.$transaction(async (tx) => {
+    const gate = await assertProjectWritable(tx, id);
+    if (!gate.ok) return { error: gate.response };
 
   if (parsed.data.milestoneId) {
-    const milestone = await prisma.projectMilestone.findFirst({ where: { id: parsed.data.milestoneId, projectId: id, deletedAt: null } });
-    if (!milestone) return failConflict(ERROR_CODES.NOT_FOUND, "关联里程碑不存在或不属于该项目");
+    const milestone = await tx.projectMilestone.findFirst({ where: { id: parsed.data.milestoneId, projectId: id, deletedAt: null } });
+    if (!milestone) return { error: failConflict(ERROR_CODES.NOT_FOUND, "关联里程碑不存在或不属于该项目") };
   }
 
-  const created = await prisma.projectTask.create({
+  const created = await tx.projectTask.create({
     data: {
       projectId: id,
       milestoneId: parsed.data.milestoneId ?? null,
@@ -92,6 +93,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       updatedById: user!.id,
     },
   });
+    return { created };
+  });
+  if ("error" in txResult) return txResult.error;
+  const created = txResult.created;
 
   await writeAuditLog({
     actorId: user?.id,

@@ -44,19 +44,22 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   const { id, vid } = await params;
   const meta = requestMeta(request);
-  const writableErr = await assertProjectWritable(id);
-  if (writableErr) return writableErr;
   const parsed = visitUpdateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
-  const { version, ...updates } = parsed.data;
-  const existing = await prisma.projectVisit.findFirst({ where: { id: vid, projectId: id, deletedAt: null } });
-  if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "走访记录不存在");
-  if (existing.version !== version) {
-    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  }
+  const txResult = await prisma.$transaction(async (tx) => {
+    const gate = await assertProjectWritable(tx, id);
+    if (!gate.ok) return { error: gate.response };
 
-  const updated = await prisma.projectVisit.update({
+
+    const { version, ...updates } = parsed.data;
+    const existing = await tx.projectVisit.findFirst({ where: { id: vid, projectId: id, deletedAt: null } });
+    if (!existing) return { error: failNotFound(ERROR_CODES.NOT_FOUND, "走访记录不存在") };
+    if (existing.version !== version) {
+      return { error: failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试") };
+    }
+
+  const updated = await tx.projectVisit.update({
     where: { id: vid },
     data: {
       ...updates,
@@ -67,6 +70,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       updatedById: user!.id,
     },
   });
+    return { updated, existing };
+  });
+  if ("error" in txResult) return txResult.error;
+  const { updated, existing } = txResult;
 
   await writeAuditLog({
     actorId: user?.id,
@@ -90,16 +97,21 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   const { id, vid } = await params;
   const meta = requestMeta(request);
-  const writableErr = await assertProjectWritable(id);
-  if (writableErr) return writableErr;
 
-  const existing = await prisma.projectVisit.findFirst({ where: { id: vid, projectId: id, deletedAt: null } });
-  if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "走访记录不存在");
+  const txResult = await prisma.$transaction(async (tx) => {
+    const gate = await assertProjectWritable(tx, id);
+    if (!gate.ok) return { error: gate.response };
 
-  await prisma.projectVisit.update({
+    const existing = await tx.projectVisit.findFirst({ where: { id: vid, projectId: id, deletedAt: null } });
+    if (!existing) return { error: failNotFound(ERROR_CODES.NOT_FOUND, "走访记录不存在") };
+
+  await tx.projectVisit.update({
     where: { id: vid },
     data: { deletedAt: new Date(), isActive: false, updatedById: user?.id ?? null },
   });
+    return { ok: true };
+  });
+  if ("error" in txResult) return txResult.error;
 
   await writeAuditLog({
     actorId: user?.id,

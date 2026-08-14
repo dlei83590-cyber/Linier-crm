@@ -65,18 +65,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const parsed = productCreateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
-  const writableErr = await assertProjectWritable(id);
-  if (writableErr) return writableErr;
+  const txResult = await prisma.$transaction(async (tx) => {
+    const gate = await assertProjectWritable(tx, id);
+    if (!gate.ok) return { error: gate.response };
 
-  const item = await prisma.item.findFirst({ where: { id: parsed.data.itemId, deletedAt: null } });
-  if (!item) return failConflict(ERROR_CODES.NOT_FOUND, "关联物料不存在");
+  const item = await tx.item.findFirst({ where: { id: parsed.data.itemId, deletedAt: null } });
+  if (!item) return { error: failConflict(ERROR_CODES.NOT_FOUND, "关联物料不存在") };
 
   if (parsed.data.priceSnapshotId) {
-    const snapshot = await prisma.quotationPriceSnapshot.findFirst({ where: { id: parsed.data.priceSnapshotId } });
-    if (!snapshot) return failConflict(ERROR_CODES.NOT_FOUND, "价格快照不存在");
+    const snapshot = await tx.quotationPriceSnapshot.findFirst({ where: { id: parsed.data.priceSnapshotId } });
+    if (!snapshot) return { error: failConflict(ERROR_CODES.NOT_FOUND, "价格快照不存在") };
   }
 
-  const created = await prisma.projectProduct.create({
+  const created = await tx.projectProduct.create({
     data: {
       projectId: id,
       itemId: parsed.data.itemId,
@@ -88,6 +89,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       updatedById: user!.id,
     },
   });
+    return { created };
+  });
+  if ("error" in txResult) return txResult.error;
+  const created = txResult.created;
 
   await writeAuditLog({
     actorId: user?.id,

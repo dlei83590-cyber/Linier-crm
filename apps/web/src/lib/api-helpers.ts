@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { verifySessionToken } from "@/lib/auth";
 import { hasPermission, type PermissionCode, type RoleCode } from "@nilier-crm/shared";
@@ -60,21 +61,60 @@ export function requirePermission(user: SessionUser | null, permission: Permissi
   return null;
 }
 
+/** B2-0（CTO #12228/#12278）：Project header FOR UPDATE 锁定的权威行（锁后不重读） */
+export interface LockedProject {
+  id: string;
+  stage: string;
+  version: number;
+  paymentStatus: string;
+  receivableBalance: unknown;
+}
+
 /**
- * B2-0（CTO #12201）：项目子资源写操作前置校验——CLOSED 项目 fail-closed。
- * 统一承担：project 存在 + deletedAt IS NULL + stage !== "CLOSED"。
- * 返回 null = 可写；返回 NextResponse = 拒绝（调用方直接 return）。
- * 不改 Schema/Migration；所有第一批子资源 POST/PATCH/DELETE 必须接入。
+ * B2-0（CTO #12278）：Project 写 Gate 结果。
+ * ok=true 携带 locked project（调用方可直接复用锁内 stage/version/paymentStatus/receivableBalance）；
+ * ok=false 携带拒绝响应（调用方直接 return response）。
  */
-export async function assertProjectWritable(projectId: string): Promise<NextResponse | null> {
-  const project = await prisma.project.findFirst({ where: { id: projectId, deletedAt: null } });
+export type ProjectWriteGateResult =
+  | { ok: true; project: LockedProject }
+  | { ok: false; response: NextResponse };
+
+/**
+ * B2-0（CTO #12201/#12228/#12278）：项目子资源写操作前置校验——CLOSED 项目 fail-closed，
+ * 且必须与 mutation 处于同一事务（transactional aggregate write gate，消除 TOCTOU 竞态）。
+ * 统一锁序：Project header FOR UPDATE → Gate → mutation。
+ * 内部：lockProjectHeader → stage === CLOSED → 409 CONFLICT。
+ * 返回 ProjectWriteGateResult（ok=true 携带 locked project）。
+ * 调用方必须已处于 prisma.$transaction(async (tx) => { ... }) 内。
+ */
+export async function assertProjectWritable(
+  tx: Prisma.TransactionClient,
+  projectId: string,
+): Promise<ProjectWriteGateResult> {
+  const project = await lockProjectHeader(tx, projectId);
   if (!project) {
-    return failConflict(ERROR_CODES.NOT_FOUND, "项目不存在");
+    return { ok: false, response: failConflict(ERROR_CODES.NOT_FOUND, "项目不存在") };
   }
   if (project.stage === "CLOSED") {
-    return failConflict(ERROR_CODES.CONFLICT, "项目已结项，不允许修改项目子资源");
+    return { ok: false, response: failConflict(ERROR_CODES.CONFLICT, "项目已结项，不允许修改项目子资源") };
   }
-  return null;
+  return { ok: true, project };
+}
+
+/**
+ * B2-0（CTO #12228/#12278）：事务内锁定 Project header（FOR UPDATE）并返回权威行。
+ * 供 close / transition / 子资源 mutation 统一复用同一锁序：
+ * Project header FOR UPDATE → Gate → mutation（锁序 Project → Child，防死锁）。
+ * 返回 null = 项目不存在或已软删（调用方按需 404）。
+ */
+export async function lockProjectHeader(
+  tx: Prisma.TransactionClient,
+  projectId: string,
+): Promise<LockedProject | null> {
+  const rows = await tx.$queryRaw<LockedProject[]>(
+    Prisma.sql`SELECT "id", "stage", "version", "paymentStatus", "receivableBalance" FROM "Project" WHERE "id" = ${projectId} AND "deletedAt" IS NULL FOR UPDATE`,
+  );
+  return rows[0] ?? null;
 }
 
 export function clientIp(request: NextRequest): string | undefined {
