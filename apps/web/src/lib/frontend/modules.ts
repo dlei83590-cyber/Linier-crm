@@ -684,6 +684,30 @@ export function modulesByDomain(): Map<ModuleDomain, FrontendModule[]> {
 }
 
 /**
+ * F2-5A — 按域分组的 ready/hold 投影（Sidebar / Mobile nav / Dashboard 业务入口消费）。
+ * ready 与 hold 分离：hold 不污染主业务导航，由 UI 折叠为「规划中 · N」组。
+ * 过滤规则：无权限 item（permission 为 null 或 hasPermission 通过）由调用方过滤，
+ * 本函数只做 availability 投影，不感知权限。
+ */
+export interface DomainModuleGroup {
+  domain: ModuleDomainDef;
+  ready: FrontendModule[];
+  hold: FrontendModule[];
+}
+
+export function modulesByDomainGrouped(): DomainModuleGroup[] {
+  const byDomain = modulesByDomain();
+  return MODULE_DOMAINS.map((domain) => {
+    const modules = byDomain.get(domain.id) ?? [];
+    return {
+      domain,
+      ready: modules.filter((m) => m.availability === "ready"),
+      hold: modules.filter((m) => m.availability === "hold" || m.availability === "preview"),
+    };
+  }).filter((g) => g.ready.length > 0 || g.hold.length > 0);
+}
+
+/**
  * F2-1 — 取模块双层能力（不存在时返回全 false 兜底）。
  * 禁止把 contract 与 ui 合并判断；两层的语义不同，消费方不同。
  */
