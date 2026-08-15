@@ -25,13 +25,29 @@ import {
  *   排除 workbench 域（Dashboard 自身不做 self-link）。
  * - 系统状态 = 发布版本 + 运行状态（复用已有 /api/health/ready，不新增 backend API）；
  *   Git Commit / Build ID / Deployment 不再作为首页核心卡片（保留在 AdminShell footer）。
+ * - 今日日期（CTO #12805 Required Hardening）：只在 hydration 后由浏览器本地时区生成，
+ *   避免 SSR 预渲染（服务器时区）与浏览器 hydration 跨日期边界 mismatch。
  */
 export default function DashboardPage() {
   const { state } = useSession();
   const user = state.user;
   const roles = (user?.roles ?? []) as RoleCode[];
   const [health, setHealth] = useState<"checking" | "ok" | "down">("checking");
+  const [today, setToday] = useState<string>("");
 
+  // 日期：hydration 后由浏览器本地时区生成（不参与 SSR 预渲染）
+  useEffect(() => {
+    setToday(
+      new Date().toLocaleDateString("zh-CN", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        weekday: "long",
+      }),
+    );
+  }, []);
+
+  // 系统状态：复用已有 /api/health/ready（不新增 backend API）；fetch 失败只降级系统状态
   useEffect(() => {
     let cancelled = false;
     fetch("/api/health/ready")
@@ -48,12 +64,6 @@ export default function DashboardPage() {
 
   const greeting =
     user?.roles?.includes("SUPER_ADMIN") ? "管理员" : user?.name ?? user?.email ?? "用户";
-  const today = new Date().toLocaleDateString("zh-CN", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    weekday: "long",
-  });
 
   // 业务入口：ready 模块按域分组（权限过滤），排除 workbench（Dashboard 自身不做 self-link）
   const entryGroups = modulesByDomainGrouped()
@@ -83,7 +93,7 @@ export default function DashboardPage() {
       <section className="rounded-lg border border-slate-200 bg-white p-5">
         <h1 className="text-xl font-semibold text-slate-800">Dashboard</h1>
         <p className="mt-1 text-sm text-slate-500">
-          欢迎回来，{greeting}。今天是 {today}。
+          欢迎回来，{greeting}。{today ? `今天是 ${today}。` : ""}
         </p>
       </section>
 

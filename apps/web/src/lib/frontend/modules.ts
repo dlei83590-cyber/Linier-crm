@@ -1,4 +1,4 @@
-import { PERMISSIONS, type PermissionCode } from '@nilier-crm/shared';
+import { PERMISSIONS, actionPermission, type PermissionCode } from '@nilier-crm/shared';
 
 /**
  * Frontend Module Registry（Frontend Productization Reset — F2-0 IA v2 + F2-1 Capability 双层模型）
@@ -234,7 +234,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     availability: 'ready',
     capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD },
     createRoute: '/project-opportunities/new',
-    createPermission: 'project-opportunity:create',
+    createPermission: actionPermission('project-opportunity', 'create'),
     order: 1,
   },
   // projects：contract CRUD + close/transition/acceptance；ui CRUD（F2-4A2）；transition/close Tier 3 HOLD
@@ -247,7 +247,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     availability: 'ready',
     capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD },
     createRoute: '/projects/new',
-    createPermission: 'project:create',
+    createPermission: actionPermission('project', 'create'),
     order: 2,
   },
   // project-visits / project-risks：后端无 read API 路由（契约缺失）
@@ -359,7 +359,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     availability: 'ready',
     capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CRUD },
     createRoute: '/purchasing/requisitions/new',
-    createPermission: 'purchase-requisition:create',
+    createPermission: actionPermission('purchase-requisition', 'create'),
     order: 1,
   },
   // purchase-orders：Batch A selective port 已交付 Create/DRAFT Edit（PR #38 业务逻辑入新 Workspace）→ ui create/edit true；Tier 2/3 保持 false
@@ -372,7 +372,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     availability: 'ready',
     capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CRUD },
     createRoute: '/purchasing/orders/new',
-    createPermission: 'purchase-order:create',
+    createPermission: actionPermission('purchase-order', 'create'),
     order: 2,
   },
   // purchase-receipts：Batch B1 selective port 已交付 Create/DRAFT Edit（来源链 purchaseOrderLineId 保留）→ ui create/edit true；Tier 2/3 保持 false
@@ -385,7 +385,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     availability: 'ready',
     capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD },
     createRoute: '/purchasing/receipts/new',
-    createPermission: 'purchase-receipt:create',
+    createPermission: actionPermission('purchase-receipt', 'create'),
     order: 3,
   },
   // inspections：main 已有 list/detail/new/edit → ui create/edit true
@@ -398,7 +398,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     availability: 'ready',
     capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD },
     createRoute: '/purchasing/inspections/new',
-    createPermission: 'inspection:create',
+    createPermission: actionPermission('inspection', 'create'),
     order: 4,
   },
   // warehouse-receipts：Batch B2 selective port 已交付 Create/DRAFT Edit（双 source identity：purchaseReceiptLineId + inspectionId 保留）→ ui create/edit true；Tier 2/3 保持 false
@@ -411,7 +411,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     availability: 'ready',
     capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD },
     createRoute: '/purchasing/warehouse-receipts/new',
-    createPermission: 'warehouse-receipt:create',
+    createPermission: actionPermission('warehouse-receipt', 'create'),
     order: 5,
   },
   // purchase-returns：main 已有 list/detail/new/edit → ui create/edit true
@@ -424,7 +424,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     availability: 'ready',
     capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD },
     createRoute: '/purchasing/returns/new',
-    createPermission: 'purchase-return:create',
+    createPermission: actionPermission('purchase-return', 'create'),
     order: 6,
   },
 
@@ -439,7 +439,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     availability: 'ready',
     capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CRUD },
     createRoute: '/inventory/transfers/new',
-    createPermission: 'inventory-transfer:create',
+    createPermission: actionPermission('inventory-transfer', 'create'),
     order: 1,
   },
   // stock-counts：main 只有 list/detail → ui create/edit false
@@ -553,7 +553,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     availability: 'ready',
     capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_DETAIL_CRUD },
     createRoute: '/items/new',
-    createPermission: 'item:create',
+    createPermission: actionPermission('item', 'create'),
     order: 1,
   },
   // business-partners：后端尚无统一 read/write API（仅 /{id}/roles 子资源）→ 契约缺失，保持 HOLD
@@ -576,7 +576,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     availability: 'ready',
     capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_DETAIL_CRUD },
     createRoute: '/price-lists/new',
-    createPermission: 'price-list:create',
+    createPermission: actionPermission('price-list', 'create'),
     order: 3,
   },
   {
