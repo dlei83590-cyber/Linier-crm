@@ -53,14 +53,19 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     const visible = (ms: FrontendModule[]) =>
       ms.filter((m) => m.permission === null || hasPermission(roles, m.permission));
     return groups
-      .map((g) => ({ domain: g.domain, ready: visible(g.ready), hold: visible(g.hold) }))
-      .filter((g) => g.ready.length > 0 || g.hold.length > 0);
+      .map((g) => ({
+        domain: g.domain,
+        ready: visible(g.ready),
+        preview: visible(g.preview),
+        hold: visible(g.hold),
+      }))
+      .filter((g) => g.ready.length > 0 || g.preview.length > 0 || g.hold.length > 0);
   }, [roles]);
 
   // 当前业务域（根据 pathname 匹配 route 前缀；未命中时默认展开第一个非空域）
   const currentDomain = useMemo<ModuleDomain | null>(() => {
     const matched = visibleGroups
-      .flatMap((g) => [...g.ready, ...g.hold])
+      .flatMap((g) => [...g.ready, ...g.preview, ...g.hold])
       .find((m) => pathname === m.route || pathname.startsWith(`${m.route}/`));
     if (matched) return matched.domain;
     return visibleGroups[0]?.domain.id ?? null;
@@ -99,26 +104,29 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   const user = state.user;
 
-  const renderModuleLink = (item: FrontendModule) => {
+  const renderModuleLink = (item: FrontendModule, badge?: string) => {
     const active = pathname === item.route || pathname.startsWith(`${item.route}/`);
     return (
       <Link
         key={item.id}
         href={item.route}
-        className={`rounded-md px-3 py-2 text-sm font-medium ${
+        className={`flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium ${
           active
             ? "bg-brand-50 text-brand-700"
             : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
         }`}
       >
-        {item.label}
+        <span>{item.label}</span>
+        {badge && (
+          <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] text-sky-600">{badge}</span>
+        )}
       </Link>
     );
   };
 
   const sidebar = (
     <nav className="flex h-full flex-col gap-1 p-4">
-      {visibleGroups.map(({ domain, ready, hold }) => {
+      {visibleGroups.map(({ domain, ready, preview, hold }) => {
         const domainExpanded = isDomainExpanded(domain.id);
         const holdExpanded = isHoldOpen(domain.id);
         return (
@@ -134,7 +142,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             {domainExpanded && (
               <div className="mt-1 flex flex-col gap-1 pl-2">
                 {/* Ready 模块：正常显示可点击 */}
-                {ready.map(renderModuleLink)}
+                {ready.map((m) => renderModuleLink(m))}
+                {/* Preview 模块：与 ready 同为主导航，带「预览」标记（只读 Preview，不归入 hold，CTO #12686） */}
+                {preview.map((m) => renderModuleLink(m, "预览"))}
                 {/* Hold 模块：折叠组「规划中 · N」，展开后仍不可点击 */}
                 {hold.length > 0 && (
                   <div className="flex flex-col">
