@@ -95,6 +95,11 @@ export const PROJECT_MODULES = [
   "project",
   "project-visit",
   "project-risk",
+  // Sprint 3C-5 / F2-4B2：Project subresource modules；必须与 prisma/seed.ts 注册保持一致，避免 static RBAC 与 DB permission catalog 漂移。
+  "project-stakeholder",
+  "project-member",
+  "project-milestone",
+  "project-task",
 ] as const;
 
 /** 细粒度权限动作（Sprint 3 审批流/工作流直接复用） */
@@ -127,6 +132,11 @@ export const PERMISSION_MODULES = [
   "project",
   "project-visit",
   "project-risk",
+  // Sprint 3C-5 / F2-4B2：Project subresource modules；必须与 prisma/seed.ts 注册保持一致，避免 static RBAC 与 DB permission catalog 漂移。
+  "project-stakeholder",
+  "project-member",
+  "project-milestone",
+  "project-task",
   // Sprint 3A：平台底座模块
   "workflow-definition",
   "workflow-step",
