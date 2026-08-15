@@ -8,7 +8,7 @@
  */
 import { useState } from "react";
 import Link from "next/link";
-import { hasPermission, PERMISSIONS, type RoleCode } from "@nilier-crm/shared";
+import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
@@ -68,7 +68,7 @@ function ItemList() {
   const canCreate =
     state.status === "authenticated" &&
     state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], "item:create");
+    hasPermission(state.user.roles as RoleCode[], actionPermission("item", "create"));
 
   const [codeInput, setCodeInput] = useState("");
   const [nameInput, setNameInput] = useState("");

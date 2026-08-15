@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { PERMISSIONS } from "@nilier-crm/shared";
+import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityFormWorkspace, ReferenceSelector, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 
@@ -422,7 +422,7 @@ function ItemEditForm() {
 
 export default function Page() {
   return (
-    <PermissionGuard permission={PERMISSIONS.ITEM_READ}>
+    <PermissionGuard permission={actionPermission("item", "edit")}>
       <AppPage>
         <ItemEditForm />
       </AppPage>
