@@ -684,6 +684,33 @@ export function modulesByDomain(): Map<ModuleDomain, FrontendModule[]> {
 }
 
 /**
+ * F2-5A — 按域分组的 ready/preview/hold 三态投影（Sidebar / Mobile nav / Dashboard 业务入口消费）。
+ * availability 三态（CTO #12686）：ready 正常可用；preview 只读预览（不得归入 hold）；hold 未开放。
+ * hold 不污染主业务导航，由 UI 折叠为「规划中 · N」组；preview 与 ready 同为主导航，但保留视觉标记。
+ * 过滤规则：无权限 item（permission 为 null 或 hasPermission 通过）由调用方过滤，
+ * 本函数只做 availability 投影，不感知权限。
+ */
+export interface DomainModuleGroup {
+  domain: ModuleDomainDef;
+  ready: FrontendModule[];
+  preview: FrontendModule[];
+  hold: FrontendModule[];
+}
+
+export function modulesByDomainGrouped(): DomainModuleGroup[] {
+  const byDomain = modulesByDomain();
+  return MODULE_DOMAINS.map((domain) => {
+    const modules = byDomain.get(domain.id) ?? [];
+    return {
+      domain,
+      ready: modules.filter((m) => m.availability === "ready"),
+      preview: modules.filter((m) => m.availability === "preview"),
+      hold: modules.filter((m) => m.availability === "hold"),
+    };
+  }).filter((g) => g.ready.length > 0 || g.preview.length > 0 || g.hold.length > 0);
+}
+
+/**
  * F2-1 — 取模块双层能力（不存在时返回全 false 兜底）。
  * 禁止把 contract 与 ui 合并判断；两层的语义不同，消费方不同。
  */
