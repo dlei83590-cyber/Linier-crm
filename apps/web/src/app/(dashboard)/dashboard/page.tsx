@@ -18,10 +18,11 @@ import {
  * 规则：
  * - 唯一数据源 = Module Registry（modulesByDomainGrouped 三态投影），
  *   不恢复旧「模块按钮墙」，不维护第二份菜单事实。
- * - 快捷操作 = Registry ui.create 投影（ui 层是唯一允许 UI 消费的层）；
- *   无 create 能力或无权限的模块不出现（当前 ready 模块 ui.create 全 false → 空态，
- *   不虚构指标，等模块真正开放 create 后自动点亮）。
- * - 业务入口 = ready 域分组 + 权限过滤，按域展示 ready 模块链接。
+ * - 快捷操作 = Registry ui.create 投影 + **权威 createRoute/createPermission 元数据**
+ *   （CTO #12781：禁止用 `route + '/new'` 推导，禁止用 read/view permission 代替
+ *   create permission）；严格消费 `ui.create && createRoute && createPermission 通过`。
+ * - 业务入口 = ready 域分组 + 权限过滤，按域展示 ready 模块链接；
+ *   排除 workbench 域（Dashboard 自身不做 self-link）。
  * - 系统状态 = 发布版本 + 运行状态（复用已有 /api/health/ready，不新增 backend API）；
  *   Git Commit / Build ID / Deployment 不再作为首页核心卡片（保留在 AdminShell footer）。
  */
@@ -54,8 +55,9 @@ export default function DashboardPage() {
     weekday: "long",
   });
 
-  // 业务入口：ready 模块按域分组（权限过滤），仅保留有 ready 项的域
+  // 业务入口：ready 模块按域分组（权限过滤），排除 workbench（Dashboard 自身不做 self-link）
   const entryGroups = modulesByDomainGrouped()
+    .filter((g) => g.domain.id !== "workbench")
     .map((g) => ({
       domain: g.domain,
       ready: g.ready.filter(
@@ -64,13 +66,15 @@ export default function DashboardPage() {
     }))
     .filter((g) => g.ready.length > 0);
 
-  // 快捷操作：仅 Registry ui.create 已开放且有权限的 ready 模块（当前为空态）
+  // 快捷操作：仅 ui.create=true 且带权威 createRoute + createPermission 且权限通过的 ready 模块
   const quickActions: FrontendModule[] = modulesByDomainGrouped()
     .flatMap((g) => g.ready)
     .filter(
       (m) =>
         uiCapabilities(m.id).create &&
-        (m.permission === null || hasPermission(roles, m.permission)),
+        !!m.createRoute &&
+        !!m.createPermission &&
+        hasPermission(roles, m.createPermission),
     );
 
   return (
@@ -91,7 +95,7 @@ export default function DashboardPage() {
             {quickActions.map((m) => (
               <Link
                 key={m.id}
-                href={`${m.route}/new`}
+                href={m.createRoute!}
                 className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
               >
                 新建{m.label}
