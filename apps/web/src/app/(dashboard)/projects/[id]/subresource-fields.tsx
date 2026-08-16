@@ -615,28 +615,36 @@ export function ProductFields({
   itemOptions,
   unavailableItem = null,
   itemLocked = null,
+  loading = false,
+  error = null,
 }: {
   value: ProductFormValue;
   onChange: (v: ProductFormValue) => void;
   itemOptions: Array<{ id: string; code: string | null; name: string | null }>;
   unavailableItem?: { id: string; label: string } | null;
   itemLocked?: { id: string; label: string } | null;
+  loading?: boolean;
+  error?: string | null;
 }) {
   const set = (patch: Partial<ProductFormValue>) => onChange({ ...value, ...patch });
   const itemUnavailable = unavailableItem !== null;
   const itemLockedOn = itemLocked !== null;
+  const selectorDisabled = itemLockedOn || loading || error !== null;
 
   return (
     <div className="space-y-3">
       {itemUnavailable && (
         <p className="text-xs text-amber-600">原关联物料已不可用，请重新选择后保存。</p>
       )}
+      {error && (
+        <p className="text-xs text-red-600">物料加载失败：{error}（无法选择物料，请重试或联系管理员）</p>
+      )}
       <div>
         <label className="text-ink-secondary block text-xs font-medium">物料 *</label>
         <select
           value={value.itemId}
           onChange={(e) => set({ itemId: e.target.value })}
-          disabled={itemLockedOn}
+          disabled={selectorDisabled}
           className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm disabled:opacity-60"
         >
           {itemLockedOn && itemLocked && (
@@ -645,8 +653,9 @@ export function ProductFields({
           {itemUnavailable && unavailableItem && !itemLockedOn && (
             <option value={unavailableItem.id}>{unavailableItem.label}</option>
           )}
-          {!itemLockedOn && <option value="">选择物料</option>}
+          {!itemLockedOn && !error && <option value="">{loading ? "物料加载中…" : "选择物料"}</option>}
           {!itemLockedOn &&
+            !error &&
             itemOptions.map((it) => (
               <option key={it.id} value={it.id}>
                 {it.code ?? ""} {it.name ?? ""}
@@ -701,30 +710,40 @@ export function TagFields({
   onChange,
   tagOptions,
   duplicateHint = null,
+  loading = false,
+  error = null,
 }: {
   value: TagFormValue;
   onChange: (v: TagFormValue) => void;
   tagOptions: Array<{ id: string; code: string | null; name: string | null }>;
   duplicateHint?: string | null;
+  loading?: boolean;
+  error?: string | null;
 }) {
   const set = (patch: Partial<TagFormValue>) => onChange({ ...value, ...patch });
+  const selectorDisabled = loading || error !== null;
 
   return (
     <div className="space-y-3">
       {duplicateHint && <p className="text-xs text-amber-600">{duplicateHint}</p>}
+      {error && (
+        <p className="text-xs text-red-600">标签加载失败：{error}（无法选择标签，请重试或联系管理员）</p>
+      )}
       <div>
         <label className="text-ink-secondary block text-xs font-medium">标签 *</label>
         <select
           value={value.tagId}
           onChange={(e) => set({ tagId: e.target.value })}
-          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+          disabled={selectorDisabled}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm disabled:opacity-60"
         >
-          <option value="">选择标签</option>
-          {tagOptions.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name ?? t.code ?? t.id}
-            </option>
-          ))}
+          {!error && <option value="">{loading ? "标签加载中…" : "选择标签"}</option>}
+          {!error &&
+            tagOptions.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name ?? t.code ?? t.id}
+              </option>
+            ))}
         </select>
       </div>
     </div>

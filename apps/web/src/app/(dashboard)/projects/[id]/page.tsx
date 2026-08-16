@@ -456,6 +456,11 @@ function ProjectDetailPage() {
   // B2-1B-2：item selector 消费真实 /api/items；tag selector 消费真实 /api/tags（CTO #13632）
   const [itemOptions, setItemOptions] = useState<Array<{ id: string; code: string | null; name: string | null }>>([]);
   const [tagOptions, setTagOptions] = useState<Array<{ id: string; code: string | null; name: string | null }>>([]);
+  // B2-1B（CTO #13762）：selector 显式 loading/error——不静默吞错、不把失败伪装成合法 empty state
+  const [itemOptionsError, setItemOptionsError] = useState<ApiClientError | null>(null);
+  const [tagOptionsError, setTagOptionsError] = useState<ApiClientError | null>(null);
+  const [itemOptionsLoading, setItemOptionsLoading] = useState(true);
+  const [tagOptionsLoading, setTagOptionsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dialogError, setDialogError] = useState<ApiClientError | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{
@@ -491,25 +496,45 @@ function ProjectDetailPage() {
     return () => controller.abort();
   }, [loadProject]);
 
-  // B2-1B-2：item/tag selector 独立加载真实数据源；失败仅降级 selector（页面其余仍可用）
+  // B2-1B-2：item/tag selector 独立加载真实数据源；失败显式报错（不静默吞错，CTO #13762）
   useEffect(() => {
     const controller = new AbortController();
+    setItemOptionsLoading(true);
     apiFetch<Array<{ id: string; code: string | null; name: string | null }>>(
       "/api/items?pageSize=100",
       { signal: controller.signal },
     )
-      .then((body) => setItemOptions(body.data))
+      .then((body) => {
+        setItemOptions(body.data);
+        setItemOptionsError(null);
+      })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
-        // selector 降级：不阻断页面其他能力
+        setItemOptionsError(
+          err instanceof ApiClientError ? err : new ApiClientError(0, "加载物料失败", "NETWORK_ERROR"),
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setItemOptionsLoading(false);
       });
+    setTagOptionsLoading(true);
+    // project-tag POST 拒绝 disabled tag → selector 只取 enabled=true（CTO #13762）
     apiFetch<Array<{ id: string; code: string | null; name: string | null }>>(
-      "/api/tags?pageSize=100",
+      "/api/tags?enabled=true&pageSize=100",
       { signal: controller.signal },
     )
-      .then((body) => setTagOptions(body.data))
+      .then((body) => {
+        setTagOptions(body.data);
+        setTagOptionsError(null);
+      })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
+        setTagOptionsError(
+          err instanceof ApiClientError ? err : new ApiClientError(0, "加载标签失败", "NETWORK_ERROR"),
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setTagOptionsLoading(false);
       });
     return () => controller.abort();
   }, []);
@@ -1060,6 +1085,13 @@ function ProjectDetailPage() {
 
   const submitProduct = async () => {
     if (!productDialog.open) return;
+    // create 依赖 item selector：失败/加载中 → 禁止提交（CTO #13762，Save 按钮也已 disabled）
+    if (productDialog.mode === "create" && (itemOptionsLoading || itemOptionsError)) {
+      setDialogError(
+        itemOptionsError ?? new ApiClientError(0, "物料加载中，请稍候", "LOADING"),
+      );
+      return;
+    }
     setSaving(true);
     setDialogError(null);
     try {
@@ -1123,6 +1155,13 @@ function ProjectDetailPage() {
   // Tags 仅 Add（无 Edit/PATCH）；重复 tag 前端可提示，backend 仍 409 兜底（CTO #13632）
   const submitTag = async () => {
     if (!tagDialog.open) return;
+    // Tag selector 失败/加载中 → 禁止提交（CTO #13762，Save 按钮也已 disabled）
+    if (tagOptionsLoading || tagOptionsError) {
+      setDialogError(
+        tagOptionsError ?? new ApiClientError(0, "标签加载中，请稍候", "LOADING"),
+      );
+      return;
+    }
     setSaving(true);
     setDialogError(null);
     try {
@@ -1279,10 +1318,13 @@ function ProjectDetailPage() {
   const canAddProduct =
     canManageProducts &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-product", "create"));
+    hasPermission(roles, actionPermission("project-product", "create")) &&
+    // selector 依赖真实 Items API：缺 item:view → 不显示添加按钮（CTO #13762）
+    hasPermission(roles, actionPermission("item", "view"));
   const canEditProduct =
     canManageProducts &&
     detail.stage !== "CLOSED" &&
+    // Edit 不需要 item:view：item 是 aggregate authoritative relation + Edit 时 locked（CTO #13762）
     hasPermission(roles, actionPermission("project-product", "edit"));
   const canDeleteProduct =
     canManageProducts &&
@@ -1292,7 +1334,9 @@ function ProjectDetailPage() {
   const canAddTag =
     canManageTags &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-tag", "create"));
+    hasPermission(roles, actionPermission("project-tag", "create")) &&
+    // selector 依赖真实 Tag 数据源：缺 tag:view → 不显示添加按钮（CTO #13762）
+    hasPermission(roles, actionPermission("tag", "view"));
   const canDeleteTag =
     canManageTags &&
     detail.stage !== "CLOSED" &&
@@ -2187,11 +2231,17 @@ function ProjectDetailPage() {
         onSubmit={submitProduct}
         onReload={reloadProduct}
         onClose={closeProductDialog}
+        submitDisabled={
+          // selector 失败/加载中 → Save disabled（CTO #13762）
+          productDialog.mode === "create" && (itemOptionsLoading || itemOptionsError !== null)
+        }
       >
         <ProductFields
           value={productForm}
           onChange={setProductForm}
           itemOptions={itemOptions}
+          loading={itemOptionsLoading}
+          error={itemOptionsError ? itemOptionsError.message : null}
           itemLocked={
             productDialog.mode === "edit" && productForm.itemId !== ""
               ? (() => {
@@ -2215,11 +2265,17 @@ function ProjectDetailPage() {
         error={dialogError}
         onSubmit={submitTag}
         onClose={closeTagDialog}
+        submitDisabled={
+          // selector 失败/加载中 → Save disabled（CTO #13762）
+          tagOptionsLoading || tagOptionsError !== null
+        }
       >
         <TagFields
           value={tagForm}
           onChange={setTagForm}
           tagOptions={tagOptions}
+          loading={tagOptionsLoading}
+          error={tagOptionsError ? tagOptionsError.message : null}
           duplicateHint={
             tagForm.tagId !== "" &&
             (detail.tags ?? []).some((t) => t.tag?.id === tagForm.tagId)

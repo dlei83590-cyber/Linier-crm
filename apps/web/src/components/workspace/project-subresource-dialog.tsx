@@ -26,6 +26,8 @@ export interface ProjectSubresourceDialogProps {
   title: string;
   saving?: boolean;
   error?: ApiClientError | null;
+  /** selector 数据未就绪/失败时禁用 Save（B2-1B，CTO #13762） */
+  submitDisabled?: boolean;
   /** VERSION_CONFLICT stale panel 的「重新加载最新数据」动作：单资源 GET → 覆盖 fields + version → 清 stale error */
   onReload?: () => void;
   onSubmit: () => void;
@@ -104,7 +106,7 @@ export function ProjectSubresourceDialog({
           <button
             type="button"
             onClick={onSubmit}
-            disabled={saving || isVersionConflict}
+            disabled={saving || isVersionConflict || submitDisabled}
             className="bg-brand-600 hover:bg-brand-700 rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             {saving ? "保存中…" : "保存"}
