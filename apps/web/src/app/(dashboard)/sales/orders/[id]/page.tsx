@@ -19,7 +19,7 @@ import { useParams, useRouter } from "next/navigation";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
+import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
@@ -91,9 +91,13 @@ function SalesOrderDetailPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selections, setSelections] = useState<Record<string, DeliverySelection>>({});
   const [dialogError, setDialogError] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<"confirm" | "cancel" | null>(null);
 
   const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
   const canCreateDelivery = hasPermission(roles, actionPermission("delivery", "create"));
+  const canEdit = hasPermission(roles, actionPermission("sales-order", "edit"));
+  const canApprove = hasPermission(roles, actionPermission("sales-order", "approve"));
+  const canClose = hasPermission(roles, actionPermission("sales-order", "close"));
   const canDeliver =
     detail !== null &&
     (detail.status === "CONFIRMED" || detail.status === "PARTIALLY_DELIVERED");
@@ -167,6 +171,34 @@ function SalesOrderDetailPage() {
     }
   };
 
+  const refreshDetail = async () => {
+    try {
+      const body = await apiFetch<SalesOrderDetail>(`/api/sales-orders/${id}`);
+      setDetail(body.data);
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "刷新失败", "NETWORK_ERROR"),
+      );
+    }
+  };
+
+  // ── 确认订单 / 取消订单（无 body；后端状态机 + 审批门禁兜底） ──
+  const runAction = async (action: "confirm" | "cancel") => {
+    if (!detail || actionBusy) return;
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      await apiFetch(`/api/sales-orders/${id}/${action}`, { method: "POST" });
+      await refreshDetail();
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "操作失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -221,17 +253,47 @@ function SalesOrderDetailPage() {
         statusLabel={detail.status}
         statusTone={TONE_MAP[detail.status] ?? "neutral"}
         actions={
-          canDeliver && canCreateDelivery ? (
-            <button
-              type="button"
-              onClick={openDeliveryDialog}
-              disabled={actionBusy || remainingLines.length === 0}
-              title={remainingLines.length === 0 ? "无剩余可交付数量" : undefined}
-              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {actionBusy ? "创建中…" : "创建送货单"}
-            </button>
-          ) : undefined
+          <>
+            {detail.status === "DRAFT" && canEdit && (
+              <Link
+                href={`/sales/orders/${id}/edit`}
+                className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-slate-50"
+              >
+                编辑
+              </Link>
+            )}
+            {detail.status === "DRAFT" && canApprove && (
+              <button
+                type="button"
+                onClick={() => setConfirmAction("confirm")}
+                disabled={actionBusy}
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {actionBusy ? "处理中…" : "确认订单"}
+              </button>
+            )}
+            {(detail.status === "DRAFT" || detail.status === "CONFIRMED") && canClose && (
+              <button
+                type="button"
+                onClick={() => setConfirmAction("cancel")}
+                disabled={actionBusy}
+                className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                取消订单
+              </button>
+            )}
+            {canDeliver && canCreateDelivery && (
+              <button
+                type="button"
+                onClick={openDeliveryDialog}
+                disabled={actionBusy || remainingLines.length === 0}
+                title={remainingLines.length === 0 ? "无剩余可交付数量" : undefined}
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {actionBusy ? "创建中…" : "创建送货单"}
+              </button>
+            )}
+          </>
         }
         summary={
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -418,6 +480,25 @@ function SalesOrderDetailPage() {
           </div>
         </div>
       )}
+
+      <ConfirmActionDialog
+        open={confirmAction !== null}
+        title={confirmAction === "confirm" ? "确认销售订单" : "取消销售订单"}
+        description={
+          confirmAction === "confirm"
+            ? "确认后将形成对客户的正式销售承诺（CONFIRMED），之后才可创建送货单。确认？"
+            : "取消该销售订单？已交付/已完成的订单禁止取消。确认后不可恢复。"
+        }
+        confirmLabel={confirmAction === "confirm" ? "确认订单" : "确认取消"}
+        tone={confirmAction === "cancel" ? "danger" : "primary"}
+        busy={actionBusy}
+        onConfirm={() => {
+          const a = confirmAction;
+          setConfirmAction(null);
+          if (a) void runAction(a);
+        }}
+        onCancel={() => setConfirmAction(null)}
+      />
     </AppPage>
   );
 }

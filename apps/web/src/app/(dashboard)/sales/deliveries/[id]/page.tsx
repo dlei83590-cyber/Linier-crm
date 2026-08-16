@@ -19,7 +19,7 @@ import { useParams, useRouter } from "next/navigation";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
+import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { useSession } from "@/lib/session-context";
 import { formatDate } from "@/lib/format";
@@ -88,9 +88,18 @@ function DeliveryDetailPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selections, setSelections] = useState<Record<string, InvoiceSelection>>({});
   const [dialogError, setDialogError] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<"ready" | "cancel" | null>(null);
+  const [dispatchOpen, setDispatchOpen] = useState(false);
+  const [dispatchCarrier, setDispatchCarrier] = useState("");
+  const [dispatchTrackingNo, setDispatchTrackingNo] = useState("");
+  const [confirmDeliverOpen, setConfirmDeliverOpen] = useState(false);
+  const [podStatus, setPodStatus] = useState<"RECEIVED" | "WAIVED">("RECEIVED");
 
   const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
   const canCreateInvoice = hasPermission(roles, actionPermission("invoice", "create"));
+  const canEdit = hasPermission(roles, actionPermission("delivery", "edit"));
+  const canApprove = hasPermission(roles, actionPermission("delivery", "approve"));
+  const canClose = hasPermission(roles, actionPermission("delivery", "close"));
   const canInvoice = detail !== null && detail.status === "DELIVERED";
   const invoicableLines = (detail?.lines ?? []).filter(
     (l) => Number(l.remainingInvoiceQty ?? l.quantity) > 0,
@@ -162,6 +171,86 @@ function DeliveryDetailPage() {
     }
   };
 
+  const refreshDetail = async () => {
+    try {
+      const body = await apiFetch<DeliveryDetail>(`/api/deliveries/${id}`);
+      setDetail(body.data);
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "刷新失败", "NETWORK_ERROR"),
+      );
+    }
+  };
+
+  // ── 就绪 / 取消（简单确认动作） ──
+  const runAction = async (action: "ready" | "cancel") => {
+    if (!detail || actionBusy) return;
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      await apiFetch(`/api/deliveries/${id}/${action}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ changeReason: action === "ready" ? "交付单就绪" : "取消交付单" }),
+      });
+      await refreshDetail();
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "操作失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  // ── 发运（READY → DISPATCHED，可补充承运方/运单号） ──
+  const handleDispatch = async () => {
+    if (!detail || actionBusy) return;
+    setActionBusy(true);
+    setActionError(null);
+    setDispatchOpen(false);
+    try {
+      await apiFetch(`/api/deliveries/${id}/dispatch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(dispatchCarrier.trim() ? { carrier: dispatchCarrier.trim() } : {}),
+          ...(dispatchTrackingNo.trim() ? { trackingNo: dispatchTrackingNo.trim() } : {}),
+          changeReason: "交付单发运",
+        }),
+      });
+      await refreshDetail();
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "发运失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  // ── 确认收货（DISPATCHED → DELIVERED；POD 门禁 RECEIVED/WAIVED） ──
+  const handleConfirmDelivery = async () => {
+    if (!detail || actionBusy) return;
+    setActionBusy(true);
+    setActionError(null);
+    setConfirmDeliverOpen(false);
+    try {
+      await apiFetch(`/api/deliveries/${id}/confirm-delivery`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ podStatus, changeReason: "确认收货" }),
+      });
+      await refreshDetail();
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "确认收货失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -216,17 +305,74 @@ function DeliveryDetailPage() {
         statusLabel={detail.status}
         statusTone={TONE_MAP[detail.status] ?? "neutral"}
         actions={
-          canInvoice && canCreateInvoice ? (
-            <button
-              type="button"
-              onClick={openInvoiceDialog}
-              disabled={actionBusy || invoicableLines.length === 0}
-              title={invoicableLines.length === 0 ? "无剩余可开票数量" : undefined}
-              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {actionBusy ? "创建中…" : "创建发票"}
-            </button>
-          ) : undefined
+          <>
+            {detail.status === "DRAFT" && canEdit && (
+              <Link
+                href={`/sales/deliveries/${id}/edit`}
+                className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-slate-50"
+              >
+                编辑
+              </Link>
+            )}
+            {detail.status === "DRAFT" && canEdit && (
+              <button
+                type="button"
+                onClick={() => setConfirmAction("ready")}
+                disabled={actionBusy}
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {actionBusy ? "处理中…" : "就绪"}
+              </button>
+            )}
+            {detail.status === "READY" && canEdit && (
+              <button
+                type="button"
+                onClick={() => {
+                  setDispatchCarrier("");
+                  setDispatchTrackingNo("");
+                  setDispatchOpen(true);
+                }}
+                disabled={actionBusy}
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {actionBusy ? "处理中…" : "发运"}
+              </button>
+            )}
+            {detail.status === "DISPATCHED" && canApprove && (
+              <button
+                type="button"
+                onClick={() => {
+                  setPodStatus("RECEIVED");
+                  setConfirmDeliverOpen(true);
+                }}
+                disabled={actionBusy}
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {actionBusy ? "处理中…" : "确认收货"}
+              </button>
+            )}
+            {(detail.status === "DRAFT" || detail.status === "READY") && canClose && (
+              <button
+                type="button"
+                onClick={() => setConfirmAction("cancel")}
+                disabled={actionBusy}
+                className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                取消
+              </button>
+            )}
+            {canInvoice && canCreateInvoice && (
+              <button
+                type="button"
+                onClick={openInvoiceDialog}
+                disabled={actionBusy || invoicableLines.length === 0}
+                title={invoicableLines.length === 0 ? "无剩余可开票数量" : undefined}
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {actionBusy ? "创建中…" : "创建发票"}
+              </button>
+            )}
+          </>
         }
         summary={
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -401,6 +547,130 @@ function DeliveryDetailPage() {
                 className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {actionBusy ? "创建中…" : "创建发票"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmActionDialog
+        open={confirmAction !== null}
+        title={confirmAction === "ready" ? "交付单就绪" : "取消交付单"}
+        description={
+          confirmAction === "ready"
+            ? "就绪后交付行将彻底冻结（不再可编辑）；就绪是发运的前置步骤。确认就绪？"
+            : "取消该交付单？仅 DRAFT/READY 可取消（DISPATCHED 及以后禁止）。确认后不可恢复。"
+        }
+        confirmLabel={confirmAction === "ready" ? "确认就绪" : "确认取消"}
+        tone={confirmAction === "cancel" ? "danger" : "primary"}
+        busy={actionBusy}
+        onConfirm={() => {
+          const a = confirmAction;
+          setConfirmAction(null);
+          if (a) void runAction(a);
+        }}
+        onCancel={() => setConfirmAction(null)}
+      />
+
+      {/* ── 发运对话框（可补充承运方/运单号） ── */}
+      {dispatchOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          onClick={() => setDispatchOpen(false)}
+        >
+          <div
+            className="border-border bg-surface shadow-elevation-lg w-full max-w-md rounded-lg border p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-ink-primary text-base font-semibold">发运交付单</h2>
+            <p className="text-ink-secondary mt-2 text-sm">发运将状态推进为 DISPATCHED（发运 ≠ 客户收货）。</p>
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="block text-xs text-slate-500">承运方（可选，≤100）</label>
+                <input
+                  value={dispatchCarrier}
+                  onChange={(e) => setDispatchCarrier(e.target.value)}
+                  maxLength={100}
+                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500">运单号（可选，≤100）</label>
+                <input
+                  value={dispatchTrackingNo}
+                  onChange={(e) => setDispatchTrackingNo(e.target.value)}
+                  maxLength={100}
+                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+                />
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDispatchOpen(false)}
+                disabled={actionBusy}
+                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleDispatch}
+                disabled={actionBusy}
+                className="bg-brand-600 hover:bg-brand-700 rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {actionBusy ? "发运中…" : "确认发运"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 确认收货对话框（POD 门禁） ── */}
+      {confirmDeliverOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          onClick={() => setConfirmDeliverOpen(false)}
+        >
+          <div
+            className="border-border bg-surface shadow-elevation-lg w-full max-w-md rounded-lg border p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-ink-primary text-base font-semibold">确认收货</h2>
+            <p className="text-ink-secondary mt-2 text-sm">
+              确认后将状态推进为 DELIVERED，并回写销售订单交付投影（不可逆）。
+            </p>
+            <div className="mt-4">
+              <label className="block text-xs text-slate-500">签收状态（POD）</label>
+              <select
+                value={podStatus}
+                onChange={(e) => setPodStatus(e.target.value as "RECEIVED" | "WAIVED")}
+                className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              >
+                <option value="RECEIVED">已签收（RECEIVED）</option>
+                <option value="WAIVED">豁免签收（WAIVED）</option>
+              </select>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeliverOpen(false)}
+                disabled={actionBusy}
+                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelivery}
+                disabled={actionBusy}
+                className="bg-brand-600 hover:bg-brand-700 rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {actionBusy ? "确认中…" : "确认收货"}
               </button>
             </div>
           </div>

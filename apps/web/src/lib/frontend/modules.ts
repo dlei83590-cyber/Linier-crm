@@ -200,6 +200,15 @@ const UI_LIST_DETAIL_ACTIONS: CapabilityFlags = {
   workflow: false,
   factActions: true,
 };
+/** 列表 + 详情 + Edit 页 + 状态动作按钮（F2-6B 批 3：SO/Delivery 无直接 create，edit 头字段 + confirm/cancel/ready/dispatch 动作） */
+const UI_LIST_DETAIL_EDIT_ACTIONS: CapabilityFlags = {
+  list: true,
+  detail: true,
+  create: false,
+  edit: true,
+  workflow: false,
+  factActions: true,
+};
 /** 列表 + 详情 + Create/Edit 页 + 状态动作按钮（F2-6B：Quotation 直建/编辑 + Convert→SO 等动作） */
 const UI_LIST_DETAIL_CRUD_ACTIONS: CapabilityFlags = {
   list: true,
@@ -352,7 +361,8 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     permission: PERMISSIONS.SALES_ORDER_READ,
     availability: 'ready',
     // F2-6B 批 1：Detail 已开放 Create Delivery（delivery:create，partial dialog）→ factActions=true；无 Direct Create
-    capabilities: { contract: CONTRACT_LIST_DETAIL_EDIT_ACTIONS, ui: UI_LIST_DETAIL_ACTIONS },
+    // F2-6B 批 3：Edit 头字段（sales-order:edit，DRAFT）+ confirm/cancel 动作
+    capabilities: { contract: CONTRACT_LIST_DETAIL_EDIT_ACTIONS, ui: UI_LIST_DETAIL_EDIT_ACTIONS },
     order: 2,
   },
   // deliveries：F2-6-0 contract 基线修正——/api/deliveries 仅 GET（Direct Delivery 不开放），创建来自 /sales-orders/{id}/deliveries；
@@ -365,7 +375,8 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     permission: PERMISSIONS.DELIVERY_READ,
     availability: 'ready',
     // F2-6B 批 1：Detail 已开放 Create Invoice（invoice:create，partial billing dialog）→ factActions=true；无 Direct Create
-    capabilities: { contract: CONTRACT_LIST_DETAIL_EDIT_ACTIONS, ui: UI_LIST_DETAIL_ACTIONS },
+    // F2-6B 批 3：Edit 头字段（delivery:edit，DRAFT）+ ready/dispatch/confirm-delivery/cancel 动作
+    capabilities: { contract: CONTRACT_LIST_DETAIL_EDIT_ACTIONS, ui: UI_LIST_DETAIL_EDIT_ACTIONS },
     order: 3,
   },
   // sales-invoices：F2-6-0 contract 基线修正——/api/invoices 仅 GET（Direct Invoice 禁止），唯一创建入口 Delivery → Invoice；
@@ -377,7 +388,8 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/sales/invoices',
     permission: PERMISSIONS.INVOICE_READ,
     availability: 'ready',
-    capabilities: { contract: CONTRACT_LIST_DETAIL_EDIT_ACTIONS, ui: UI_LIST_DETAIL },
+    // F2-6B 批 3：issue/cancel 动作已开放（无 Edit 页——发票 edit 本轮不做）
+    capabilities: { contract: CONTRACT_LIST_DETAIL_EDIT_ACTIONS, ui: UI_LIST_DETAIL_ACTIONS },
     order: 4,
   },
   // accounts-receivable：只读模型（list/detail/aging），无 create/edit
