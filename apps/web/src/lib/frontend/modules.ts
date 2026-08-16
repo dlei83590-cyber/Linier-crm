@@ -21,10 +21,12 @@ import { PERMISSIONS, actionPermission, type PermissionCode } from '@nilier-crm/
  * - icon：预留图标名（可选）
  * - order：域内排序
  *
- * ui 层事实基线（2026-08-14 核验 apps/web/src/app/(dashboard) 实际页面）：
- * - 有列表页 + 详情页 → ui.list / ui.detail = true
- * - 有 new / [id]/edit 页面 → ui.create / ui.edit = true（Create/Edit 未入 main 的模块必须 false）
- * - Tier 2 workflow / Tier 3 factActions → ui 一律 false（HARD HOLD）
+ * ui 层事实基线（治理规则，长期有效；不维护模块快照——每个 capability activation PR 必须同步本 Registry）：
+ * - list/detail/create/edit：以真实页面 surface 为准（有真实 page.tsx 才算开放；Create/Edit 未入 main 的模块必须 false）
+ * - workflow / factActions 默认 HOLD；只有经过 contract review、权限/状态 Gate 实现、CI 和 runtime acceptance 后，
+ *   对应 capability 才允许 ui=true
+ * - ui 不得大于 contract（backend FINAL contract 缺失的能力不允许声明为开放）；
+ * - Registry 必须随每个 capability activation PR 同步更新（禁止快照式列举具体模块名单）；
  * - 占位页（PlaceholderPage「尚未开放」）不算开放 → ui 全 false
  */
 
