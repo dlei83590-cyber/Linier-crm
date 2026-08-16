@@ -47,14 +47,20 @@ const TONE_MAP: Record<string, StatusTone> = {
 
 function ArList() {
   const [statusInput, setStatusInput] = useState("");
-  const [filters, setFilters] = useState<{ status?: string }>({});
+  // F2-6A REQUEST CHANGES：OVERDUE 是惰性投影（非持久化状态），必须走 effectiveStatus 参数；
+  // OPEN/PARTIALLY_PAID/PAID/CLOSED → status；OVERDUE → effectiveStatus（与 backend contract 一致）
+  const [filters, setFilters] = useState<{ status?: string; effectiveStatus?: string }>({});
 
   const { items, total, page, pageSize, loading, error, setPage, refresh } =
     useListQuery<ArRow>("/api/accounts-receivables", filters);
 
   const applyFilter = () => {
-    const next: { status?: string } = {};
-    if (statusInput) next.status = statusInput;
+    const next: { status?: string; effectiveStatus?: string } = {};
+    if (statusInput === "OVERDUE") {
+      next.effectiveStatus = "OVERDUE";
+    } else if (statusInput) {
+      next.status = statusInput;
+    }
     setFilters(next);
     setPage(1);
   };
