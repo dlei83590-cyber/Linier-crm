@@ -551,7 +551,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     createPermission: actionPermission('inventory-adjustment', 'create'),
     order: 3,
   },
-  // conversions：main 只有 list/detail → ui create/edit false
+  // conversions：F2-6B 批 3 开放 create + submit/execute/cancel → factActions=true（Edit 本轮不做）
   {
     id: 'inventory-conversions',
     domain: 'inventory',
@@ -559,7 +559,9 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/inventory/conversions',
     permission: PERMISSIONS.INVENTORY_CONVERSION_READ,
     availability: 'ready',
-    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL },
+    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CREATE_ACTIONS },
+    createRoute: '/inventory/conversions/new',
+    createPermission: actionPermission('inventory-conversion', 'create'),
     order: 4,
   },
   // Read Model（页面已存在但无 FINAL Read API → hold；inventory-ledger:view / stock-projection:view **非已存在权限事实**（CTO #8845），permission=null 避免伪造权限码

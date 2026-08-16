@@ -1,23 +1,27 @@
 "use client";
 
 /**
- * Inventory Conversions — 库存转换详情页（F2-3 Batch C2 Consolidation，CTO #11888）
+ * Inventory Conversions — 库存转换详情页（F2-3 Consolidation + F2-6B 批 3 动作）
  *
- * 由旧式布局迁移至统一 Workspace：
- * AppPage → EntityDetailWorkspace（Header Summary → Status → Actions → Sections）。
- * 不改 backend / 状态机 / action。
+ * F2-6B 批 3：状态 Gate + 权限 Gate 后提供 submit / execute / cancel 事实动作。
+ *  - submit（inventory-conversion:edit）：DRAFT → SUBMITTED（version CAS；Conversion 无审批状态）
+ *  - execute（inventory-conversion:edit）：SUBMITTED → EXECUTED（version CAS，幂等 ALREADY_EXECUTED）
+ *  - cancel（inventory-conversion:close）：DRAFT/SUBMITTED → CANCELLED
+ * SUBMITTED ≠ EXECUTED；CONSUME/PRODUCE 守恒由后端 Shared LedgerCommand 校验。
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { PERMISSIONS } from "@nilier-crm/shared";
-import { AppPage, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
-import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
+import { useSession } from "@/lib/session-context";
+import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
+import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 
 interface ConversionDetail {
   id: string;
+  version: number;
   conversionNo: string;
   status: string;
   movementGroupId?: string | null;
@@ -41,6 +45,8 @@ interface ConversionDetail {
   }>;
 }
 
+type ConfirmAction = "submit" | "execute" | "cancel";
+
 function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
@@ -53,9 +59,16 @@ function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
 function ConversionDetailPage() {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
+  const { state } = useSession();
+  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
+  const canEdit = hasPermission(roles, actionPermission("inventory-conversion", "edit"));
+  const canClose = hasPermission(roles, actionPermission("inventory-conversion", "close"));
   const [detail, setDetail] = useState<ConversionDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState<ApiClientError | null>(null);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -75,12 +88,41 @@ function ConversionDetailPage() {
     return () => controller.abort();
   }, [id]);
 
+  const refreshDetail = async () => {
+    try {
+      const body = await apiFetch<ConversionDetail>(`/api/inventory-conversions/${id}`);
+      setDetail(body.data);
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "刷新失败", "NETWORK_ERROR"),
+      );
+    }
+  };
+
+  const runAction = async (action: ConfirmAction) => {
+    if (!detail || actionBusy) return;
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      await apiFetch(`/api/inventory-conversions/${id}/${action}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ version: detail.version }),
+      });
+      await refreshDetail();
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "操作失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
   if (loading) {
     return (
       <AppPage>
-        <div className="border-border bg-surface rounded-lg border p-6 text-sm text-ink-muted">
-          加载中…
-        </div>
+        <div className="border-border bg-surface rounded-lg border p-6 text-sm text-ink-muted">加载中…</div>
       </AppPage>
     );
   }
@@ -98,10 +140,50 @@ function ConversionDetailPage() {
 
   return (
     <AppPage>
+      {actionError && (
+        <div className="border-status-danger-border mb-3 rounded-md border bg-status-danger-bg/10 p-3 text-sm text-status-danger-text">
+          {describeStatus(actionError.status)}：{actionError.message}
+          {actionError.code ? `（${actionError.code}）` : ""}
+        </div>
+      )}
       <EntityDetailWorkspace
         title={`库存转换详情 — ${detail.conversionNo}`}
         backHref="/inventory/conversions"
         status={detail.status}
+        actions={
+          <>
+            {detail.status === "DRAFT" && canEdit && (
+              <button
+                type="button"
+                onClick={() => setConfirmAction("submit")}
+                disabled={actionBusy}
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {actionBusy ? "处理中…" : "提交"}
+              </button>
+            )}
+            {detail.status === "SUBMITTED" && canEdit && (
+              <button
+                type="button"
+                onClick={() => setConfirmAction("execute")}
+                disabled={actionBusy}
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {actionBusy ? "执行中…" : "执行转换"}
+              </button>
+            )}
+            {(detail.status === "DRAFT" || detail.status === "SUBMITTED") && canClose && (
+              <button
+                type="button"
+                onClick={() => setConfirmAction("cancel")}
+                disabled={actionBusy}
+                className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                取消
+              </button>
+            )}
+          </>
+        }
         summary={
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <InfoItem label="转换单号" value={detail.conversionNo} />
@@ -153,9 +235,7 @@ function ConversionDetailPage() {
                 ))}
                 {(detail.lines ?? []).length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-3 py-8 text-center text-sm text-ink-muted">
-                      暂无明细行
-                    </td>
+                    <td colSpan={8} className="px-3 py-8 text-center text-sm text-ink-muted">暂无明细行</td>
                   </tr>
                 )}
               </tbody>
@@ -163,6 +243,29 @@ function ConversionDetailPage() {
           </div>
         </section>
       </EntityDetailWorkspace>
+
+      <ConfirmActionDialog
+        open={confirmAction !== null}
+        title={
+          confirmAction === "submit" ? "提交转换单" : confirmAction === "execute" ? "执行转换" : "取消转换单"
+        }
+        description={
+          confirmAction === "submit"
+            ? "提交转换单（Conversion 无审批状态，提交即确认）。确认提交？"
+            : confirmAction === "execute"
+              ? "执行将产生 CONSUME + PRODUCE 双边库存流水（守恒校验，同事务原子提交），不可逆。确认执行？"
+              : "取消该转换单？仅 DRAFT/SUBMITTED 可取消。确认后不可恢复。"
+        }
+        confirmLabel={confirmAction === "execute" ? "确认执行" : confirmAction === "cancel" ? "确认取消" : "确认提交"}
+        tone={confirmAction === "execute" || confirmAction === "cancel" ? "danger" : "primary"}
+        busy={actionBusy}
+        onConfirm={() => {
+          const a = confirmAction;
+          setConfirmAction(null);
+          if (a) void runAction(a);
+        }}
+        onCancel={() => setConfirmAction(null)}
+      />
     </AppPage>
   );
 }
