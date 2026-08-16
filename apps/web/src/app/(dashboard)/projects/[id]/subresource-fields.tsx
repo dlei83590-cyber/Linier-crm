@@ -399,3 +399,195 @@ export function TaskFields({
     </div>
   );
 }
+
+/** B2-1B-1：Risks（项目风险）表单字段（CTO #13589）
+ * 只按真实 contract 提供字段：description(必填)/impact/probability(HIGH|MEDIUM|LOW)/mitigation/status(OPEN|MITIGATING|CLOSED)。
+ * ownerId 不暴露（无正式 user selector，同 B2-1A Members 模式）：Create/Edit 均不发送。
+ * status→CLOSED 只提交已有 PATCH 字段；closedAt / ProjectRiskClosed Domain Event 由 backend 负责，前端不复制。
+ */
+export interface RiskFormValue {
+  description: string;
+  impact: string;
+  probability: "HIGH" | "MEDIUM" | "LOW" | "";
+  mitigation: string;
+  status: "OPEN" | "MITIGATING" | "CLOSED";
+}
+
+export const EMPTY_RISK_FORM: RiskFormValue = {
+  description: "",
+  impact: "",
+  probability: "",
+  mitigation: "",
+  status: "OPEN",
+};
+
+export function RiskFields({
+  value,
+  onChange,
+  statusLabels,
+  probabilityLabels,
+}: {
+  value: RiskFormValue;
+  onChange: (v: RiskFormValue) => void;
+  statusLabels: Record<string, string>;
+  probabilityLabels: Record<string, string>;
+}) {
+  const set = (patch: Partial<RiskFormValue>) => onChange({ ...value, ...patch });
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">描述 *</label>
+        <textarea
+          value={value.description}
+          onChange={(e) => set({ description: e.target.value })}
+          rows={3}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">状态</label>
+        <select
+          value={value.status}
+          onChange={(e) => set({ status: e.target.value as RiskFormValue["status"] })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        >
+          {Object.entries(statusLabels).map(([k, label]) => (
+            <option key={k} value={k}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">发生概率</label>
+        <select
+          value={value.probability}
+          onChange={(e) => set({ probability: e.target.value as RiskFormValue["probability"] })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        >
+          <option value="">未设置</option>
+          {Object.entries(probabilityLabels).map(([k, label]) => (
+            <option key={k} value={k}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">影响</label>
+        <input
+          value={value.impact}
+          onChange={(e) => set({ impact: e.target.value })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">应对方案</label>
+        <textarea
+          value={value.mitigation}
+          onChange={(e) => set({ mitigation: e.target.value })}
+          rows={3}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+    </div>
+  );
+}
+
+/** B2-1B-1：Visits（客户走访/沟通记录）表单字段（CTO #13589）
+ * 只按真实 contract 提供字段：visitType(VISIT|PHONE|VIDEO|MEETING|OTHER)/visitedAt/contactName/summary(必填)/nextAction/reminderAt。
+ * visitorId 不暴露（无正式 user selector，同 B2-1A Members 模式）：Create/Edit 均不发送。
+ * 不扩展 customer-contact 或 follow-up workflow 语义。
+ */
+export interface VisitFormValue {
+  visitType: "VISIT" | "PHONE" | "VIDEO" | "MEETING" | "OTHER";
+  visitedAt: string;
+  contactName: string;
+  summary: string;
+  nextAction: string;
+  reminderAt: string;
+}
+
+export const EMPTY_VISIT_FORM: VisitFormValue = {
+  visitType: "VISIT",
+  visitedAt: "",
+  contactName: "",
+  summary: "",
+  nextAction: "",
+  reminderAt: "",
+};
+
+export function VisitFields({
+  value,
+  onChange,
+  visitTypeLabels,
+}: {
+  value: VisitFormValue;
+  onChange: (v: VisitFormValue) => void;
+  visitTypeLabels: Record<string, string>;
+}) {
+  const set = (patch: Partial<VisitFormValue>) => onChange({ ...value, ...patch });
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">类型</label>
+        <select
+          value={value.visitType}
+          onChange={(e) => set({ visitType: e.target.value as VisitFormValue["visitType"] })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        >
+          {Object.entries(visitTypeLabels).map(([k, label]) => (
+            <option key={k} value={k}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">走访时间</label>
+        <input
+          type="datetime-local"
+          value={value.visitedAt}
+          onChange={(e) => set({ visitedAt: e.target.value })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">客户联系人</label>
+        <input
+          value={value.contactName}
+          onChange={(e) => set({ contactName: e.target.value })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">沟通纪要 *</label>
+        <textarea
+          value={value.summary}
+          onChange={(e) => set({ summary: e.target.value })}
+          rows={3}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">下次行动</label>
+        <input
+          value={value.nextAction}
+          onChange={(e) => set({ nextAction: e.target.value })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">提醒时间</label>
+        <input
+          type="datetime-local"
+          value={value.reminderAt}
+          onChange={(e) => set({ reminderAt: e.target.value })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+    </div>
+  );
+}

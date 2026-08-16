@@ -33,14 +33,20 @@ import {
   MemberFields,
   MilestoneFields,
   TaskFields,
+  RiskFields,
+  VisitFields,
   EMPTY_STAKEHOLDER_FORM,
   EMPTY_MEMBER_FORM,
   EMPTY_MILESTONE_FORM,
   EMPTY_TASK_FORM,
+  EMPTY_RISK_FORM,
+  EMPTY_VISIT_FORM,
   type StakeholderFormValue,
   type MemberFormValue,
   type MilestoneFormValue,
   type TaskFormValue,
+  type RiskFormValue,
+  type VisitFormValue,
 } from "./subresource-fields";
 
 interface ProjectDetail {
@@ -111,6 +117,7 @@ interface ProjectDetail {
   }>;
   risks?: Array<{
     id: string;
+    version: number;
     description: string;
     status: string;
     probability?: string | null;
@@ -119,11 +126,13 @@ interface ProjectDetail {
   }>;
   visits?: Array<{
     id: string;
+    version: number;
     visitType: string;
     visitedAt: string;
     contactName?: string | null;
     summary?: string | null;
     nextAction?: string | null;
+    reminderAt?: string | null;
   }>;
   budgets?: Array<{
     id: string;
@@ -181,6 +190,8 @@ type StakeholderRow = NonNullable<ProjectDetail["stakeholders"]>[number];
 type MemberRow = NonNullable<ProjectDetail["members"]>[number];
 type MilestoneRow = NonNullable<ProjectDetail["milestones"]>[number];
 type TaskRow = NonNullable<ProjectDetail["tasks"]>[number];
+type RiskRow = NonNullable<ProjectDetail["risks"]>[number];
+type VisitRow = NonNullable<ProjectDetail["visits"]>[number];
 
 const STAGE_LABELS: Record<string, string> = {
   LEAD: "线索",
@@ -236,6 +247,12 @@ const RISK_STATUS_LABELS: Record<string, string> = {
   CLOSED: "已关闭",
 };
 
+const RISK_PROBABILITY_LABELS: Record<string, string> = {
+  HIGH: "高",
+  MEDIUM: "中",
+  LOW: "低",
+};
+
 const MILESTONE_STATUS_LABELS: Record<string, string> = {
   PLANNED: "计划中",
   IN_PROGRESS: "进行中",
@@ -256,6 +273,8 @@ const SUBRESOURCE_LABELS: Record<string, string> = {
   member: "成员",
   milestone: "里程碑",
   task: "任务",
+  risk: "风险",
+  visit: "走访记录",
 };
 
 const VISIT_TYPE_LABELS: Record<string, string> = {
@@ -391,15 +410,29 @@ function ProjectDetailPage() {
     id: string | null;
     version: number | null;
   }>({ open: false, mode: "create", id: null, version: null });
+  const [riskDialog, setRiskDialog] = useState<{
+    open: boolean;
+    mode: "create" | "edit";
+    id: string | null;
+    version: number | null;
+  }>({ open: false, mode: "create", id: null, version: null });
+  const [visitDialog, setVisitDialog] = useState<{
+    open: boolean;
+    mode: "create" | "edit";
+    id: string | null;
+    version: number | null;
+  }>({ open: false, mode: "create", id: null, version: null });
   const [stakeholderForm, setStakeholderForm] =
     useState<StakeholderFormValue>(EMPTY_STAKEHOLDER_FORM);
   const [memberForm, setMemberForm] = useState<MemberFormValue>(EMPTY_MEMBER_FORM);
   const [milestoneForm, setMilestoneForm] = useState<MilestoneFormValue>(EMPTY_MILESTONE_FORM);
   const [taskForm, setTaskForm] = useState<TaskFormValue>(EMPTY_TASK_FORM);
+  const [riskForm, setRiskForm] = useState<RiskFormValue>(EMPTY_RISK_FORM);
+  const [visitForm, setVisitForm] = useState<VisitFormValue>(EMPTY_VISIT_FORM);
   const [saving, setSaving] = useState(false);
   const [dialogError, setDialogError] = useState<ApiClientError | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{
-    resource: "stakeholder" | "member" | "milestone" | "task";
+    resource: "stakeholder" | "member" | "milestone" | "task" | "risk" | "visit";
     id: string;
     name: string;
   } | null>(null);
@@ -527,6 +560,45 @@ function ProjectDetailPage() {
   };
   const closeTaskDialog = () =>
     setTaskDialog({ open: false, mode: "create", id: null, version: null });
+
+  const openRiskCreate = () => {
+    setRiskForm(EMPTY_RISK_FORM);
+    setDialogError(null);
+    setRiskDialog({ open: true, mode: "create", id: null, version: null });
+  };
+  const openRiskEdit = (r: RiskRow) => {
+    setRiskForm({
+      description: r.description,
+      impact: r.impact ?? "",
+      probability: (r.probability ?? "") as RiskFormValue["probability"],
+      mitigation: r.mitigation ?? "",
+      status: r.status as RiskFormValue["status"],
+    });
+    setDialogError(null);
+    setRiskDialog({ open: true, mode: "edit", id: r.id, version: r.version });
+  };
+  const closeRiskDialog = () =>
+    setRiskDialog({ open: false, mode: "create", id: null, version: null });
+
+  const openVisitCreate = () => {
+    setVisitForm(EMPTY_VISIT_FORM);
+    setDialogError(null);
+    setVisitDialog({ open: true, mode: "create", id: null, version: null });
+  };
+  const openVisitEdit = (v: VisitRow) => {
+    setVisitForm({
+      visitType: v.visitType as VisitFormValue["visitType"],
+      visitedAt: v.visitedAt ? v.visitedAt.slice(0, 16) : "",
+      contactName: v.contactName ?? "",
+      summary: v.summary ?? "",
+      nextAction: v.nextAction ?? "",
+      reminderAt: v.reminderAt ? v.reminderAt.slice(0, 16) : "",
+    });
+    setDialogError(null);
+    setVisitDialog({ open: true, mode: "edit", id: v.id, version: v.version });
+  };
+  const closeVisitDialog = () =>
+    setVisitDialog({ open: false, mode: "create", id: null, version: null });
 
   const submitStakeholder = async () => {
     if (!stakeholderDialog.open) return;
@@ -782,6 +854,133 @@ function ProjectDetailPage() {
     }
   };
 
+  const submitRisk = async () => {
+    if (!riskDialog.open) return;
+    setSaving(true);
+    setDialogError(null);
+    try {
+      // ownerId 不发送（无正式 user selector，同 B2-1A Members 模式）；status→CLOSED 只提交已有 PATCH 字段，
+      // closedAt / ProjectRiskClosed Domain Event 由 backend 负责（CTO #13589）
+      const payload = {
+        description: riskForm.description,
+        impact: riskForm.impact === "" ? null : riskForm.impact,
+        probability: riskForm.probability === "" ? null : riskForm.probability,
+        mitigation: riskForm.mitigation === "" ? null : riskForm.mitigation,
+        status: riskForm.status,
+      };
+      if (riskDialog.mode === "create") {
+        await apiFetch(`/api/projects/${id}/risks`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } else if (riskDialog.id && riskDialog.version != null) {
+        await apiFetch(`/api/projects/${id}/risks/${riskDialog.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, version: riskDialog.version }),
+        });
+      }
+      closeRiskDialog();
+      await reloadProject();
+    } catch (err) {
+      setDialogError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "保存失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reloadRisk = async () => {
+    if (!riskDialog.open || !riskDialog.id) return;
+    setSaving(true);
+    try {
+      const body = await apiFetch<RiskRow>(`/api/projects/${id}/risks/${riskDialog.id}`);
+      const r = body.data;
+      setRiskForm({
+        description: r.description,
+        impact: r.impact ?? "",
+        probability: (r.probability ?? "") as RiskFormValue["probability"],
+        mitigation: r.mitigation ?? "",
+        status: r.status as RiskFormValue["status"],
+      });
+      setRiskDialog({ open: true, mode: "edit", id: r.id, version: r.version });
+      setDialogError(null);
+    } catch (err) {
+      setDialogError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "重新加载失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const submitVisit = async () => {
+    if (!visitDialog.open) return;
+    setSaving(true);
+    setDialogError(null);
+    try {
+      // visitorId 不发送（无正式 user selector，同 B2-1A Members 模式）；只按真实 schema 字段（CTO #13589）
+      const payload = {
+        visitType: visitForm.visitType,
+        visitedAt:
+          visitForm.visitedAt === "" ? undefined : new Date(visitForm.visitedAt).toISOString(),
+        contactName: visitForm.contactName === "" ? null : visitForm.contactName,
+        summary: visitForm.summary,
+        nextAction: visitForm.nextAction === "" ? null : visitForm.nextAction,
+        reminderAt:
+          visitForm.reminderAt === "" ? null : new Date(visitForm.reminderAt).toISOString(),
+      };
+      if (visitDialog.mode === "create") {
+        await apiFetch(`/api/projects/${id}/visits`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } else if (visitDialog.id && visitDialog.version != null) {
+        await apiFetch(`/api/projects/${id}/visits/${visitDialog.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, version: visitDialog.version }),
+        });
+      }
+      closeVisitDialog();
+      await reloadProject();
+    } catch (err) {
+      setDialogError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "保存失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reloadVisit = async () => {
+    if (!visitDialog.open || !visitDialog.id) return;
+    setSaving(true);
+    try {
+      const body = await apiFetch<VisitRow>(`/api/projects/${id}/visits/${visitDialog.id}`);
+      const v = body.data;
+      setVisitForm({
+        visitType: v.visitType as VisitFormValue["visitType"],
+        visitedAt: v.visitedAt ? v.visitedAt.slice(0, 16) : "",
+        contactName: v.contactName ?? "",
+        summary: v.summary ?? "",
+        nextAction: v.nextAction ?? "",
+        reminderAt: v.reminderAt ? v.reminderAt.slice(0, 16) : "",
+      });
+      setVisitDialog({ open: true, mode: "edit", id: v.id, version: v.version });
+      setDialogError(null);
+    } catch (err) {
+      setDialogError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "重新加载失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
@@ -792,6 +991,10 @@ function ProjectDetailPage() {
         await apiFetch(`/api/projects/${id}/members/${deleteTarget.id}`, { method: "DELETE" });
       } else if (deleteTarget.resource === "milestone") {
         await apiFetch(`/api/projects/${id}/milestones/${deleteTarget.id}`, { method: "DELETE" });
+      } else if (deleteTarget.resource === "risk") {
+        await apiFetch(`/api/projects/${id}/risks/${deleteTarget.id}`, { method: "DELETE" });
+      } else if (deleteTarget.resource === "visit") {
+        await apiFetch(`/api/projects/${id}/visits/${deleteTarget.id}`, { method: "DELETE" });
       } else {
         await apiFetch(`/api/projects/${id}/tasks/${deleteTarget.id}`, { method: "DELETE" });
       }
@@ -881,6 +1084,32 @@ function ProjectDetailPage() {
     canManageTasks &&
     detail.stage !== "CLOSED" &&
     hasPermission(roles, actionPermission("project-task", "delete"));
+  const canManageRisks = detail.capabilities.risks;
+  const canAddRisk =
+    canManageRisks &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-risk", "create"));
+  const canEditRisk =
+    canManageRisks &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-risk", "edit"));
+  const canDeleteRisk =
+    canManageRisks &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-risk", "delete"));
+  const canManageVisits = detail.capabilities.visits;
+  const canAddVisit =
+    canManageVisits &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-visit", "create"));
+  const canEditVisit =
+    canManageVisits &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-visit", "edit"));
+  const canDeleteVisit =
+    canManageVisits &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-visit", "delete"));
 
   return (
     <AppPage>
@@ -1315,28 +1544,98 @@ function ProjectDetailPage() {
 
           {activeTab === "risks" && (
             <section className="border-border rounded-md border p-4">
-              <SectionTitle>风险（{detail.risks?.length ?? 0}）</SectionTitle>
-              <Table headers={["描述", "状态", "概率", "影响", "应对方案"]}>
+              <div className="mb-3 flex items-center justify-between">
+                <SectionTitle>风险（{detail.risks?.length ?? 0}）</SectionTitle>
+                {canAddRisk && (
+                  <button
+                    type="button"
+                    onClick={openRiskCreate}
+                    className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                  >
+                    添加风险
+                  </button>
+                )}
+              </div>
+              <Table
+                headers={[
+                  "描述",
+                  "状态",
+                  "概率",
+                  "影响",
+                  "应对方案",
+                  ...(canEditRisk || canDeleteRisk ? ["操作"] : []),
+                ]}
+              >
                 {(detail.risks ?? []).map((r) => (
                   <tr key={r.id}>
                     <td className="px-3 py-2 text-ink-primary">{r.description}</td>
                     <td className="px-3 py-2">
                       <StatusBadge status={r.status} label={RISK_STATUS_LABELS[r.status] ?? r.status} />
                     </td>
-                    <td className="px-3 py-2 text-ink-secondary">{r.probability ?? "—"}</td>
+                    <td className="px-3 py-2 text-ink-secondary">
+                      {r.probability ? RISK_PROBABILITY_LABELS[r.probability] ?? r.probability : "—"}
+                    </td>
                     <td className="px-3 py-2 text-ink-secondary">{r.impact ?? "—"}</td>
                     <td className="px-3 py-2 text-ink-secondary">{r.mitigation ?? "—"}</td>
+                    {(canEditRisk || canDeleteRisk) && (
+                      <td className="px-3 py-2">
+                        <div className="flex gap-2">
+                          {canEditRisk && (
+                            <button
+                              type="button"
+                              onClick={() => openRiskEdit(r)}
+                              className="text-brand-600 text-sm hover:underline"
+                            >
+                              编辑
+                            </button>
+                          )}
+                          {canDeleteRisk && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDeleteTarget({ resource: "risk", id: r.id, name: r.description })
+                              }
+                              className="text-sm text-red-600 hover:underline"
+                            >
+                              删除
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
-                {(detail.risks ?? []).length === 0 && <EmptyRow colSpan={5} text="暂无风险" />}
+                {(detail.risks ?? []).length === 0 && (
+                  <EmptyRow colSpan={canEditRisk || canDeleteRisk ? 6 : 5} text="暂无风险" />
+                )}
               </Table>
             </section>
           )}
 
           {activeTab === "visits" && (
             <section className="border-border rounded-md border p-4">
-              <SectionTitle>走访（{detail.visits?.length ?? 0}）</SectionTitle>
-              <Table headers={["类型", "走访时间", "客户联系人", "沟通纪要", "下次行动"]}>
+              <div className="mb-3 flex items-center justify-between">
+                <SectionTitle>走访（{detail.visits?.length ?? 0}）</SectionTitle>
+                {canAddVisit && (
+                  <button
+                    type="button"
+                    onClick={openVisitCreate}
+                    className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                  >
+                    添加走访
+                  </button>
+                )}
+              </div>
+              <Table
+                headers={[
+                  "类型",
+                  "走访时间",
+                  "客户联系人",
+                  "沟通纪要",
+                  "下次行动",
+                  ...(canEditVisit || canDeleteVisit ? ["操作"] : []),
+                ]}
+              >
                 {(detail.visits ?? []).map((v) => (
                   <tr key={v.id}>
                     <td className="px-3 py-2 text-ink-secondary">
@@ -1346,9 +1645,41 @@ function ProjectDetailPage() {
                     <td className="px-3 py-2 text-ink-secondary">{v.contactName ?? "—"}</td>
                     <td className="px-3 py-2 text-ink-secondary">{v.summary ?? "—"}</td>
                     <td className="px-3 py-2 text-ink-secondary">{v.nextAction ?? "—"}</td>
+                    {(canEditVisit || canDeleteVisit) && (
+                      <td className="px-3 py-2">
+                        <div className="flex gap-2">
+                          {canEditVisit && (
+                            <button
+                              type="button"
+                              onClick={() => openVisitEdit(v)}
+                              className="text-brand-600 text-sm hover:underline"
+                            >
+                              编辑
+                            </button>
+                          )}
+                          {canDeleteVisit && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDeleteTarget({
+                                  resource: "visit",
+                                  id: v.id,
+                                  name: v.summary ?? v.visitType,
+                                })
+                              }
+                              className="text-sm text-red-600 hover:underline"
+                            >
+                              删除
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
-                {(detail.visits ?? []).length === 0 && <EmptyRow colSpan={5} text="暂无走访记录" />}
+                {(detail.visits ?? []).length === 0 && (
+                  <EmptyRow colSpan={canEditVisit || canDeleteVisit ? 6 : 5} text="暂无走访记录" />
+                )}
               </Table>
             </section>
           )}
@@ -1543,6 +1874,41 @@ function ProjectDetailPage() {
               ? { id: taskForm.milestoneId, label: "原关联里程碑不可用" }
               : null
           }
+        />
+      </ProjectSubresourceDialog>
+
+      <ProjectSubresourceDialog
+        open={riskDialog.open}
+        mode={riskDialog.mode}
+        title={riskDialog.mode === "create" ? "添加风险" : "编辑风险"}
+        saving={saving}
+        error={dialogError}
+        onSubmit={submitRisk}
+        onReload={reloadRisk}
+        onClose={closeRiskDialog}
+      >
+        <RiskFields
+          value={riskForm}
+          onChange={setRiskForm}
+          statusLabels={RISK_STATUS_LABELS}
+          probabilityLabels={RISK_PROBABILITY_LABELS}
+        />
+      </ProjectSubresourceDialog>
+
+      <ProjectSubresourceDialog
+        open={visitDialog.open}
+        mode={visitDialog.mode}
+        title={visitDialog.mode === "create" ? "添加走访记录" : "编辑走访记录"}
+        saving={saving}
+        error={dialogError}
+        onSubmit={submitVisit}
+        onReload={reloadVisit}
+        onClose={closeVisitDialog}
+      >
+        <VisitFields
+          value={visitForm}
+          onChange={setVisitForm}
+          visitTypeLabels={VISIT_TYPE_LABELS}
         />
       </ProjectSubresourceDialog>
 
