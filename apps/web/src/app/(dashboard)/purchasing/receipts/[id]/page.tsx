@@ -13,8 +13,8 @@ import { useParams } from "next/navigation";
 import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
-import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
+import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 
 interface ReceiptDetail {
@@ -52,13 +52,15 @@ function ReceiptDetailPage() {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
   const { state } = useSession();
-  const canEdit =
-    state.status === "authenticated" &&
-    state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("purchase-receipt", "edit"));
+  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
+  const canEdit = hasPermission(roles, actionPermission("purchase-receipt", "edit"));
+  const canClose = hasPermission(roles, actionPermission("purchase-receipt", "close"));
   const [detail, setDetail] = useState<ReceiptDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState<ApiClientError | null>(null);
+  const [confirmAction, setConfirmAction] = useState<"receive" | "cancel" | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -77,6 +79,33 @@ function ReceiptDetailPage() {
       });
     return () => controller.abort();
   }, [id]);
+
+  const refreshDetail = async () => {
+    try {
+      const body = await apiFetch<ReceiptDetail>(`/api/purchase-receipts/${id}`);
+      setDetail(body.data);
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "刷新失败", "NETWORK_ERROR"),
+      );
+    }
+  };
+
+  const runAction = async (action: "receive" | "cancel") => {
+    if (!detail || actionBusy) return;
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      await apiFetch(`/api/purchase-receipts/${id}/${action}`, { method: "POST" });
+      await refreshDetail();
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "操作失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -101,18 +130,48 @@ function ReceiptDetailPage() {
 
   return (
     <AppPage>
+      {actionError && (
+        <div className="border-status-danger-border mb-3 rounded-md border bg-status-danger-bg/10 p-3 text-sm text-status-danger-text">
+          {describeStatus(actionError.status)}：{actionError.message}
+          {actionError.code ? `（${actionError.code}）` : ""}
+        </div>
+      )}
       <EntityDetailWorkspace
         title={`到货收货详情 — ${detail.code}`}
         backHref="/purchasing/receipts"
         status={detail.status}
         actions={
-          detail.status === "DRAFT" && canEdit ? (
-            <Link
-              href={`/purchasing/receipts/${id}/edit`}
-              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
-            >
-              编辑
-            </Link>
+          detail.status === "DRAFT" && (canEdit || canClose) ? (
+            <>
+              {canEdit && (
+                <>
+                  <Link
+                    href={`/purchasing/receipts/${id}/edit`}
+                    className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-slate-50"
+                  >
+                    编辑
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmAction("receive")}
+                    disabled={actionBusy}
+                    className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {actionBusy ? "处理中…" : "确认收货"}
+                  </button>
+                </>
+              )}
+              {canClose && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmAction("cancel")}
+                  disabled={actionBusy}
+                  className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  取消
+                </button>
+              )}
+            </>
           ) : undefined
         }
         summary={
@@ -177,6 +236,25 @@ function ReceiptDetailPage() {
           </div>
         </section>
       </EntityDetailWorkspace>
+
+      <ConfirmActionDialog
+        open={confirmAction !== null}
+        title={confirmAction === "receive" ? "确认收货" : "取消到货单"}
+        description={
+          confirmAction === "receive"
+            ? "确认收货将回写采购订单行收货投影（RECEIVED），之后可创建质检/入库。确认？"
+            : "取消该到货单？仅 DRAFT 可取消。确认后不可恢复。"
+        }
+        confirmLabel={confirmAction === "receive" ? "确认收货" : "确认取消"}
+        tone={confirmAction === "cancel" ? "danger" : "primary"}
+        busy={actionBusy}
+        onConfirm={() => {
+          const a = confirmAction;
+          setConfirmAction(null);
+          if (a) void runAction(a);
+        }}
+        onCancel={() => setConfirmAction(null)}
+      />
     </AppPage>
   );
 }

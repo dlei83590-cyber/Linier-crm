@@ -13,12 +13,13 @@ import { useParams } from "next/navigation";
 import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
-import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
+import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 
 interface WarehouseReceiptDetail {
   id: string;
+  version: number;
   code: string;
   status: string;
   postedAt?: string | null;
@@ -60,6 +61,9 @@ function WarehouseReceiptDetailPage() {
   const [detail, setDetail] = useState<WarehouseReceiptDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState<ApiClientError | null>(null);
+  const [confirmPost, setConfirmPost] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -78,6 +82,37 @@ function WarehouseReceiptDetailPage() {
       });
     return () => controller.abort();
   }, [id]);
+
+  const refreshDetail = async () => {
+    try {
+      const body = await apiFetch<WarehouseReceiptDetail>(`/api/warehouse-receipts/${id}`);
+      setDetail(body.data);
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "刷新失败", "NETWORK_ERROR"),
+      );
+    }
+  };
+
+  const handlePost = async () => {
+    if (!detail || actionBusy) return;
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      await apiFetch(`/api/warehouse-receipts/${id}/post`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ version: detail.version }),
+      });
+      await refreshDetail();
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "过账失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -102,18 +137,34 @@ function WarehouseReceiptDetailPage() {
 
   return (
     <AppPage>
+      {actionError && (
+        <div className="border-status-danger-border mb-3 rounded-md border bg-status-danger-bg/10 p-3 text-sm text-status-danger-text">
+          {describeStatus(actionError.status)}：{actionError.message}
+          {actionError.code ? `（${actionError.code}）` : ""}
+        </div>
+      )}
       <EntityDetailWorkspace
         title={`仓库收货详情 — ${detail.code}`}
         backHref="/purchasing/warehouse-receipts"
         status={detail.status}
         actions={
           detail.status === "DRAFT" && canEdit ? (
-            <Link
-              href={`/purchasing/warehouse-receipts/${id}/edit`}
-              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
-            >
-              编辑
-            </Link>
+            <>
+              <Link
+                href={`/purchasing/warehouse-receipts/${id}/edit`}
+                className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-slate-50"
+              >
+                编辑
+              </Link>
+              <button
+                type="button"
+                onClick={() => setConfirmPost(true)}
+                disabled={actionBusy}
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {actionBusy ? "处理中…" : "过账"}
+              </button>
+            </>
           ) : undefined
         }
         summary={
@@ -175,6 +226,20 @@ function WarehouseReceiptDetailPage() {
           </div>
         </section>
       </EntityDetailWorkspace>
+
+      <ConfirmActionDialog
+        open={confirmPost}
+        title="过账入库"
+        description="过账将触发库存流水（InventoryMovement IN，同事务落账），不可逆。确认过账？"
+        confirmLabel="确认过账"
+        tone="danger"
+        busy={actionBusy}
+        onConfirm={() => {
+          setConfirmPost(false);
+          void handlePost();
+        }}
+        onCancel={() => setConfirmPost(false)}
+      />
     </AppPage>
   );
 }

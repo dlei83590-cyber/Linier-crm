@@ -1,50 +1,63 @@
 "use client";
 
 /**
- * Inventory Conversions — 库存转换列表页（F2-3 Batch C2 Consolidation，CTO #11888）
+ * Supplier Invoices — 供应商发票列表页（F2-6B 批 3，F2-6 开放）
  *
- * 由旧式自绘 table/filter 迁移至统一 Workspace：
- * AppPage → EntityListWorkspace → StatusBadge / ErrorPanel / common toolbar。
- * 不改 backend / 状态机 / action；useListQuery + filters 原样保留。
+ * 只读 List：AppPage → EntityListWorkspace → useListQuery。
+ * 消费 FINAL 契约 GET /api/supplier-invoices（分页 + invoiceNo/supplierId/documentStatus 过滤；形态 B）。
+ * 提供「新建供应商发票」入口（supplier-invoice:create）。
+ * PermissionGuard 对齐 API requirePermission("supplier-invoice:view")。
  */
 import { useState } from "react";
 import Link from "next/link";
+import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
+import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { hasPermission, actionPermission, PERMISSIONS, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { useListQuery } from "@/lib/use-list-query";
-import { formatDate } from "@/lib/format";
+import { useSession } from "@/lib/session-context";
+import { formatDate, formatMoney } from "@/lib/format";
 
-interface ConversionRow {
+interface SupplierInvoiceRow {
   id: string;
-  conversionNo: string;
-  status: string;
-  createdAt: string;
-  item?: { code: string | null; name: string | null } | null;
-  baseUom?: { symbol: string | null } | null;
+  invoiceNo: string;
+  supplierInvoiceNo: string;
+  documentStatus: string;
+  settlementStatus?: string | null;
+  invoiceDate: string;
+  currency: string;
+  grossAmount: string;
+  supplier?: { id: string; code: string | null; name: string | null } | null;
   _count?: { lines: number };
 }
 
-const STATUS_OPTIONS = ["DRAFT", "SUBMITTED", "EXECUTED", "CANCELLED"] as const;
+const STATUS_OPTIONS = ["DRAFT", "SUBMITTED", "MATCHED", "APPROVED", "POSTED"] as const;
 
-function ConversionList() {
+const TONE_MAP: Record<string, StatusTone> = {
+  DRAFT: "neutral",
+  SUBMITTED: "info",
+  MATCHED: "info",
+  APPROVED: "success",
+  POSTED: "success",
+};
+
+function SupplierInvoiceList() {
   const { state } = useSession();
   const canCreate =
     state.status === "authenticated" &&
     state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("inventory-conversion", "create"));
+    hasPermission(state.user.roles as RoleCode[], actionPermission("supplier-invoice", "create"));
   const [noInput, setNoInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
-  const [filters, setFilters] = useState<{ conversionNo?: string; status?: string }>({});
+  const [filters, setFilters] = useState<{ invoiceNo?: string; documentStatus?: string }>({});
 
   const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<ConversionRow>("/api/inventory-conversions", filters);
+    useListQuery<SupplierInvoiceRow>("/api/supplier-invoices", filters);
 
   const applyFilter = () => {
-    const next: { conversionNo?: string; status?: string } = {};
-    if (noInput.trim()) next.conversionNo = noInput.trim();
-    if (statusInput) next.status = statusInput;
+    const next: { invoiceNo?: string; documentStatus?: string } = {};
+    if (noInput.trim()) next.invoiceNo = noInput.trim();
+    if (statusInput) next.documentStatus = statusInput;
     setFilters(next);
     setPage(1);
   };
@@ -58,16 +71,16 @@ function ConversionList() {
 
   return (
     <AppPage>
-      <EntityListWorkspace<ConversionRow>
-        title="库存转换"
-        description="库存转换工作台"
+      <EntityListWorkspace<SupplierInvoiceRow>
+        title="供应商发票"
+        description="供应商发票（RECEIPT_BASED 三重匹配 + AP 应付）"
         headerActions={
           canCreate ? (
             <Link
-              href="/inventory/conversions/new"
+              href="/supplier-invoices/new"
               className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
             >
-              + 新建转换单
+              + 新建供应商发票
             </Link>
           ) : undefined
         }
@@ -79,7 +92,7 @@ function ConversionList() {
               onKeyDown={(e) => {
                 if (e.key === "Enter") applyFilter();
               }}
-              placeholder="按转换单号搜索"
+              placeholder="按发票号搜索"
               className="w-40 rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
             />
             <select
@@ -116,42 +129,46 @@ function ConversionList() {
         }
         columns={[
           {
-            key: "conversionNo",
-            header: "转换单号",
+            key: "invoiceNo",
+            header: "发票号",
             render: (row) => (
               <Link
-                href={`/inventory/conversions/${row.id}`}
+                href={`/supplier-invoices/${row.id}`}
                 className="font-medium text-brand-600 hover:underline"
               >
-                {row.conversionNo}
+                {row.invoiceNo}
               </Link>
             ),
           },
           {
-            key: "status",
-            header: "状态",
-            render: (row) => <StatusBadge status={row.status} />,
+            key: "supplierInvoiceNo",
+            header: "供应商发票号",
+            render: (row) => row.supplierInvoiceNo,
           },
           {
-            key: "item",
-            header: "物料",
-            render: (row) =>
-              row.item ? `${row.item.code ?? ""} ${row.item.name ?? ""}`.trim() : "—",
+            key: "documentStatus",
+            header: "单据状态",
+            render: (row) => <StatusBadge status={row.documentStatus} toneMap={TONE_MAP} />,
           },
           {
-            key: "baseUom",
-            header: "基准单位",
-            render: (row) => row.baseUom?.symbol ?? "—",
+            key: "supplier",
+            header: "供应商",
+            render: (row) => row.supplier?.name ?? "—",
+          },
+          {
+            key: "invoiceDate",
+            header: "开票日期",
+            render: (row) => formatDate(row.invoiceDate),
+          },
+          {
+            key: "grossAmount",
+            header: "价税合计",
+            render: (row) => formatMoney(row.grossAmount, row.currency),
           },
           {
             key: "lines",
             header: "行数",
             render: (row) => String(row._count?.lines ?? 0),
-          },
-          {
-            key: "createdAt",
-            header: "创建时间",
-            render: (row) => formatDate(row.createdAt),
           },
         ]}
         rows={items}
@@ -170,8 +187,8 @@ function ConversionList() {
 
 export default function Page() {
   return (
-    <PermissionGuard permission={PERMISSIONS.INVENTORY_CONVERSION_READ}>
-      <ConversionList />
+    <PermissionGuard permission={actionPermission("supplier-invoice", "view")}>
+      <SupplierInvoiceList />
     </PermissionGuard>
   );
 }

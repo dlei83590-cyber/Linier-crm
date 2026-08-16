@@ -10,7 +10,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { PERMISSIONS } from "@nilier-crm/shared";
+import { hasPermission, actionPermission, PERMISSIONS, type RoleCode } from "@nilier-crm/shared";
+import { useSession } from "@/lib/session-context";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
@@ -27,6 +28,11 @@ interface StockCountRow {
 const STATUS_OPTIONS = ["DRAFT", "COUNTING", "COMPLETED", "ADJUSTED", "CANCELLED"] as const;
 
 function StockCountList() {
+  const { state } = useSession();
+  const canCreate =
+    state.status === "authenticated" &&
+    state.user !== null &&
+    hasPermission(state.user.roles as RoleCode[], actionPermission("stock-count", "create"));
   const [countNoInput, setCountNoInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ countNo?: string; status?: string }>({});
@@ -54,6 +60,16 @@ function StockCountList() {
       <EntityListWorkspace<StockCountRow>
         title="库存盘点"
         description="库存盘点工作台"
+        headerActions={
+          canCreate ? (
+            <Link
+              href="/inventory/stock-counts/new"
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+            >
+              + 新建盘点单
+            </Link>
+          ) : undefined
+        }
         filters={
           <>
             <input

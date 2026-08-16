@@ -440,7 +440,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/purchasing/requisitions',
     permission: PERMISSIONS.PURCHASE_REQUISITION_READ,
     availability: 'ready',
-    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CRUD },
+    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CRUD_ACTIONS },
     createRoute: '/purchasing/requisitions/new',
     createPermission: actionPermission('purchase-requisition', 'create'),
     order: 1,
@@ -453,7 +453,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/purchasing/orders',
     permission: PERMISSIONS.PURCHASE_ORDER_READ,
     availability: 'ready',
-    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CRUD },
+    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CRUD_ACTIONS },
     createRoute: '/purchasing/orders/new',
     createPermission: actionPermission('purchase-order', 'create'),
     order: 2,
@@ -466,7 +466,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/purchasing/receipts',
     permission: PERMISSIONS.PURCHASE_RECEIPT_READ,
     availability: 'ready',
-    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD },
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD_ACTIONS },
     createRoute: '/purchasing/receipts/new',
     createPermission: actionPermission('purchase-receipt', 'create'),
     order: 3,
@@ -479,7 +479,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/purchasing/inspections',
     permission: PERMISSIONS.INSPECTION_READ,
     availability: 'ready',
-    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD },
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD_ACTIONS },
     createRoute: '/purchasing/inspections/new',
     createPermission: actionPermission('inspection', 'create'),
     order: 4,
@@ -492,7 +492,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/purchasing/warehouse-receipts',
     permission: PERMISSIONS.WAREHOUSE_RECEIPT_READ,
     availability: 'ready',
-    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD },
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD_ACTIONS },
     createRoute: '/purchasing/warehouse-receipts/new',
     createPermission: actionPermission('warehouse-receipt', 'create'),
     order: 5,
@@ -505,14 +505,14 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/purchasing/returns',
     permission: PERMISSIONS.PURCHASE_RETURN_READ,
     availability: 'ready',
-    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD },
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD_ACTIONS },
     createRoute: '/purchasing/returns/new',
     createPermission: actionPermission('purchase-return', 'create'),
     order: 6,
   },
 
   // ===== 库存管理（现有成熟工作台 ready；Read Model 类 hold 展示但不提供假入口——F2-7 后端 Read Model Gate 后开放）=====
-  // transfers：main 已有 list/detail/new/edit → ui create/edit true
+  // transfers：main 已有 list/detail/new/edit；F2-6B 批 3 开放 submit/execute/cancel → factActions=true
   {
     id: 'inventory-transfers',
     domain: 'inventory',
@@ -520,12 +520,12 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/inventory/transfers',
     permission: PERMISSIONS.INVENTORY_TRANSFER_READ,
     availability: 'ready',
-    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CRUD },
+    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CRUD_ACTIONS },
     createRoute: '/inventory/transfers/new',
     createPermission: actionPermission('inventory-transfer', 'create'),
     order: 1,
   },
-  // stock-counts：main 只有 list/detail → ui create/edit false
+  // stock-counts：F2-6B 批 3 开放 create + 录入行/complete/cancel → factActions=true
   {
     id: 'stock-counts',
     domain: 'inventory',
@@ -533,10 +533,12 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/inventory/stock-counts',
     permission: PERMISSIONS.STOCK_COUNT_READ,
     availability: 'ready',
-    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL },
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CREATE_ACTIONS },
+    createRoute: '/inventory/stock-counts/new',
+    createPermission: actionPermission('stock-count', 'create'),
     order: 2,
   },
-  // adjustments：main 只有 list/detail → ui create/edit false
+  // adjustments：F2-6B 批 3 开放 create/edit + submit/apply/cancel → factActions=true
   {
     id: 'inventory-adjustments',
     domain: 'inventory',
@@ -544,10 +546,12 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/inventory/adjustments',
     permission: PERMISSIONS.INVENTORY_ADJUSTMENT_READ,
     availability: 'ready',
-    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL },
+    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CRUD_ACTIONS },
+    createRoute: '/inventory/adjustments/new',
+    createPermission: actionPermission('inventory-adjustment', 'create'),
     order: 3,
   },
-  // conversions：main 只有 list/detail → ui create/edit false
+  // conversions：F2-6B 批 3 开放 create + submit/execute/cancel → factActions=true（Edit 本轮不做）
   {
     id: 'inventory-conversions',
     domain: 'inventory',
@@ -555,7 +559,9 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/inventory/conversions',
     permission: PERMISSIONS.INVENTORY_CONVERSION_READ,
     availability: 'ready',
-    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL },
+    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CREATE_ACTIONS },
+    createRoute: '/inventory/conversions/new',
+    createPermission: actionPermission('inventory-conversion', 'create'),
     order: 4,
   },
   // Read Model（页面已存在但无 FINAL Read API → hold；inventory-ledger:view / stock-projection:view **非已存在权限事实**（CTO #8845），permission=null 避免伪造权限码
@@ -587,8 +593,11 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     label: '供应商发票',
     route: '/supplier-invoices',
     permission: PERMISSIONS.SUPPLIER_INVOICE_READ,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_FULL, ui: UI_NONE },
+    availability: 'ready',
+    // F2-6B 批 3：list/detail/create + submit/match/post（Edit 本轮不做）
+    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CREATE_ACTIONS },
+    createRoute: '/supplier-invoices/new',
+    createPermission: actionPermission('supplier-invoice', 'create'),
     order: 1,
   },
   {
@@ -756,15 +765,15 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
     order: 3,
   },
-  // audit-logs：contract list/detail API FINAL；ui 全 false（占位页，入口未开放）
+  // audit-logs：F2-6B 批 3 已开放 list/detail（只读）
   {
     id: 'audit-logs',
     domain: 'system',
     label: '操作日志',
     route: '/audit-logs',
     permission: actionPermission('audit', 'view'), // F2-6-0: 对齐 API requirePermission("audit:view")（原 PERMISSIONS.AUDIT_READ 值为 "audit:read"，与后端强制码不一致）
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_LIST_DETAIL, ui: UI_NONE },
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_LIST_DETAIL, ui: UI_LIST_DETAIL },
     order: 4,
   },
 

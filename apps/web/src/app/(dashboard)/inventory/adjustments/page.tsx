@@ -10,7 +10,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { PERMISSIONS } from "@nilier-crm/shared";
+import { hasPermission, actionPermission, PERMISSIONS, type RoleCode } from "@nilier-crm/shared";
+import { useSession } from "@/lib/session-context";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
@@ -28,6 +29,11 @@ interface AdjustmentRow {
 const STATUS_OPTIONS = ["DRAFT", "SUBMITTED", "APPROVED", "APPLIED", "CANCELLED"] as const;
 
 function AdjustmentList() {
+  const { state } = useSession();
+  const canCreate =
+    state.status === "authenticated" &&
+    state.user !== null &&
+    hasPermission(state.user.roles as RoleCode[], actionPermission("inventory-adjustment", "create"));
   const [noInput, setNoInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ adjustmentNo?: string; status?: string }>({});
@@ -55,6 +61,16 @@ function AdjustmentList() {
       <EntityListWorkspace<AdjustmentRow>
         title="库存调整"
         description="库存调整工作台"
+        headerActions={
+          canCreate ? (
+            <Link
+              href="/inventory/adjustments/new"
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+            >
+              + 新建调整单
+            </Link>
+          ) : undefined
+        }
         filters={
           <>
             <input

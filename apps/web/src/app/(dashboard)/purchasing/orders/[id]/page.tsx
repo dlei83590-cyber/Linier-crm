@@ -13,8 +13,8 @@ import { useParams } from "next/navigation";
 import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
-import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
+import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 
 interface OrderDetail {
@@ -53,13 +53,16 @@ function OrderDetailPage() {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
   const { state } = useSession();
-  const canEdit =
-    state.status === "authenticated" &&
-    state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("purchase-order", "edit"));
+  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
+  const canEdit = hasPermission(roles, actionPermission("purchase-order", "edit"));
+  const canApprove = hasPermission(roles, actionPermission("purchase-order", "approve"));
+  const canClose = hasPermission(roles, actionPermission("purchase-order", "close"));
   const [detail, setDetail] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState<ApiClientError | null>(null);
+  const [confirmAction, setConfirmAction] = useState<"submit" | "confirm" | "cancel" | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -78,6 +81,33 @@ function OrderDetailPage() {
       });
     return () => controller.abort();
   }, [id]);
+
+  const refreshDetail = async () => {
+    try {
+      const body = await apiFetch<OrderDetail>(`/api/purchase-orders/${id}`);
+      setDetail(body.data);
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "刷新失败", "NETWORK_ERROR"),
+      );
+    }
+  };
+
+  const runAction = async (action: "submit" | "confirm" | "cancel") => {
+    if (!detail || actionBusy) return;
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      await apiFetch(`/api/purchase-orders/${id}/${action}`, { method: "POST" });
+      await refreshDetail();
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "操作失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -102,19 +132,57 @@ function OrderDetailPage() {
 
   return (
     <AppPage>
+      {actionError && (
+        <div className="border-status-danger-border mb-3 rounded-md border bg-status-danger-bg/10 p-3 text-sm text-status-danger-text">
+          {describeStatus(actionError.status)}：{actionError.message}
+          {actionError.code ? `（${actionError.code}）` : ""}
+        </div>
+      )}
       <EntityDetailWorkspace
         title={`采购订单详情 — ${detail.code}`}
         backHref="/purchasing/orders"
         status={detail.status}
         actions={
-          detail.status === "DRAFT" && canEdit ? (
-            <Link
-              href={`/purchasing/orders/${id}/edit`}
-              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
-            >
-              编辑
-            </Link>
-          ) : undefined
+          <>
+            {detail.status === "DRAFT" && canEdit && (
+              <Link
+                href={`/purchasing/orders/${id}/edit`}
+                className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-slate-50"
+              >
+                编辑
+              </Link>
+            )}
+            {detail.status === "DRAFT" && canEdit && (
+              <button
+                type="button"
+                onClick={() => setConfirmAction("submit")}
+                disabled={actionBusy}
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {actionBusy ? "处理中…" : "提交审批"}
+              </button>
+            )}
+            {detail.status === "APPROVED" && canApprove && (
+              <button
+                type="button"
+                onClick={() => setConfirmAction("confirm")}
+                disabled={actionBusy}
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {actionBusy ? "处理中…" : "确认订单"}
+              </button>
+            )}
+            {(detail.status === "DRAFT" || detail.status === "APPROVED") && canClose && (
+              <button
+                type="button"
+                onClick={() => setConfirmAction("cancel")}
+                disabled={actionBusy}
+                className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                取消
+              </button>
+            )}
+          </>
         }
         summary={
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -172,6 +240,33 @@ function OrderDetailPage() {
           </div>
         </section>
       </EntityDetailWorkspace>
+
+      <ConfirmActionDialog
+        open={confirmAction !== null}
+        title={
+          confirmAction === "submit"
+            ? "提交采购订单审批"
+            : confirmAction === "confirm"
+              ? "确认采购订单"
+              : "取消采购订单"
+        }
+        description={
+          confirmAction === "submit"
+            ? "提交后进入审批流程（命中策略需 APPROVED 后才能确认）。确认提交？"
+            : confirmAction === "confirm"
+              ? "确认后形成对供应商的正式采购承诺（CONFIRMED），之后才可收货。确认？"
+              : "取消该采购订单？仅 DRAFT/APPROVED 可取消（已确认订单禁止取消）。"
+        }
+        confirmLabel={confirmAction === "confirm" ? "确认订单" : confirmAction === "cancel" ? "确认取消" : "确认提交"}
+        tone={confirmAction === "cancel" ? "danger" : "primary"}
+        busy={actionBusy}
+        onConfirm={() => {
+          const a = confirmAction;
+          setConfirmAction(null);
+          if (a) void runAction(a);
+        }}
+        onCancel={() => setConfirmAction(null)}
+      />
     </AppPage>
   );
 }
