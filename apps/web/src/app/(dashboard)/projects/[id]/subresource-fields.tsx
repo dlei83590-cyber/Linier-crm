@@ -749,3 +749,158 @@ export function TagFields({
     </div>
   );
 }
+
+/** B2-2A：Budgets（项目预算）表单字段
+ * 只按真实 project-budget contract：category(≤100,必填)/amount(coerce number ≥0)/currency(≤10,默认CNY)/note(≤500,空→null)。
+ * 金额纪律：amount 只是单条明细事实，前端绝不求和展示总预算/预算余额（CTO B2-2A）。
+ */
+export interface BudgetFormValue {
+  category: string;
+  amount: string;
+  currency: string;
+  note: string;
+}
+
+export const EMPTY_BUDGET_FORM: BudgetFormValue = {
+  category: "",
+  amount: "",
+  currency: "CNY",
+  note: "",
+};
+
+export function BudgetFields({
+  value,
+  onChange,
+}: {
+  value: BudgetFormValue;
+  onChange: (v: BudgetFormValue) => void;
+}) {
+  const set = (patch: Partial<BudgetFormValue>) => onChange({ ...value, ...patch });
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">科目 *</label>
+        <input
+          value={value.category}
+          onChange={(e) => set({ category: e.target.value })}
+          maxLength={100}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">金额 *</label>
+        <input
+          type="number"
+          min={0}
+          step="any"
+          value={value.amount}
+          onChange={(e) => set({ amount: e.target.value })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">币种</label>
+        <input
+          value={value.currency}
+          onChange={(e) => set({ currency: e.target.value })}
+          maxLength={10}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">备注</label>
+        <textarea
+          value={value.note}
+          onChange={(e) => set({ note: e.target.value })}
+          rows={2}
+          maxLength={500}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+    </div>
+  );
+}
+
+/** B2-2A：Expenses（项目费用/实际支出）表单字段
+ * 只按真实 project-expense contract：category/amount/currency/incurredAt(发生时间,可空)/note。
+ * 金额纪律同 Budget：amount 是单条支出事实，前端不求和展示总费用/费用率。
+ */
+export interface ExpenseFormValue {
+  category: string;
+  amount: string;
+  currency: string;
+  incurredAt: string; // yyyy-MM-dd
+  note: string;
+}
+
+export const EMPTY_EXPENSE_FORM: ExpenseFormValue = {
+  category: "",
+  amount: "",
+  currency: "CNY",
+  incurredAt: "",
+  note: "",
+};
+
+export function ExpenseFields({
+  value,
+  onChange,
+}: {
+  value: ExpenseFormValue;
+  onChange: (v: ExpenseFormValue) => void;
+}) {
+  const set = (patch: Partial<ExpenseFormValue>) => onChange({ ...value, ...patch });
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">科目 *</label>
+        <input
+          value={value.category}
+          onChange={(e) => set({ category: e.target.value })}
+          maxLength={100}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">金额 *</label>
+        <input
+          type="number"
+          min={0}
+          step="any"
+          value={value.amount}
+          onChange={(e) => set({ amount: e.target.value })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">币种</label>
+        <input
+          value={value.currency}
+          onChange={(e) => set({ currency: e.target.value })}
+          maxLength={10}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">发生时间</label>
+        <input
+          type="date"
+          value={value.incurredAt}
+          onChange={(e) => set({ incurredAt: e.target.value })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">备注</label>
+        <textarea
+          value={value.note}
+          onChange={(e) => set({ note: e.target.value })}
+          rows={2}
+          maxLength={500}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+    </div>
+  );
+}
