@@ -37,6 +37,8 @@ import {
   VisitFields,
   ProductFields,
   TagFields,
+  BudgetFields,
+  ExpenseFields,
   EMPTY_STAKEHOLDER_FORM,
   EMPTY_MEMBER_FORM,
   EMPTY_MILESTONE_FORM,
@@ -45,6 +47,8 @@ import {
   EMPTY_VISIT_FORM,
   EMPTY_PRODUCT_FORM,
   EMPTY_TAG_FORM,
+  EMPTY_BUDGET_FORM,
+  EMPTY_EXPENSE_FORM,
   type StakeholderFormValue,
   type MemberFormValue,
   type MilestoneFormValue,
@@ -53,6 +57,8 @@ import {
   type VisitFormValue,
   type ProductFormValue,
   type TagFormValue,
+  type BudgetFormValue,
+  type ExpenseFormValue,
 } from "./subresource-fields";
 
 interface ProjectDetail {
@@ -143,6 +149,7 @@ interface ProjectDetail {
   }>;
   budgets?: Array<{
     id: string;
+    version: number;
     category: string;
     amount: string;
     currency: string;
@@ -150,6 +157,7 @@ interface ProjectDetail {
   }>;
   expenses?: Array<{
     id: string;
+    version: number;
     category: string;
     amount: string;
     currency: string;
@@ -200,6 +208,8 @@ type TaskRow = NonNullable<ProjectDetail["tasks"]>[number];
 type RiskRow = NonNullable<ProjectDetail["risks"]>[number];
 type VisitRow = NonNullable<ProjectDetail["visits"]>[number];
 type ProductRow = NonNullable<ProjectDetail["products"]>[number];
+type BudgetRow = NonNullable<ProjectDetail["budgets"]>[number];
+type ExpenseRow = NonNullable<ProjectDetail["expenses"]>[number];
 
 const STAGE_LABELS: Record<string, string> = {
   LEAD: "线索",
@@ -285,6 +295,8 @@ const SUBRESOURCE_LABELS: Record<string, string> = {
   visit: "走访记录",
   product: "产品",
   tag: "标签",
+  budget: "预算",
+  expense: "费用",
 };
 
 const VISIT_TYPE_LABELS: Record<string, string> = {
@@ -444,6 +456,18 @@ function ProjectDetailPage() {
     id: null;
     version: null;
   }>({ open: false, mode: "create", id: null, version: null });
+  const [budgetDialog, setBudgetDialog] = useState<{
+    open: boolean;
+    mode: "create" | "edit";
+    id: string | null;
+    version: number | null;
+  }>({ open: false, mode: "create", id: null, version: null });
+  const [expenseDialog, setExpenseDialog] = useState<{
+    open: boolean;
+    mode: "create" | "edit";
+    id: string | null;
+    version: number | null;
+  }>({ open: false, mode: "create", id: null, version: null });
   const [stakeholderForm, setStakeholderForm] =
     useState<StakeholderFormValue>(EMPTY_STAKEHOLDER_FORM);
   const [memberForm, setMemberForm] = useState<MemberFormValue>(EMPTY_MEMBER_FORM);
@@ -453,6 +477,8 @@ function ProjectDetailPage() {
   const [visitForm, setVisitForm] = useState<VisitFormValue>(EMPTY_VISIT_FORM);
   const [productForm, setProductForm] = useState<ProductFormValue>(EMPTY_PRODUCT_FORM);
   const [tagForm, setTagForm] = useState<TagFormValue>(EMPTY_TAG_FORM);
+  const [budgetForm, setBudgetForm] = useState<BudgetFormValue>(EMPTY_BUDGET_FORM);
+  const [expenseForm, setExpenseForm] = useState<ExpenseFormValue>(EMPTY_EXPENSE_FORM);
   // B2-1B-2：item selector 消费真实 /api/items；tag selector 消费真实 /api/tags（CTO #13632）
   const [itemOptions, setItemOptions] = useState<Array<{ id: string; code: string | null; name: string | null }>>([]);
   const [tagOptions, setTagOptions] = useState<Array<{ id: string; code: string | null; name: string | null }>>([]);
@@ -464,7 +490,17 @@ function ProjectDetailPage() {
   const [saving, setSaving] = useState(false);
   const [dialogError, setDialogError] = useState<ApiClientError | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{
-    resource: "stakeholder" | "member" | "milestone" | "task" | "risk" | "visit" | "product" | "tag";
+    resource:
+      | "stakeholder"
+      | "member"
+      | "milestone"
+      | "task"
+      | "risk"
+      | "visit"
+      | "product"
+      | "tag"
+      | "budget"
+      | "expense";
     id: string;
     name: string;
   } | null>(null);
@@ -701,6 +737,43 @@ function ProjectDetailPage() {
   };
   const closeTagDialog = () =>
     setTagDialog({ open: false, mode: "create", id: null, version: null });
+
+  const openBudgetCreate = () => {
+    setBudgetForm(EMPTY_BUDGET_FORM);
+    setDialogError(null);
+    setBudgetDialog({ open: true, mode: "create", id: null, version: null });
+  };
+  const openBudgetEdit = (b: BudgetRow) => {
+    setBudgetForm({
+      category: b.category,
+      amount: b.amount,
+      currency: b.currency,
+      note: b.note ?? "",
+    });
+    setDialogError(null);
+    setBudgetDialog({ open: true, mode: "edit", id: b.id, version: b.version });
+  };
+  const closeBudgetDialog = () =>
+    setBudgetDialog({ open: false, mode: "create", id: null, version: null });
+
+  const openExpenseCreate = () => {
+    setExpenseForm(EMPTY_EXPENSE_FORM);
+    setDialogError(null);
+    setExpenseDialog({ open: true, mode: "create", id: null, version: null });
+  };
+  const openExpenseEdit = (e: ExpenseRow) => {
+    setExpenseForm({
+      category: e.category,
+      amount: e.amount,
+      currency: e.currency,
+      incurredAt: e.incurredAt ? e.incurredAt.slice(0, 10) : "",
+      note: e.note ?? "",
+    });
+    setDialogError(null);
+    setExpenseDialog({ open: true, mode: "edit", id: e.id, version: e.version });
+  };
+  const closeExpenseDialog = () =>
+    setExpenseDialog({ open: false, mode: "create", id: null, version: null });
 
   const submitStakeholder = async () => {
     if (!stakeholderDialog.open) return;
@@ -1181,6 +1254,124 @@ function ProjectDetailPage() {
     }
   };
 
+  const submitBudget = async () => {
+    if (!budgetDialog.open) return;
+    setSaving(true);
+    setDialogError(null);
+    try {
+      // 金额纪律：amount 仅作为单条明细事实提交，不前端求和（CTO B2-2A）
+      const payload = {
+        category: budgetForm.category,
+        amount: Number(budgetForm.amount),
+        currency: budgetForm.currency.trim() === "" ? "CNY" : budgetForm.currency,
+        note: budgetForm.note.trim() === "" ? null : budgetForm.note,
+      };
+      if (budgetDialog.mode === "create") {
+        await apiFetch(`/api/projects/${id}/budgets`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } else if (budgetDialog.id && budgetDialog.version != null) {
+        await apiFetch(`/api/projects/${id}/budgets/${budgetDialog.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, version: budgetDialog.version }),
+        });
+      }
+      closeBudgetDialog();
+      await reloadProject();
+    } catch (err) {
+      setDialogError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "保存失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reloadBudget = async () => {
+    if (!budgetDialog.open || !budgetDialog.id) return;
+    setSaving(true);
+    try {
+      const body = await apiFetch<BudgetRow>(`/api/projects/${id}/budgets/${budgetDialog.id}`);
+      const b = body.data;
+      setBudgetForm({ category: b.category, amount: b.amount, currency: b.currency, note: b.note ?? "" });
+      setBudgetDialog({ open: true, mode: "edit", id: b.id, version: b.version });
+      setDialogError(null);
+    } catch (err) {
+      setDialogError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "重新加载失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const submitExpense = async () => {
+    if (!expenseDialog.open) return;
+    setSaving(true);
+    setDialogError(null);
+    try {
+      // 金额纪律同 Budget：amount 是单条支出事实，不前端求和（CTO B2-2A）
+      const payload = {
+        category: expenseForm.category,
+        amount: Number(expenseForm.amount),
+        currency: expenseForm.currency.trim() === "" ? "CNY" : expenseForm.currency,
+        incurredAt:
+          expenseForm.incurredAt === ""
+            ? null
+            : new Date(`${expenseForm.incurredAt}T00:00:00.000Z`).toISOString(),
+        note: expenseForm.note.trim() === "" ? null : expenseForm.note,
+      };
+      if (expenseDialog.mode === "create") {
+        await apiFetch(`/api/projects/${id}/expenses`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } else if (expenseDialog.id && expenseDialog.version != null) {
+        await apiFetch(`/api/projects/${id}/expenses/${expenseDialog.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, version: expenseDialog.version }),
+        });
+      }
+      closeExpenseDialog();
+      await reloadProject();
+    } catch (err) {
+      setDialogError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "保存失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reloadExpense = async () => {
+    if (!expenseDialog.open || !expenseDialog.id) return;
+    setSaving(true);
+    try {
+      const body = await apiFetch<ExpenseRow>(`/api/projects/${id}/expenses/${expenseDialog.id}`);
+      const e = body.data;
+      setExpenseForm({
+        category: e.category,
+        amount: e.amount,
+        currency: e.currency,
+        incurredAt: e.incurredAt ? e.incurredAt.slice(0, 10) : "",
+        note: e.note ?? "",
+      });
+      setExpenseDialog({ open: true, mode: "edit", id: e.id, version: e.version });
+      setDialogError(null);
+    } catch (err) {
+      setDialogError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "重新加载失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
@@ -1199,6 +1390,10 @@ function ProjectDetailPage() {
         await apiFetch(`/api/projects/${id}/products/${deleteTarget.id}`, { method: "DELETE" });
       } else if (deleteTarget.resource === "tag") {
         await apiFetch(`/api/projects/${id}/tags/${deleteTarget.id}`, { method: "DELETE" });
+      } else if (deleteTarget.resource === "budget") {
+        await apiFetch(`/api/projects/${id}/budgets/${deleteTarget.id}`, { method: "DELETE" });
+      } else if (deleteTarget.resource === "expense") {
+        await apiFetch(`/api/projects/${id}/expenses/${deleteTarget.id}`, { method: "DELETE" });
       } else {
         await apiFetch(`/api/projects/${id}/tasks/${deleteTarget.id}`, { method: "DELETE" });
       }
@@ -1341,6 +1536,32 @@ function ProjectDetailPage() {
     canManageTags &&
     detail.stage !== "CLOSED" &&
     hasPermission(roles, actionPermission("project-tag", "delete"));
+  const canManageBudgets = detail.capabilities.budgets;
+  const canAddBudget =
+    canManageBudgets &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-budget", "create"));
+  const canEditBudget =
+    canManageBudgets &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-budget", "edit"));
+  const canDeleteBudget =
+    canManageBudgets &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-budget", "delete"));
+  const canManageExpenses = detail.capabilities.expenses;
+  const canAddExpense =
+    canManageExpenses &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-expense", "create"));
+  const canEditExpense =
+    canManageExpenses &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-expense", "edit"));
+  const canDeleteExpense =
+    canManageExpenses &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-expense", "delete"));
 
   return (
     <AppPage>
@@ -1972,24 +2193,98 @@ function ProjectDetailPage() {
             <div className="space-y-6">
               {detail.capabilities.budgets && (
                 <section className="border-border rounded-md border p-4">
-                  <SectionTitle>预算（{detail.budgets?.length ?? 0}）</SectionTitle>
-                  <Table headers={["科目", "金额", "币种", "备注"]}>
+                  <div className="mb-3 flex items-center justify-between">
+                    <SectionTitle>预算（{detail.budgets?.length ?? 0}）</SectionTitle>
+                    {canAddBudget && (
+                      <button
+                        type="button"
+                        onClick={openBudgetCreate}
+                        className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                      >
+                        添加预算
+                      </button>
+                    )}
+                  </div>
+                  <Table
+                    headers={[
+                      "科目",
+                      "金额",
+                      "币种",
+                      "备注",
+                      ...(canEditBudget || canDeleteBudget ? ["操作"] : []),
+                    ]}
+                  >
                     {(detail.budgets ?? []).map((b) => (
                       <tr key={b.id}>
                         <td className="px-3 py-2 text-ink-primary">{b.category}</td>
                         <td className="px-3 py-2 text-ink-primary">{b.amount}</td>
                         <td className="px-3 py-2 text-ink-secondary">{b.currency}</td>
                         <td className="px-3 py-2 text-ink-secondary">{b.note ?? "—"}</td>
+                        {(canEditBudget || canDeleteBudget) && (
+                          <td className="px-3 py-2">
+                            <div className="flex gap-2">
+                              {canEditBudget && (
+                                <button
+                                  type="button"
+                                  onClick={() => openBudgetEdit(b)}
+                                  className="text-brand-600 text-sm hover:underline"
+                                >
+                                  编辑
+                                </button>
+                              )}
+                              {canDeleteBudget && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setDeleteTarget({
+                                      resource: "budget",
+                                      id: b.id,
+                                      name: b.category,
+                                    })
+                                  }
+                                  className="text-sm text-red-600 hover:underline"
+                                >
+                                  删除
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))}
-                    {(detail.budgets ?? []).length === 0 && <EmptyRow colSpan={4} text="暂无预算" />}
+                    {(detail.budgets ?? []).length === 0 && (
+                      <EmptyRow
+                        colSpan={canEditBudget || canDeleteBudget ? 5 : 4}
+                        text="暂无预算"
+                      />
+                    )}
                   </Table>
                 </section>
               )}
               {detail.capabilities.expenses && (
                 <section className="border-border rounded-md border p-4">
-                  <SectionTitle>费用（{detail.expenses?.length ?? 0}）</SectionTitle>
-                  <Table headers={["科目", "金额", "币种", "发生时间", "备注"]}>
+                  <div className="mb-3 flex items-center justify-between">
+                    <SectionTitle>费用（{detail.expenses?.length ?? 0}）</SectionTitle>
+                    {canAddExpense && (
+                      <button
+                        type="button"
+                        onClick={openExpenseCreate}
+                        className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                      >
+                        添加费用
+                      </button>
+                    )}
+                  </div>
+                  <Table
+                    headers={[
+                      "科目",
+                      "金额",
+                      "币种",
+                      "发生时间",
+                      "备注",
+                      ...(canEditExpense || canDeleteExpense ? ["操作"] : []),
+                    ]}
+                  >
                     {(detail.expenses ?? []).map((e) => (
                       <tr key={e.id}>
                         <td className="px-3 py-2 text-ink-primary">{e.category}</td>
@@ -1997,9 +2292,44 @@ function ProjectDetailPage() {
                         <td className="px-3 py-2 text-ink-secondary">{e.currency}</td>
                         <td className="px-3 py-2 text-ink-secondary">{formatDate(e.incurredAt)}</td>
                         <td className="px-3 py-2 text-ink-secondary">{e.note ?? "—"}</td>
+                        {(canEditExpense || canDeleteExpense) && (
+                          <td className="px-3 py-2">
+                            <div className="flex gap-2">
+                              {canEditExpense && (
+                                <button
+                                  type="button"
+                                  onClick={() => openExpenseEdit(e)}
+                                  className="text-brand-600 text-sm hover:underline"
+                                >
+                                  编辑
+                                </button>
+                              )}
+                              {canDeleteExpense && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setDeleteTarget({
+                                      resource: "expense",
+                                      id: e.id,
+                                      name: e.category,
+                                    })
+                                  }
+                                  className="text-sm text-red-600 hover:underline"
+                                >
+                                  删除
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))}
-                    {(detail.expenses ?? []).length === 0 && <EmptyRow colSpan={5} text="暂无费用" />}
+                    {(detail.expenses ?? []).length === 0 && (
+                      <EmptyRow
+                        colSpan={canEditExpense || canDeleteExpense ? 6 : 5}
+                        text="暂无费用"
+                      />
+                    )}
                   </Table>
                 </section>
               )}
@@ -2283,6 +2613,32 @@ function ProjectDetailPage() {
               : null
           }
         />
+      </ProjectSubresourceDialog>
+
+      <ProjectSubresourceDialog
+        open={budgetDialog.open}
+        mode={budgetDialog.mode}
+        title={budgetDialog.mode === "create" ? "添加预算" : "编辑预算"}
+        saving={saving}
+        error={dialogError}
+        onSubmit={submitBudget}
+        onReload={reloadBudget}
+        onClose={closeBudgetDialog}
+      >
+        <BudgetFields value={budgetForm} onChange={setBudgetForm} />
+      </ProjectSubresourceDialog>
+
+      <ProjectSubresourceDialog
+        open={expenseDialog.open}
+        mode={expenseDialog.mode}
+        title={expenseDialog.mode === "create" ? "添加费用" : "编辑费用"}
+        saving={saving}
+        error={dialogError}
+        onSubmit={submitExpense}
+        onReload={reloadExpense}
+        onClose={closeExpenseDialog}
+      >
+        <ExpenseFields value={expenseForm} onChange={setExpenseForm} />
       </ProjectSubresourceDialog>
 
       <ConfirmActionDialog
