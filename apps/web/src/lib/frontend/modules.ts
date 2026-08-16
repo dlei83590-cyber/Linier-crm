@@ -191,6 +191,24 @@ const UI_LIST_DETAIL_CRUD: CapabilityFlags = {
   workflow: false,
   factActions: false,
 };
+/** 列表 + 详情 + 状态动作按钮（F2-6B：Detail 已开放 source-driven factActions，无 Create/Edit 页） */
+const UI_LIST_DETAIL_ACTIONS: CapabilityFlags = {
+  list: true,
+  detail: true,
+  create: false,
+  edit: false,
+  workflow: false,
+  factActions: true,
+};
+/** 列表 + 详情 + Create/Edit 页 + 状态动作按钮（F2-6B：Quotation 直建/编辑 + Convert→SO 等动作） */
+const UI_LIST_DETAIL_CRUD_ACTIONS: CapabilityFlags = {
+  list: true,
+  detail: true,
+  create: true,
+  edit: true,
+  workflow: false,
+  factActions: true,
+};
 
 export interface FrontendModule {
   id: string;
@@ -299,8 +317,9 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/sales/quotations',
     permission: PERMISSIONS.QUOTATION_READ,
     availability: 'ready',
-    // F2-6B 批 1：Direct Create 允许（POST /api/quotations + quotation:create）；Edit 已交付（DRAFT/REJECTED + version CAS）
-    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CRUD },
+    // F2-6B 批 1：Direct Create 允许（POST /api/quotations + quotation:create）；Edit 已交付（DRAFT/REJECTED + version CAS）；
+    // Detail 已开放 Convert→SO（quotation:approve）→ factActions=true
+    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CRUD_ACTIONS },
     createRoute: '/sales/quotations/new',
     createPermission: actionPermission('quotation', 'create'),
     order: 1,
@@ -314,7 +333,8 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/sales/orders',
     permission: PERMISSIONS.SALES_ORDER_READ,
     availability: 'ready',
-    capabilities: { contract: CONTRACT_LIST_DETAIL_EDIT_ACTIONS, ui: UI_LIST_DETAIL },
+    // F2-6B 批 1：Detail 已开放 Create Delivery（delivery:create，partial dialog）→ factActions=true；无 Direct Create
+    capabilities: { contract: CONTRACT_LIST_DETAIL_EDIT_ACTIONS, ui: UI_LIST_DETAIL_ACTIONS },
     order: 2,
   },
   // deliveries：F2-6-0 contract 基线修正——/api/deliveries 仅 GET（Direct Delivery 不开放），创建来自 /sales-orders/{id}/deliveries；
@@ -326,7 +346,8 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/sales/deliveries',
     permission: PERMISSIONS.DELIVERY_READ,
     availability: 'ready',
-    capabilities: { contract: CONTRACT_LIST_DETAIL_EDIT_ACTIONS, ui: UI_LIST_DETAIL },
+    // F2-6B 批 1：Detail 已开放 Create Invoice（invoice:create，partial billing dialog）→ factActions=true；无 Direct Create
+    capabilities: { contract: CONTRACT_LIST_DETAIL_EDIT_ACTIONS, ui: UI_LIST_DETAIL_ACTIONS },
     order: 3,
   },
   // sales-invoices：F2-6-0 contract 基线修正——/api/invoices 仅 GET（Direct Invoice 禁止），唯一创建入口 Delivery → Invoice；
