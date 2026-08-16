@@ -24,7 +24,7 @@ import { PERMISSIONS, actionPermission, type PermissionCode } from '@nilier-crm/
  * ui 层事实基线（治理规则，长期有效；不维护模块快照——每个 capability activation PR 必须同步本 Registry）：
  * - list/detail/create/edit：以真实页面 surface 为准（有真实 page.tsx 才算开放；Create/Edit 未入 main 的模块必须 false）
  * - workflow / factActions 默认 HOLD；只有经过 contract review、权限/状态 Gate 实现、CI 和 runtime acceptance 后，
- *   对应 capability 才允许 ui=true（例如 F2-6B 的 source-driven actions）；
+ *   对应 capability 才允许 ui=true
  * - ui 不得大于 contract（backend FINAL contract 缺失的能力不允许声明为开放）；
  * - Registry 必须随每个 capability activation PR 同步更新（禁止快照式列举具体模块名单）；
  * - 占位页（PlaceholderPage「尚未开放」）不算开放 → ui 全 false
