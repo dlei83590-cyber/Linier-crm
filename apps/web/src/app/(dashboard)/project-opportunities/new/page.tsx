@@ -12,7 +12,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
+import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { AppPage, EntityFormWorkspace, ReferenceSelector } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
@@ -285,7 +285,7 @@ export default function Page() {
     hasPermission(state.user.roles as RoleCode[], actionPermission("project-opportunity", "create"));
   if (!canCreate) {
     return (
-      <PermissionGuard permission={PERMISSIONS.PROJECT_OPPORTUNITY_READ}>
+      <PermissionGuard permission={actionPermission("project-opportunity", "create")}>
         <div className="border-border bg-surface rounded-lg border p-6 text-sm text-ink-muted">
           无新建项目机会权限
         </div>
@@ -293,7 +293,7 @@ export default function Page() {
     );
   }
   return (
-    <PermissionGuard permission={PERMISSIONS.PROJECT_OPPORTUNITY_READ}>
+    <PermissionGuard permission={actionPermission("project-opportunity", "create")}>
       <OpportunityCreateForm />
     </PermissionGuard>
   );

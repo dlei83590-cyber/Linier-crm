@@ -8,7 +8,7 @@
  */
 import { useState } from "react";
 import Link from "next/link";
-import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
+import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
@@ -250,7 +250,7 @@ function ItemList() {
 
 export default function Page() {
   return (
-    <PermissionGuard permission={PERMISSIONS.ITEM_READ}>
+    <PermissionGuard permission={actionPermission("item", "view")}>
       <ItemList />
     </PermissionGuard>
   );

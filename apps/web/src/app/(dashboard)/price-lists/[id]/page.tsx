@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
+import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import {
@@ -247,7 +247,7 @@ function PriceListDetailPage() {
 
 export default function Page() {
   return (
-    <PermissionGuard permission={PERMISSIONS.PRICE_LIST_READ}>
+    <PermissionGuard permission={actionPermission("price-list", "view")}>
       <PriceListDetailPage />
     </PermissionGuard>
   );

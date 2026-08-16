@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
+import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { AppPage, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
@@ -202,7 +202,7 @@ function OpportunityDetailPage() {
 
 export default function Page() {
   return (
-    <PermissionGuard permission={PERMISSIONS.PROJECT_OPPORTUNITY_READ}>
+    <PermissionGuard permission={actionPermission("project-opportunity", "view")}>
       <OpportunityDetailPage />
     </PermissionGuard>
   );

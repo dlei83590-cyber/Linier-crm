@@ -16,7 +16,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
+import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { AppPage, EntityFormWorkspace, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
@@ -342,7 +342,7 @@ export default function Page() {
     hasPermission(state.user.roles as RoleCode[], actionPermission("project", "edit"));
   if (!canEdit) {
     return (
-      <PermissionGuard permission={PERMISSIONS.PROJECT_READ}>
+      <PermissionGuard permission={actionPermission("project", "edit")}>
         <div className="border-border bg-surface rounded-lg border p-6 text-sm text-ink-muted">
           无编辑项目权限
         </div>
@@ -350,7 +350,7 @@ export default function Page() {
     );
   }
   return (
-    <PermissionGuard permission={PERMISSIONS.PROJECT_READ}>
+    <PermissionGuard permission={actionPermission("project", "edit")}>
       <ProjectEditForm />
     </PermissionGuard>
   );
