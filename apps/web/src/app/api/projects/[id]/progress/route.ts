@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
+import { authenticate, requirePermission, requestMeta, writeAuditLog, assertProjectWritable } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, parsePagination } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
@@ -49,10 +49,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const parsed = progressCreateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
-  const project = await prisma.project.findFirst({ where: { id, deletedAt: null } });
-  if (!project) return failConflict(ERROR_CODES.NOT_FOUND, "项目不存在");
+  const txResult = await prisma.$transaction(async (tx) => {
+    const gate = await assertProjectWritable(tx, id);
+    if (!gate.ok) return { error: gate.response };
 
-  const created = await prisma.$transaction(async (tx) => {
     const progress = await tx.projectProgress.create({
       data: {
         projectId: id,
@@ -69,8 +69,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       where: { id },
       data: { progressPercent: parsed.data.progressPercent, updatedById: user!.id },
     });
-    return progress;
+    return { created: progress };
   });
+  if ("error" in txResult) return txResult.error;
+  const created = txResult.created;
 
   await writeAuditLog({
     actorId: user?.id,

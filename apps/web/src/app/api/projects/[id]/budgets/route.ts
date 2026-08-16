@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
+import { authenticate, requirePermission, requestMeta, writeAuditLog, assertProjectWritable } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, parsePagination } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
@@ -56,21 +56,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const parsed = budgetCreateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
-  const project = await prisma.project.findFirst({ where: { id, deletedAt: null } });
-  if (!project) return failConflict(ERROR_CODES.NOT_FOUND, "项目不存在");
+  const txResult = await prisma.$transaction(async (tx) => {
+    const gate = await assertProjectWritable(tx, id);
+    if (!gate.ok) return { error: gate.response };
 
-  const created = await prisma.projectBudget.create({
-    data: {
-      projectId: id,
-      category: parsed.data.category,
-      amount: parsed.data.amount,
-      currency: parsed.data.currency ?? "CNY",
-      note: parsed.data.note ?? null,
-      approvalStatus: "APPROVED",
-      createdById: user!.id,
-      updatedById: user!.id,
-    },
+    const created = await tx.projectBudget.create({
+      data: {
+        projectId: id,
+        category: parsed.data.category,
+        amount: parsed.data.amount,
+        currency: parsed.data.currency ?? "CNY",
+        note: parsed.data.note ?? null,
+        approvalStatus: "APPROVED",
+        createdById: user!.id,
+        updatedById: user!.id,
+      },
+    });
+    return { created };
   });
+  if ("error" in txResult) return txResult.error;
+  const created = txResult.created;
 
   await writeAuditLog({
     actorId: user?.id,
