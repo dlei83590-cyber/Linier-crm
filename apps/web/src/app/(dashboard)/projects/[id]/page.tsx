@@ -200,7 +200,6 @@ type TaskRow = NonNullable<ProjectDetail["tasks"]>[number];
 type RiskRow = NonNullable<ProjectDetail["risks"]>[number];
 type VisitRow = NonNullable<ProjectDetail["visits"]>[number];
 type ProductRow = NonNullable<ProjectDetail["products"]>[number];
-type TagRow = NonNullable<ProjectDetail["tags"]>[number];
 
 const STAGE_LABELS: Record<string, string> = {
   LEAD: "线索",
