@@ -135,6 +135,24 @@ const CONTRACT_LIST_DETAIL_CREATE_ACTIONS: CapabilityFlags = {
   workflow: false,
   factActions: true,
 };
+/** 列表 + 详情 + 编辑 + 事实动作（F2-6-0：SO/Delivery/Invoice——无直接 create POST，创建走上游单据链路；无 submit 审批流） */
+const CONTRACT_LIST_DETAIL_EDIT_ACTIONS: CapabilityFlags = {
+  list: true,
+  detail: true,
+  create: false,
+  edit: true,
+  workflow: false,
+  factActions: true,
+};
+/** 列表 + 创建 + 提交流 + 事实动作（F2-6-0：Credit/Debit Note——无详情 GET、无 PATCH，[id] 仅 submit/apply） */
+const CONTRACT_LIST_CREATE_WORKFLOW_ACTIONS: CapabilityFlags = {
+  list: true,
+  detail: false,
+  create: true,
+  edit: false,
+  workflow: true,
+  factActions: true,
+};
 
 // ===== ui 层常量（当前 main 前端实际开放，CTO F2-1 Review 语义锁死）=====
 /** 前端未开放任何能力 */
@@ -230,7 +248,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     domain: 'customer-project',
     label: '项目机会',
     route: '/project-opportunities',
-    permission: PERMISSIONS.PROJECT_OPPORTUNITY_READ,
+    permission: actionPermission('project-opportunity', 'view'), // F2-6-0: 对齐 API requirePermission("project-opportunity:view")（原 PERMISSIONS 值为 read 风格，与后端强制码不一致）
     availability: 'ready',
     capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD },
     createRoute: '/project-opportunities/new',
@@ -243,7 +261,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     domain: 'customer-project',
     label: '项目管理',
     route: '/projects',
-    permission: PERMISSIONS.PROJECT_READ,
+    permission: actionPermission('project', 'view'), // F2-6-0: 对齐 API requirePermission("project:view")（原 PERMISSIONS 值为 read 风格）
     availability: 'ready',
     capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD },
     createRoute: '/projects/new',
@@ -284,7 +302,8 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_FULL, ui: UI_NONE },
     order: 1,
   },
-  // sales-orders：confirm/cancel 为事实动作，无 submit 审批流
+  // sales-orders：F2-6-0 contract 基线修正——/api/sales-orders 仅 GET（本阶段不开放 POST），唯一创建入口 Quotation convert；
+  // [id]/route.ts 有 GET+PATCH（sales-order:edit）→ edit=true；confirm/cancel 为事实动作，无 submit 审批流
   {
     id: 'sales-orders',
     domain: 'sales',
@@ -292,9 +311,11 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/sales/orders',
     permission: PERMISSIONS.SALES_ORDER_READ,
     availability: 'hold',
-    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_NONE },
+    capabilities: { contract: CONTRACT_LIST_DETAIL_EDIT_ACTIONS, ui: UI_NONE },
     order: 2,
   },
+  // deliveries：F2-6-0 contract 基线修正——/api/deliveries 仅 GET（Direct Delivery 不开放），创建来自 /sales-orders/{id}/deliveries；
+  // [id]/route.ts 有 GET+PATCH（delivery:edit）→ edit=true
   {
     id: 'deliveries',
     domain: 'sales',
@@ -302,9 +323,11 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/sales/deliveries',
     permission: PERMISSIONS.DELIVERY_READ,
     availability: 'hold',
-    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_NONE },
+    capabilities: { contract: CONTRACT_LIST_DETAIL_EDIT_ACTIONS, ui: UI_NONE },
     order: 3,
   },
+  // sales-invoices：F2-6-0 contract 基线修正——/api/invoices 仅 GET（Direct Invoice 禁止），唯一创建入口 Delivery → Invoice；
+  // [id]/route.ts 有 GET+PATCH（invoice:edit）→ edit=true
   {
     id: 'sales-invoices',
     domain: 'sales',
@@ -312,7 +335,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/sales/invoices',
     permission: PERMISSIONS.INVOICE_READ,
     availability: 'hold',
-    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_NONE },
+    capabilities: { contract: CONTRACT_LIST_DETAIL_EDIT_ACTIONS, ui: UI_NONE },
     order: 4,
   },
   // accounts-receivable：只读模型（list/detail/aging），无 create/edit
@@ -337,6 +360,8 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_LIST_DETAIL_CREATE_ACTIONS, ui: UI_NONE },
     order: 6,
   },
+  // credit-debit-notes：F2-6-0 contract 基线修正——/api/credit-debit-notes/[id] 仅 submit/apply，无详情 GET/PATCH route → detail=false / edit=false；
+  // root 有 GET+POST（list/create），submit（workflow）+ apply（factAction）→ CONTRACT_LIST_CREATE_WORKFLOW_ACTIONS（不再用 CONTRACT_FULL）
   {
     id: 'credit-debit-notes',
     domain: 'sales',
@@ -344,7 +369,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/sales/credit-debit-notes',
     permission: PERMISSIONS.CREDIT_DEBIT_NOTE_READ,
     availability: 'hold',
-    capabilities: { contract: CONTRACT_FULL, ui: UI_NONE },
+    capabilities: { contract: CONTRACT_LIST_CREATE_WORKFLOW_ACTIONS, ui: UI_NONE },
     order: 7,
   },
 
@@ -549,7 +574,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     domain: 'master-data',
     label: '物料管理',
     route: '/items',
-    permission: PERMISSIONS.ITEM_READ,
+    permission: actionPermission('item', 'view'), // F2-6-0: 对齐 API requirePermission("item:view")（原 PERMISSIONS.ITEM_READ 值为 "item:read"，与后端强制码不一致）
     availability: 'ready',
     capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_DETAIL_CRUD },
     createRoute: '/items/new',
@@ -572,7 +597,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     domain: 'master-data',
     label: '价格表',
     route: '/price-lists',
-    permission: PERMISSIONS.PRICE_LIST_READ,
+    permission: actionPermission('price-list', 'view'), // F2-6-0: 对齐 API requirePermission("price-list:view")（原 PERMISSIONS 值为 read 风格）
     availability: 'ready',
     capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_DETAIL_CRUD },
     createRoute: '/price-lists/new',
@@ -595,7 +620,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     domain: 'master-data',
     label: '计量单位',
     route: '/unit-of-measures',
-    permission: PERMISSIONS.UNIT_OF_MEASURE_READ,
+    permission: actionPermission('unit-of-measure', 'view'), // F2-6-0: 对齐 API requirePermission("unit-of-measure:view")（原 PERMISSIONS 值为 read 风格）
     availability: 'ready',
     capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_LIST },
     order: 5,
@@ -679,7 +704,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     domain: 'system',
     label: '操作日志',
     route: '/audit-logs',
-    permission: PERMISSIONS.AUDIT_READ,
+    permission: actionPermission('audit', 'view'), // F2-6-0: 对齐 API requirePermission("audit:view")（原 PERMISSIONS.AUDIT_READ 值为 "audit:read"，与后端强制码不一致）
     availability: 'hold',
     capabilities: { contract: CONTRACT_LIST_DETAIL, ui: UI_NONE },
     order: 4,
