@@ -13,8 +13,8 @@ import { useParams } from "next/navigation";
 import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
-import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
+import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 
 interface RequisitionDetail {
@@ -57,6 +57,9 @@ function RequisitionDetailPage() {
   const [detail, setDetail] = useState<RequisitionDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState<ApiClientError | null>(null);
+  const [confirmSubmit, setConfirmSubmit] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -75,6 +78,33 @@ function RequisitionDetailPage() {
       });
     return () => controller.abort();
   }, [id]);
+
+  const refreshDetail = async () => {
+    try {
+      const body = await apiFetch<RequisitionDetail>(`/api/purchase-requisitions/${id}`);
+      setDetail(body.data);
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "刷新失败", "NETWORK_ERROR"),
+      );
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!detail || actionBusy) return;
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      await apiFetch(`/api/purchase-requisitions/${id}/submit`, { method: "POST" });
+      await refreshDetail();
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "提交失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -99,18 +129,34 @@ function RequisitionDetailPage() {
 
   return (
     <AppPage>
+      {actionError && (
+        <div className="border-status-danger-border mb-3 rounded-md border bg-status-danger-bg/10 p-3 text-sm text-status-danger-text">
+          {describeStatus(actionError.status)}：{actionError.message}
+          {actionError.code ? `（${actionError.code}）` : ""}
+        </div>
+      )}
       <EntityDetailWorkspace
         title={`采购申请详情 — ${detail.code}`}
         backHref="/purchasing/requisitions"
         status={detail.status}
         actions={
           detail.status === "DRAFT" && canEdit ? (
-            <Link
-              href={`/purchasing/requisitions/${id}/edit`}
-              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
-            >
-              编辑
-            </Link>
+            <>
+              <Link
+                href={`/purchasing/requisitions/${id}/edit`}
+                className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-slate-50"
+              >
+                编辑
+              </Link>
+              <button
+                type="button"
+                onClick={() => setConfirmSubmit(true)}
+                disabled={actionBusy}
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {actionBusy ? "处理中…" : "提交审批"}
+              </button>
+            </>
           ) : undefined
         }
         summary={
@@ -165,6 +211,19 @@ function RequisitionDetailPage() {
           </div>
         </section>
       </EntityDetailWorkspace>
+
+      <ConfirmActionDialog
+        open={confirmSubmit}
+        title="提交采购申请审批"
+        description="提交后进入审批流程（命中策略需 APPROVED 后才能转采购订单）。确认提交？"
+        confirmLabel="确认提交"
+        busy={actionBusy}
+        onConfirm={() => {
+          setConfirmSubmit(false);
+          void handleSubmit();
+        }}
+        onCancel={() => setConfirmSubmit(false)}
+      />
     </AppPage>
   );
 }
