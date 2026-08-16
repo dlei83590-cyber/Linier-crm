@@ -290,7 +290,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     order: 4,
   },
 
-  // ===== 销售管理（后端契约 FINAL，前端未开放 → hold；F2-5 开放）=====
+  // ===== 销售管理（F2-6A：List/Detail 只读产品化 → ready；create 严格按来源链，F2-6B 开放）=====
   // 权限码为真实 endpoint 码（quotation:view / sales-order:view / delivery:view / invoice:view / accounts-receivable:view / receipt:view / credit-debit-note:view）
   {
     id: 'quotations',
@@ -298,8 +298,8 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     label: '报价单',
     route: '/sales/quotations',
     permission: PERMISSIONS.QUOTATION_READ,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_FULL, ui: UI_NONE },
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL },
     order: 1,
   },
   // sales-orders：F2-6-0 contract 基线修正——/api/sales-orders 仅 GET（本阶段不开放 POST），唯一创建入口 Quotation convert；
@@ -310,8 +310,8 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     label: '销售订单',
     route: '/sales/orders',
     permission: PERMISSIONS.SALES_ORDER_READ,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_LIST_DETAIL_EDIT_ACTIONS, ui: UI_NONE },
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_LIST_DETAIL_EDIT_ACTIONS, ui: UI_LIST_DETAIL },
     order: 2,
   },
   // deliveries：F2-6-0 contract 基线修正——/api/deliveries 仅 GET（Direct Delivery 不开放），创建来自 /sales-orders/{id}/deliveries；
@@ -322,8 +322,8 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     label: '送货单',
     route: '/sales/deliveries',
     permission: PERMISSIONS.DELIVERY_READ,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_LIST_DETAIL_EDIT_ACTIONS, ui: UI_NONE },
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_LIST_DETAIL_EDIT_ACTIONS, ui: UI_LIST_DETAIL },
     order: 3,
   },
   // sales-invoices：F2-6-0 contract 基线修正——/api/invoices 仅 GET（Direct Invoice 禁止），唯一创建入口 Delivery → Invoice；
@@ -334,8 +334,8 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     label: '销售发票',
     route: '/sales/invoices',
     permission: PERMISSIONS.INVOICE_READ,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_LIST_DETAIL_EDIT_ACTIONS, ui: UI_NONE },
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_LIST_DETAIL_EDIT_ACTIONS, ui: UI_LIST_DETAIL },
     order: 4,
   },
   // accounts-receivable：只读模型（list/detail/aging），无 create/edit
@@ -345,8 +345,8 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     label: '应收账款',
     route: '/sales/accounts-receivable',
     permission: PERMISSIONS.ACCOUNTS_RECEIVABLE_READ,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_LIST_DETAIL, ui: UI_NONE },
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_LIST_DETAIL, ui: UI_LIST_DETAIL },
     order: 5,
   },
   // receipt-allocation：收款创建 + allocate/void 事实动作，无编辑
