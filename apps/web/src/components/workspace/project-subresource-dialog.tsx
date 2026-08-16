@@ -41,6 +41,7 @@ export function ProjectSubresourceDialog({
   title,
   saving = false,
   error = null,
+  submitDisabled = false,
   onReload,
   onSubmit,
   onClose,
