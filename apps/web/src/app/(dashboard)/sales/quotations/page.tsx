@@ -9,11 +9,12 @@
  */
 import { useState } from "react";
 import Link from "next/link";
-import { actionPermission } from "@nilier-crm/shared";
+import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { useListQuery } from "@/lib/use-list-query";
+import { useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
 
 interface QuotationRow {
@@ -44,6 +45,11 @@ const TONE_MAP: Record<string, StatusTone> = {
 };
 
 function QuotationList() {
+  const { state } = useSession();
+  const canCreate =
+    state.status === "authenticated" &&
+    state.user !== null &&
+    hasPermission(state.user.roles as RoleCode[], actionPermission("quotation", "create"));
   const [codeInput, setCodeInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ code?: string; status?: string }>({});
@@ -71,6 +77,16 @@ function QuotationList() {
       <EntityListWorkspace<QuotationRow>
         title="报价单"
         description="销售报价单列表"
+        headerActions={
+          canCreate ? (
+            <Link
+              href="/sales/quotations/new"
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+            >
+              + 新建报价单
+            </Link>
+          ) : undefined
+        }
         filters={
           <>
             <input
