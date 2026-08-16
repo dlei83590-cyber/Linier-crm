@@ -36,21 +36,21 @@
 - 409：核销冲突 / 金额不匹配
 - 400：校验错误
 
-## Frontend Current State（ui 层事实，2026-08-14）
+## Frontend Current State（ui 层事实，F2-6B 批 2 交付后）
 
-| 能力              | 状态                           |
-| ----------------- | ------------------------------ |
-| List              | ⏸️ 未开放（占位页/入口未开放） |
-| Detail            | ⏸️ 未开放（占位页/入口未开放） |
-| Create            | ⏸️ new 页面未入 main           |
-| Edit              | ⏸️ edit 页面未入 main          |
-| Submit / Workflow | HOLD（Tier 2 HARD HOLD）       |
-| Fact Actions      | HOLD（Tier 3 HARD HOLD）       |
+| 能力              | 状态                                             |
+| ----------------- | ------------------------------------------------ |
+| List              | ✅ `/sales/receipts`（分页 + status 过滤）        |
+| Detail            | ✅ `/sales/receipts/[id]`（摘要 + 核销记录）      |
+| Create            | ✅ `/sales/receipts/new`（收款登记）              |
+| Edit              | ➖ 无 PATCH 路由（收款创建后不可编辑，设计如此）  |
+| Submit / Workflow | ➖ 收款不审批（无 workflow）                      |
+| Fact Actions      | ✅ allocate / void / allocation reverse（详情页） |
 
 ## Current UI
 
-- 占位页（PlaceholderPage「尚未开放」）
+- 列表页 + 新建页 + 详情页（核销选择对话框 + 作废确认 + 核销冲销）。
 
 ## Gap
 
-- List/Detail/Create/allocate/void 全部缺失 → F2-5 分阶段开放
+- 无（List/Detail/Create/allocate/void/reverse 已接线，消费 FINAL 契约）。

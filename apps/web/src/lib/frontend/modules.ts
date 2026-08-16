@@ -209,6 +209,24 @@ const UI_LIST_DETAIL_CRUD_ACTIONS: CapabilityFlags = {
   workflow: false,
   factActions: true,
 };
+/** 列表 + 详情 + Create（F2-6B 批 2 收款核销：无 Edit，有 allocate/void/reverse 事实动作） */
+const UI_LIST_DETAIL_CREATE_ACTIONS: CapabilityFlags = {
+  list: true,
+  detail: true,
+  create: true,
+  edit: false,
+  workflow: false,
+  factActions: true,
+};
+/** 列表 + Create + 提交流 + 事实动作（F2-6B 批 2 贷项/借项通知单：无详情 GET 端点，submit/apply 内联在列表） */
+const UI_LIST_CREATE_WORKFLOW_ACTIONS: CapabilityFlags = {
+  list: true,
+  detail: false,
+  create: true,
+  edit: false,
+  workflow: true,
+  factActions: true,
+};
 
 export interface FrontendModule {
   id: string;
@@ -373,15 +391,17 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_LIST_DETAIL, ui: UI_LIST_DETAIL },
     order: 5,
   },
-  // receipt-allocation：收款创建 + allocate/void 事实动作，无编辑
+  // receipt-allocation：收款创建 + allocate/void/reverse 事实动作，无编辑（F2-6B 批 2 已交付）
   {
     id: 'receipt-allocation',
     domain: 'sales',
     label: '收款核销',
     route: '/sales/receipts',
     permission: PERMISSIONS.RECEIPT_READ,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_LIST_DETAIL_CREATE_ACTIONS, ui: UI_NONE },
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_LIST_DETAIL_CREATE_ACTIONS, ui: UI_LIST_DETAIL_CREATE_ACTIONS },
+    createRoute: '/sales/receipts/new',
+    createPermission: actionPermission('receipt', 'create'),
     order: 6,
   },
   // credit-debit-notes：F2-6-0 contract 基线修正——/api/credit-debit-notes/[id] 仅 submit/apply，无详情 GET/PATCH route → detail=false / edit=false；
@@ -392,8 +412,10 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     label: '贷项/借项通知单',
     route: '/sales/credit-debit-notes',
     permission: PERMISSIONS.CREDIT_DEBIT_NOTE_READ,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_LIST_CREATE_WORKFLOW_ACTIONS, ui: UI_NONE },
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_LIST_CREATE_WORKFLOW_ACTIONS, ui: UI_LIST_CREATE_WORKFLOW_ACTIONS },
+    createRoute: '/sales/credit-debit-notes/new',
+    createPermission: actionPermission('credit-debit-note', 'create'),
     order: 7,
   },
 

@@ -45,8 +45,6 @@
 | 送货单 deliveries                  | [deliveries.md](./deliveries.md)                       | F2-5                     |
 | 销售发票 sales-invoices            | [sales-invoices.md](./sales-invoices.md)               | F2-5                     |
 | 应收账款 accounts-receivable       | [accounts-receivable.md](./accounts-receivable.md)     | F2-5（只读）             |
-| 收款核销 receipt-allocation        | [receipt-allocation.md](./receipt-allocation.md)       | F2-5                     |
-| 贷项/借项通知单 credit-debit-notes | [credit-debit-notes.md](./credit-debit-notes.md)       | F2-5                     |
 | 供应商发票 supplier-invoices       | [supplier-invoices.md](./supplier-invoices.md)         | F2-6                     |
 | 操作日志 audit-logs                | [audit-logs.md](./audit-logs.md)                       | 未排期                   |
 
@@ -64,6 +62,8 @@
 | 库存盘点 stock-counts          | [stock-counts.md](./stock-counts.md)                   | F2-3      |
 | 库存调整 inventory-adjustments | [inventory-adjustments.md](./inventory-adjustments.md) | F2-3      |
 | 库存转换 inventory-conversions | [inventory-conversions.md](./inventory-conversions.md) | F2-3      |
+| 收款核销 receipt-allocation        | [receipt-allocation.md](./receipt-allocation.md)       | F2-6B 批 2（已交付）     |
+| 贷项/借项通知单 credit-debit-notes | [credit-debit-notes.md](./credit-debit-notes.md)       | F2-6B 批 2（已交付）     |
 
 ### HOLD（Backend Contract Missing / 未开放）
 
