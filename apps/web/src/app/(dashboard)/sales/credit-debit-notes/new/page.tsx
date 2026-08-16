@@ -236,7 +236,7 @@ function CnDnCreateForm() {
           金额/税率/价格由后端复制原发票行快照（不重算）；客户与币种从源发票继承。贷项为负向冲减应收、借项为正向调整。
         </p>
 
-        <h2 className="mb-2 text-sm font-medium text-slate-700">调整明细（填入调整数量，> 0）</h2>
+        <h2 className="mb-2 text-sm font-medium text-slate-700">调整明细（填入调整数量，须大于 0）</h2>
         {fieldErrors.lines && <p className="mb-2 text-xs text-red-600">{fieldErrors.lines}</p>}
 
         {loadingLines ? (
