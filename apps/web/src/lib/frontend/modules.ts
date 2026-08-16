@@ -538,7 +538,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     createPermission: actionPermission('stock-count', 'create'),
     order: 2,
   },
-  // adjustments：main 只有 list/detail → ui create/edit false
+  // adjustments：F2-6B 批 3 开放 create/edit + submit/apply/cancel → factActions=true
   {
     id: 'inventory-adjustments',
     domain: 'inventory',
@@ -546,7 +546,9 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/inventory/adjustments',
     permission: PERMISSIONS.INVENTORY_ADJUSTMENT_READ,
     availability: 'ready',
-    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL },
+    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CRUD_ACTIONS },
+    createRoute: '/inventory/adjustments/new',
+    createPermission: actionPermission('inventory-adjustment', 'create'),
     order: 3,
   },
   // conversions：main 只有 list/detail → ui create/edit false

@@ -1,23 +1,27 @@
 "use client";
 
 /**
- * Inventory Adjustments — 库存调整详情页（F2-3 Batch C2 Consolidation，CTO #11888）
+ * Inventory Adjustments — 库存调整详情页（F2-3 Consolidation + F2-6B 批 3 动作）
  *
- * 由旧式布局迁移至统一 Workspace：
- * AppPage → EntityDetailWorkspace（Header Summary → Status → Actions → Sections）。
- * 不改 backend / 状态机 / action。
+ * F2-6B 批 3：状态 Gate + 权限 Gate 后提供 submit / apply / cancel 事实动作。
+ *  - submit（inventory-adjustment:edit）：DRAFT → SUBMITTED（version CAS）
+ *  - apply（inventory-adjustment:apply，受限系统权限）：APPROVED → APPLIED（version CAS，maker-checker）
+ *  - cancel（inventory-adjustment:close）：DRAFT/SUBMITTED/APPROVED → CANCELLED
+ * APPROVED ≠ APPLIED；库存落账由后端 Shared LedgerCommand 执行（前端只读）。
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { PERMISSIONS } from "@nilier-crm/shared";
-import { AppPage, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
-import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
+import { useSession } from "@/lib/session-context";
+import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
+import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 
 interface AdjustmentDetail {
   id: string;
+  version: number;
   adjustmentNo: string;
   status: string;
   reasonCode: string;
@@ -40,6 +44,8 @@ interface AdjustmentDetail {
   }>;
 }
 
+type ConfirmAction = "submit" | "apply" | "cancel";
+
 function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
@@ -52,9 +58,17 @@ function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
 function AdjustmentDetailPage() {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
+  const { state } = useSession();
+  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
+  const canEdit = hasPermission(roles, actionPermission("inventory-adjustment", "edit"));
+  const canApply = hasPermission(roles, actionPermission("inventory-adjustment", "apply"));
+  const canClose = hasPermission(roles, actionPermission("inventory-adjustment", "close"));
   const [detail, setDetail] = useState<AdjustmentDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState<ApiClientError | null>(null);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -74,12 +88,41 @@ function AdjustmentDetailPage() {
     return () => controller.abort();
   }, [id]);
 
+  const refreshDetail = async () => {
+    try {
+      const body = await apiFetch<AdjustmentDetail>(`/api/inventory-adjustments/${id}`);
+      setDetail(body.data);
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "刷新失败", "NETWORK_ERROR"),
+      );
+    }
+  };
+
+  const runAction = async (action: ConfirmAction) => {
+    if (!detail || actionBusy) return;
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      await apiFetch(`/api/inventory-adjustments/${id}/${action}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ version: detail.version }),
+      });
+      await refreshDetail();
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "操作失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
   if (loading) {
     return (
       <AppPage>
-        <div className="border-border bg-surface rounded-lg border p-6 text-sm text-ink-muted">
-          加载中…
-        </div>
+        <div className="border-border bg-surface rounded-lg border p-6 text-sm text-ink-muted">加载中…</div>
       </AppPage>
     );
   }
@@ -97,10 +140,58 @@ function AdjustmentDetailPage() {
 
   return (
     <AppPage>
+      {actionError && (
+        <div className="border-status-danger-border mb-3 rounded-md border bg-status-danger-bg/10 p-3 text-sm text-status-danger-text">
+          {describeStatus(actionError.status)}：{actionError.message}
+          {actionError.code ? `（${actionError.code}）` : ""}
+        </div>
+      )}
       <EntityDetailWorkspace
         title={`库存调整详情 — ${detail.adjustmentNo}`}
         backHref="/inventory/adjustments"
         status={detail.status}
+        actions={
+          <>
+            {detail.status === "DRAFT" && canEdit && (
+              <Link
+                href={`/inventory/adjustments/${id}/edit`}
+                className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-slate-50"
+              >
+                编辑
+              </Link>
+            )}
+            {detail.status === "DRAFT" && canEdit && (
+              <button
+                type="button"
+                onClick={() => setConfirmAction("submit")}
+                disabled={actionBusy}
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {actionBusy ? "处理中…" : "提交"}
+              </button>
+            )}
+            {detail.status === "APPROVED" && canApply && (
+              <button
+                type="button"
+                onClick={() => setConfirmAction("apply")}
+                disabled={actionBusy}
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {actionBusy ? "应用中…" : "应用调整"}
+              </button>
+            )}
+            {(detail.status === "DRAFT" || detail.status === "SUBMITTED" || detail.status === "APPROVED") && canClose && (
+              <button
+                type="button"
+                onClick={() => setConfirmAction("cancel")}
+                disabled={actionBusy}
+                className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                取消
+              </button>
+            )}
+          </>
+        }
         summary={
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <InfoItem label="调整单号" value={detail.adjustmentNo} />
@@ -154,9 +245,7 @@ function AdjustmentDetailPage() {
                 ))}
                 {(detail.lines ?? []).length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-3 py-8 text-center text-sm text-ink-muted">
-                      暂无明细行
-                    </td>
+                    <td colSpan={7} className="px-3 py-8 text-center text-sm text-ink-muted">暂无明细行</td>
                   </tr>
                 )}
               </tbody>
@@ -164,6 +253,29 @@ function AdjustmentDetailPage() {
           </div>
         </section>
       </EntityDetailWorkspace>
+
+      <ConfirmActionDialog
+        open={confirmAction !== null}
+        title={
+          confirmAction === "submit" ? "提交调整单" : confirmAction === "apply" ? "应用调整" : "取消调整单"
+        }
+        description={
+          confirmAction === "submit"
+            ? "提交后进入审批流程（命中策略需 APPROVED 后方可应用）。确认提交？"
+            : confirmAction === "apply"
+              ? "应用将经 Shared LedgerCommand 追加库存流水（IN/OUT 同事务落账），不可逆。确认应用？"
+              : "取消该调整单？仅 DRAFT/SUBMITTED/APPROVED 可取消（APPLIED 禁止取消）。"
+        }
+        confirmLabel={confirmAction === "apply" ? "确认应用" : confirmAction === "cancel" ? "确认取消" : "确认提交"}
+        tone={confirmAction === "apply" || confirmAction === "cancel" ? "danger" : "primary"}
+        busy={actionBusy}
+        onConfirm={() => {
+          const a = confirmAction;
+          setConfirmAction(null);
+          if (a) void runAction(a);
+        }}
+        onCancel={() => setConfirmAction(null)}
+      />
     </AppPage>
   );
 }
