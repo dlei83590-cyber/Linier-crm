@@ -399,3 +399,353 @@ export function TaskFields({
     </div>
   );
 }
+
+/** B2-1B-1：Risks（项目风险）表单字段（CTO #13589）
+ * 只按真实 contract 提供字段：description(必填)/impact/probability(HIGH|MEDIUM|LOW)/mitigation/status(OPEN|MITIGATING|CLOSED)。
+ * ownerId 不暴露（无正式 user selector，同 B2-1A Members 模式）：Create/Edit 均不发送。
+ * status→CLOSED 只提交已有 PATCH 字段；closedAt / ProjectRiskClosed Domain Event 由 backend 负责，前端不复制。
+ */
+export interface RiskFormValue {
+  description: string;
+  impact: string;
+  probability: "HIGH" | "MEDIUM" | "LOW" | "";
+  mitigation: string;
+  status: "OPEN" | "MITIGATING" | "CLOSED";
+}
+
+export const EMPTY_RISK_FORM: RiskFormValue = {
+  description: "",
+  impact: "",
+  probability: "",
+  mitigation: "",
+  status: "OPEN",
+};
+
+export function RiskFields({
+  value,
+  onChange,
+  statusLabels,
+  probabilityLabels,
+}: {
+  value: RiskFormValue;
+  onChange: (v: RiskFormValue) => void;
+  statusLabels: Record<string, string>;
+  probabilityLabels: Record<string, string>;
+}) {
+  const set = (patch: Partial<RiskFormValue>) => onChange({ ...value, ...patch });
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">描述 *</label>
+        <textarea
+          value={value.description}
+          onChange={(e) => set({ description: e.target.value })}
+          rows={3}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">状态</label>
+        <select
+          value={value.status}
+          onChange={(e) => set({ status: e.target.value as RiskFormValue["status"] })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        >
+          {Object.entries(statusLabels).map(([k, label]) => (
+            <option key={k} value={k}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">发生概率</label>
+        <select
+          value={value.probability}
+          onChange={(e) => set({ probability: e.target.value as RiskFormValue["probability"] })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        >
+          <option value="">未设置</option>
+          {Object.entries(probabilityLabels).map(([k, label]) => (
+            <option key={k} value={k}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">影响</label>
+        <input
+          value={value.impact}
+          onChange={(e) => set({ impact: e.target.value })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">应对方案</label>
+        <textarea
+          value={value.mitigation}
+          onChange={(e) => set({ mitigation: e.target.value })}
+          rows={3}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+    </div>
+  );
+}
+
+/** B2-1B-1：Visits（客户走访/沟通记录）表单字段（CTO #13589）
+ * 只按真实 contract 提供字段：visitType(VISIT|PHONE|VIDEO|MEETING|OTHER)/visitedAt/contactName/summary(必填)/nextAction/reminderAt。
+ * visitorId 不暴露（无正式 user selector，同 B2-1A Members 模式）：Create/Edit 均不发送。
+ * 不扩展 customer-contact 或 follow-up workflow 语义。
+ */
+export interface VisitFormValue {
+  visitType: "VISIT" | "PHONE" | "VIDEO" | "MEETING" | "OTHER";
+  visitedAt: string;
+  contactName: string;
+  summary: string;
+  nextAction: string;
+  reminderAt: string;
+}
+
+export const EMPTY_VISIT_FORM: VisitFormValue = {
+  visitType: "VISIT",
+  visitedAt: "",
+  contactName: "",
+  summary: "",
+  nextAction: "",
+  reminderAt: "",
+};
+
+export function VisitFields({
+  value,
+  onChange,
+  visitTypeLabels,
+}: {
+  value: VisitFormValue;
+  onChange: (v: VisitFormValue) => void;
+  visitTypeLabels: Record<string, string>;
+}) {
+  const set = (patch: Partial<VisitFormValue>) => onChange({ ...value, ...patch });
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">类型</label>
+        <select
+          value={value.visitType}
+          onChange={(e) => set({ visitType: e.target.value as VisitFormValue["visitType"] })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        >
+          {Object.entries(visitTypeLabels).map(([k, label]) => (
+            <option key={k} value={k}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">走访时间</label>
+        <input
+          type="datetime-local"
+          value={value.visitedAt}
+          onChange={(e) => set({ visitedAt: e.target.value })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">客户联系人</label>
+        <input
+          value={value.contactName}
+          onChange={(e) => set({ contactName: e.target.value })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">沟通纪要 *</label>
+        <textarea
+          value={value.summary}
+          onChange={(e) => set({ summary: e.target.value })}
+          rows={3}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">下次行动</label>
+        <input
+          value={value.nextAction}
+          onChange={(e) => set({ nextAction: e.target.value })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">提醒时间</label>
+        <input
+          type="datetime-local"
+          value={value.reminderAt}
+          onChange={(e) => set({ reminderAt: e.target.value })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+    </div>
+  );
+}
+
+/** B2-1B-2：Products（项目产品）表单字段（CTO #13632）
+ * 只按真实 project-product contract：itemId(必填，selector 消费真实 /api/items)/quantity(coerce number≥0,空)/note(≤500,空)。
+ * priceSnapshotId 由报价快照流程维护，UI 不暴露（避免前端计算/伪造价格）；
+ * 不前端计算项目总金额；PATCH 带 version CAS（refine 至少一个更新字段，quantity/note 为空 → null）。
+ */
+export interface ProductFormValue {
+  itemId: string;
+  quantity: string;
+  note: string;
+}
+
+export const EMPTY_PRODUCT_FORM: ProductFormValue = {
+  itemId: "",
+  quantity: "",
+  note: "",
+};
+
+export function ProductFields({
+  value,
+  onChange,
+  itemOptions,
+  unavailableItem = null,
+  itemLocked = null,
+  loading = false,
+  error = null,
+}: {
+  value: ProductFormValue;
+  onChange: (v: ProductFormValue) => void;
+  itemOptions: Array<{ id: string; code: string | null; name: string | null }>;
+  unavailableItem?: { id: string; label: string } | null;
+  itemLocked?: { id: string; label: string } | null;
+  loading?: boolean;
+  error?: string | null;
+}) {
+  const set = (patch: Partial<ProductFormValue>) => onChange({ ...value, ...patch });
+  const itemUnavailable = unavailableItem !== null;
+  const itemLockedOn = itemLocked !== null;
+  const selectorDisabled = itemLockedOn || loading || error !== null;
+
+  return (
+    <div className="space-y-3">
+      {itemUnavailable && (
+        <p className="text-xs text-amber-600">原关联物料已不可用，请重新选择后保存。</p>
+      )}
+      {error && (
+        <p className="text-xs text-red-600">物料加载失败：{error}（无法选择物料，请重试或联系管理员）</p>
+      )}
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">物料 *</label>
+        <select
+          value={value.itemId}
+          onChange={(e) => set({ itemId: e.target.value })}
+          disabled={selectorDisabled}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm disabled:opacity-60"
+        >
+          {itemLockedOn && itemLocked && (
+            <option value={itemLocked.id}>{itemLocked.label}</option>
+          )}
+          {itemUnavailable && unavailableItem && !itemLockedOn && (
+            <option value={unavailableItem.id}>{unavailableItem.label}</option>
+          )}
+          {!itemLockedOn && !error && <option value="">{loading ? "物料加载中…" : "选择物料"}</option>}
+          {!itemLockedOn &&
+            !error &&
+            itemOptions.map((it) => (
+              <option key={it.id} value={it.id}>
+                {it.code ?? ""} {it.name ?? ""}
+              </option>
+            ))}
+        </select>
+        {itemLockedOn && (
+          <p className="mt-1 text-xs text-ink-muted">
+            编辑时物料不可变更（PATCH 不接收 itemId），如需更换请删除后重新添加。
+          </p>
+        )}
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">数量</label>
+        <input
+          type="number"
+          min={0}
+          step="any"
+          value={value.quantity}
+          onChange={(e) => set({ quantity: e.target.value })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">备注</label>
+        <textarea
+          value={value.note}
+          onChange={(e) => set({ note: e.target.value })}
+          rows={3}
+          maxLength={500}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+    </div>
+  );
+}
+
+/** B2-1B-2：Tags（项目标签）表单字段（CTO #13632）
+ * 只支持 Add（POST tagId，重复 → backend 409 兜底）；无 Edit/PATCH，UI 不造编辑入口。
+ * selector 消费真实 Tag 数据源（/api/tags）；前端可提示重复，但 backend 仍最终兜底。
+ */
+export interface TagFormValue {
+  tagId: string;
+}
+
+export const EMPTY_TAG_FORM: TagFormValue = {
+  tagId: "",
+};
+
+export function TagFields({
+  value,
+  onChange,
+  tagOptions,
+  duplicateHint = null,
+  loading = false,
+  error = null,
+}: {
+  value: TagFormValue;
+  onChange: (v: TagFormValue) => void;
+  tagOptions: Array<{ id: string; code: string | null; name: string | null }>;
+  duplicateHint?: string | null;
+  loading?: boolean;
+  error?: string | null;
+}) {
+  const set = (patch: Partial<TagFormValue>) => onChange({ ...value, ...patch });
+  const selectorDisabled = loading || error !== null;
+
+  return (
+    <div className="space-y-3">
+      {duplicateHint && <p className="text-xs text-amber-600">{duplicateHint}</p>}
+      {error && (
+        <p className="text-xs text-red-600">标签加载失败：{error}（无法选择标签，请重试或联系管理员）</p>
+      )}
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">标签 *</label>
+        <select
+          value={value.tagId}
+          onChange={(e) => set({ tagId: e.target.value })}
+          disabled={selectorDisabled}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm disabled:opacity-60"
+        >
+          {!error && <option value="">{loading ? "标签加载中…" : "选择标签"}</option>}
+          {!error &&
+            tagOptions.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name ?? t.code ?? t.id}
+              </option>
+            ))}
+        </select>
+      </div>
+    </div>
+  );
+}
