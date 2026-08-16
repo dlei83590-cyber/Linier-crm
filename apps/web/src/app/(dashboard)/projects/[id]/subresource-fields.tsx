@@ -904,3 +904,66 @@ export function ExpenseFields({
     </div>
   );
 }
+
+/** B2-2B：Progresses（项目进展记录）表单字段
+ * 只按真实 project-progress contract：recordedAt(记录时间,可空,datetime)/progressPercent(0-100,必填)/summary(≤2000,必填)。
+ * 红线：Progress record 是录入事实，Project.progressPercent 是唯一 authoritative aggregate projection；
+ * 前端不据 history 计算当前/平均/最大/最新进度。
+ */
+export interface ProgressFormValue {
+  recordedAt: string; // datetime-local（空 = 不提供）
+  progressPercent: string;
+  summary: string;
+}
+
+export const EMPTY_PROGRESS_FORM: ProgressFormValue = {
+  recordedAt: "",
+  progressPercent: "",
+  summary: "",
+};
+
+export function ProgressFields({
+  value,
+  onChange,
+}: {
+  value: ProgressFormValue;
+  onChange: (v: ProgressFormValue) => void;
+}) {
+  const set = (patch: Partial<ProgressFormValue>) => onChange({ ...value, ...patch });
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">进度 %（0-100）*</label>
+        <input
+          type="number"
+          min={0}
+          max={100}
+          step="any"
+          value={value.progressPercent}
+          onChange={(e) => set({ progressPercent: e.target.value })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">记录时间（可选，默认当前时间）</label>
+        <input
+          type="datetime-local"
+          value={value.recordedAt}
+          onChange={(e) => set({ recordedAt: e.target.value })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">进展说明 *</label>
+        <textarea
+          value={value.summary}
+          onChange={(e) => set({ summary: e.target.value })}
+          rows={3}
+          maxLength={2000}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+    </div>
+  );
+}
