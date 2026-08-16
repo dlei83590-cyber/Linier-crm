@@ -425,7 +425,7 @@ function CnDnList() {
                 onClick={() => {
                   const t = confirmTarget;
                   setConfirmTarget(null);
-                  void runAction(t);
+                  if (t) void runAction(t);
                 }}
                 disabled={busyKey !== null}
                 className={
