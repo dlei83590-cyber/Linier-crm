@@ -1,20 +1,23 @@
 "use client";
 
 /**
- * Sales Order Detail — 销售订单详情页（F2-6A Sales Read Foundation）
+ * Sales Order Detail — 销售订单详情页（F2-6A Sales Read Foundation + F2-6B 批 1 动作）
  *
  * 只读 Detail：AppPage → EntityDetailWorkspace（Header → Summary → Lines）。
- * 不开放 confirm/cancel 等 factActions（F2-6B）；不提供 Edit 入口。
+ * F2-6B 批 1：状态 Gate + 权限 Gate 后提供 Create Delivery（delivery:create）动作按钮，
+ * 携带剩余可交付行（sourceSalesOrderLineId + remainingQty）创建 DRAFT 送货单。
+ * confirm/cancel 等其它 factActions 仍不开放；不提供 Edit 入口。
  * PermissionGuard 对齐 API requirePermission("sales-order:view")。
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { actionPermission } from "@nilier-crm/shared";
+import { useParams, useRouter } from "next/navigation";
+import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
-import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
+import { useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
 
 const TONE_MAP: Record<string, StatusTone> = {
@@ -31,8 +34,15 @@ interface SalesOrderLine {
   lineNo: number;
   description?: string | null;
   quantity: string;
+  remainingQty?: string;
   unitPrice: string;
   item?: { id: string; code: string | null; name: string | null; model?: string | null } | null;
+}
+
+interface DeliveryCreatedResponse {
+  id: string;
+  code: string;
+  status: string;
 }
 
 interface SalesOrderDetail {
@@ -60,10 +70,49 @@ function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
 
 function SalesOrderDetailPage() {
   const params = useParams();
+  const router = useRouter();
+  const { state } = useSession();
   const id = typeof params.id === "string" ? params.id : "";
   const [detail, setDetail] = useState<SalesOrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState<ApiClientError | null>(null);
+
+  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
+  const canCreateDelivery = hasPermission(roles, actionPermission("delivery", "create"));
+  const canDeliver =
+    detail !== null &&
+    (detail.status === "CONFIRMED" || detail.status === "PARTIALLY_DELIVERED");
+  const remainingLines = (detail?.lines ?? []).filter(
+    (l) => Number(l.remainingQty ?? l.quantity) > 0,
+  );
+
+  const handleCreateDelivery = async () => {
+    if (!detail || actionBusy) return;
+    if (remainingLines.length === 0) return;
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      const body = await apiFetch<DeliveryCreatedResponse>(`/api/sales-orders/${id}/deliveries`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lines: remainingLines.map((l) => ({
+            sourceSalesOrderLineId: l.id,
+            quantity: Number(l.remainingQty ?? l.quantity),
+          })),
+          changeReason: "从销售订单创建送货单",
+        }),
+      });
+      router.push(`/sales/deliveries/${body.data.id}`);
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "创建送货单失败", "NETWORK_ERROR"),
+      );
+      setActionBusy(false);
+    }
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -106,12 +155,31 @@ function SalesOrderDetailPage() {
 
   return (
     <AppPage>
+      {actionError && (
+        <div className="border-status-danger-border mb-3 rounded-md border bg-status-danger-bg/10 p-3 text-sm text-status-danger-text">
+          {describeStatus(actionError.status)}：{actionError.message}
+          {actionError.code ? `（${actionError.code}）` : ""}
+        </div>
+      )}
       <EntityDetailWorkspace
         title={`销售订单详情 — ${detail.code}`}
         backHref="/sales/orders"
         status={detail.status}
         statusLabel={detail.status}
         statusTone={TONE_MAP[detail.status] ?? "neutral"}
+        actions={
+          canDeliver && canCreateDelivery ? (
+            <button
+              type="button"
+              onClick={handleCreateDelivery}
+              disabled={actionBusy || remainingLines.length === 0}
+              title={remainingLines.length === 0 ? "无剩余可交付数量" : undefined}
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {actionBusy ? "创建中…" : "创建送货单"}
+            </button>
+          ) : undefined
+        }
         summary={
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <InfoItem label="单号" value={detail.code} />

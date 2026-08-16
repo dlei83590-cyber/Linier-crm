@@ -299,7 +299,10 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/sales/quotations',
     permission: PERMISSIONS.QUOTATION_READ,
     availability: 'ready',
-    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL },
+    // F2-6B 批 1：Direct Create 允许（POST /api/quotations + quotation:create）；Edit 已交付（DRAFT/REJECTED + version CAS）
+    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CRUD },
+    createRoute: '/sales/quotations/new',
+    createPermission: actionPermission('quotation', 'create'),
     order: 1,
   },
   // sales-orders：F2-6-0 contract 基线修正——/api/sales-orders 仅 GET（本阶段不开放 POST），唯一创建入口 Quotation convert；

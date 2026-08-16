@@ -1,20 +1,23 @@
 "use client";
 
 /**
- * Quotation Detail — 报价单详情页（F2-6A Sales Read Foundation）
+ * Quotation Detail — 报价单详情页（F2-6A Sales Read Foundation + F2-6B 批 1 动作）
  *
  * 只读 Detail：AppPage → EntityDetailWorkspace（Header → Summary → Lines）。
- * 不开放 submit/accept/cancel/convert 等 factActions（F2-6B）；不提供 Edit 入口。
+ * F2-6B 批 1：状态 Gate + 权限 Gate 后提供 Edit 入口（DRAFT/REJECTED）与
+ * Convert→SO（ACCEPTED + 未过期 + 未转换，quotation:approve）动作按钮。
+ * 其余 factActions（submit/accept/cancel）仍不开放。
  * PermissionGuard 对齐 API requirePermission("quotation:view")。
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { actionPermission } from "@nilier-crm/shared";
+import { useParams, useRouter } from "next/navigation";
+import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
-import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
+import { useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
 
 const TONE_MAP: Record<string, StatusTone> = {
@@ -50,7 +53,14 @@ interface QuotationDetail {
   remark?: string | null;
   customer?: { id: string; code: string | null; name: string | null } | null;
   lines?: QuotationLine[];
+  convertedAt?: string | null;
+  salesOrderId?: string | null;
   createdAt: string;
+}
+
+interface ConvertResponse {
+  salesOrder: { id: string; code: string; status: string };
+  converted: boolean;
 }
 
 function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
@@ -64,10 +74,43 @@ function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
 
 function QuotationDetailPage() {
   const params = useParams();
+  const router = useRouter();
+  const { state } = useSession();
   const id = typeof params.id === "string" ? params.id : "";
   const [detail, setDetail] = useState<QuotationDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState<ApiClientError | null>(null);
+
+  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
+  const canEdit = hasPermission(roles, actionPermission("quotation", "edit"));
+  const canApprove = hasPermission(roles, actionPermission("quotation", "approve"));
+  const canConvert =
+    detail !== null &&
+    detail.status === "ACCEPTED" &&
+    detail.effectiveStatus !== "EXPIRED" &&
+    !detail.convertedAt &&
+    !detail.salesOrderId;
+
+  const handleConvert = async () => {
+    if (!detail || actionBusy) return;
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      const body = await apiFetch<ConvertResponse>(`/api/quotations/${id}/convert`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ changeReason: "报价单转为销售订单" }),
+      });
+      router.push(`/sales/orders/${body.data.salesOrder.id}`);
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "转换失败", "NETWORK_ERROR"),
+      );
+      setActionBusy(false);
+    }
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -110,12 +153,43 @@ function QuotationDetailPage() {
 
   return (
     <AppPage>
+      {actionError && (
+        <div className="border-status-danger-border mb-3 rounded-md border bg-status-danger-bg/10 p-3 text-sm text-status-danger-text">
+          {describeStatus(actionError.status)}：{actionError.message}
+          {actionError.code ? `（${actionError.code}）` : ""}
+        </div>
+      )}
       <EntityDetailWorkspace
         title={`报价单详情 — ${detail.code}`}
         backHref="/sales/quotations"
         status={detail.effectiveStatus ?? detail.status}
         statusLabel={detail.effectiveStatus ?? detail.status}
         statusTone={TONE_MAP[detail.effectiveStatus ?? detail.status] ?? "neutral"}
+        actions={
+          (canEdit && (detail.status === "DRAFT" || detail.status === "REJECTED")) ||
+          (canConvert && canApprove) ? (
+            <>
+              {canEdit && (detail.status === "DRAFT" || detail.status === "REJECTED") && (
+                <Link
+                  href={`/sales/quotations/${id}/edit`}
+                  className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-slate-50"
+                >
+                  编辑
+                </Link>
+              )}
+              {canConvert && canApprove && (
+                <button
+                  type="button"
+                  onClick={handleConvert}
+                  disabled={actionBusy}
+                  className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {actionBusy ? "转换中…" : "转为销售订单"}
+                </button>
+              )}
+            </>
+          ) : undefined
+        }
         summary={
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <InfoItem label="单号" value={detail.code} />
