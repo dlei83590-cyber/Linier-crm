@@ -1,11 +1,14 @@
 "use client";
 
 /**
- * Inventory Transfers — 库存调拨详情页（F2-3 Batch C2 Consolidation，CTO #11888）
+ * Inventory Transfers — 库存调拨详情页（F2-3 Batch C2 Consolidation + F2-6B 批 3 动作）
  *
- * 由旧式布局迁移至统一 Workspace：
- * AppPage → EntityDetailWorkspace（Header Summary → Status → Actions → Sections）。
- * 不改 backend / 状态机 / action。
+ * AppPage → EntityDetailWorkspace（Header Summary → Actions → Lines）。
+ * F2-6B 批 3：状态 Gate + 权限 Gate 后提供 submit / execute / cancel 事实动作。
+ *  - submit（inventory-transfer:edit）：DRAFT → SUBMITTED（version CAS）
+ *  - execute（inventory-transfer:edit）：APPROVED → EXECUTED（version CAS，幂等 ALREADY_EXECUTED）
+ *  - cancel（inventory-transfer:close）：DRAFT/APPROVED → CANCELLED（version CAS）
+ * APPROVED ≠ EXECUTED；SUBMITTED 状态走 Workflow 审批（前端不驱动审批）。
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -13,12 +16,13 @@ import { useParams } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
-import { AppPage, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
-import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
+import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 
 interface TransferDetail {
   id: string;
+  version: number;
   transferNo: string;
   status: string;
   transferType?: string | null;
@@ -42,6 +46,8 @@ interface TransferDetail {
   }>;
 }
 
+type ConfirmAction = "submit" | "execute" | "cancel";
+
 function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
@@ -53,15 +59,17 @@ function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
 
 function TransferDetailPage() {
   const { state } = useSession();
-  const canEdit =
-    state.status === "authenticated" &&
-    state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("inventory-transfer", "edit"));
+  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
+  const canEdit = hasPermission(roles, actionPermission("inventory-transfer", "edit"));
+  const canClose = hasPermission(roles, actionPermission("inventory-transfer", "close"));
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
   const [detail, setDetail] = useState<TransferDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState<ApiClientError | null>(null);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -80,6 +88,37 @@ function TransferDetailPage() {
       });
     return () => controller.abort();
   }, [id]);
+
+  const refreshDetail = async () => {
+    try {
+      const body = await apiFetch<TransferDetail>(`/api/inventory-transfers/${id}`);
+      setDetail(body.data);
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "刷新失败", "NETWORK_ERROR"),
+      );
+    }
+  };
+
+  const runAction = async (action: ConfirmAction) => {
+    if (!detail || actionBusy) return;
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      await apiFetch(`/api/inventory-transfers/${id}/${action}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ version: detail.version }),
+      });
+      await refreshDetail();
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "操作失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -104,19 +143,57 @@ function TransferDetailPage() {
 
   return (
     <AppPage>
+      {actionError && (
+        <div className="border-status-danger-border mb-3 rounded-md border bg-status-danger-bg/10 p-3 text-sm text-status-danger-text">
+          {describeStatus(actionError.status)}：{actionError.message}
+          {actionError.code ? `（${actionError.code}）` : ""}
+        </div>
+      )}
       <EntityDetailWorkspace
         title={`库存调拨详情 — ${detail.transferNo}`}
         backHref="/inventory/transfers"
         status={detail.status}
         actions={
-          detail.status === "DRAFT" && canEdit ? (
-            <Link
-              href={`/inventory/transfers/${id}/edit`}
-              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
-            >
-              编辑
-            </Link>
-          ) : undefined
+          <>
+            {detail.status === "DRAFT" && canEdit && (
+              <Link
+                href={`/inventory/transfers/${id}/edit`}
+                className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-slate-50"
+              >
+                编辑
+              </Link>
+            )}
+            {detail.status === "DRAFT" && canEdit && (
+              <button
+                type="button"
+                onClick={() => setConfirmAction("submit")}
+                disabled={actionBusy}
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {actionBusy ? "处理中…" : "提交"}
+              </button>
+            )}
+            {detail.status === "APPROVED" && canEdit && (
+              <button
+                type="button"
+                onClick={() => setConfirmAction("execute")}
+                disabled={actionBusy}
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {actionBusy ? "执行中…" : "执行调拨"}
+              </button>
+            )}
+            {(detail.status === "DRAFT" || detail.status === "APPROVED") && canClose && (
+              <button
+                type="button"
+                onClick={() => setConfirmAction("cancel")}
+                disabled={actionBusy}
+                className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                取消
+              </button>
+            )}
+          </>
         }
         summary={
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -185,6 +262,33 @@ function TransferDetailPage() {
           </div>
         </section>
       </EntityDetailWorkspace>
+
+      <ConfirmActionDialog
+        open={confirmAction !== null}
+        title={
+          confirmAction === "submit"
+            ? "提交调拨单"
+            : confirmAction === "execute"
+              ? "执行调拨"
+              : "取消调拨单"
+        }
+        description={
+          confirmAction === "submit"
+            ? "提交后进入审批流程（命中策略则需 APPROVED 后方可执行）。确认提交？"
+            : confirmAction === "execute"
+              ? "执行将产生双边库存流水（SOURCE_OUT + DESTINATION_IN，同事务原子提交），不可逆。确认执行？"
+              : "取消该调拨单？仅 DRAFT/APPROVED 可取消。确认后不可恢复。"
+        }
+        confirmLabel={confirmAction === "execute" ? "确认执行" : confirmAction === "cancel" ? "确认取消" : "确认提交"}
+        tone={confirmAction === "cancel" ? "danger" : confirmAction === "execute" ? "danger" : "primary"}
+        busy={actionBusy}
+        onConfirm={() => {
+          const a = confirmAction;
+          setConfirmAction(null);
+          if (a) void runAction(a);
+        }}
+        onCancel={() => setConfirmAction(null)}
+      />
     </AppPage>
   );
 }

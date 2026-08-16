@@ -512,7 +512,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
   },
 
   // ===== 库存管理（现有成熟工作台 ready；Read Model 类 hold 展示但不提供假入口——F2-7 后端 Read Model Gate 后开放）=====
-  // transfers：main 已有 list/detail/new/edit → ui create/edit true
+  // transfers：main 已有 list/detail/new/edit；F2-6B 批 3 开放 submit/execute/cancel → factActions=true
   {
     id: 'inventory-transfers',
     domain: 'inventory',
@@ -520,12 +520,12 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/inventory/transfers',
     permission: PERMISSIONS.INVENTORY_TRANSFER_READ,
     availability: 'ready',
-    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CRUD },
+    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CRUD_ACTIONS },
     createRoute: '/inventory/transfers/new',
     createPermission: actionPermission('inventory-transfer', 'create'),
     order: 1,
   },
-  // stock-counts：main 只有 list/detail → ui create/edit false
+  // stock-counts：F2-6B 批 3 开放 create + 录入行/complete/cancel → factActions=true
   {
     id: 'stock-counts',
     domain: 'inventory',
@@ -533,7 +533,9 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/inventory/stock-counts',
     permission: PERMISSIONS.STOCK_COUNT_READ,
     availability: 'ready',
-    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL },
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CREATE_ACTIONS },
+    createRoute: '/inventory/stock-counts/new',
+    createPermission: actionPermission('stock-count', 'create'),
     order: 2,
   },
   // adjustments：main 只有 list/detail → ui create/edit false
