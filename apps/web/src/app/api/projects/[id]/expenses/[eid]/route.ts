@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
+import { authenticate, requirePermission, requestMeta, writeAuditLog, assertProjectWritable } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
@@ -45,33 +45,40 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
   const { version, ...updates } = parsed.data;
-  const existing = await prisma.projectExpense.findFirst({ where: { id: eid, projectId: id, deletedAt: null } });
-  if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "费用不存在");
-  if (existing.version !== version) {
-    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  }
+  const txResult = await prisma.$transaction(async (tx) => {
+    const gate = await assertProjectWritable(tx, id);
+    if (!gate.ok) return { error: gate.response };
 
-  const updated = await prisma.projectExpense.update({
-    where: { id: eid },
-    data: {
-      ...updates,
-      incurredAt: updates.incurredAt === undefined ? undefined : updates.incurredAt === null ? null : new Date(updates.incurredAt),
-      version: { increment: 1 },
-      updatedById: user!.id,
-    },
+    const existing = await tx.projectExpense.findFirst({ where: { id: eid, projectId: id, deletedAt: null } });
+    if (!existing) return { error: failNotFound(ERROR_CODES.NOT_FOUND, "费用不存在") };
+    if (existing.version !== version) {
+      return { error: failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试") };
+    }
+
+    const updated = await tx.projectExpense.update({
+      where: { id: eid },
+      data: {
+        ...updates,
+        incurredAt: updates.incurredAt === undefined ? undefined : updates.incurredAt === null ? null : new Date(updates.incurredAt),
+        version: { increment: 1 },
+        updatedById: user!.id,
+      },
+    });
+    return { existing, updated };
   });
+  if ("error" in txResult) return txResult.error;
 
   await writeAuditLog({
     actorId: user?.id,
     action: "project-expense.update",
     entityType: "projectExpense",
     entityId: eid,
-    beforeData: { category: existing.category, amount: existing.amount },
-    afterData: { category: updated.category, amount: updated.amount },
+    beforeData: { category: txResult.existing.category, amount: txResult.existing.amount },
+    afterData: { category: txResult.updated.category, amount: txResult.updated.amount },
     ...meta,
   });
 
-  return ok(updated);
+  return ok(txResult.updated);
 }
 
 /** DELETE /api/projects/:id/expenses/:eid（软删除） */
@@ -84,13 +91,20 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   const { id, eid } = await params;
   const meta = requestMeta(request);
 
-  const existing = await prisma.projectExpense.findFirst({ where: { id: eid, projectId: id, deletedAt: null } });
-  if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "费用不存在");
+  const txResult = await prisma.$transaction(async (tx) => {
+    const gate = await assertProjectWritable(tx, id);
+    if (!gate.ok) return { error: gate.response };
 
-  await prisma.projectExpense.update({
-    where: { id: eid },
-    data: { deletedAt: new Date(), isActive: false, updatedById: user?.id ?? null },
+    const existing = await tx.projectExpense.findFirst({ where: { id: eid, projectId: id, deletedAt: null } });
+    if (!existing) return { error: failNotFound(ERROR_CODES.NOT_FOUND, "费用不存在") };
+
+    await tx.projectExpense.update({
+      where: { id: eid },
+      data: { deletedAt: new Date(), isActive: false, updatedById: user?.id ?? null },
+    });
+    return { ok: true };
   });
+  if ("error" in txResult) return txResult.error;
 
   await writeAuditLog({
     actorId: user?.id,
