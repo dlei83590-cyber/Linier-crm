@@ -124,6 +124,9 @@ export const PERMISSION_MODULES = [
   "item",
   "business-partner",
   "price-list",
+  // Sprint 3C-4：Price Foundation 模块（与 prisma/seed.ts SEED_ACTION_MODULES 保持一致，避免 static RBAC 与 DB permission catalog 漂移；
+  // F2-6B Batch 1 Runtime Hotfix：Quotation Edit 依赖 tax-profiles API → 必须注册 tax-profile:view）
+  "tax-profile",
   "technical-standard",
   "unit-of-measure",
   "commercial-term",

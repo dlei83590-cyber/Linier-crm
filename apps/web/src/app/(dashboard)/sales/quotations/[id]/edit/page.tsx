@@ -97,6 +97,8 @@ function QuotationEditForm() {
 
   const [items, setItems] = useState<ItemOption[]>([]);
   const [taxProfiles, setTaxProfiles] = useState<TaxProfileOption[]>([]);
+  const [itemsError, setItemsError] = useState<ApiClientError | null>(null);
+  const [taxProfilesError, setTaxProfilesError] = useState<ApiClientError | null>(null);
   const [detail, setDetail] = useState<QuotationDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | null>(null);
@@ -170,22 +172,30 @@ function QuotationEditForm() {
     }
   }, [id]);
 
+  // 独立加载基础数据：Items 失败 → 阻断行编辑；Tax Profiles 失败 → 仅税档 selector 降级（页面其余仍可编辑）
   useEffect(() => {
     const controller = new AbortController();
-    Promise.all([
-      apiFetch<ItemOption[]>("/api/items?pageSize=100", { signal: controller.signal }),
-      apiFetch<TaxProfileOption[]>("/api/tax-profiles?pageSize=100", { signal: controller.signal }),
-    ])
-      .then(([itemsBody, taxBody]) => {
-        setItems(itemsBody.data);
-        setTaxProfiles(taxBody.data);
-      })
+    apiFetch<ItemOption[]>("/api/items?pageSize=100", { signal: controller.signal })
+      .then((body) => setItems(body.data))
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(
+        setItemsError(
+          err instanceof ApiClientError ? err : new ApiClientError(0, "加载物料失败", "NETWORK_ERROR"),
+        );
+      });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    apiFetch<TaxProfileOption[]>("/api/tax-profiles?pageSize=100", { signal: controller.signal })
+      .then((body) => setTaxProfiles(body.data))
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setTaxProfilesError(
           err instanceof ApiClientError
             ? err
-            : new ApiClientError(0, "加载基础数据失败", "NETWORK_ERROR"),
+            : new ApiClientError(0, "税率档案加载失败", "NETWORK_ERROR"),
         );
       });
     return () => controller.abort();
@@ -513,7 +523,8 @@ function QuotationEditForm() {
             <select
               value={taxProfileId}
               onChange={(e) => setTaxProfileId(e.target.value)}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              disabled={!!taxProfilesError}
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none disabled:bg-slate-50 disabled:text-slate-400"
             >
               <option value="">未指定</option>
               {taxProfiles.map((t) => (
@@ -522,6 +533,11 @@ function QuotationEditForm() {
                 </option>
               ))}
             </select>
+            {taxProfilesError && (
+              <p className="mt-1 text-xs text-amber-600">
+                税率档案加载失败（已保留当前值，保存不会清空税档）
+              </p>
+            )}
           </div>
           <div className="col-span-2 md:col-span-3">
             <label className="block text-xs text-slate-500">备注（可选，≤1000，清空即置空）</label>
@@ -652,6 +668,12 @@ function QuotationEditForm() {
         {canCreateLine ? (
           <div className="mt-4 rounded-md border border-dashed border-slate-300 p-3">
             <p className="mb-2 text-xs font-medium text-slate-500">新增行</p>
+            {itemsError ? (
+              <p className="text-sm text-red-600">
+                物料数据加载失败，暂时无法新增行：{describeStatus(itemsError.status)}：{itemsError.message}
+                {itemsError.code ? `（${itemsError.code}）` : ""}
+              </p>
+            ) : (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
               <div>
                 <select
@@ -698,6 +720,7 @@ function QuotationEditForm() {
                 </button>
               </div>
             </div>
+            )}
             {fieldErrors.newLine && (
               <p className="mt-1 text-xs text-red-600">{fieldErrors.newLine}</p>
             )}
