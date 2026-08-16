@@ -21,10 +21,11 @@ import { PERMISSIONS, actionPermission, type PermissionCode } from '@nilier-crm/
  * - icon：预留图标名（可选）
  * - order：域内排序
  *
- * ui 层事实基线（2026-08-14 核验 apps/web/src/app/(dashboard) 实际页面）：
+ * ui 层事实基线（2026-08-14 核验 apps/web/src/app/(dashboard) 实际页面；2026-08-17 F2-6B 修订）：
  * - 有列表页 + 详情页 → ui.list / ui.detail = true
  * - 有 new / [id]/edit 页面 → ui.create / ui.edit = true（Create/Edit 未入 main 的模块必须 false）
- * - Tier 2 workflow / Tier 3 factActions → ui 一律 false（HARD HOLD）
+ * - Tier 2 workflow → ui 一律 false（HARD HOLD）；Tier 3 factActions 按真实开放逐模块核（F2-6B：
+ *   quotations/sales-orders/deliveries 已开放 source-driven actions → factActions=true，其余仍 false）
  * - 占位页（PlaceholderPage「尚未开放」）不算开放 → ui 全 false
  */
 
