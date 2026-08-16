@@ -479,6 +479,20 @@ function ProjectDetailPage() {
   const [tagForm, setTagForm] = useState<TagFormValue>(EMPTY_TAG_FORM);
   const [budgetForm, setBudgetForm] = useState<BudgetFormValue>(EMPTY_BUDGET_FORM);
   const [expenseForm, setExpenseForm] = useState<ExpenseFormValue>(EMPTY_EXPENSE_FORM);
+  // B2-2A Hotfix：authoritative init snapshot，Edit PATCH 只发 changed fields（避免无关编辑改写 timestamp / 无意义 version+1）
+  const [budgetInit, setBudgetInit] = useState<{
+    category: string;
+    amount: string;
+    currency: string;
+    note: string;
+  } | null>(null);
+  const [expenseInit, setExpenseInit] = useState<{
+    category: string;
+    amount: string;
+    currency: string;
+    incurredAt: string; // 原始完整 ISO datetime（"" = null）
+    note: string;
+  } | null>(null);
   // B2-1B-2：item selector 消费真实 /api/items；tag selector 消费真实 /api/tags（CTO #13632）
   const [itemOptions, setItemOptions] = useState<Array<{ id: string; code: string | null; name: string | null }>>([]);
   const [tagOptions, setTagOptions] = useState<Array<{ id: string; code: string | null; name: string | null }>>([]);
@@ -740,11 +754,18 @@ function ProjectDetailPage() {
 
   const openBudgetCreate = () => {
     setBudgetForm(EMPTY_BUDGET_FORM);
+    setBudgetInit(null);
     setDialogError(null);
     setBudgetDialog({ open: true, mode: "create", id: null, version: null });
   };
   const openBudgetEdit = (b: BudgetRow) => {
     setBudgetForm({
+      category: b.category,
+      amount: b.amount,
+      currency: b.currency,
+      note: b.note ?? "",
+    });
+    setBudgetInit({
       category: b.category,
       amount: b.amount,
       currency: b.currency,
@@ -758,6 +779,7 @@ function ProjectDetailPage() {
 
   const openExpenseCreate = () => {
     setExpenseForm(EMPTY_EXPENSE_FORM);
+    setExpenseInit(null);
     setDialogError(null);
     setExpenseDialog({ open: true, mode: "create", id: null, version: null });
   };
@@ -767,6 +789,14 @@ function ProjectDetailPage() {
       amount: e.amount,
       currency: e.currency,
       incurredAt: e.incurredAt ? e.incurredAt.slice(0, 10) : "",
+      note: e.note ?? "",
+    });
+    // init 存原始完整 ISO incurredAt（不做 date 截断），用于 changed-only 判断
+    setExpenseInit({
+      category: e.category,
+      amount: e.amount,
+      currency: e.currency,
+      incurredAt: e.incurredAt ?? "",
       note: e.note ?? "",
     });
     setDialogError(null);
@@ -1256,27 +1286,43 @@ function ProjectDetailPage() {
 
   const submitBudget = async () => {
     if (!budgetDialog.open) return;
+    // Hotfix：amount blank 禁止提交，不静默转 0
+    if (budgetForm.amount.trim() === "") {
+      setDialogError(new ApiClientError(400, "金额不能为空", "VALIDATION"));
+      return;
+    }
     setSaving(true);
     setDialogError(null);
     try {
       // 金额纪律：amount 仅作为单条明细事实提交，不前端求和（CTO B2-2A）
-      const payload = {
-        category: budgetForm.category,
-        amount: Number(budgetForm.amount),
-        currency: budgetForm.currency.trim() === "" ? "CNY" : budgetForm.currency,
-        note: budgetForm.note.trim() === "" ? null : budgetForm.note,
-      };
       if (budgetDialog.mode === "create") {
         await apiFetch(`/api/projects/${id}/budgets`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            category: budgetForm.category,
+            amount: Number(budgetForm.amount),
+            currency: budgetForm.currency.trim() === "" ? "CNY" : budgetForm.currency,
+            note: budgetForm.note.trim() === "" ? null : budgetForm.note,
+          }),
         });
-      } else if (budgetDialog.id && budgetDialog.version != null) {
+      } else if (budgetDialog.id && budgetDialog.version != null && budgetInit) {
+        // Hotfix：Edit PATCH 只发 changed fields（避免无意义 version+1）
+        const changes: Record<string, unknown> = {};
+        if (budgetForm.category !== budgetInit.category) changes.category = budgetForm.category;
+        if (budgetForm.amount !== budgetInit.amount) changes.amount = Number(budgetForm.amount);
+        if (budgetForm.currency !== budgetInit.currency)
+          changes.currency = budgetForm.currency.trim() === "" ? "CNY" : budgetForm.currency;
+        if (budgetForm.note !== budgetInit.note)
+          changes.note = budgetForm.note.trim() === "" ? null : budgetForm.note;
+        if (Object.keys(changes).length === 0) {
+          closeBudgetDialog();
+          return;
+        }
         await apiFetch(`/api/projects/${id}/budgets/${budgetDialog.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...payload, version: budgetDialog.version }),
+          body: JSON.stringify({ ...changes, version: budgetDialog.version }),
         });
       }
       closeBudgetDialog();
@@ -1297,6 +1343,7 @@ function ProjectDetailPage() {
       const body = await apiFetch<BudgetRow>(`/api/projects/${id}/budgets/${budgetDialog.id}`);
       const b = body.data;
       setBudgetForm({ category: b.category, amount: b.amount, currency: b.currency, note: b.note ?? "" });
+      setBudgetInit({ category: b.category, amount: b.amount, currency: b.currency, note: b.note ?? "" });
       setBudgetDialog({ open: true, mode: "edit", id: b.id, version: b.version });
       setDialogError(null);
     } catch (err) {
@@ -1310,31 +1357,54 @@ function ProjectDetailPage() {
 
   const submitExpense = async () => {
     if (!expenseDialog.open) return;
+    // Hotfix：amount blank 禁止提交，不静默转 0
+    if (expenseForm.amount.trim() === "") {
+      setDialogError(new ApiClientError(400, "金额不能为空", "VALIDATION"));
+      return;
+    }
     setSaving(true);
     setDialogError(null);
     try {
       // 金额纪律同 Budget：amount 是单条支出事实，不前端求和（CTO B2-2A）
-      const payload = {
-        category: expenseForm.category,
-        amount: Number(expenseForm.amount),
-        currency: expenseForm.currency.trim() === "" ? "CNY" : expenseForm.currency,
-        incurredAt:
-          expenseForm.incurredAt === ""
-            ? null
-            : new Date(`${expenseForm.incurredAt}T00:00:00.000Z`).toISOString(),
-        note: expenseForm.note.trim() === "" ? null : expenseForm.note,
-      };
       if (expenseDialog.mode === "create") {
         await apiFetch(`/api/projects/${id}/expenses`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            category: expenseForm.category,
+            amount: Number(expenseForm.amount),
+            currency: expenseForm.currency.trim() === "" ? "CNY" : expenseForm.currency,
+            incurredAt:
+              expenseForm.incurredAt === ""
+                ? null
+                : new Date(`${expenseForm.incurredAt}T00:00:00.000Z`).toISOString(),
+            note: expenseForm.note.trim() === "" ? null : expenseForm.note,
+          }),
         });
-      } else if (expenseDialog.id && expenseDialog.version != null) {
+      } else if (expenseDialog.id && expenseDialog.version != null && expenseInit) {
+        // Hotfix：Edit PATCH 只发 changed fields；incurredAt 只有用户实际改动才发（清空→null，没碰→不发送）
+        const changes: Record<string, unknown> = {};
+        if (expenseForm.category !== expenseInit.category) changes.category = expenseForm.category;
+        if (expenseForm.amount !== expenseInit.amount) changes.amount = Number(expenseForm.amount);
+        if (expenseForm.currency !== expenseInit.currency)
+          changes.currency = expenseForm.currency.trim() === "" ? "CNY" : expenseForm.currency;
+        if (expenseForm.note !== expenseInit.note)
+          changes.note = expenseForm.note.trim() === "" ? null : expenseForm.note;
+        const initIncurredAtDate = expenseInit.incurredAt === "" ? "" : expenseInit.incurredAt.slice(0, 10);
+        if (expenseForm.incurredAt !== initIncurredAtDate) {
+          changes.incurredAt =
+            expenseForm.incurredAt === ""
+              ? null
+              : new Date(`${expenseForm.incurredAt}T00:00:00.000Z`).toISOString();
+        }
+        if (Object.keys(changes).length === 0) {
+          closeExpenseDialog();
+          return;
+        }
         await apiFetch(`/api/projects/${id}/expenses/${expenseDialog.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...payload, version: expenseDialog.version }),
+          body: JSON.stringify({ ...changes, version: expenseDialog.version }),
         });
       }
       closeExpenseDialog();
@@ -1359,6 +1429,13 @@ function ProjectDetailPage() {
         amount: e.amount,
         currency: e.currency,
         incurredAt: e.incurredAt ? e.incurredAt.slice(0, 10) : "",
+        note: e.note ?? "",
+      });
+      setExpenseInit({
+        category: e.category,
+        amount: e.amount,
+        currency: e.currency,
+        incurredAt: e.incurredAt ?? "",
         note: e.note ?? "",
       });
       setExpenseDialog({ open: true, mode: "edit", id: e.id, version: e.version });
