@@ -593,8 +593,11 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     label: '供应商发票',
     route: '/supplier-invoices',
     permission: PERMISSIONS.SUPPLIER_INVOICE_READ,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_FULL, ui: UI_NONE },
+    availability: 'ready',
+    // F2-6B 批 3：list/detail/create + submit/match/post（Edit 本轮不做）
+    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CREATE_ACTIONS },
+    createRoute: '/supplier-invoices/new',
+    createPermission: actionPermission('supplier-invoice', 'create'),
     order: 1,
   },
   {
