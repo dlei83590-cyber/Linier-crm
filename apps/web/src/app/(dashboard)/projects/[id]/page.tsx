@@ -2195,14 +2195,14 @@ function ProjectDetailPage() {
           itemOptions={itemOptions}
           itemLocked={
             productDialog.mode === "edit" && productForm.itemId !== ""
-              ? {
-                  id: productForm.itemId,
-                  label:
-                    (detail.products ?? []).find((p) => p.id === productDialog.id)?.item
-                      ? `${((detail.products ?? []).find((p) => p.id === productDialog.id)?.item
-                          ?.code ?? "")} ${((detail.products ?? []).find((p) => p.id === productDialog.id)
-                          ?.item?.name ?? "")}`.trim() || productForm.itemId,
-                }
+              ? (() => {
+                  const p = (detail.products ?? []).find((x) => x.id === productDialog.id);
+                  const item = p?.item;
+                  const label = item
+                    ? `${item.code ?? ""} ${item.name ?? ""}`.trim()
+                    : "";
+                  return { id: productForm.itemId, label: label || productForm.itemId };
+                })()
               : null
           }
         />
