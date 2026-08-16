@@ -758,15 +758,15 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
     order: 3,
   },
-  // audit-logs：contract list/detail API FINAL；ui 全 false（占位页，入口未开放）
+  // audit-logs：F2-6B 批 3 已开放 list/detail（只读）
   {
     id: 'audit-logs',
     domain: 'system',
     label: '操作日志',
     route: '/audit-logs',
     permission: actionPermission('audit', 'view'), // F2-6-0: 对齐 API requirePermission("audit:view")（原 PERMISSIONS.AUDIT_READ 值为 "audit:read"，与后端强制码不一致）
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_LIST_DETAIL, ui: UI_NONE },
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_LIST_DETAIL, ui: UI_LIST_DETAIL },
     order: 4,
   },
 
