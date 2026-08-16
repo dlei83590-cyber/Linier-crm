@@ -200,6 +200,41 @@ export const PERMISSION_MODULES = [
   "item-revision",
   "item-tag",
   "item-attachment",
+  // Sprint 4A：Quotation Foundation（动作映射：create→quotation:create（创建即取号）；submit→quotation:edit；approve→quotation:approve（Workflow）；cancel DRAFT→quotation:close；line/revision/snapshot 仅 view/edit——与 seed.ts SEED_ACTION_MODULES 保持一致）
+  "quotation",
+  "quotation-line",
+  "quotation-revision",
+  "quotation-snapshot",
+  "approval-policy",
+  "approval-policy-rule",
+  // Sprint 4B：Sales Order Foundation（动作映射：create→sales-order:create；submit→sales-order:edit；approve→sales-order:approve（Workflow）；cancel DRAFT→sales-order:close；line/revision/snapshot 仅 view/edit）
+  "sales-order",
+  "sales-order-line",
+  "sales-order-revision",
+  "sales-order-snapshot",
+  // Sprint 4C：Delivery Foundation（动作映射：ready/dispatch→delivery:edit；confirm-delivery→delivery:approve；cancel→delivery:close；line/revision/snapshot 仅 view/edit）
+  "delivery",
+  "delivery-line",
+  "delivery-revision",
+  "delivery-snapshot",
+  // Sprint 4D：Invoice Foundation（动作映射：create→invoice:create；issue→invoice:approve；cancel draft→invoice:close；line 系统生成仅 view/edit；revision/snapshot 只读）
+  "invoice",
+  "invoice-line",
+  "invoice-revision",
+  "invoice-snapshot",
+  // Sprint 4E-1：Accounts Receivable Foundation（动作映射：view→accounts-receivable:view；revision/snapshot 只读 view；金额由 4E-2/4E-3 动作驱动）
+  "accounts-receivable",
+  "accounts-receivable-revision",
+  "accounts-receivable-snapshot",
+  // Sprint 4E-2：Receipt & Payment Allocation（动作映射：create→receipt:create（创建即取号）；allocate/reverse→receipt:edit；void→receipt:close；write-off create/submit/approve/apply→write-off:create/edit/approve；revision/snapshot 只读 view）
+  "receipt",
+  "receipt-allocation",
+  "receipt-revision",
+  "receipt-snapshot",
+  "write-off",
+  "write-off-allocation",
+  // Sprint 4E-3：Credit Note / Debit Note（动作映射：create→credit-debit-note:create（创建即取号）；submit→credit-debit-note:edit；apply→credit-debit-note:approve（APPROVED≠APPLIED）；cancel DRAFT→credit-debit-note:close；line 仅 view/edit、adjustment 系统事实层仅 view）
+  "credit-debit-note",
   // Sprint 5A：Purchase Requisition 业务事实（动作映射：create→purchase-requisition:create（创建即取号）；submit→purchase-requisition:edit（复用统一 RBAC，不新造 submit 体系——对齐 5A/5B 拍板）；approve→purchase-requisition:approve（Workflow 审批）；cancel DRAFT→purchase-requisition:close；line 仅 view/edit——见 SEED_RESTRICTED_ACTION_PERMISSIONS；与 seed.ts SEED_ACTION_MODULES 保持一致）
   "purchase-requisition",
   // Sprint 5A：Purchase Order 业务事实（动作映射：create→purchase-order:create（创建即取号）；submit→purchase-order:edit（复用统一 RBAC，不新造 submit 体系——对齐 5A/5B 拍板）；approve→purchase-order:approve（Workflow 审批）；cancel DRAFT→purchase-order:close；line 仅 view/edit、revision/snapshot 只读 view——见 SEED_RESTRICTED_ACTION_PERMISSIONS；与 seed.ts SEED_ACTION_MODULES 保持一致）
