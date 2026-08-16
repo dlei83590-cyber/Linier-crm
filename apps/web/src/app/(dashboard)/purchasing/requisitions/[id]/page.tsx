@@ -50,16 +50,22 @@ function RequisitionDetailPage() {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
   const { state } = useSession();
-  const canEdit =
-    state.status === "authenticated" &&
-    state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("purchase-requisition", "edit"));
+  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
+  const canEdit = hasPermission(roles, actionPermission("purchase-requisition", "edit"));
+  const canApprove = hasPermission(roles, actionPermission("purchase-requisition", "approve"));
   const [detail, setDetail] = useState<RequisitionDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiClientError | null>(null);
   const [confirmSubmit, setConfirmSubmit] = useState(false);
+  const [convertOpen, setConvertOpen] = useState(false);
+  const [suppliers, setSuppliers] = useState<Array<{ id: string; code: string | null; name: string | null }>>([]);
+  const [convertSupplierId, setConvertSupplierId] = useState("");
+  const [convertDeliveryDate, setConvertDeliveryDate] = useState("");
+  const [convertPaymentTerm, setConvertPaymentTerm] = useState("");
+  const [convertRemark, setConvertRemark] = useState("");
+  const [convertError, setConvertError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -106,6 +112,58 @@ function RequisitionDetailPage() {
     }
   };
 
+  const openConvertDialog = async () => {
+    setConvertOpen(true);
+    setConvertError(null);
+    setConvertSupplierId("");
+    setConvertDeliveryDate("");
+    setConvertPaymentTerm("");
+    setConvertRemark("");
+    try {
+      const body = await apiFetch<Array<{ id: string; code: string | null; name: string | null }>>("/api/suppliers?pageSize=100");
+      setSuppliers(body.data);
+    } catch {
+      setConvertError("加载供应商失败");
+    }
+  };
+
+  const handleConvert = async () => {
+    if (!detail || actionBusy) return;
+    if (!convertSupplierId) {
+      setConvertError("请选择供应商");
+      return;
+    }
+    setActionBusy(true);
+    setActionError(null);
+    setConvertError(null);
+    setConvertOpen(false);
+    try {
+      const body = await apiFetch<{ id: string; code: string; status: string }>(
+        `/api/purchase-requisitions/${id}/convert`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            supplierId: convertSupplierId,
+            ...(convertDeliveryDate ? { expectedDeliveryDate: new Date(convertDeliveryDate).toISOString() } : {}),
+            ...(convertPaymentTerm.trim() ? { paymentTerm: convertPaymentTerm.trim() } : {}),
+            ...(convertRemark.trim() ? { remark: convertRemark.trim() } : {}),
+          }),
+        },
+      );
+      await refreshDetail();
+      if (body.data.id) {
+        window.location.href = `/purchasing/orders/${body.data.id}`;
+      }
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "转单失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
   if (loading) {
     return (
       <AppPage>
@@ -140,24 +198,36 @@ function RequisitionDetailPage() {
         backHref="/purchasing/requisitions"
         status={detail.status}
         actions={
-          detail.status === "DRAFT" && canEdit ? (
-            <>
-              <Link
-                href={`/purchasing/requisitions/${id}/edit`}
-                className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-slate-50"
-              >
-                编辑
-              </Link>
+          <>
+            {detail.status === "DRAFT" && canEdit && (
+              <>
+                <Link
+                  href={`/purchasing/requisitions/${id}/edit`}
+                  className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-slate-50"
+                >
+                  编辑
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setConfirmSubmit(true)}
+                  disabled={actionBusy}
+                  className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {actionBusy ? "处理中…" : "提交审批"}
+                </button>
+              </>
+            )}
+            {detail.status === "APPROVED" && canApprove && (
               <button
                 type="button"
-                onClick={() => setConfirmSubmit(true)}
+                onClick={openConvertDialog}
                 disabled={actionBusy}
                 className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {actionBusy ? "处理中…" : "提交审批"}
+                {actionBusy ? "处理中…" : "转采购订单"}
               </button>
-            </>
-          ) : undefined
+            )}
+          </>
         }
         summary={
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -224,6 +294,87 @@ function RequisitionDetailPage() {
         }}
         onCancel={() => setConfirmSubmit(false)}
       />
+
+      {/* ── 转采购订单对话框（选择供应商 + 可选头字段；行自动复制 PR 行） ── */}
+      {convertOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          onClick={() => setConvertOpen(false)}
+        >
+          <div
+            className="border-border bg-surface shadow-elevation-lg w-full max-w-md rounded-lg border p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-ink-primary text-base font-semibold">转采购订单</h2>
+            <p className="text-ink-secondary mt-2 text-xs">将采购申请行复制为采购订单（DRAFT）；请选择供应商。</p>
+            {convertError && (
+              <div className="border-red-200 mt-3 rounded-md border bg-red-50 p-2 text-sm text-red-700">{convertError}</div>
+            )}
+            <div className="mt-4 space-y-3 text-sm">
+              <div>
+                <label className="block text-xs text-slate-500">供应商 *</label>
+                <select
+                  value={convertSupplierId}
+                  onChange={(e) => setConvertSupplierId(e.target.value)}
+                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+                >
+                  <option value="">选择供应商</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>{s.code ?? ""} {s.name ?? ""}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500">期望交期（可选）</label>
+                <input
+                  type="datetime-local"
+                  value={convertDeliveryDate}
+                  onChange={(e) => setConvertDeliveryDate(e.target.value)}
+                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500">付款条件（可选，≤100）</label>
+                <input
+                  value={convertPaymentTerm}
+                  onChange={(e) => setConvertPaymentTerm(e.target.value)}
+                  maxLength={100}
+                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500">备注（可选，≤1000）</label>
+                <input
+                  value={convertRemark}
+                  onChange={(e) => setConvertRemark(e.target.value)}
+                  maxLength={1000}
+                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+                />
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConvertOpen(false)}
+                disabled={actionBusy}
+                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleConvert}
+                disabled={actionBusy}
+                className="bg-brand-600 hover:bg-brand-700 rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {actionBusy ? "转单中…" : "确认转单"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppPage>
   );
 }
