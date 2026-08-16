@@ -35,18 +35,24 @@ import {
   TaskFields,
   RiskFields,
   VisitFields,
+  ProductFields,
+  TagFields,
   EMPTY_STAKEHOLDER_FORM,
   EMPTY_MEMBER_FORM,
   EMPTY_MILESTONE_FORM,
   EMPTY_TASK_FORM,
   EMPTY_RISK_FORM,
   EMPTY_VISIT_FORM,
+  EMPTY_PRODUCT_FORM,
+  EMPTY_TAG_FORM,
   type StakeholderFormValue,
   type MemberFormValue,
   type MilestoneFormValue,
   type TaskFormValue,
   type RiskFormValue,
   type VisitFormValue,
+  type ProductFormValue,
+  type TagFormValue,
 } from "./subresource-fields";
 
 interface ProjectDetail {
@@ -110,6 +116,7 @@ interface ProjectDetail {
   }>;
   products?: Array<{
     id: string;
+    version: number;
     quantity?: string | null;
     unitPrice?: string | null;
     note?: string | null;
@@ -192,6 +199,8 @@ type MilestoneRow = NonNullable<ProjectDetail["milestones"]>[number];
 type TaskRow = NonNullable<ProjectDetail["tasks"]>[number];
 type RiskRow = NonNullable<ProjectDetail["risks"]>[number];
 type VisitRow = NonNullable<ProjectDetail["visits"]>[number];
+type ProductRow = NonNullable<ProjectDetail["products"]>[number];
+type TagRow = NonNullable<ProjectDetail["tags"]>[number];
 
 const STAGE_LABELS: Record<string, string> = {
   LEAD: "线索",
@@ -275,6 +284,8 @@ const SUBRESOURCE_LABELS: Record<string, string> = {
   task: "任务",
   risk: "风险",
   visit: "走访记录",
+  product: "产品",
+  tag: "标签",
 };
 
 const VISIT_TYPE_LABELS: Record<string, string> = {
@@ -422,6 +433,18 @@ function ProjectDetailPage() {
     id: string | null;
     version: number | null;
   }>({ open: false, mode: "create", id: null, version: null });
+  const [productDialog, setProductDialog] = useState<{
+    open: boolean;
+    mode: "create" | "edit";
+    id: string | null;
+    version: number | null;
+  }>({ open: false, mode: "create", id: null, version: null });
+  const [tagDialog, setTagDialog] = useState<{
+    open: boolean;
+    mode: "create";
+    id: null;
+    version: null;
+  }>({ open: false, mode: "create", id: null, version: null });
   const [stakeholderForm, setStakeholderForm] =
     useState<StakeholderFormValue>(EMPTY_STAKEHOLDER_FORM);
   const [memberForm, setMemberForm] = useState<MemberFormValue>(EMPTY_MEMBER_FORM);
@@ -429,10 +452,15 @@ function ProjectDetailPage() {
   const [taskForm, setTaskForm] = useState<TaskFormValue>(EMPTY_TASK_FORM);
   const [riskForm, setRiskForm] = useState<RiskFormValue>(EMPTY_RISK_FORM);
   const [visitForm, setVisitForm] = useState<VisitFormValue>(EMPTY_VISIT_FORM);
+  const [productForm, setProductForm] = useState<ProductFormValue>(EMPTY_PRODUCT_FORM);
+  const [tagForm, setTagForm] = useState<TagFormValue>(EMPTY_TAG_FORM);
+  // B2-1B-2：item selector 消费真实 /api/items；tag selector 消费真实 /api/tags（CTO #13632）
+  const [itemOptions, setItemOptions] = useState<Array<{ id: string; code: string | null; name: string | null }>>([]);
+  const [tagOptions, setTagOptions] = useState<Array<{ id: string; code: string | null; name: string | null }>>([]);
   const [saving, setSaving] = useState(false);
   const [dialogError, setDialogError] = useState<ApiClientError | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{
-    resource: "stakeholder" | "member" | "milestone" | "task" | "risk" | "visit";
+    resource: "stakeholder" | "member" | "milestone" | "task" | "risk" | "visit" | "product" | "tag";
     id: string;
     name: string;
   } | null>(null);
@@ -463,6 +491,29 @@ function ProjectDetailPage() {
       });
     return () => controller.abort();
   }, [loadProject]);
+
+  // B2-1B-2：item/tag selector 独立加载真实数据源；失败仅降级 selector（页面其余仍可用）
+  useEffect(() => {
+    const controller = new AbortController();
+    apiFetch<Array<{ id: string; code: string | null; name: string | null }>>(
+      "/api/items?pageSize=100",
+      { signal: controller.signal },
+    )
+      .then((body) => setItemOptions(body.data))
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        // selector 降级：不阻断页面其他能力
+      });
+    apiFetch<Array<{ id: string; code: string | null; name: string | null }>>(
+      "/api/tags?pageSize=100",
+      { signal: controller.signal },
+    )
+      .then((body) => setTagOptions(body.data))
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+      });
+    return () => controller.abort();
+  }, []);
 
   // mutation 成功后 background refresh：保留已显示数据，不整页 loading；失败显示 refreshError
   const reloadProject = useCallback(async () => {
@@ -599,6 +650,33 @@ function ProjectDetailPage() {
   };
   const closeVisitDialog = () =>
     setVisitDialog({ open: false, mode: "create", id: null, version: null });
+
+  const openProductCreate = () => {
+    setProductForm(EMPTY_PRODUCT_FORM);
+    setDialogError(null);
+    setProductDialog({ open: true, mode: "create", id: null, version: null });
+  };
+  const openProductEdit = (p: ProductRow) => {
+    // Edit 时 item 锁定不可变更（PATCH 不接收 itemId）；quantity/note 回填可编辑
+    setProductForm({
+      itemId: p.item?.id ?? "",
+      quantity: p.quantity ?? "",
+      note: p.note ?? "",
+    });
+    setDialogError(null);
+    setProductDialog({ open: true, mode: "edit", id: p.id, version: p.version });
+  };
+  const closeProductDialog = () =>
+    setProductDialog({ open: false, mode: "create", id: null, version: null });
+
+  // Tags 仅 Add（无 Edit/PATCH，UI 不造编辑入口，CTO #13632）
+  const openTagCreate = () => {
+    setTagForm(EMPTY_TAG_FORM);
+    setDialogError(null);
+    setTagDialog({ open: true, mode: "create", id: null, version: null });
+  };
+  const closeTagDialog = () =>
+    setTagDialog({ open: false, mode: "create", id: null, version: null });
 
   const submitStakeholder = async () => {
     if (!stakeholderDialog.open) return;
@@ -981,6 +1059,90 @@ function ProjectDetailPage() {
     }
   };
 
+  const submitProduct = async () => {
+    if (!productDialog.open) return;
+    setSaving(true);
+    setDialogError(null);
+    try {
+      // priceSnapshotId 由报价快照流程维护，UI 不暴露；不前端计算总金额（CTO #13632）
+      const payload = {
+        itemId: productForm.itemId,
+        quantity: productForm.quantity === "" ? null : Number(productForm.quantity),
+        note: productForm.note === "" ? null : productForm.note,
+      };
+      if (productDialog.mode === "create") {
+        await apiFetch(`/api/projects/${id}/products`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } else if (productDialog.id && productDialog.version != null) {
+        // Edit：PATCH 不接收 itemId（item 锁定不可变更）→ 只发 quantity/note + version CAS
+        await apiFetch(`/api/projects/${id}/products/${productDialog.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            quantity: payload.quantity,
+            note: payload.note,
+            version: productDialog.version,
+          }),
+        });
+      }
+      closeProductDialog();
+      await reloadProject();
+    } catch (err) {
+      setDialogError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "保存失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reloadProduct = async () => {
+    if (!productDialog.open || !productDialog.id) return;
+    setSaving(true);
+    try {
+      const body = await apiFetch<ProductRow>(`/api/projects/${id}/products/${productDialog.id}`);
+      const p = body.data;
+      setProductForm({
+        itemId: p.item?.id ?? "",
+        quantity: p.quantity ?? "",
+        note: p.note ?? "",
+      });
+      setProductDialog({ open: true, mode: "edit", id: p.id, version: p.version });
+      setDialogError(null);
+    } catch (err) {
+      setDialogError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "重新加载失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Tags 仅 Add（无 Edit/PATCH）；重复 tag 前端可提示，backend 仍 409 兜底（CTO #13632）
+  const submitTag = async () => {
+    if (!tagDialog.open) return;
+    setSaving(true);
+    setDialogError(null);
+    try {
+      await apiFetch(`/api/projects/${id}/tags`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tagId: tagForm.tagId }),
+      });
+      closeTagDialog();
+      await reloadProject();
+    } catch (err) {
+      setDialogError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "保存失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
@@ -995,6 +1157,10 @@ function ProjectDetailPage() {
         await apiFetch(`/api/projects/${id}/risks/${deleteTarget.id}`, { method: "DELETE" });
       } else if (deleteTarget.resource === "visit") {
         await apiFetch(`/api/projects/${id}/visits/${deleteTarget.id}`, { method: "DELETE" });
+      } else if (deleteTarget.resource === "product") {
+        await apiFetch(`/api/projects/${id}/products/${deleteTarget.id}`, { method: "DELETE" });
+      } else if (deleteTarget.resource === "tag") {
+        await apiFetch(`/api/projects/${id}/tags/${deleteTarget.id}`, { method: "DELETE" });
       } else {
         await apiFetch(`/api/projects/${id}/tasks/${deleteTarget.id}`, { method: "DELETE" });
       }
@@ -1110,6 +1276,28 @@ function ProjectDetailPage() {
     canManageVisits &&
     detail.stage !== "CLOSED" &&
     hasPermission(roles, actionPermission("project-visit", "delete"));
+  const canManageProducts = detail.capabilities.products;
+  const canAddProduct =
+    canManageProducts &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-product", "create"));
+  const canEditProduct =
+    canManageProducts &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-product", "edit"));
+  const canDeleteProduct =
+    canManageProducts &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-product", "delete"));
+  const canManageTags = detail.capabilities.tags;
+  const canAddTag =
+    canManageTags &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-tag", "create"));
+  const canDeleteTag =
+    canManageTags &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-tag", "delete"));
 
   return (
     <AppPage>
@@ -1525,8 +1713,29 @@ function ProjectDetailPage() {
 
           {activeTab === "products" && (
             <section className="border-border rounded-md border p-4">
-              <SectionTitle>产品（{detail.products?.length ?? 0}）</SectionTitle>
-              <Table headers={["物料编码", "物料名称", "型号", "数量", "单价", "备注"]}>
+              <div className="mb-3 flex items-center justify-between">
+                <SectionTitle>产品（{detail.products?.length ?? 0}）</SectionTitle>
+                {canAddProduct && (
+                  <button
+                    type="button"
+                    onClick={openProductCreate}
+                    className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                  >
+                    添加产品
+                  </button>
+                )}
+              </div>
+              <Table
+                headers={[
+                  "物料编码",
+                  "物料名称",
+                  "型号",
+                  "数量",
+                  "单价",
+                  "备注",
+                  ...(canEditProduct || canDeleteProduct ? ["操作"] : []),
+                ]}
+              >
                 {(detail.products ?? []).map((p) => (
                   <tr key={p.id}>
                     <td className="px-3 py-2 text-ink-secondary">{p.item?.code ?? "—"}</td>
@@ -1535,9 +1744,41 @@ function ProjectDetailPage() {
                     <td className="px-3 py-2 text-ink-primary">{p.quantity ?? "—"}</td>
                     <td className="px-3 py-2 text-ink-secondary">{p.unitPrice ?? "—"}</td>
                     <td className="px-3 py-2 text-ink-secondary">{p.note ?? "—"}</td>
+                    {(canEditProduct || canDeleteProduct) && (
+                      <td className="px-3 py-2">
+                        <div className="flex gap-2">
+                          {canEditProduct && (
+                            <button
+                              type="button"
+                              onClick={() => openProductEdit(p)}
+                              className="text-brand-600 text-sm hover:underline"
+                            >
+                              编辑
+                            </button>
+                          )}
+                          {canDeleteProduct && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDeleteTarget({
+                                  resource: "product",
+                                  id: p.id,
+                                  name: `${p.item?.code ?? ""} ${p.item?.name ?? ""}`.trim() || "产品",
+                                })
+                              }
+                              className="text-sm text-red-600 hover:underline"
+                            >
+                              删除
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
-                {(detail.products ?? []).length === 0 && <EmptyRow colSpan={6} text="暂无产品" />}
+                {(detail.products ?? []).length === 0 && (
+                  <EmptyRow colSpan={canEditProduct || canDeleteProduct ? 7 : 6} text="暂无产品" />
+                )}
               </Table>
             </section>
           )}
@@ -1780,7 +2021,18 @@ function ProjectDetailPage() {
 
           {activeTab === "tags" && (
             <section className="border-border rounded-md border p-4">
-              <SectionTitle>标签（{detail.tags?.length ?? 0}）</SectionTitle>
+              <div className="mb-3 flex items-center justify-between">
+                <SectionTitle>标签（{detail.tags?.length ?? 0}）</SectionTitle>
+                {canAddTag && (
+                  <button
+                    type="button"
+                    onClick={openTagCreate}
+                    className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                  >
+                    添加标签
+                  </button>
+                )}
+              </div>
               <div className="flex flex-wrap gap-2">
                 {(detail.tags ?? []).map((t) => (
                   <span
@@ -1792,6 +2044,21 @@ function ProjectDetailPage() {
                     }}
                   >
                     {t.tag?.name ?? t.tag?.code ?? "—"}
+                    {canDeleteTag && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDeleteTarget({
+                            resource: "tag",
+                            id: t.id,
+                            name: t.tag?.name ?? t.tag?.code ?? "标签",
+                          })
+                        }
+                        className="ml-1.5 text-xs text-red-600 hover:underline"
+                      >
+                        删除
+                      </button>
+                    )}
                   </span>
                 ))}
                 {(detail.tags ?? []).length === 0 && (
@@ -1909,6 +2176,57 @@ function ProjectDetailPage() {
           value={visitForm}
           onChange={setVisitForm}
           visitTypeLabels={VISIT_TYPE_LABELS}
+        />
+      </ProjectSubresourceDialog>
+
+      <ProjectSubresourceDialog
+        open={productDialog.open}
+        mode={productDialog.mode}
+        title={productDialog.mode === "create" ? "添加产品" : "编辑产品"}
+        saving={saving}
+        error={dialogError}
+        onSubmit={submitProduct}
+        onReload={reloadProduct}
+        onClose={closeProductDialog}
+      >
+        <ProductFields
+          value={productForm}
+          onChange={setProductForm}
+          itemOptions={itemOptions}
+          itemLocked={
+            productDialog.mode === "edit" && productForm.itemId !== ""
+              ? {
+                  id: productForm.itemId,
+                  label:
+                    (detail.products ?? []).find((p) => p.id === productDialog.id)?.item
+                      ? `${((detail.products ?? []).find((p) => p.id === productDialog.id)?.item
+                          ?.code ?? "")} ${((detail.products ?? []).find((p) => p.id === productDialog.id)
+                          ?.item?.name ?? "")}`.trim() || productForm.itemId,
+                }
+              : null
+          }
+        />
+      </ProjectSubresourceDialog>
+
+      <ProjectSubresourceDialog
+        open={tagDialog.open}
+        mode="create"
+        title="添加标签"
+        saving={saving}
+        error={dialogError}
+        onSubmit={submitTag}
+        onClose={closeTagDialog}
+      >
+        <TagFields
+          value={tagForm}
+          onChange={setTagForm}
+          tagOptions={tagOptions}
+          duplicateHint={
+            tagForm.tagId !== "" &&
+            (detail.tags ?? []).some((t) => t.tag?.id === tagForm.tagId)
+              ? "该标签已添加，重复添加会被后端拒绝（409）。"
+              : null
+          }
         />
       </ProjectSubresourceDialog>
 

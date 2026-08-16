@@ -591,3 +591,142 @@ export function VisitFields({
     </div>
   );
 }
+
+/** B2-1B-2：Products（项目产品）表单字段（CTO #13632）
+ * 只按真实 project-product contract：itemId(必填，selector 消费真实 /api/items)/quantity(coerce number≥0,空)/note(≤500,空)。
+ * priceSnapshotId 由报价快照流程维护，UI 不暴露（避免前端计算/伪造价格）；
+ * 不前端计算项目总金额；PATCH 带 version CAS（refine 至少一个更新字段，quantity/note 为空 → null）。
+ */
+export interface ProductFormValue {
+  itemId: string;
+  quantity: string;
+  note: string;
+}
+
+export const EMPTY_PRODUCT_FORM: ProductFormValue = {
+  itemId: "",
+  quantity: "",
+  note: "",
+};
+
+export function ProductFields({
+  value,
+  onChange,
+  itemOptions,
+  unavailableItem = null,
+  itemLocked = null,
+}: {
+  value: ProductFormValue;
+  onChange: (v: ProductFormValue) => void;
+  itemOptions: Array<{ id: string; code: string | null; name: string | null }>;
+  unavailableItem?: { id: string; label: string } | null;
+  itemLocked?: { id: string; label: string } | null;
+}) {
+  const set = (patch: Partial<ProductFormValue>) => onChange({ ...value, ...patch });
+  const itemUnavailable = unavailableItem !== null;
+  const itemLockedOn = itemLocked !== null;
+
+  return (
+    <div className="space-y-3">
+      {itemUnavailable && (
+        <p className="text-xs text-amber-600">原关联物料已不可用，请重新选择后保存。</p>
+      )}
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">物料 *</label>
+        <select
+          value={value.itemId}
+          onChange={(e) => set({ itemId: e.target.value })}
+          disabled={itemLockedOn}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm disabled:opacity-60"
+        >
+          {itemLockedOn && itemLocked && (
+            <option value={itemLocked.id}>{itemLocked.label}</option>
+          )}
+          {itemUnavailable && unavailableItem && !itemLockedOn && (
+            <option value={unavailableItem.id}>{unavailableItem.label}</option>
+          )}
+          {!itemLockedOn && <option value="">选择物料</option>}
+          {!itemLockedOn &&
+            itemOptions.map((it) => (
+              <option key={it.id} value={it.id}>
+                {it.code ?? ""} {it.name ?? ""}
+              </option>
+            ))}
+        </select>
+        {itemLockedOn && (
+          <p className="mt-1 text-xs text-ink-muted">
+            编辑时物料不可变更（PATCH 不接收 itemId），如需更换请删除后重新添加。
+          </p>
+        )}
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">数量</label>
+        <input
+          type="number"
+          min={0}
+          step="any"
+          value={value.quantity}
+          onChange={(e) => set({ quantity: e.target.value })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">备注</label>
+        <textarea
+          value={value.note}
+          onChange={(e) => set({ note: e.target.value })}
+          rows={3}
+          maxLength={500}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+    </div>
+  );
+}
+
+/** B2-1B-2：Tags（项目标签）表单字段（CTO #13632）
+ * 只支持 Add（POST tagId，重复 → backend 409 兜底）；无 Edit/PATCH，UI 不造编辑入口。
+ * selector 消费真实 Tag 数据源（/api/tags）；前端可提示重复，但 backend 仍最终兜底。
+ */
+export interface TagFormValue {
+  tagId: string;
+}
+
+export const EMPTY_TAG_FORM: TagFormValue = {
+  tagId: "",
+};
+
+export function TagFields({
+  value,
+  onChange,
+  tagOptions,
+  duplicateHint = null,
+}: {
+  value: TagFormValue;
+  onChange: (v: TagFormValue) => void;
+  tagOptions: Array<{ id: string; code: string | null; name: string | null }>;
+  duplicateHint?: string | null;
+}) {
+  const set = (patch: Partial<TagFormValue>) => onChange({ ...value, ...patch });
+
+  return (
+    <div className="space-y-3">
+      {duplicateHint && <p className="text-xs text-amber-600">{duplicateHint}</p>}
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">标签 *</label>
+        <select
+          value={value.tagId}
+          onChange={(e) => set({ tagId: e.target.value })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        >
+          <option value="">选择标签</option>
+          {tagOptions.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name ?? t.code ?? t.id}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+}
