@@ -8,7 +8,7 @@
  */
 import { useState } from "react";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { PERMISSIONS } from "@nilier-crm/shared";
+import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
@@ -162,7 +162,7 @@ function UomList() {
 
 export default function Page() {
   return (
-    <PermissionGuard permission={PERMISSIONS.UNIT_OF_MEASURE_READ}>
+    <PermissionGuard permission={actionPermission("unit-of-measure", "view")}>
       <UomList />
     </PermissionGuard>
   );

@@ -10,7 +10,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
+import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { useListQuery } from "@/lib/use-list-query";
@@ -253,7 +253,7 @@ function ProjectList() {
 
 export default function Page() {
   return (
-    <PermissionGuard permission={PERMISSIONS.PROJECT_READ}>
+    <PermissionGuard permission={actionPermission("project", "view")}>
       <ProjectList />
     </PermissionGuard>
   );

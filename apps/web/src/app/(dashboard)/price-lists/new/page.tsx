@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { PERMISSIONS } from "@nilier-crm/shared";
+import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityFormWorkspace, ReferenceSelector } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 
@@ -248,7 +248,7 @@ function PriceListCreateForm() {
 
 export default function Page() {
   return (
-    <PermissionGuard permission={PERMISSIONS.PRICE_LIST_READ}>
+    <PermissionGuard permission={actionPermission("price-list", "create")}>
       <AppPage>
         <PriceListCreateForm />
       </AppPage>

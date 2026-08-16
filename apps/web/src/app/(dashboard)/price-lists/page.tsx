@@ -8,7 +8,7 @@
  */
 import { useState } from "react";
 import Link from "next/link";
-import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
+import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
@@ -236,7 +236,7 @@ function PriceListPage() {
 
 export default function Page() {
   return (
-    <PermissionGuard permission={PERMISSIONS.PRICE_LIST_READ}>
+    <PermissionGuard permission={actionPermission("price-list", "view")}>
       <PriceListPage />
     </PermissionGuard>
   );
