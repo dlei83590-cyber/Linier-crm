@@ -967,3 +967,93 @@ export function ProgressFields({
     </div>
   );
 }
+
+/** L2-A：Acceptances（项目验收项）表单字段
+ * 只按真实 project-acceptance contract：name(必填≤200)/expectedDate(可空 datetime)/actualDate(可空 datetime)/
+ * result(PASSED|CONDITIONAL_PASS|FAILED|PENDING，默认 PENDING)/resultNote(可空≤1000)。
+ * 红线：Acceptance 是验收事实记录，ProjectAccepted 生命周期事件由 backend 负责，前端不复制事件逻辑；
+ * mutation 后一律 authoritative re-GET aggregate。
+ */
+export interface AcceptanceFormValue {
+  name: string;
+  expectedDate: string; // datetime-local（空 = 不提供）
+  actualDate: string; // datetime-local（空 = 不提供）
+  result: "PASSED" | "CONDITIONAL_PASS" | "FAILED" | "PENDING";
+  resultNote: string;
+}
+
+export const EMPTY_ACCEPTANCE_FORM: AcceptanceFormValue = {
+  name: "",
+  expectedDate: "",
+  actualDate: "",
+  result: "PENDING",
+  resultNote: "",
+};
+
+export function AcceptanceFields({
+  value,
+  onChange,
+  resultLabels,
+}: {
+  value: AcceptanceFormValue;
+  onChange: (v: AcceptanceFormValue) => void;
+  resultLabels: Record<string, string>;
+}) {
+  const set = (patch: Partial<AcceptanceFormValue>) => onChange({ ...value, ...patch });
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">验收项名称 *</label>
+        <input
+          value={value.name}
+          onChange={(e) => set({ name: e.target.value })}
+          maxLength={200}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">计划日期（可选）</label>
+        <input
+          type="datetime-local"
+          value={value.expectedDate}
+          onChange={(e) => set({ expectedDate: e.target.value })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">实际日期（可选）</label>
+        <input
+          type="datetime-local"
+          value={value.actualDate}
+          onChange={(e) => set({ actualDate: e.target.value })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">验收结果</label>
+        <select
+          value={value.result}
+          onChange={(e) => set({ result: e.target.value as AcceptanceFormValue["result"] })}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        >
+          {Object.entries(resultLabels).map(([k, label]) => (
+            <option key={k} value={k}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="text-ink-secondary block text-xs font-medium">结果说明（可选）</label>
+        <textarea
+          value={value.resultNote}
+          onChange={(e) => set({ resultNote: e.target.value })}
+          rows={3}
+          maxLength={1000}
+          className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+        />
+      </div>
+    </div>
+  );
+}

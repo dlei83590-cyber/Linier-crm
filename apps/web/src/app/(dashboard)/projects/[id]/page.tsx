@@ -40,6 +40,7 @@ import {
   BudgetFields,
   ExpenseFields,
   ProgressFields,
+  AcceptanceFields,
   EMPTY_STAKEHOLDER_FORM,
   EMPTY_MEMBER_FORM,
   EMPTY_MILESTONE_FORM,
@@ -51,6 +52,7 @@ import {
   EMPTY_BUDGET_FORM,
   EMPTY_EXPENSE_FORM,
   EMPTY_PROGRESS_FORM,
+  EMPTY_ACCEPTANCE_FORM,
   type StakeholderFormValue,
   type MemberFormValue,
   type MilestoneFormValue,
@@ -62,6 +64,7 @@ import {
   type BudgetFormValue,
   type ExpenseFormValue,
   type ProgressFormValue,
+  type AcceptanceFormValue,
 } from "./subresource-fields";
 
 interface ProjectDetail {
@@ -176,6 +179,7 @@ interface ProjectDetail {
   }>;
   acceptances?: Array<{
     id: string;
+    version: number;
     name: string;
     expectedDate?: string | null;
     actualDate?: string | null;
@@ -215,6 +219,7 @@ type ProductRow = NonNullable<ProjectDetail["products"]>[number];
 type BudgetRow = NonNullable<ProjectDetail["budgets"]>[number];
 type ExpenseRow = NonNullable<ProjectDetail["expenses"]>[number];
 type ProgressRow = NonNullable<ProjectDetail["progresses"]>[number];
+type AcceptanceRow = NonNullable<ProjectDetail["acceptances"]>[number];
 
 const STAGE_LABELS: Record<string, string> = {
   LEAD: "线索",
@@ -303,6 +308,7 @@ const SUBRESOURCE_LABELS: Record<string, string> = {
   budget: "预算",
   expense: "费用",
   progress: "进度记录",
+  acceptance: "验收项",
 };
 
 const VISIT_TYPE_LABELS: Record<string, string> = {
@@ -496,6 +502,13 @@ function ProjectDetailPage() {
     id: string | null;
     version: number | null;
   }>({ open: false, mode: "create", id: null, version: null });
+  // L2-A：acceptance dialog（验收项，PATCH version CAS；不复制生命周期/事件逻辑）
+  const [acceptanceDialog, setAcceptanceDialog] = useState<{
+    open: boolean;
+    mode: "create" | "edit";
+    id: string | null;
+    version: number | null;
+  }>({ open: false, mode: "create", id: null, version: null });
   const [stakeholderForm, setStakeholderForm] =
     useState<StakeholderFormValue>(EMPTY_STAKEHOLDER_FORM);
   const [memberForm, setMemberForm] = useState<MemberFormValue>(EMPTY_MEMBER_FORM);
@@ -508,6 +521,15 @@ function ProjectDetailPage() {
   const [budgetForm, setBudgetForm] = useState<BudgetFormValue>(EMPTY_BUDGET_FORM);
   const [expenseForm, setExpenseForm] = useState<ExpenseFormValue>(EMPTY_EXPENSE_FORM);
   const [progressForm, setProgressForm] = useState<ProgressFormValue>(EMPTY_PROGRESS_FORM);
+  const [acceptanceForm, setAcceptanceForm] = useState<AcceptanceFormValue>(EMPTY_ACCEPTANCE_FORM);
+  // L2-A：authoritative init snapshot，Edit PATCH 只发 changed fields（同 B2-2A 纪律）
+  const [acceptanceInit, setAcceptanceInit] = useState<{
+    name: string;
+    expectedDate: string; // 原始完整 ISO datetime（"" = null）
+    actualDate: string; // 原始完整 ISO datetime（"" = null）
+    result: string;
+    resultNote: string;
+  } | null>(null);
   // B2-2A Hotfix：authoritative init snapshot，Edit PATCH 只发 changed fields（避免无关编辑改写 timestamp / 无意义 version+1）
   const [budgetInit, setBudgetInit] = useState<{
     category: string;
@@ -549,7 +571,8 @@ function ProjectDetailPage() {
       | "tag"
       | "budget"
       | "expense"
-      | "progress";
+      | "progress"
+      | "acceptance";
     id: string;
     name: string;
   } | null>(null);
@@ -862,6 +885,35 @@ function ProjectDetailPage() {
   };
   const closeProgressDialog = () =>
     setProgressDialog({ open: false, mode: "create", id: null, version: null });
+
+  // L2-A：acceptance dialog 开关（只做 CRUD 交互；ProjectAccepted 事件由 backend 负责，前端不复制）
+  const openAcceptanceCreate = () => {
+    setAcceptanceForm(EMPTY_ACCEPTANCE_FORM);
+    setAcceptanceInit(null);
+    setDialogError(null);
+    setAcceptanceDialog({ open: true, mode: "create", id: null, version: null });
+  };
+  const openAcceptanceEdit = (a: AcceptanceRow) => {
+    setAcceptanceForm({
+      name: a.name,
+      expectedDate: a.expectedDate ? toLocalInput(a.expectedDate) : "",
+      actualDate: a.actualDate ? toLocalInput(a.actualDate) : "",
+      result: a.result as AcceptanceFormValue["result"],
+      resultNote: a.resultNote ?? "",
+    });
+    // init 存原始完整 ISO datetime（不做 date 截断），用于 changed-only 判断
+    setAcceptanceInit({
+      name: a.name,
+      expectedDate: a.expectedDate ?? "",
+      actualDate: a.actualDate ?? "",
+      result: a.result,
+      resultNote: a.resultNote ?? "",
+    });
+    setDialogError(null);
+    setAcceptanceDialog({ open: true, mode: "edit", id: a.id, version: a.version });
+  };
+  const closeAcceptanceDialog = () =>
+    setAcceptanceDialog({ open: false, mode: "create", id: null, version: null });
 
   const submitStakeholder = async () => {
     if (!stakeholderDialog.open) return;
@@ -1595,6 +1647,102 @@ function ProjectDetailPage() {
     }
   };
 
+  // L2-A：acceptance submit（create POST / edit PATCH changed-only + version CAS）
+  // 红线：Acceptance 是验收事实记录，ProjectAccepted 事件由 backend 负责，前端不复制事件逻辑；mutation 后 authoritative re-GET
+  const submitAcceptance = async () => {
+    if (!acceptanceDialog.open) return;
+    if (acceptanceForm.name.trim() === "") {
+      setDialogError(new ApiClientError(400, "验收项名称不能为空", "VALIDATION"));
+      return;
+    }
+    setSaving(true);
+    setDialogError(null);
+    try {
+      if (acceptanceDialog.mode === "create") {
+        await apiFetch(`/api/projects/${id}/acceptance`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: acceptanceForm.name,
+            expectedDate: acceptanceForm.expectedDate === "" ? null : toIso(acceptanceForm.expectedDate),
+            actualDate: acceptanceForm.actualDate === "" ? null : toIso(acceptanceForm.actualDate),
+            result: acceptanceForm.result,
+            resultNote: acceptanceForm.resultNote.trim() === "" ? null : acceptanceForm.resultNote,
+          }),
+        });
+      } else if (acceptanceDialog.id && acceptanceDialog.version != null && acceptanceInit) {
+        // Edit PATCH 只发 changed fields；expectedDate/actualDate 只有用户实际改动才发（清空→null，没碰→不发送）
+        const changes: Record<string, unknown> = {};
+        if (acceptanceForm.name !== acceptanceInit.name) changes.name = acceptanceForm.name;
+        if (acceptanceForm.result !== acceptanceInit.result) changes.result = acceptanceForm.result;
+        if (acceptanceForm.resultNote !== acceptanceInit.resultNote)
+          changes.resultNote = acceptanceForm.resultNote.trim() === "" ? null : acceptanceForm.resultNote;
+        const initExpectedDate =
+          acceptanceInit.expectedDate === "" ? "" : toLocalInput(acceptanceInit.expectedDate);
+        if (acceptanceForm.expectedDate !== initExpectedDate) {
+          changes.expectedDate =
+            acceptanceForm.expectedDate === "" ? null : toIso(acceptanceForm.expectedDate);
+        }
+        const initActualDate =
+          acceptanceInit.actualDate === "" ? "" : toLocalInput(acceptanceInit.actualDate);
+        if (acceptanceForm.actualDate !== initActualDate) {
+          changes.actualDate =
+            acceptanceForm.actualDate === "" ? null : toIso(acceptanceForm.actualDate);
+        }
+        if (Object.keys(changes).length === 0) {
+          closeAcceptanceDialog();
+          return;
+        }
+        await apiFetch(`/api/projects/${id}/acceptance/${acceptanceDialog.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...changes, version: acceptanceDialog.version }),
+        });
+      }
+      closeAcceptanceDialog();
+      await reloadProject();
+    } catch (err) {
+      setDialogError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "保存失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reloadAcceptance = async () => {
+    if (!acceptanceDialog.open || !acceptanceDialog.id) return;
+    setSaving(true);
+    try {
+      const body = await apiFetch<AcceptanceRow>(
+        `/api/projects/${id}/acceptance/${acceptanceDialog.id}`,
+      );
+      const a = body.data;
+      setAcceptanceForm({
+        name: a.name,
+        expectedDate: a.expectedDate ? toLocalInput(a.expectedDate) : "",
+        actualDate: a.actualDate ? toLocalInput(a.actualDate) : "",
+        result: a.result as AcceptanceFormValue["result"],
+        resultNote: a.resultNote ?? "",
+      });
+      setAcceptanceInit({
+        name: a.name,
+        expectedDate: a.expectedDate ?? "",
+        actualDate: a.actualDate ?? "",
+        result: a.result,
+        resultNote: a.resultNote ?? "",
+      });
+      setAcceptanceDialog({ open: true, mode: "edit", id: a.id, version: a.version });
+      setDialogError(null);
+    } catch (err) {
+      setDialogError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "重新加载失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
@@ -1619,6 +1767,8 @@ function ProjectDetailPage() {
         await apiFetch(`/api/projects/${id}/expenses/${deleteTarget.id}`, { method: "DELETE" });
       } else if (deleteTarget.resource === "progress") {
         await apiFetch(`/api/projects/${id}/progress/${deleteTarget.id}`, { method: "DELETE" });
+      } else if (deleteTarget.resource === "acceptance") {
+        await apiFetch(`/api/projects/${id}/acceptance/${deleteTarget.id}`, { method: "DELETE" });
       } else {
         await apiFetch(`/api/projects/${id}/tasks/${deleteTarget.id}`, { method: "DELETE" });
       }
@@ -1800,6 +1950,20 @@ function ProjectDetailPage() {
     canManageProgresses &&
     detail.stage !== "CLOSED" &&
     hasPermission(roles, actionPermission("project-progress", "delete"));
+  // L2-A：acceptance 三层按钮 Gate（capabilities + 细粒度 permission + stage !== CLOSED；CLOSED 后写按钮隐藏）
+  const canManageAcceptances = detail.capabilities.acceptances;
+  const canAddAcceptance =
+    canManageAcceptances &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-acceptance", "create"));
+  const canEditAcceptance =
+    canManageAcceptances &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-acceptance", "edit"));
+  const canDeleteAcceptance =
+    canManageAcceptances &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-acceptance", "delete"));
 
   return (
     <AppPage>
@@ -2646,8 +2810,28 @@ function ProjectDetailPage() {
             <div className="space-y-6">
               {detail.capabilities.acceptances && (
                 <section className="border-border rounded-md border p-4">
-                  <SectionTitle>验收项（{detail.acceptances?.length ?? 0}）</SectionTitle>
-                  <Table headers={["验收项", "计划日期", "实际日期", "结果", "结果说明"]}>
+                  <div className="mb-3 flex items-center justify-between">
+                    <SectionTitle>验收项（{detail.acceptances?.length ?? 0}）</SectionTitle>
+                    {canAddAcceptance && (
+                      <button
+                        type="button"
+                        onClick={openAcceptanceCreate}
+                        className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                      >
+                        添加验收项
+                      </button>
+                    )}
+                  </div>
+                  <Table
+                    headers={[
+                      "验收项",
+                      "计划日期",
+                      "实际日期",
+                      "结果",
+                      "结果说明",
+                      ...(canEditAcceptance || canDeleteAcceptance ? ["操作"] : []),
+                    ]}
+                  >
                     {(detail.acceptances ?? []).map((a) => (
                       <tr key={a.id}>
                         <td className="px-3 py-2 text-ink-primary">{a.name}</td>
@@ -2661,10 +2845,39 @@ function ProjectDetailPage() {
                           />
                         </td>
                         <td className="px-3 py-2 text-ink-secondary">{a.resultNote ?? "—"}</td>
+                        {(canEditAcceptance || canDeleteAcceptance) && (
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              {canEditAcceptance && (
+                                <button
+                                  type="button"
+                                  onClick={() => openAcceptanceEdit(a)}
+                                  className="text-sm text-brand-600 hover:underline"
+                                >
+                                  编辑
+                                </button>
+                              )}
+                              {canDeleteAcceptance && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setDeleteTarget({ resource: "acceptance", id: a.id, name: a.name })
+                                  }
+                                  className="text-sm text-red-600 hover:underline"
+                                >
+                                  删除
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))}
                     {(detail.acceptances ?? []).length === 0 && (
-                      <EmptyRow colSpan={5} text="暂无验收项" />
+                      <EmptyRow
+                        colSpan={canEditAcceptance || canDeleteAcceptance ? 6 : 5}
+                        text="暂无验收项"
+                      />
                     )}
                   </Table>
                 </section>
@@ -2941,6 +3154,19 @@ function ProjectDetailPage() {
         onClose={closeProgressDialog}
       >
         <ProgressFields value={progressForm} onChange={setProgressForm} />
+      </ProjectSubresourceDialog>
+
+      <ProjectSubresourceDialog
+        open={acceptanceDialog.open}
+        mode={acceptanceDialog.mode}
+        title={acceptanceDialog.mode === "create" ? "添加验收项" : "编辑验收项"}
+        saving={saving}
+        error={dialogError}
+        onSubmit={submitAcceptance}
+        onReload={reloadAcceptance}
+        onClose={closeAcceptanceDialog}
+      >
+        <AcceptanceFields value={acceptanceForm} onChange={setAcceptanceForm} resultLabels={ACCEPTANCE_RESULT_LABELS} />
       </ProjectSubresourceDialog>
 
       <ConfirmActionDialog
