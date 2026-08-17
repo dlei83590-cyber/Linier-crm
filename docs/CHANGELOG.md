@@ -4,6 +4,16 @@
 
 ## [Unreleased] - Sprint 4A + 4B + 4C + 4D + 4E-1 + 4E-2 + 4E-3（Quotation / Sales Order / Delivery / Invoice / Accounts Receivable / Receipt & Payment Allocation / Credit Note & Debit Note Foundation，2026-08-08，PR #12-#18 已合并，未打 Tag）
 
+### 新增（B2-2A / B2-2B：Project Budgets + Expenses + Progresses FINAL CLOSED，PR #70-#75，2026-08-17）
+
+- **B2-2A FINAL CLOSED ✅ / B2-2B FINAL CLOSED ✅**（owner 签署，Production `dcefea3e`，**31/31 Runtime Acceptance PASS — ACCEPTED**，QA 证据见 docs/qa/B2-2_Runtime_QA.md）
+- **B2-2A（Budgets + Expenses）**：前端 Add/Edit/Delete 工作台（PR #71 `a3c789c`）+ changed-only PATCH + amount blank gate hotfix（PR #72 `a866d10`）；Runtime 验证：Budget create/PATCH CAS/stale 409/soft delete、Expense create + incurredAt 时区 round-trip（+08 本地 → UTC Z instant-equivalence）、**note-only PATCH 前后 incurredAt 完整 ISO 不变**、clear→null、amount blank → 400 VALIDATION_ERROR、stale version 409、soft delete 全链路 PASS
+- **B2-2B（Progresses）**：前端 Add/Edit/Delete（PR #73 `8b0af12`）+ backend aggregate integrity（PR #74 `fc7cc82`，`Project.progressPercent` 在 create/edit/delete 全链路维护）+ recordedAt datetime-local 时区转换（PR #74 `096a7f2`）；Runtime 验证：**POST 30 → header 30.0 → PATCH 60 → 60.0 → PATCH 80 → 80.0 → DELETE 次新 → fallback 80.0 → DELETE 最后 → null** 全链路 PASS、recordedAt +08 round-trip、stale 409
+- **CLOSED 双层 Gate**：B2-0（PR #70 `2bb40d7`）为 budgets/expenses/progresses 补 `assertProjectWritable` transactional gate；Runtime 验证 force close 200（stage=CLOSED）后 Budget/Expense/Progress direct POST 全 **409 CONFLICT「项目已结项，不允许修改项目子资源」**
+- **RBAC drift root cause（PR #75 `dcefea3e`，Runtime Blocking ①）**：`packages/shared/src/constants/index.ts` 的 `PERMISSION_MODULES` 缺注册 17 个 seed-only 模块（project-budget/expense/product/progress/acceptance/closure/tag/attachment + exchange-rate/partner-price/price-policy/price-rule/price-list-version/promotion/tax-rate/pricing-engine/price-audit）→ `ALL_ACTION_PERMISSIONS` 不含这些 action → SUPER_ADMIN 也 403；一次性补齐并同步 `PROJECT_MODULES`；静态审计 308 个 API 引用权限码缺失归零
+- **B2-1B regression PASS**：PR #75 顺带修复 product/tag 潜伏 403；Runtime 验证 `capabilities.products/tags=true`、Product Add 201、Tag Add 201
+- **治理规则（backlog，本轮不实现）**：`API referenced permission ⊆ ALL_ACTION_PERMISSIONS` 拟做成 CI 静态 Gate（独立 Governance Audit，不夹带进 Lifecycle 工作）；详见 ADR-0028
+
 ### 新增（Sprint 6A：Inventory Ledger Foundation，PR #21，待 CTO Final Review——CTO Inventory Consumer + Ledger Command FINAL APPROVED 99/100 #7683，6A 核心库存账闭环成立）
 
 - **库存数量唯一事实源 = InventoryMovement（SSOT，ADR-0025）**：Migration `0025_inventory_ledger_foundation`（InventoryMovement + StockProjection + OutboxMessage + 6 枚举 + `INVENTORY_MOVEMENT` DocumentType + 不可变触发器 + 五维 NULLS NOT DISTINCT 唯一索引 + onHandQty>=0 CHECK + serial_atom_key_check）；**Movement 历史不可变**（COMMITTED 后禁止 UPDATE/DELETE，纠错只能追加 Reversal/Correction）
@@ -244,7 +254,7 @@
 - **File Center**：FileFolder（树）/ File（元数据）/ FileVersion（版本历史）/ FileAttachment（业务附件关联）；files CRUD + versions + preview；file-folders + attachments API；Quotation/Contract/SO/Invoice/Project 统一引用
 - **架构冻结**：ARCHITECTURE_BASELINE v1.0（后续调整必须新增 ADR）；docs/test-cases/ 4 份测试用例模板（Audit/Menu/Dashboard/File API）
 - **迁移**：0005_audit_upgrade / 0006_menu_center / 0007_dashboard_api / 0008_file_center（+8 模型/+3 枚举）
-- **RBAC**：+10 模块（menu/menu-group/dashboard-*/file*/file-folder/file-version/file-attachment）动作级权限，MANAGER 全量
+- **RBAC**：+10 模块（menu/menu-group/dashboard-_/file_/file-folder/file-version/file-attachment）动作级权限，MANAGER 全量
 - **文档**：ADR-0005~0008、DOMAIN_MODEL v1.5（按模块拆图 62 模型/29 枚举）、OpenAPI 全端点覆盖（4100+ 行）
 
 ### 已知限制（后续计划，非本版本交付）
