@@ -396,6 +396,22 @@ function EmptyRow({ colSpan, text }: { colSpan: number; text: string }) {
   );
 }
 
+/** B2-2B：datetime-local 时区转换纪律（不 slice UTC ISO 冒充本地时间）
+ * toLocalInput：ISO UTC → 本地 datetime-local（YYYY-MM-DDTHH:mm）
+ * toIso：datetime-local 本地时间 → Date → ISO UTC
+ */
+function toLocalInput(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function toIso(value: string): string {
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "" : d.toISOString();
+}
+
 function ProjectDetailPage() {
   const { state } = useSession();
   const roles =
@@ -832,7 +848,7 @@ function ProjectDetailPage() {
   };
   const openProgressEdit = (p: ProgressRow) => {
     setProgressForm({
-      recordedAt: p.recordedAt ? p.recordedAt.slice(0, 16) : "",
+      recordedAt: p.recordedAt ? toLocalInput(p.recordedAt) : "",
       progressPercent: p.progressPercent,
       summary: p.summary,
     });
@@ -1516,7 +1532,7 @@ function ProjectDetailPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             recordedAt:
-              progressForm.recordedAt === "" ? undefined : new Date(progressForm.recordedAt).toISOString(),
+              progressForm.recordedAt === "" ? undefined : toIso(progressForm.recordedAt),
             progressPercent: pct,
             summary: progressForm.summary,
           }),
@@ -1524,9 +1540,9 @@ function ProjectDetailPage() {
       } else if (progressDialog.id && progressDialog.version != null && progressInit) {
         // changed-only PATCH：无变化不发送；recordedAt 只有用户实际改动才发（空 → 不发送，保留原值）
         const changes: Record<string, unknown> = {};
-        const initRecordedAtDate = progressInit.recordedAt === "" ? "" : progressInit.recordedAt.slice(0, 16);
+        const initRecordedAtDate = progressInit.recordedAt === "" ? "" : toLocalInput(progressInit.recordedAt);
         if (progressForm.recordedAt !== initRecordedAtDate && progressForm.recordedAt !== "") {
-          changes.recordedAt = new Date(progressForm.recordedAt).toISOString();
+          changes.recordedAt = toIso(progressForm.recordedAt);
         }
         if (progressForm.progressPercent !== progressInit.progressPercent) changes.progressPercent = pct;
         if (progressForm.summary !== progressInit.summary) changes.summary = progressForm.summary;
@@ -1559,7 +1575,7 @@ function ProjectDetailPage() {
       const body = await apiFetch<ProgressRow>(`/api/projects/${id}/progress/${progressDialog.id}`);
       const p = body.data;
       setProgressForm({
-        recordedAt: p.recordedAt ? p.recordedAt.slice(0, 16) : "",
+        recordedAt: p.recordedAt ? toLocalInput(p.recordedAt) : "",
         progressPercent: p.progressPercent,
         summary: p.summary,
       });
