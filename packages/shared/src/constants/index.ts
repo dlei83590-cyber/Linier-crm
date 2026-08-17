@@ -100,6 +100,14 @@ export const PROJECT_MODULES = [
   "project-member",
   "project-milestone",
   "project-task",
+  "project-budget",
+  "project-expense",
+  "project-product",
+  "project-progress",
+  "project-acceptance",
+  "project-closure",
+  "project-tag",
+  "project-attachment",
 ] as const;
 
 /** 细粒度权限动作（Sprint 3 审批流/工作流直接复用） */
@@ -127,6 +135,18 @@ export const PERMISSION_MODULES = [
   // Sprint 3C-4：Price Foundation 模块（与 prisma/seed.ts SEED_ACTION_MODULES 保持一致，避免 static RBAC 与 DB permission catalog 漂移；
   // F2-6B Batch 1 Runtime Hotfix：Quotation Edit 依赖 tax-profiles API → 必须注册 tax-profile:view）
   "tax-profile",
+  // Sprint 3C-4：Price Foundation 其余模块（与 prisma/seed.ts SEED_ACTION_MODULES 保持一致——F2-4B2 Runtime Hotfix：
+  // 补齐 exchange-rate / partner-price / price-policy / price-rule / price-list-version / promotion / tax-rate / pricing-engine / price-audit，
+  // 消除 static RBAC 与已上线 API requirePermission 的漂移（SUPER_ADMIN 静态授权缺失 → 403））
+  "exchange-rate",
+  "partner-price",
+  "price-policy",
+  "price-rule",
+  "price-list-version",
+  "promotion",
+  "tax-rate",
+  "pricing-engine",
+  "price-audit",
   "technical-standard",
   "unit-of-measure",
   "commercial-term",
@@ -140,6 +160,17 @@ export const PERMISSION_MODULES = [
   "project-member",
   "project-milestone",
   "project-task",
+  // Sprint 3C-5 / F2-4B2（B2-2A/B2-2B Runtime Hotfix）：补齐 project 子资源模块——seed 已注册、API requirePermission 已引用，
+  // 但 PERMISSION_MODULES 缺失 → ALL_ACTION_PERMISSIONS 不生成 → SUPER_ADMIN 静态授权缺失 → hasPermission/requirePermission/capabilities 全部 fail-closed（403）。
+  // 与 prisma/seed.ts SEED_ACTION_MODULES 保持一致；不改权限命名、不改 seed 语义。
+  "project-budget",
+  "project-expense",
+  "project-product",
+  "project-progress",
+  "project-acceptance",
+  "project-closure",
+  "project-tag",
+  "project-attachment",
   // Sprint 3A：平台底座模块
   "workflow-definition",
   "workflow-step",
