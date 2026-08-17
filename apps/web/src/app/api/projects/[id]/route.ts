@@ -52,6 +52,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     acceptances: hasPermission(roles, 'project-acceptance:view'),
     closure: hasPermission(roles, 'project-closure:view'),
     tags: hasPermission(roles, 'project-tag:view'),
+    attachments: hasPermission(roles, 'project-attachment:view'),
   };
 
   const project = await prisma.project.findFirst({

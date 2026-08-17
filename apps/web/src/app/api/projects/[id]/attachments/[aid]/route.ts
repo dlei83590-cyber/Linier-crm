@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
+import { authenticate, requirePermission, requestMeta, writeAuditLog, assertProjectWritable } from "@/lib/api-helpers";
 import { ok, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
@@ -17,15 +17,23 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   const { id, aid } = await params;
   const meta = requestMeta(request);
 
-  const existing = await prisma.fileAttachment.findFirst({
-    where: { id: aid, businessType: "project", businessId: id, deletedAt: null },
-  });
-  if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "项目附件关联不存在");
+  // L1-B lifecycle integrity：DELETE 与 Project header lock 同事务（B2-0 锁纪律：Project FOR UPDATE → Gate → mutation）；CLOSED → 409
+  const txResult = await prisma.$transaction(async (tx) => {
+    const gate = await assertProjectWritable(tx, id);
+    if (!gate.ok) return { error: gate.response };
 
-  await prisma.fileAttachment.update({
-    where: { id: aid },
-    data: { deletedAt: new Date(), isActive: false, updatedById: user?.id ?? null },
+    const existing = await tx.fileAttachment.findFirst({
+      where: { id: aid, businessType: "project", businessId: id, deletedAt: null },
+    });
+    if (!existing) return { error: failNotFound(ERROR_CODES.NOT_FOUND, "项目附件关联不存在") };
+
+    const updated = await tx.fileAttachment.update({
+      where: { id: aid },
+      data: { deletedAt: new Date(), isActive: false, updatedById: user?.id ?? null },
+    });
+    return { updated };
   });
+  if ("error" in txResult) return txResult.error;
 
   await writeAuditLog({
     actorId: user?.id,
