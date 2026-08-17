@@ -112,14 +112,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       });
 
       // 10. 更新项目状态：CLOSED + version+1（与 Gate 同事务串行化，TOCTOU 消除）
+      // L0 aggregate integrity（CTO Re-review 98/100 Required Hardening）：Project header 只允许一次 lifecycle update——
+      // progressPercent=100 通过条件 spread 合并进本次 update（仅 force 时生效；非 force 不覆盖 projection，保持现值）；
+      // force 分支（step 11）只创建 ProjectProgress(100%) record，不再第二次 update Project。
+      // invariant：header lock → blockers/acceptance checks → create Closure → single Project close mutation → force 时 create Progress fact → commit。
       const updatedProject = await tx.project.update({
         where: { id },
-        data: { stage: 'CLOSED', version: { increment: 1 }, updatedById: user!.id },
+        data: {
+          stage: 'CLOSED',
+          version: { increment: 1 },
+          updatedById: user!.id,
+          ...(force ? { progressPercent: 100 } : {}),
+        },
       });
 
-      // 11. 强制结项必须写 ProjectProgress 备注（CTO #3C5）
-      // L0 aggregate integrity：force-close 创建 progress=100% record ⇒ 同一 close 事务 / 同一 Project header lock 内同步
-      // Project.progressPercent=100%（不另起第二次事务；非 force close 不写 100%）
+      // 11. 强制结项必须写 ProjectProgress 备注（CTO #3C5）；progressPercent 已在 step 10 同一事务同步，此处不再 update Project
       if (force) {
         await tx.projectProgress.create({
           data: {
@@ -129,10 +136,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             approvalStatus: 'APPROVED',
             createdById: user!.id,
           },
-        });
-        await tx.project.update({
-          where: { id },
-          data: { progressPercent: 100, updatedById: user!.id },
         });
       }
 
