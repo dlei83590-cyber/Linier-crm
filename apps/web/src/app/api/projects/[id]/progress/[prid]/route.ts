@@ -62,6 +62,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         updatedById: user!.id,
       },
     });
+    // B2-2B Backend Aggregate Integrity：Project.progressPercent = 最近一次写入（create/edit）的非删除 Progress 记录进度。
+    // PATCH 使本条成为「最近写入」，故同步 header（与 POST 语义一致，均在 assertProjectWritable 锁内同事务）。
+    await tx.project.update({
+      where: { id },
+      data: { progressPercent: updated.progressPercent, updatedById: user!.id },
+    });
     return { existing, updated };
   });
   if ("error" in txResult) return txResult.error;
@@ -99,6 +105,17 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     await tx.projectProgress.update({
       where: { id: prid },
       data: { deletedAt: new Date(), isActive: false, updatedById: user?.id ?? null },
+    });
+    // B2-2B Backend Aggregate Integrity：删除后 header 回退到剩余记录中「最近写入」（updatedAt desc）的 progressPercent；
+    // 无剩余记录 → null（明确语义：进度清空，不保留被删记录旧值）。同一事务 + assertProjectWritable 锁内。
+    const latestRemaining = await tx.projectProgress.findFirst({
+      where: { projectId: id, deletedAt: null },
+      orderBy: { updatedAt: "desc" },
+      select: { progressPercent: true },
+    });
+    await tx.project.update({
+      where: { id },
+      data: { progressPercent: latestRemaining?.progressPercent ?? null, updatedById: user!.id },
     });
     return { ok: true };
   });
