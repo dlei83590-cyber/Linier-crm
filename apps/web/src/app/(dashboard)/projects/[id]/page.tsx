@@ -1663,20 +1663,27 @@ function ProjectDetailPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name: acceptanceForm.name,
+            name: acceptanceForm.name.trim(),
             expectedDate: acceptanceForm.expectedDate === "" ? null : toIso(acceptanceForm.expectedDate),
             actualDate: acceptanceForm.actualDate === "" ? null : toIso(acceptanceForm.actualDate),
             result: acceptanceForm.result,
-            resultNote: acceptanceForm.resultNote.trim() === "" ? null : acceptanceForm.resultNote,
+            resultNote:
+              acceptanceForm.resultNote.trim() === "" ? null : acceptanceForm.resultNote.trim(),
           }),
         });
       } else if (acceptanceDialog.id && acceptanceDialog.version != null && acceptanceInit) {
-        // Edit PATCH 只发 changed fields；expectedDate/actualDate 只有用户实际改动才发（清空→null，没碰→不发送）
+        // Edit PATCH 只发 changed fields；字符串字段按提交语义（normalized）比较：
+        // name 用 trimmed value、resultNote 用 trim()==="" ? null : trimmedValue，
+        // 与 authoritative normalized value 比较——纯空格输入不产生无意义 mutation/version increment
         const changes: Record<string, unknown> = {};
-        if (acceptanceForm.name !== acceptanceInit.name) changes.name = acceptanceForm.name;
+        const normalizedName = acceptanceForm.name.trim();
+        if (normalizedName !== acceptanceInit.name) changes.name = normalizedName;
         if (acceptanceForm.result !== acceptanceInit.result) changes.result = acceptanceForm.result;
-        if (acceptanceForm.resultNote !== acceptanceInit.resultNote)
-          changes.resultNote = acceptanceForm.resultNote.trim() === "" ? null : acceptanceForm.resultNote;
+        const normalizedNote =
+          acceptanceForm.resultNote.trim() === "" ? null : acceptanceForm.resultNote.trim();
+        const initNormalizedNote =
+          acceptanceInit.resultNote.trim() === "" ? null : acceptanceInit.resultNote.trim();
+        if (normalizedNote !== initNormalizedNote) changes.resultNote = normalizedNote;
         const initExpectedDate =
           acceptanceInit.expectedDate === "" ? "" : toLocalInput(acceptanceInit.expectedDate);
         if (acceptanceForm.expectedDate !== initExpectedDate) {
