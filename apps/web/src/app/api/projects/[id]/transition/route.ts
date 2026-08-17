@@ -12,6 +12,7 @@ import { ok, failValidation, failConflict, failNotFound } from '@/lib/api/respon
 import { ERROR_CODES } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
 import { z } from 'zod';
+import { isLegalTransition } from '@/lib/project-transition';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,36 +34,7 @@ const transitionSchema = z.object({
   version: z.number().int().positive(),
 });
 
-/** 合法阶段流转（CTO #3C5：集中校验，禁止 PATCH 任意修改 stage） */
-const STAGE_ORDER: ProjectStage[] = [
-  'LEAD',
-  'QUALIFIED',
-  'SOLUTION',
-  'QUOTATION',
-  'SAMPLING',
-  'TESTING',
-  'SMALL_BATCH',
-  'MASS_SUPPLY',
-];
-
-function isLegalTransition(from: ProjectStage, to: ProjectStage): boolean {
-  if (from === to) return true;
-  // 暂停/失败 → 结项 或 恢复
-  if (from === 'PAUSED') {
-    return to === 'FAILED' || to === 'CLOSED' || STAGE_ORDER.includes(to);
-  }
-  // 任意阶段 → 暂停/失败/结项（结项仅批量供货/失败/暂停后可）
-  if (to === 'PAUSED' || to === 'FAILED') return true;
-  if (to === 'CLOSED') {
-    // PAUSED → CLOSED 已由上方 from === "PAUSED" 分支处理，此处无需重复比较
-    return from === 'MASS_SUPPLY' || from === 'FAILED';
-  }
-  // 正向推进：只能前进，不能倒退/跳级
-  const fromIdx = STAGE_ORDER.indexOf(from);
-  const toIdx = STAGE_ORDER.indexOf(to);
-  if (fromIdx === -1 || toIdx === -1) return false;
-  return toIdx === fromIdx + 1;
-}
+/** 合法阶段流转（CTO #3C5：集中校验，禁止 PATCH 任意修改 stage）；规则源 = @/lib/project-transition（L2-B0 抽取） */
 
 /**
  * POST /api/projects/:id/transition — 项目阶段流转唯一入口（CTO #3C5）

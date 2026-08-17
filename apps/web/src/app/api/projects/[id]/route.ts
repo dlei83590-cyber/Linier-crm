@@ -1,10 +1,12 @@
 import type { NextRequest } from 'next/server';
+import type { ProjectStage } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from '@/lib/api-helpers';
 import { ok, failValidation, failConflict, failNotFound } from '@/lib/api/response';
 import { ERROR_CODES } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
 import { hasPermission, type RoleCode } from '@nilier-crm/shared';
+import { getAllowedProjectTransitions } from '@/lib/project-transition';
 import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
@@ -115,7 +117,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     },
   });
   if (!project) return failNotFound(ERROR_CODES.NOT_FOUND, '项目不存在');
-  return ok({ ...project, capabilities });
+  // L2-B0：allowedTransitions 由 authoritative 规则源派生（CLOSED 恒空；不暴露自环；只返回 stage code）
+  return ok({
+    ...project,
+    capabilities,
+    allowedTransitions: getAllowedProjectTransitions(project.stage as ProjectStage),
+  });
 }
 
 /** PATCH /api/projects/:id（乐观锁 version；禁止改 stage/结项锁定字段；转换自机会的项目禁改 customerId） */
