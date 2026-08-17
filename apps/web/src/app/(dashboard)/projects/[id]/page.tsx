@@ -26,7 +26,7 @@ import {
   ConfirmActionDialog,
   ProjectSubresourceDialog,
 } from "@/components/workspace";
-import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 import {
   StakeholderFields,
@@ -72,6 +72,8 @@ interface ProjectDetail {
   code: string;
   name: string;
   stage: string;
+  version: number; // L2-B1：transition payload 需要 authoritative project version（CAS）
+  allowedTransitions: string[]; // L2-B1：backend authoritative read projection（唯一候选来源）
   priority: string | null;
   progressPercent: string | null;
   paymentStatus: string;
@@ -509,6 +511,14 @@ function ProjectDetailPage() {
     id: string | null;
     version: number | null;
   }>({ open: false, mode: "create", id: null, version: null });
+  // L2-B1：Transition command dialog（唯一候选来源 = detail.allowedTransitions；不复制状态机）
+  const [transitionDialog, setTransitionDialog] = useState<{
+    open: boolean;
+    targetStage: string;
+    remark: string;
+    saving: boolean;
+    error: ApiClientError | null;
+  }>({ open: false, targetStage: "", remark: "", saving: false, error: null });
   const [stakeholderForm, setStakeholderForm] =
     useState<StakeholderFormValue>(EMPTY_STAKEHOLDER_FORM);
   const [memberForm, setMemberForm] = useState<MemberFormValue>(EMPTY_MEMBER_FORM);
@@ -1750,6 +1760,68 @@ function ProjectDetailPage() {
     }
   };
 
+  const reloadTransition = async () => {
+    // VERSION_CONFLICT stale panel：重新 GET → 重新消费最新 stage + version + allowedTransitions
+    setTransitionDialog((prev) => ({ ...prev, saving: true, error: null }));
+    try {
+      const body = await apiFetch<ProjectDetail>(`/api/projects/${id}`);
+      setDetail(body.data);
+      setTransitionDialog({
+        open: true,
+        targetStage: body.data.allowedTransitions?.[0] ?? "",
+        remark: "",
+        saving: false,
+        error: null,
+      });
+    } catch (err) {
+      setTransitionDialog((prev) => ({
+        ...prev,
+        saving: false,
+        error:
+          err instanceof ApiClientError ? err : new ApiClientError(0, "重新加载失败", "NETWORK_ERROR"),
+      }));
+    }
+  };
+
+  const submitTransition = async () => {
+    if (!transitionDialog.open || !transitionDialog.targetStage) return;
+    setTransitionDialog((prev) => ({ ...prev, saving: true, error: null }));
+    try {
+      await apiFetch(`/api/projects/${id}/transition`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetStage: transitionDialog.targetStage,
+          remark: transitionDialog.remark.trim() === "" ? undefined : transitionDialog.remark.trim(),
+          version: detail.version, // authoritative CAS（不本地推导 stage/version）
+        }),
+      });
+      setTransitionDialog((prev) => ({ ...prev, open: false }));
+      // mutation 后 authoritative re-GET（不本地 patch stage/version）
+      await reloadProject();
+    } catch (err) {
+      setTransitionDialog((prev) => ({
+        ...prev,
+        saving: false,
+        error:
+          err instanceof ApiClientError ? err : new ApiClientError(0, "流转失败", "NETWORK_ERROR"),
+      }));
+    }
+  };
+
+  const openTransition = () => {
+    setTransitionDialog({
+      open: true,
+      targetStage: detail.allowedTransitions?.[0] ?? "",
+      remark: "",
+      saving: false,
+      error: null,
+    });
+  };
+  const closeTransition = () => {
+    setTransitionDialog((prev) => ({ ...prev, open: false }));
+  };
+
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
@@ -1959,6 +2031,11 @@ function ProjectDetailPage() {
     hasPermission(roles, actionPermission("project-progress", "delete"));
   // L2-A：acceptance 三层按钮 Gate（capabilities + 细粒度 permission + stage !== CLOSED；CLOSED 后写按钮隐藏）
   const canManageAcceptances = detail.capabilities.acceptances;
+  // L2-B1：Transition 入口 Gate（唯一候选来源 = detail.allowedTransitions；不复制状态机；无候选/CLOSED 不显示入口）
+  const canTransition =
+    canEdit &&
+    detail.stage !== "CLOSED" &&
+    (detail.allowedTransitions?.length ?? 0) > 0;
   const canAddAcceptance =
     canManageAcceptances &&
     detail.stage !== "CLOSED" &&
@@ -1993,12 +2070,23 @@ function ProjectDetailPage() {
         statusTone={STAGE_TONE_MAP[detail.stage] ?? "neutral"}
         actions={
           canEdit && detail.stage !== "CLOSED" ? (
-            <Link
-              href={`/projects/${id}/edit`}
-              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
-            >
-              编辑
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/projects/${id}/edit`}
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+              >
+                编辑
+              </Link>
+              {canTransition && (
+                <button
+                  type="button"
+                  onClick={openTransition}
+                  className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                >
+                  阶段流转
+                </button>
+              )}
+            </div>
           ) : undefined
         }
         summary={
@@ -3175,6 +3263,92 @@ function ProjectDetailPage() {
       >
         <AcceptanceFields value={acceptanceForm} onChange={setAcceptanceForm} resultLabels={ACCEPTANCE_RESULT_LABELS} />
       </ProjectSubresourceDialog>
+
+      {/* L2-B1：Transition command dialog（唯一候选来源 = detail.allowedTransitions；不复制状态机；CLOSED/无候选不显示入口） */}
+      {transitionDialog.open && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          onClick={closeTransition}
+        >
+          <div
+            className="border-border bg-surface shadow-elevation-lg w-full max-w-md rounded-lg border p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-ink-primary text-base font-semibold">阶段流转</h2>
+            <p className="text-ink-secondary mt-1 text-sm">
+              当前阶段：{STAGE_LABELS[detail.stage] ?? detail.stage}
+            </p>
+            <div className="mt-4">
+              <label className="text-ink-secondary block text-xs font-medium">目标阶段 *</label>
+              <select
+                value={transitionDialog.targetStage}
+                onChange={(e) =>
+                  setTransitionDialog((prev) => ({ ...prev, targetStage: e.target.value }))
+                }
+                className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+              >
+                {(detail.allowedTransitions ?? []).map((code) => (
+                  <option key={code} value={code}>
+                    {STAGE_LABELS[code] ?? code}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="mt-3">
+              <label className="text-ink-secondary block text-xs font-medium">备注（可选）</label>
+              <input
+                value={transitionDialog.remark}
+                onChange={(e) =>
+                  setTransitionDialog((prev) => ({ ...prev, remark: e.target.value }))
+                }
+                maxLength={500}
+                className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+              />
+            </div>
+            {transitionDialog.error && (
+              <div className="border-red-200 mt-3 rounded-md border bg-red-50 p-3 text-sm text-red-700">
+                <p>
+                  {describeStatus(transitionDialog.error.status)}：{transitionDialog.error.message}
+                  {transitionDialog.error.code ? `（${transitionDialog.error.code}）` : ""}
+                </p>
+                {transitionDialog.error.code === "VERSION_CONFLICT" && (
+                  <div className="mt-2">
+                    <p className="text-xs">该记录已被其他操作更新，请重新加载最新数据后再操作。</p>
+                    <button
+                      type="button"
+                      onClick={reloadTransition}
+                      disabled={transitionDialog.saving}
+                      className="mt-2 rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      重新加载
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeTransition}
+                disabled={transitionDialog.saving}
+                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={submitTransition}
+                disabled={transitionDialog.saving || !transitionDialog.targetStage}
+                className="bg-brand-600 hover:bg-brand-700 rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {transitionDialog.saving ? "处理中…" : "确认流转"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ConfirmActionDialog
         open={deleteTarget !== null}
