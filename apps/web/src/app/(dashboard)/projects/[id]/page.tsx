@@ -39,6 +39,7 @@ import {
   TagFields,
   BudgetFields,
   ExpenseFields,
+  ProgressFields,
   EMPTY_STAKEHOLDER_FORM,
   EMPTY_MEMBER_FORM,
   EMPTY_MILESTONE_FORM,
@@ -49,6 +50,7 @@ import {
   EMPTY_TAG_FORM,
   EMPTY_BUDGET_FORM,
   EMPTY_EXPENSE_FORM,
+  EMPTY_PROGRESS_FORM,
   type StakeholderFormValue,
   type MemberFormValue,
   type MilestoneFormValue,
@@ -59,6 +61,7 @@ import {
   type TagFormValue,
   type BudgetFormValue,
   type ExpenseFormValue,
+  type ProgressFormValue,
 } from "./subresource-fields";
 
 interface ProjectDetail {
@@ -166,6 +169,7 @@ interface ProjectDetail {
   }>;
   progresses?: Array<{
     id: string;
+    version: number;
     recordedAt: string;
     progressPercent: string;
     summary: string;
@@ -210,6 +214,7 @@ type VisitRow = NonNullable<ProjectDetail["visits"]>[number];
 type ProductRow = NonNullable<ProjectDetail["products"]>[number];
 type BudgetRow = NonNullable<ProjectDetail["budgets"]>[number];
 type ExpenseRow = NonNullable<ProjectDetail["expenses"]>[number];
+type ProgressRow = NonNullable<ProjectDetail["progresses"]>[number];
 
 const STAGE_LABELS: Record<string, string> = {
   LEAD: "线索",
@@ -297,6 +302,7 @@ const SUBRESOURCE_LABELS: Record<string, string> = {
   tag: "标签",
   budget: "预算",
   expense: "费用",
+  progress: "进度记录",
 };
 
 const VISIT_TYPE_LABELS: Record<string, string> = {
@@ -390,6 +396,22 @@ function EmptyRow({ colSpan, text }: { colSpan: number; text: string }) {
   );
 }
 
+/** B2-2B：datetime-local 时区转换纪律（不 slice UTC ISO 冒充本地时间）
+ * toLocalInput：ISO UTC → 本地 datetime-local（YYYY-MM-DDTHH:mm）
+ * toIso：datetime-local 本地时间 → Date → ISO UTC
+ */
+function toLocalInput(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function toIso(value: string): string {
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "" : d.toISOString();
+}
+
 function ProjectDetailPage() {
   const { state } = useSession();
   const roles =
@@ -468,6 +490,12 @@ function ProjectDetailPage() {
     id: string | null;
     version: number | null;
   }>({ open: false, mode: "create", id: null, version: null });
+  const [progressDialog, setProgressDialog] = useState<{
+    open: boolean;
+    mode: "create" | "edit";
+    id: string | null;
+    version: number | null;
+  }>({ open: false, mode: "create", id: null, version: null });
   const [stakeholderForm, setStakeholderForm] =
     useState<StakeholderFormValue>(EMPTY_STAKEHOLDER_FORM);
   const [memberForm, setMemberForm] = useState<MemberFormValue>(EMPTY_MEMBER_FORM);
@@ -479,6 +507,7 @@ function ProjectDetailPage() {
   const [tagForm, setTagForm] = useState<TagFormValue>(EMPTY_TAG_FORM);
   const [budgetForm, setBudgetForm] = useState<BudgetFormValue>(EMPTY_BUDGET_FORM);
   const [expenseForm, setExpenseForm] = useState<ExpenseFormValue>(EMPTY_EXPENSE_FORM);
+  const [progressForm, setProgressForm] = useState<ProgressFormValue>(EMPTY_PROGRESS_FORM);
   // B2-2A Hotfix：authoritative init snapshot，Edit PATCH 只发 changed fields（避免无关编辑改写 timestamp / 无意义 version+1）
   const [budgetInit, setBudgetInit] = useState<{
     category: string;
@@ -492,6 +521,11 @@ function ProjectDetailPage() {
     currency: string;
     incurredAt: string; // 原始完整 ISO datetime（"" = null）
     note: string;
+  } | null>(null);
+  const [progressInit, setProgressInit] = useState<{
+    recordedAt: string; // 原始完整 ISO datetime（"" = null）
+    progressPercent: string;
+    summary: string;
   } | null>(null);
   // B2-1B-2：item selector 消费真实 /api/items；tag selector 消费真实 /api/tags（CTO #13632）
   const [itemOptions, setItemOptions] = useState<Array<{ id: string; code: string | null; name: string | null }>>([]);
@@ -514,7 +548,8 @@ function ProjectDetailPage() {
       | "product"
       | "tag"
       | "budget"
-      | "expense";
+      | "expense"
+      | "progress";
     id: string;
     name: string;
   } | null>(null);
@@ -804,6 +839,29 @@ function ProjectDetailPage() {
   };
   const closeExpenseDialog = () =>
     setExpenseDialog({ open: false, mode: "create", id: null, version: null });
+
+  const openProgressCreate = () => {
+    setProgressForm(EMPTY_PROGRESS_FORM);
+    setProgressInit(null);
+    setDialogError(null);
+    setProgressDialog({ open: true, mode: "create", id: null, version: null });
+  };
+  const openProgressEdit = (p: ProgressRow) => {
+    setProgressForm({
+      recordedAt: p.recordedAt ? toLocalInput(p.recordedAt) : "",
+      progressPercent: p.progressPercent,
+      summary: p.summary,
+    });
+    setProgressInit({
+      recordedAt: p.recordedAt ?? "",
+      progressPercent: p.progressPercent,
+      summary: p.summary,
+    });
+    setDialogError(null);
+    setProgressDialog({ open: true, mode: "edit", id: p.id, version: p.version });
+  };
+  const closeProgressDialog = () =>
+    setProgressDialog({ open: false, mode: "create", id: null, version: null });
 
   const submitStakeholder = async () => {
     if (!stakeholderDialog.open) return;
@@ -1449,6 +1507,94 @@ function ProjectDetailPage() {
     }
   };
 
+  const submitProgress = async () => {
+    if (!progressDialog.open) return;
+    // 必填 Gate：progressPercent 0-100、summary 非空；blank 不静默转 0
+    if (progressForm.progressPercent.trim() === "") {
+      setDialogError(new ApiClientError(400, "进度百分比不能为空", "VALIDATION"));
+      return;
+    }
+    const pct = Number(progressForm.progressPercent);
+    if (Number.isNaN(pct) || pct < 0 || pct > 100) {
+      setDialogError(new ApiClientError(400, "进度百分比必须在 0-100 之间", "VALIDATION"));
+      return;
+    }
+    if (progressForm.summary.trim() === "") {
+      setDialogError(new ApiClientError(400, "进展说明不能为空", "VALIDATION"));
+      return;
+    }
+    setSaving(true);
+    setDialogError(null);
+    try {
+      if (progressDialog.mode === "create") {
+        await apiFetch(`/api/projects/${id}/progress`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            recordedAt:
+              progressForm.recordedAt === "" ? undefined : toIso(progressForm.recordedAt),
+            progressPercent: pct,
+            summary: progressForm.summary,
+          }),
+        });
+      } else if (progressDialog.id && progressDialog.version != null && progressInit) {
+        // changed-only PATCH：无变化不发送；recordedAt 只有用户实际改动才发（空 → 不发送，保留原值）
+        const changes: Record<string, unknown> = {};
+        const initRecordedAtDate = progressInit.recordedAt === "" ? "" : toLocalInput(progressInit.recordedAt);
+        if (progressForm.recordedAt !== initRecordedAtDate && progressForm.recordedAt !== "") {
+          changes.recordedAt = toIso(progressForm.recordedAt);
+        }
+        if (progressForm.progressPercent !== progressInit.progressPercent) changes.progressPercent = pct;
+        if (progressForm.summary !== progressInit.summary) changes.summary = progressForm.summary;
+        if (Object.keys(changes).length === 0) {
+          closeProgressDialog();
+          return;
+        }
+        await apiFetch(`/api/projects/${id}/progress/${progressDialog.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...changes, version: progressDialog.version }),
+        });
+      }
+      closeProgressDialog();
+      // 红线：Project.progressPercent 是唯一 authoritative aggregate，mutation 后 re-GET aggregate（不前端自算）
+      await reloadProject();
+    } catch (err) {
+      setDialogError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "保存失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reloadProgress = async () => {
+    if (!progressDialog.open || !progressDialog.id) return;
+    setSaving(true);
+    try {
+      const body = await apiFetch<ProgressRow>(`/api/projects/${id}/progress/${progressDialog.id}`);
+      const p = body.data;
+      setProgressForm({
+        recordedAt: p.recordedAt ? toLocalInput(p.recordedAt) : "",
+        progressPercent: p.progressPercent,
+        summary: p.summary,
+      });
+      setProgressInit({
+        recordedAt: p.recordedAt ?? "",
+        progressPercent: p.progressPercent,
+        summary: p.summary,
+      });
+      setProgressDialog({ open: true, mode: "edit", id: p.id, version: p.version });
+      setDialogError(null);
+    } catch (err) {
+      setDialogError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "重新加载失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
@@ -1471,6 +1617,8 @@ function ProjectDetailPage() {
         await apiFetch(`/api/projects/${id}/budgets/${deleteTarget.id}`, { method: "DELETE" });
       } else if (deleteTarget.resource === "expense") {
         await apiFetch(`/api/projects/${id}/expenses/${deleteTarget.id}`, { method: "DELETE" });
+      } else if (deleteTarget.resource === "progress") {
+        await apiFetch(`/api/projects/${id}/progress/${deleteTarget.id}`, { method: "DELETE" });
       } else {
         await apiFetch(`/api/projects/${id}/tasks/${deleteTarget.id}`, { method: "DELETE" });
       }
@@ -1639,6 +1787,19 @@ function ProjectDetailPage() {
     canManageExpenses &&
     detail.stage !== "CLOSED" &&
     hasPermission(roles, actionPermission("project-expense", "delete"));
+  const canManageProgresses = detail.capabilities.progresses;
+  const canAddProgress =
+    canManageProgresses &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-progress", "create"));
+  const canEditProgress =
+    canManageProgresses &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-progress", "edit"));
+  const canDeleteProgress =
+    canManageProgresses &&
+    detail.stage !== "CLOSED" &&
+    hasPermission(roles, actionPermission("project-progress", "delete"));
 
   return (
     <AppPage>
@@ -2412,17 +2573,68 @@ function ProjectDetailPage() {
               )}
               {detail.capabilities.progresses && (
                 <section className="border-border rounded-md border p-4">
-                  <SectionTitle>进度记录（{detail.progresses?.length ?? 0}）</SectionTitle>
-                  <Table headers={["记录时间", "进度", "进展说明"]}>
+                  <div className="mb-3 flex items-center justify-between">
+                    <SectionTitle>进度记录（{detail.progresses?.length ?? 0}）</SectionTitle>
+                    {canAddProgress && (
+                      <button
+                        type="button"
+                        onClick={openProgressCreate}
+                        className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                      >
+                        添加进度
+                      </button>
+                    )}
+                  </div>
+                  <Table
+                    headers={[
+                      "记录时间",
+                      "进度",
+                      "进展说明",
+                      ...(canEditProgress || canDeleteProgress ? ["操作"] : []),
+                    ]}
+                  >
                     {(detail.progresses ?? []).map((p) => (
                       <tr key={p.id}>
                         <td className="px-3 py-2 text-ink-secondary">{formatDate(p.recordedAt)}</td>
                         <td className="px-3 py-2 text-ink-primary">{p.progressPercent}%</td>
                         <td className="px-3 py-2 text-ink-secondary">{p.summary}</td>
+                        {(canEditProgress || canDeleteProgress) && (
+                          <td className="px-3 py-2">
+                            <div className="flex gap-2">
+                              {canEditProgress && (
+                                <button
+                                  type="button"
+                                  onClick={() => openProgressEdit(p)}
+                                  className="text-brand-600 text-sm hover:underline"
+                                >
+                                  编辑
+                                </button>
+                              )}
+                              {canDeleteProgress && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setDeleteTarget({
+                                      resource: "progress",
+                                      id: p.id,
+                                      name: p.summary,
+                                    })
+                                  }
+                                  className="text-sm text-red-600 hover:underline"
+                                >
+                                  删除
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))}
                     {(detail.progresses ?? []).length === 0 && (
-                      <EmptyRow colSpan={3} text="暂无进度记录" />
+                      <EmptyRow
+                        colSpan={canEditProgress || canDeleteProgress ? 4 : 3}
+                        text="暂无进度记录"
+                      />
                     )}
                   </Table>
                 </section>
@@ -2716,6 +2928,19 @@ function ProjectDetailPage() {
         onClose={closeExpenseDialog}
       >
         <ExpenseFields value={expenseForm} onChange={setExpenseForm} />
+      </ProjectSubresourceDialog>
+
+      <ProjectSubresourceDialog
+        open={progressDialog.open}
+        mode={progressDialog.mode}
+        title={progressDialog.mode === "create" ? "添加进度" : "编辑进度"}
+        saving={saving}
+        error={dialogError}
+        onSubmit={submitProgress}
+        onReload={reloadProgress}
+        onClose={closeProgressDialog}
+      >
+        <ProgressFields value={progressForm} onChange={setProgressForm} />
       </ProjectSubresourceDialog>
 
       <ConfirmActionDialog
