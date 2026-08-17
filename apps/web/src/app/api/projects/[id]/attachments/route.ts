@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import type { AttachmentType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
+import { authenticate, requirePermission, requestMeta, writeAuditLog, assertProjectWritable } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, parsePagination } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
@@ -56,33 +56,41 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const parsed = attachmentCreateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
-  const project = await prisma.project.findFirst({ where: { id, deletedAt: null } });
-  if (!project) return failConflict(ERROR_CODES.NOT_FOUND, "项目不存在");
+  // L1-B lifecycle integrity：mutation 与 Project header lock 同事务（B2-0 锁纪律：Project FOR UPDATE → Gate → mutation）；CLOSED → 409
+  const txResult = await prisma.$transaction(async (tx) => {
+    const gate = await assertProjectWritable(tx, id);
+    if (!gate.ok) return { error: gate.response };
 
-  const file = await prisma.file.findFirst({ where: { id: parsed.data.fileId, deletedAt: null } });
-  if (!file) return failConflict(ERROR_CODES.NOT_FOUND, "附件文件不存在（请先上传到 File Center）");
+    const project = await tx.project.findFirst({ where: { id, deletedAt: null } });
+    if (!project) return { error: failConflict(ERROR_CODES.NOT_FOUND, "项目不存在") };
 
-  const created = await prisma.fileAttachment.create({
-    data: {
-      fileId: parsed.data.fileId,
-      businessType: "project",
-      businessId: id,
-      attachmentType: parsed.data.attachmentType as AttachmentType | undefined,
-      sort: parsed.data.sort ?? 0,
-      approvalStatus: "APPROVED",
-      createdById: user!.id,
-      updatedById: user!.id,
-    },
+    const file = await tx.file.findFirst({ where: { id: parsed.data.fileId, deletedAt: null } });
+    if (!file) return { error: failConflict(ERROR_CODES.NOT_FOUND, "附件文件不存在（请先上传到 File Center）") };
+
+    const created = await tx.fileAttachment.create({
+      data: {
+        fileId: parsed.data.fileId,
+        businessType: "project", // backend authoritative 固定，不接受前端覆盖
+        businessId: id,
+        attachmentType: parsed.data.attachmentType as AttachmentType | undefined,
+        sort: parsed.data.sort ?? 0,
+        approvalStatus: "APPROVED",
+        createdById: user!.id,
+        updatedById: user!.id,
+      },
+    });
+    return { created };
   });
+  if ("error" in txResult) return txResult.error;
 
   await writeAuditLog({
     actorId: user?.id,
     action: "project-attachment.create",
     entityType: "fileAttachment",
-    entityId: created.id,
-    afterData: { projectId: id, fileId: created.fileId, attachmentType: created.attachmentType },
+    entityId: txResult.created.id,
+    afterData: { projectId: id, fileId: txResult.created.fileId, attachmentType: txResult.created.attachmentType },
     ...meta,
   });
 
-  return ok(created, undefined, 201);
+  return ok(txResult.created, undefined, 201);
 }
