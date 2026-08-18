@@ -2,6 +2,20 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Inventory Read Model（P1，2026-08-18）
+
+### 新增（Inventory Read Model Query API + 前端两页替换 Placeholder，Design Gate 批准后实现）
+
+- **只读 Query API（CTO #8845 Contract Blocking 解除）**：
+  - `GET /api/stock-projections`（库存余额投影列表）——过滤 item（Item.code/name 模糊）/ itemId / warehouseId / locationId / batchNo / serialNo + 分页（pageSize ≤ 100）；**余额唯一权威 = StockProjection SSOT**（禁止 route 动态 SUM Movement、禁止前端自拼余额）；权限 `stock-projection:view`；响应含 warehouse/location/item 摘要，`onHandQty` 为 Decimal 字符串
+  - `GET /api/inventory-movements`（库存流水列表，**Trace/Audit Query，非余额 API**）——过滤 item / itemId / warehouseId / locationId / movementType / direction / sourceType / sourceId / movementGroupId / dateFrom-dateTo（committedAt 范围）；非法枚举/日期 → 400 VALIDATION_ERROR；权限 `inventory-movement:view`；默认 committedAt desc
+  - `GET /api/inventory-movements/{id}`（单条流水详情，含来源链 sourceType/sourceId/sourceLineId + movementGroupId + reversal/correction 引用）
+- **RBAC（ADR-0028）**：`stock-projection` / `inventory-movement` 模块注册进 shared `PERMISSION_MODULES` + `PERMISSIONS` 与 seed `SEED_ACTION_MODULES`（view 动作），避免 static RBAC 与 DB permission catalog 漂移；原「inventory-ledger:view 非生产权限事实」声明作废
+- **前端**：`/inventory/stock-projection`（只读列表：物料搜索/仓库下拉/批次/序列号过滤 + 分页）与 `/inventory/ledger`（只读列表：物料/仓库/类型/方向/来源/日期范围过滤 + 分页 + 行链接）替换 Placeholder，新增 `/inventory/ledger/[id]` 详情页——全部复用 F2-3 Workspace 共享层（AppPage / EntityListWorkspace / useListQuery / PermissionGuard / StatusBadge），无新建入口
+- **红线遵守（CTO Directive §14/§16）**：不引入 reservedQty / availableQty / unitCost / FIFO layer / movingAverageCost；前端不 SUM Movement 当权威余额；StockProjection 仍只表达已 FINAL 的 quantity fact
+- **文档**：openapi.yaml +3 paths（含参数/响应 schema）+7 schemas（WarehouseSummary/LocationSummary/ItemSummary/StockProjection/StockProjectionListResponse/InventoryMovement/InventoryMovementListResponse）；Frontend Module Map / API Contract Map / Page Route Map / Error Permission UX Matrix 同步解除 QUERY CONTRACT GAP / HOLD 标记；ROADMAP v1.22（Inventory Read Model ✅ FINAL）；AGENTS.md §3；SPRINT_PLAN
+- **边界**：本 Gate 不实现 Reservation / AvailableQty / Costing / FIFO / Moving Average / 库存价值；不新增任何写端点；不修改 6A/6B 事实模型
+
 ## [v0.7.0-alpha] - 2026-08-18（Release：Linier ERP v0.7.0-alpha — Purchase, Inventory & AP Accounting + Frontend Operations）
 
 > 本段汇总 PR #19-#83（Sprint 5A/5B/5C-1、Sprint 6A/6B、Frontend Operations F2/B2/L、P0 R1-R3 修复）与治理收口；Sprint 4A-4E-3 历史条目（PR #12-#18）属 v0.6.0-alpha 发布段，按仓库既有惯例保留在本文件前部未迁移。

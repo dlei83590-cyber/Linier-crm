@@ -65,9 +65,10 @@ export const PERMISSIONS = {
   WAREHOUSE_READ: "warehouse:view",
   WAREHOUSE_LOCATION_READ: "warehouse-location:view",
   // Sprint 6A/6B：库存工作台（前端消费层对齐 FINAL 契约）
-  // 注：Inventory Ledger / Stock Projection **无 FINAL Read API**（6A 只暴露 Consumer contract，
-  //     未发布 InventoryMovement/StockProjection 只读端点）——inventory-ledger:view **不是已存在的
-  //     生产权限事实**（CTO #8845 Contract Blocking）。正式 Query API Gate 前不声明该权限码。
+  // Sprint 6A Read Model（Inventory Read Model Gate FINAL，2026-08-18）：新增只读 Query API
+  // GET /api/stock-projections + GET /api/inventory-movements（+ /:id 详情）——权限码为正式生产事实；
+  // **CTO #8845 Contract Blocking 解除**（原 inventory-ledger:view 非生产权限的声明作废，
+  // 由 stock-projection:view / inventory-movement:view 取代；consume 仍为 SYSTEM_PERMISSIONS）。
   INVENTORY_TRANSFER_READ: "inventory-transfer:view",
   INVENTORY_TRANSFER_WRITE: "inventory-transfer:write",
   STOCK_COUNT_READ: "stock-count:view",
@@ -76,6 +77,9 @@ export const PERMISSIONS = {
   INVENTORY_ADJUSTMENT_WRITE: "inventory-adjustment:write",
   INVENTORY_CONVERSION_READ: "inventory-conversion:view",
   INVENTORY_CONVERSION_WRITE: "inventory-conversion:write",
+  // Sprint 6A Read Model：库存只读查询（Stock Projection 余额投影 / Inventory Movement 流水追溯）
+  STOCK_PROJECTION_READ: "stock-projection:view",
+  INVENTORY_MOVEMENT_READ: "inventory-movement:view",
 } as const;
 
 /** 主数据模块（供菜单/权限路由复用） */
@@ -289,6 +293,10 @@ export const PERMISSION_MODULES = [
   "inventory-adjustment",
   // Sprint 6B-4：Inventory Conversion 同 item Repack/UOM Conversion（动作映射：create→inventory-conversion:create（创建即取号 CVT）；submit→inventory-conversion:edit；execute→inventory-conversion:edit（对齐 5B post→:edit 先例）；cancel→inventory-conversion:close；line 仅 view/edit——见 SEED_RESTRICTED_ACTION_PERMISSIONS；**首版无审批状态机（DRAFT→SUBMITTED→EXECUTED/CANCELLED），计量事实不发明审批流**）
   "inventory-conversion",
+  // Sprint 6A Read Model：库存只读查询模块（stock-projection / inventory-movement——只读 Query API 用 :view；
+  // 与 prisma/seed.ts SEED_ACTION_MODULES 保持一致，避免 static RBAC 与 DB permission catalog 漂移（ADR-0028））
+  "stock-projection",
+  "inventory-movement",
   // Sprint 5C-1：Supplier Invoice 供应商发票（动作映射：create→supplier-invoice:create（创建即取号 SINV，P1 Final）；submit→supplier-invoice:edit；cancel→supplier-invoice:close；line 仅 view/edit——见 SEED_RESTRICTED_ACTION_PERMISSIONS；**5C-1A 状态机 DRAFT→SUBMITTED（Match/POST 属 5C-1B/1C，本阶段不到达）；SUBMITTED ≠ POSTED**）
   "supplier-invoice",
 ] as const;

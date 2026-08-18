@@ -1,7 +1,7 @@
-# Inventory Read Model — Query Contract（Design Gate）
+# Inventory Read Model — Query Contract（Design Gate → ✅ APPROVED & IMPLEMENTED）
 
-> 状态：**DESIGN GATE（实现 HOLD until 批准）**｜日期：2026-08-18｜维护者：CTO｜依据：CTO Directive 2026-08-12 §15/§16、CTO #8845 Contract Blocking 解除条件、ROADMAP v1.21（Inventory Read Model = PLANNED）
-> 范围：新增 **2 个只读 Query API**（`GET /api/stock-projections` + `GET /api/inventory-movements`）+ 替换 `/inventory/stock-projection` 与 `/inventory/ledger` 两个 Placeholder 页为真实页面。
+> 状态：✅ **APPROVED & IMPLEMENTED（2026-08-18）**——设计经 Scope Gate 批准后实现：`GET /api/stock-projections` + `GET /api/inventory-movements`（+ `/{id}`）已合入 main；前端 `/inventory/stock-projection`（列表）与 `/inventory/ledger`（列表 + `[id]` 详情）已替换 Placeholder。v1 UI 过滤：物料搜索 / 仓库（下拉）/ 批次 / 序列号（location 参数后端已支持，UI 级联下拉留后续 Gate）。｜维护者：CTO｜依据：CTO Directive 2026-08-12 §15/§16、CTO #8845 Contract Blocking 解除条件、ROADMAP v1.22
+> 范围：新增 **2 个只读 Query API**（`GET /api/stock-projections` + `GET /api/inventory-movements`，含 `/{id}` 详情）+ 替换 `/inventory/stock-projection` 与 `/inventory/ledger` 两个 Placeholder 页为真实页面。
 > 边界：**本 Gate 不实现** Reservation / AvailableQty / Costing / FIFO / Moving Average / 库存价值（§16 红线）；不新增任何写端点；不修改 6A/6B 事实模型。
 
 ---

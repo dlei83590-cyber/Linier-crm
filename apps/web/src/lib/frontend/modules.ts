@@ -566,15 +566,16 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     createPermission: actionPermission('inventory-conversion', 'create'),
     order: 4,
   },
-  // Read Model（页面已存在但无 FINAL Read API → hold；inventory-ledger:view / stock-projection:view **非已存在权限事实**（CTO #8845），permission=null 避免伪造权限码
+  // Sprint 6A Read Model（Inventory Read Model Gate FINAL，2026-08-18）：GET /api/stock-projections + /api/inventory-movements
+  // 只读；余额唯一权威 = StockProjection SSOT；前端不 SUM Movement（CTO Directive §14/§16）。CTO #8845 Contract Blocking 解除。
   {
     id: 'stock-projection',
     domain: 'inventory',
-    label: '库存展望',
+    label: '库存余额投影',
     route: '/inventory/stock-projection',
-    permission: null,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
+    permission: PERMISSIONS.STOCK_PROJECTION_READ,
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_LIST },
     order: 5,
   },
   {
@@ -582,9 +583,9 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     domain: 'inventory',
     label: '库存流水',
     route: '/inventory/ledger',
-    permission: null,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
+    permission: PERMISSIONS.INVENTORY_MOVEMENT_READ,
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_LIST_DETAIL, ui: UI_LIST_DETAIL },
     order: 6,
   },
 

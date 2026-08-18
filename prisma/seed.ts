@@ -135,6 +135,10 @@ const SEED_ACTION_MODULES = [
   "inventory-adjustment",
   // Sprint 6B-4：Inventory Conversion 转换模块（动作映射：create→inventory-conversion:create（创建即取号 CVT）；submit→inventory-conversion:edit；execute→inventory-conversion:edit（对齐 5B post→:edit 先例）；cancel→inventory-conversion:close；line 仅 view/edit——见 SEED_RESTRICTED_ACTION_PERMISSIONS；**Conversion 状态机无 APPROVED（DRAFT/SUBMITTED/EXECUTED/CANCELLED——同 item Repack/UOM 计量事实，不发明审批流）**）
   "inventory-conversion",
+  // Sprint 6A Read Model：库存只读查询模块（stock-projection / inventory-movement——只读 Query API 用 :view；
+  // 与 shared PERMISSION_MODULES 保持一致，避免 static RBAC 与 DB permission catalog 漂移（ADR-0028））
+  "stock-projection",
+  "inventory-movement",
   // Sprint 5C-1：Supplier Invoice 供应商发票（动作映射：create→supplier-invoice:create（创建即取号 SINV，P1 Final）；submit→supplier-invoice:edit；cancel→supplier-invoice:close；line 仅 view/edit——见 SEED_RESTRICTED_ACTION_PERMISSIONS；**5C-1A 状态机 DRAFT→SUBMITTED（Match/Approval/POST 属 5C-1B/1C，本阶段不实现）；SUBMITTED ≠ POSTED，submit 不生成 AP/GRIR**）
   "supplier-invoice",
   // Sprint 3A：平台底座模块

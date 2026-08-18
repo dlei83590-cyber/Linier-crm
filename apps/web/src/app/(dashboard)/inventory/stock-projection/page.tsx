@@ -1,16 +1,177 @@
 "use client";
 
+/**
+ * Inventory Read Model — 库存余额投影列表页（Read Model Gate FINAL，CTO Directive 2026-08-12 §15/§16）
+ *
+ * 只读：余额唯一权威 = 后端 StockProjection SSOT；前端禁止 SUM InventoryMovement / 自拼余额（§14）。
+ * 复用 F2-3 Workspace：AppPage → EntityListWorkspace + useListQuery + PermissionGuard。
+ * 过滤：物料搜索 / 仓库（下拉，best-effort）/ 批次 / 序列号；location 过滤后端已支持，UI 下拉后续 Gate 加。
+ */
+import { useEffect, useState } from "react";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { PlaceholderPage } from "@/components/ui/placeholder-page";
+import { PERMISSIONS } from "@nilier-crm/shared";
+import { AppPage, EntityListWorkspace } from "@/components/workspace";
+import { useListQuery } from "@/lib/use-list-query";
+import { formatDate } from "@/lib/format";
+import { apiFetch } from "@/lib/api-client";
 
-// ⚠️ QUERY CONTRACT GAP / HOLD（CTO #8845 Frontend Contract Blocking）：
-// Inventory Ledger / Stock Projection 无 FINAL Read API——6A Final 只暴露 Consumer contract，
-// 未发布 InventoryMovement/StockProjection 只读端点。正式 Backend Read Model Gate 前：
-// ① 保留 Placeholder 骨架；② 不允许真实数据接线；③ 不声明 inventory-ledger:view 为生产权限。
+interface WarehouseOption {
+  id: string;
+  name: string | null;
+}
+
+interface StockProjectionRow {
+  id: string;
+  onHandQty: string;
+  lastMovementAt: string | null;
+  warehouse?: { id: string; name: string | null } | null;
+  location?: { id: string; name: string | null } | null;
+  item?: { id: string; code: string | null; name: string | null } | null;
+  batchNo?: string | null;
+  serialNo?: string | null;
+}
+
+function StockProjectionList() {
+  const [itemInput, setItemInput] = useState("");
+  const [warehouseInput, setWarehouseInput] = useState("");
+  const [batchInput, setBatchInput] = useState("");
+  const [serialInput, setSerialInput] = useState("");
+  const [filters, setFilters] = useState<{
+    item?: string;
+    warehouseId?: string;
+    batchNo?: string;
+    serialNo?: string;
+  }>({});
+  const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
+
+  useEffect(() => {
+    const c = new AbortController();
+    apiFetch<WarehouseOption[]>("/api/warehouses?pageSize=100", { signal: c.signal })
+      .then((b) => setWarehouses(b.data))
+      .catch(() => setWarehouses([])); // best-effort：无 warehouse:view 权限时下拉为空，列表仍可用
+    return () => c.abort();
+  }, []);
+
+  const { items, total, page, pageSize, loading, error, setPage, refresh } =
+    useListQuery<StockProjectionRow>("/api/stock-projections", filters);
+
+  const applyFilter = () => {
+    const next: typeof filters = {};
+    if (itemInput.trim()) next.item = itemInput.trim();
+    if (warehouseInput) next.warehouseId = warehouseInput;
+    if (batchInput.trim()) next.batchNo = batchInput.trim();
+    if (serialInput.trim()) next.serialNo = serialInput.trim();
+    setFilters(next);
+    setPage(1);
+  };
+
+  const resetFilter = () => {
+    setItemInput("");
+    setWarehouseInput("");
+    setBatchInput("");
+    setSerialInput("");
+    setFilters({});
+    setPage(1);
+  };
+
+  return (
+    <AppPage>
+      <EntityListWorkspace<StockProjectionRow>
+        title="库存余额投影"
+        description="五维库存余额（物料/仓库/库位/批次/序列号）只读；余额全部来自后端 StockProjection SSOT，前端不自行计算。"
+        filters={
+          <>
+            <input
+              value={itemInput}
+              onChange={(e) => setItemInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") applyFilter();
+              }}
+              placeholder="按物料编码/名称搜索"
+              className="w-44 rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+            />
+            <select
+              value={warehouseInput}
+              onChange={(e) => setWarehouseInput(e.target.value)}
+              className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+            >
+              <option value="">全部仓库</option>
+              {warehouses.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name ?? w.id}
+                </option>
+              ))}
+            </select>
+            <input
+              value={batchInput}
+              onChange={(e) => setBatchInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") applyFilter();
+              }}
+              placeholder="批次"
+              className="w-32 rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+            />
+            <input
+              value={serialInput}
+              onChange={(e) => setSerialInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") applyFilter();
+              }}
+              placeholder="序列号"
+              className="w-32 rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+            />
+          </>
+        }
+        toolbarActions={
+          <>
+            <button
+              type="button"
+              onClick={applyFilter}
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+            >
+              查询
+            </button>
+            <button
+              type="button"
+              onClick={resetFilter}
+              className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-slate-50"
+            >
+              重置
+            </button>
+          </>
+        }
+        columns={[
+          {
+            key: "item",
+            header: "物料",
+            render: (r) => (r.item ? `${r.item.code ?? ""} ${r.item.name ?? ""}`.trim() : "—"),
+          },
+          { key: "warehouse", header: "仓库", render: (r) => r.warehouse?.name ?? "—" },
+          { key: "location", header: "库位", render: (r) => r.location?.name ?? "—" },
+          { key: "batchNo", header: "批次", render: (r) => r.batchNo ?? "—" },
+          { key: "serialNo", header: "序列号", render: (r) => r.serialNo ?? "—" },
+          { key: "onHandQty", header: "在库数量", render: (r) => r.onHandQty },
+          { key: "lastMovementAt", header: "最后变动", render: (r) => formatDate(r.lastMovementAt) },
+        ]}
+        rows={items}
+        rowKey={(r) => r.id}
+        loading={loading}
+        error={error}
+        onRetry={refresh}
+        emptyMessage="暂无库存余额记录"
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        onPageChange={setPage}
+      />
+    </AppPage>
+  );
+}
+
 export default function Page() {
   return (
-    <PermissionGuard permission={null}>
-      <PlaceholderPage title="库存余额投影" description="五维库存余额（物料/仓库/库位/批次/序列号）只读展示；余额全部来自后端，前端不自行计算。⚠️ 后端 Read Model Gate 前 HOLD。" />
+    <PermissionGuard permission={PERMISSIONS.STOCK_PROJECTION_READ}>
+      <StockProjectionList />
     </PermissionGuard>
   );
 }

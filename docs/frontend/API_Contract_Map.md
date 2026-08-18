@@ -79,25 +79,27 @@
 
 ## 2. 库存工作台（6A/6B FINAL 契约）
 
-### 2.1 Stock Projection（库存余额投影，6A）——**QUERY CONTRACT GAP / HOLD** ⚠️
+### 2.1 Stock Projection（库存余额投影，6A）——✅ FINAL（Inventory Read Model Gate，2026-08-18）
 
-> **CTO #8845 Frontend Contract Blocking**：Inventory Ledger / Stock Projection **无 FINAL Read API**——6A Final 只暴露 Consumer contract（`/api/inventory-ledger/consume`），**未发布 InventoryMovement/StockProjection 只读端点**。
-> **处置**：页面保留 Placeholder；**不允许真实数据接线**；`inventory-ledger:view` 在正式 Query API Gate 前**不是已存在的生产权限事实**（后端 read-model 应独立走一个很小的 Gate，不得因前端需求在 PR #24 直接新增）。
-> **前端禁令**：不得通过多个业务 API 拼装库存余额；不得自行 SUM Movement 充当 StockProjection。
+> **CTO #8845 Contract Blocking 解除**（Read Model Gate FINAL）：`GET /api/stock-projections` 已发布为 FINAL 只读端点。
+> **权限**：`stock-projection:view`（shared PERMISSION_MODULES + seed 同步注册，ADR-0028）。
+> **前端禁令（不变）**：不得通过多个业务 API 拼装库存余额；不得自行 SUM Movement 充当 StockProjection——余额唯一权威 = 后端 StockProjection SSOT（§14/§16）。
 
-| 端点 | 方法 | 用途 | 骨架页消费 |
+| 端点 | 方法 | 用途 | 页面消费 |
 | --- | --- | --- | --- |
-| （无 FINAL 端点——6A 仅暴露 Consumer contract） | — | 五维余额展示（item/warehouse/location/batch/serial） | **⛔ HOLD：不接线，等 Backend Read Model Gate** |
+| `/api/stock-projections` | GET | 五维余额列表（item/warehouseId/locationId/batchNo/serialNo + item 搜索 + 分页） | 库存余额投影页（只读列表） |
 
-### 2.2 Inventory Movement Ledger（库存流水，6A）——**QUERY CONTRACT GAP / HOLD** ⚠️
+### 2.2 Inventory Movement Ledger（库存流水，6A）——✅ FINAL（Inventory Read Model Gate，2026-08-18）
 
-> **CTO #8845 Frontend Contract Blocking**：同上——**无 FINAL 只读流水端点**（6A 只有 `consume` 后台动作）。
-> **处置**：页面保留 Placeholder；**不允许真实数据接线**；不声明 `inventory-ledger:view` 为可用权限。
+> **CTO #8845 Contract Blocking 解除**：`GET /api/inventory-movements`（+ `/{id}` 详情）已发布为 FINAL 只读端点。
+> **权限**：`inventory-movement:view`（shared PERMISSION_MODULES + seed 同步注册）。
+> **性质**：Trace / Audit Query，**不是余额 API**——前端禁止 SUM quantity 充当权威余额。
 
-| 端点 | 方法 | 用途 | 骨架页消费 |
+| 端点 | 方法 | 用途 | 页面消费 |
 | --- | --- | --- | --- |
+| `/api/inventory-movements` | GET | 流水列表（item/warehouseId/locationId/movementType/direction/sourceType/sourceId/movementGroupId/dateFrom-dateTo + 分页） | 库存流水页（只读列表） |
+| `/api/inventory-movements/{id}` | GET | 单条流水详情（来源链 + reversal/correction 引用） | 库存流水详情页 |
 | `/api/inventory-ledger/consume` | POST | 触发 Consumer（后台动作，**前端不调用**） | — |
-| （无 FINAL 只读端点） | GET | 追溯 InventoryMovement（不可变账本） | **⛔ HOLD：不接线，等 Backend Read Model Gate** |
 
 ### 2.3 Inventory Transfer（调拨，6B）
 

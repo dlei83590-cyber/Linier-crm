@@ -12001,6 +12001,156 @@ paths:
         "409":
           description: Conflict（非 APPROVED / 已 POSTED / 版本冲突 / maker-checker / 审批快照不一致 / GRIR 不足）
 
+  # ==========================================================================
+  # Sprint 6A Read Model — Stock Projection / Inventory Movement Query API
+  # （Inventory Read Model Gate FINAL，CTO Directive 2026-08-12 §15/§16；CTO #8845 Contract Blocking 解除）
+  # 只读：余额唯一权威 = StockProjection SSOT；本组端点不引入 reservedQty/availableQty/unitCost/FIFO（§16）；
+  # Inventory Movement = Trace/Audit Query，**不是余额 API**（前端禁止 SUM quantity 充当权威余额，§14）。
+  # ==========================================================================
+
+  /api/stock-projections:
+    get:
+      tags: [Inventory Read Model]
+      summary: List stock projections (paginated, read-only; balance SSOT = StockProjection)
+      description: |
+        库存余额投影列表（只读）。过滤：item（Item.code/name 模糊）/ itemId / warehouseId / locationId / batchNo / serialNo；
+        分页 page/pageSize（≤100）。**余额唯一权威 = StockProjection SSOT**——禁止 route 动态 SUM InventoryMovement 作为正式余额。
+        权限：stock-projection:view。
+      operationId: listStockProjections
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: item
+          in: query
+          schema: { type: string, description: Item.code/name 模糊搜索 }
+        - name: itemId
+          in: query
+          schema: { type: string }
+        - name: warehouseId
+          in: query
+          schema: { type: string }
+        - name: locationId
+          in: query
+          schema: { type: string }
+        - name: batchNo
+          in: query
+          schema: { type: string }
+        - name: serialNo
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Paginated list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockProjectionListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/inventory-movements:
+    get:
+      tags: [Inventory Read Model]
+      summary: List inventory movements (paginated, read-only Trace/Audit query)
+      description: |
+        库存流水列表（只读 Trace/Audit Query，**不是余额 API**）。过滤：item / itemId / warehouseId / locationId /
+        movementType / direction / sourceType / sourceId / movementGroupId / dateFrom-dateTo（committedAt 范围）；
+        分页 page/pageSize（≤100）。非法枚举/日期 → 400 VALIDATION_ERROR。
+        权限：inventory-movement:view。
+      operationId: listInventoryMovements
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: item
+          in: query
+          schema: { type: string, description: Item.code/name 模糊搜索 }
+        - name: itemId
+          in: query
+          schema: { type: string }
+        - name: warehouseId
+          in: query
+          schema: { type: string }
+        - name: locationId
+          in: query
+          schema: { type: string }
+        - name: movementType
+          in: query
+          schema: { type: string, description: "InventoryMovementType: INBOUND|OUTBOUND|TRANSFER_OUT|TRANSFER_IN|CONSUME|PRODUCE|ADJUSTMENT|REVERSAL|CORRECTION" }
+        - name: direction
+          in: query
+          schema: { type: string, description: "IN|OUT" }
+        - name: sourceType
+          in: query
+          schema: { type: string, description: "InventoryMovementSourceType: WAREHOUSE_RECEIPT_POSTED|PURCHASE_RETURN_RETURNED|TRANSFER|ADJUSTMENT|CONVERSION|REVERSAL|CORRECTION" }
+        - name: sourceId
+          in: query
+          schema: { type: string }
+        - name: movementGroupId
+          in: query
+          schema: { type: string }
+        - name: dateFrom
+          in: query
+          schema: { type: string, format: date-time, description: committedAt 下限 }
+        - name: dateTo
+          in: query
+          schema: { type: string, format: date-time, description: committedAt 上限 }
+      responses:
+        "200":
+          description: Paginated list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryMovementListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/inventory-movements/{id}:
+    get:
+      tags: [Inventory Read Model]
+      summary: Get inventory movement detail (read-only ledger fact)
+      description: |
+        单条库存流水详情（只读）。完整展示不可变账本事实：来源链 sourceType/sourceId/sourceLineId +
+        movementGroupId + reversal/correction 引用。权限：inventory-movement:view。
+      operationId: getInventoryMovement
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryMovement"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -18436,6 +18586,117 @@ components:
                 properties:
                   inserted: { type: boolean, description: true=新入账 / false=五元幂等重放 }
                   movementNo: { type: string, description: 入账流水号 MV-xxxxxx }
+
+    # ==========================================================================
+    # Sprint 6A Read Model — Stock Projection / Inventory Movement components
+    # （Inventory Read Model Gate FINAL，CTO Directive 2026-08-12 §15/§16）
+    # ==========================================================================
+    WarehouseSummary:
+      type: object
+      required: [id]
+      properties:
+        id: { type: string }
+        name: { type: [string, "null"] }
+
+    LocationSummary:
+      type: object
+      required: [id]
+      properties:
+        id: { type: string }
+        name: { type: [string, "null"] }
+
+    ItemSummary:
+      type: object
+      required: [id]
+      properties:
+        id: { type: string }
+        code: { type: [string, "null"] }
+        name: { type: [string, "null"] }
+
+    StockProjection:
+      type: object
+      required: [id, onHandQty]
+      description: 五维库存余额投影（余额唯一权威 = StockProjection SSOT；一行 = 一个五维组合当前余额；onHandQty ≥ 0 DB CHECK）
+      properties:
+        id: { type: string }
+        warehouse: { $ref: "#/components/schemas/WarehouseSummary" }
+        location: { allOf: [{ $ref: "#/components/schemas/LocationSummary" }], nullable: true }
+        item: { $ref: "#/components/schemas/ItemSummary" }
+        batchNo: { type: [string, "null"] }
+        serialNo: { type: [string, "null"] }
+        onHandQty: { type: string, description: "Decimal 字符串（防精度丢失，禁 toNumber）" }
+        lastMovementAt: { type: [string, "null"], format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    StockProjectionListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/StockProjection" }
+        meta:
+          type: object
+          required: [page, pageSize, total]
+          properties:
+            page: { type: integer }
+            pageSize: { type: integer }
+            total: { type: integer }
+
+    InventoryMovement:
+      type: object
+      required: [id, movementNo, quantity]
+      description: 不可变库存流水（Trace/Audit 事实；COMMITTED 后禁止 UPDATE/DELETE；纠错只能追加 Reversal/Correction）
+      properties:
+        id: { type: string }
+        movementNo: { type: string }
+        sourceType: { type: string }
+        sourceId: { type: string }
+        sourceLineId: { type: string }
+        movementRole: { type: string }
+        movementAtomKey: { type: string }
+        movementGroupId: { type: [string, "null"] }
+        direction: { type: string, description: "IN|OUT" }
+        status: { type: string, description: "COMMITTED" }
+        movementType: { type: string }
+        reversalOfMovementId: { type: [string, "null"] }
+        correctionOfMovementId: { type: [string, "null"] }
+        warehouse: { $ref: "#/components/schemas/WarehouseSummary" }
+        location: { allOf: [{ $ref: "#/components/schemas/LocationSummary" }], nullable: true }
+        item: { $ref: "#/components/schemas/ItemSummary" }
+        batchNo: { type: [string, "null"] }
+        serialNo: { type: [string, "null"] }
+        mfgDate: { type: [string, "null"], format: date-time }
+        expDate: { type: [string, "null"], format: date-time }
+        quantity: { type: string, description: "Decimal 字符串；IN/OUT 均为正数（方向承载正负语义）" }
+        uom:
+          type: object
+          nullable: true
+          properties:
+            id: { type: string }
+            code: { type: [string, "null"] }
+            name: { type: [string, "null"] }
+        referenceNo: { type: [string, "null"] }
+        remark: { type: [string, "null"] }
+        committedAt: { type: string, format: date-time }
+        committedById: { type: [string, "null"] }
+
+    InventoryMovementListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/InventoryMovement" }
+        meta:
+          type: object
+          required: [page, pageSize, total]
+          properties:
+            page: { type: integer }
+            pageSize: { type: integer }
+            total: { type: integer }
 
     # ==========================================================================
     # Sprint 6B-3 — Stock Count / Inventory Adjustment components（CTO #8471 授权）

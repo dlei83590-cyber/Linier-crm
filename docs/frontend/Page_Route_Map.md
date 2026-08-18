@@ -69,7 +69,7 @@ export default function Page() {
 ```
 
 > 骨架页统一使用现有 `PlaceholderPage` + `PermissionGuard` 模式（对齐 items/projects 页面先例），**不新增 UI 组件、不写后端调用**——Page Skeleton 阶段只确立 IA 与路由骨架。
-> ⚠️ **CTO #8845 Contract Blocking**：`/inventory/stock-projection` 与 `/inventory/ledger` 无 FINAL Read API（6A 只暴露 Consumer contract）——两页保留 Placeholder、**不接线、不声明 inventory-ledger:view 为可用权限**（等独立 Backend Read Model Gate）。
+> ✅ **CTO #8845 Contract Blocking 解除（Inventory Read Model Gate FINAL，2026-08-18）**：`/inventory/stock-projection`（`stock-projection:view`）与 `/inventory/ledger`（`inventory-movement:view`）已接入 FINAL 只读 API（`/api/stock-projections` + `/api/inventory-movements`），由 Placeholder 替换为真实列表/详情页；余额唯一权威 = 后端 StockProjection SSOT，前端不计算（§14/§16）。
 
 ---
 

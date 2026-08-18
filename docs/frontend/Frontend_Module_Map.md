@@ -56,8 +56,8 @@ ERP Frontend（Next.js App Router，apps/web）
 
 | 模块 | 后端契约（FINAL） | 关键动作 | 页面形态 |
 | --- | --- | --- | --- |
-| Stock Projection | 6A（**无 FINAL Read API——QUERY CONTRACT GAP**）⚠️ | 五维余额展示（item/warehouse/location/batch/serial） | **⛔ HOLD：仅 Placeholder，不接线（等 Backend Read Model Gate）** |
-| Inventory Movement Ledger | 6A（**无 FINAL 只读端点——QUERY CONTRACT GAP**）⚠️ | 流水追溯 | **⛔ HOLD：仅 Placeholder，不接线（等 Backend Read Model Gate）** |
+| Stock Projection | 6A `api/stock-projections`（**Read Model Gate FINAL，2026-08-18**）✅ | 五维余额展示（item/warehouse/location/batch/serial） | ✅ 只读列表（`stock-projection:view`；余额 SSOT，前端不计算） |
+| Inventory Movement Ledger | 6A `api/inventory-movements`（**Read Model Gate FINAL，2026-08-18**）✅ | 流水追溯（Trace/Audit，**非余额 API**） | ✅ 只读列表 + 详情（`inventory-movement:view`） |
 | Inventory Transfer | 6B `api/inventory-transfers` | list / create / PATCH / submit / **execute** / cancel | 列表 + 详情 + 执行动作骨架 |
 | Stock Count | 6B `api/stock-counts` | list / create / PATCH / lines / **complete** / cancel | 列表 + 详情 + 盘点录入骨架 |
 | Inventory Adjustment | 6B `api/inventory-adjustments` | list / create / PATCH / submit / **apply** / cancel | 列表 + 详情 + 过账动作骨架 |
@@ -83,7 +83,7 @@ ERP Frontend（Next.js App Router，apps/web）
 - **只允许**：后端已有 read-model / 聚合 API 的消费（如 dashboard KPI、单据列表查询参数）
 - **禁止**：前端自行计算"权威库存余额"（Stock Projection 余额只能来自后端）；禁止前端内存中组合多 API 结果伪造余额/差异
 - 库存相关 Dashboard 卡片（如有）一律走后端聚合端点，前端只渲染
-- ⚠️ **CTO #8845 Contract Blocking**：Stock Projection / Inventory Movement Ledger **无 FINAL Read API**（6A 只暴露 Consumer contract）——前端**不声明 inventory-ledger:view 为可用权限**、**不得多 API 拼装余额**、**不得 SUM Movement 充当 StockProjection**；等独立 Backend Read Model Gate
+- ✅ **CTO #8845 Contract Blocking 解除（Inventory Read Model Gate FINAL，2026-08-18）**：`GET /api/stock-projections` / `GET /api/inventory-movements` 已发布 FINAL 只读端点（权限 `stock-projection:view` / `inventory-movement:view`）——Stock Projection / Inventory Movement Ledger 两页已接线；前端**仍不得多 API 拼装余额、不得 SUM Movement 充当 StockProjection**（§14/§16）。
 
 ---
 

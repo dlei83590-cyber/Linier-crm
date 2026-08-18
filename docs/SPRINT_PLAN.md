@@ -63,8 +63,8 @@ Minor changes identified during acceptance are incorporated into the next planni
 
 - **代码事实基线**：main HEAD `5f5d1fa`（437 commits），CI 全绿（Quality Gates / Build / Secret Scanning），生产已部署（2026-08-18T12:26Z，migration baseline 0028）。
 - **Frontend Operations 收口**：F2-0~F2-6B + B2-0~B2-2B 全部合并（B2-2A/B2-2B 31/31 Runtime Acceptance ACCEPTED）；Project Lifecycle L0-L2-B1 已合并（PR #77-#83）。
-- **下一阶段（按 CTO Directive 2026-08-12 §21 与 2026-08-18 治理收口）**：① Project Lifecycle Contract Audit 收口（FINAL/GAP/HOLD matrix）；② **v0.7.0-alpha Release Gate**（schema/migration/API/frontend baseline + known limitations + HOLD 清单）；③ Inventory Read Model Query Contract 设计（实现 HOLD）。
-- **HOLD（解除需 CTO 单独指令）**：5C-2（Supplier Payment / AP Allocation / Supplier CN-DN / AP Write-Off / GL Posting）、Reservation、Costing、Sprint 7 GL、BI、OA、Mobile、Inventory Read Model 实现。
+- **下一阶段（按 CTO Directive 2026-08-12 §21 与 2026-08-18 治理收口）**：① Project Lifecycle Contract Audit 收口（FINAL/GAP/HOLD matrix）；② ~~v0.7.0-alpha Release Gate~~ ✅（2026-08-18 已发布）；③ ~~Inventory Read Model Query Contract 设计~~ ✅（2026-08-18 已实现：只读 Query API + 前端两页）。
+- **HOLD（解除需 CTO 单独指令）**：5C-2（Supplier Payment / AP Allocation / Supplier CN-DN / AP Write-Off / GL Posting）、Reservation、Costing、Sprint 7 GL、BI、OA、Mobile。
 
 ## Prioritized Backlog
 

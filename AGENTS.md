@@ -77,7 +77,7 @@
 - **Invoice POST 同事务必须产生 GRIR CONSUME + AP Liability + AP Open Item**，禁止 partial success；金额一律 Server-side Decimal canonical 计算，禁止信任 client amount/tax/matched quantity。
 - **并发锁序（Blocking Gate）**：collect IDs → deduplicate → sort → `SELECT ... ORDER BY id FOR UPDATE`；POST 与 Return REVERSAL 必须使用完全一致锁序。
 - **Migration 0027 = FROZEN BASELINE**，禁止修改；**Migration 0028（GRIR Historical Backfill）= FINAL 已冻结**（PR #23 已通过 Final Gate）。
-- **Inventory Read Model（P1）**：只允许设计 StockProjection Query / InventoryMovement Query 的 Query Contract，实现 HOLD until Contract Review；禁止前端自拼余额、SUM Movement 当权威余额、客户端重建 StockProjection。
+- **Inventory Read Model（P1）— ✅ FINAL（2026-08-18）**：`GET /api/stock-projections` / `GET /api/inventory-movements`（+ `/{id}`）只读 Query API 已发布（权限 `stock-projection:view` / `inventory-movement:view`，shared PERMISSION_MODULES + seed 同步注册，ADR-0028）；前端 `/inventory/stock-projection` 与 `/inventory/ledger` 已接线（CTO #8845 Blocking 解除）。**红线保持**：余额唯一权威 = StockProjection SSOT；禁止前端自拼余额、SUM Movement 当权威余额、客户端重建 StockProjection；不引入 reservedQty/availableQty/unitCost/FIFO（§16）。
 - **HOLD（解除需 CTO 单独指令）**：Reservation / AvailableQty / FIFO / Moving Average / Inventory Costing / General Ledger / Financial Statements / BI / OA / Mobile。
 - **UI 状态机红线**：APPROVED ≠ CONFIRMED、CREATED ≠ POSTED、APPROVED ≠ APPLIED、COMPLETED ≠ ADJUSTED、DRAFT ≠ SUBMITTED；前端按钮显隐只能消费后端状态契约。
 - 下一阶段开发必须先进行 **Design / Scope Gate**，再进入 Schema/API 实现；下一 Governance 项 = **Project Lifecycle Contract Audit 收口 + v0.7.0-alpha Release Gate**（schema/migration/API/frontend baseline + known limitations + HOLD 清单）。
