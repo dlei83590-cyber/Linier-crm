@@ -1784,7 +1784,8 @@ function ProjectDetailPage() {
   };
 
   const submitTransition = async () => {
-    if (!transitionDialog.open || !transitionDialog.targetStage) return;
+    // fail-closed：detail 未就绪（异步加载中/失败）时不允许发起流转
+    if (!detail || !transitionDialog.open || !transitionDialog.targetStage) return;
     setTransitionDialog((prev) => ({ ...prev, saving: true, error: null }));
     try {
       await apiFetch(`/api/projects/${id}/transition`, {
@@ -1810,6 +1811,8 @@ function ProjectDetailPage() {
   };
 
   const openTransition = () => {
+    // fail-closed：detail 未就绪时不打开 Transition 对话框
+    if (!detail) return;
     setTransitionDialog({
       open: true,
       targetStage: detail.allowedTransitions?.[0] ?? "",
