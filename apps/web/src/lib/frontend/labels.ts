@@ -169,8 +169,8 @@ export function moduleLabel(slug: string): string {
 export function permissionLabel(code: string): string {
   const idx = code.indexOf(":");
   if (idx <= 0) return code;
-  const module = code.slice(0, idx);
+  const mod = code.slice(0, idx);
   const action = code.slice(idx + 1);
   const actionLabel = ACTION_LABELS[action] || action;
-  return moduleLabel(module) + "·" + actionLabel;
+  return moduleLabel(mod) + "·" + actionLabel;
 }
