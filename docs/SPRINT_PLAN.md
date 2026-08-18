@@ -49,6 +49,23 @@ Minor changes identified during acceptance are incorporated into the next planni
 - An authenticated user can access only their active workspace.
 - The application can be deployed and rolled back in a non-production environment.
 
+## Sprint 2-6（已完成，2026-08-18 治理收口，详见 docs/ROADMAP.md v1.21）
+
+| Sprint | 状态 | 说明 |
+| --- | --- | --- |
+| Sprint 2 | ✅ Closed | Master Data（2A+2B+2C，Release v0.2.0-alpha） |
+| Sprint 3 | ✅ Closed | ERP Foundation（3A v0.3.0 / 3B v0.4.0 / 3C v0.5.0-alpha） |
+| Sprint 4 | ✅ Complete | Sales+Finance O2C（4A-4E-3，Release v0.6.0-alpha） |
+| Sprint 5 | ✅ FINAL | Purchase（5A PR/PO、5B Goods Receipt & Inbound、**5C-1 Supplier Invoice / 3-Way Match / GRIR / AP——PR #23 已合并 main `5a8dcae`**；5C-2 Payment/Allocation HOLD） |
+| Sprint 6 | ✅ FINAL | Inventory（6A Ledger Foundation、6B Operations 四块 Vertical Slice；Reservation/Costing HOLD） |
+
+## 当前阶段（2026-08-18，Post-6B 双轨收口）
+
+- **代码事实基线**：main HEAD `5f5d1fa`（437 commits），CI 全绿（Quality Gates / Build / Secret Scanning），生产已部署（2026-08-18T12:26Z，migration baseline 0028）。
+- **Frontend Operations 收口**：F2-0~F2-6B + B2-0~B2-2B 全部合并（B2-2A/B2-2B 31/31 Runtime Acceptance ACCEPTED）；Project Lifecycle L0-L2-B1 已合并（PR #77-#83）。
+- **下一阶段（按 CTO Directive 2026-08-12 §21 与 2026-08-18 治理收口）**：① Project Lifecycle Contract Audit 收口（FINAL/GAP/HOLD matrix）；② **v0.7.0-alpha Release Gate**（schema/migration/API/frontend baseline + known limitations + HOLD 清单）；③ Inventory Read Model Query Contract 设计（实现 HOLD）。
+- **HOLD（解除需 CTO 单独指令）**：5C-2（Supplier Payment / AP Allocation / Supplier CN-DN / AP Write-Off / GL Posting）、Reservation、Costing、Sprint 7 GL、BI、OA、Mobile、Inventory Read Model 实现。
+
 ## Prioritized Backlog
 
 1. Organizations and contacts.

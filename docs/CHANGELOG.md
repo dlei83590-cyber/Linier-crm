@@ -2,7 +2,38 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased] - Sprint 4A + 4B + 4C + 4D + 4E-1 + 4E-2 + 4E-3（Quotation / Sales Order / Delivery / Invoice / Accounts Receivable / Receipt & Payment Allocation / Credit Note & Debit Note Foundation，2026-08-08，PR #12-#18 已合并，未打 Tag）
+## [Unreleased] - Sprint 4A-4E-3 + 5A/5B/5C-1 + 6A/6B + Frontend Operations（F2-0~F2-6B / B2-0~B2-2B / Project Lifecycle L0-L2B1）+ P0 修复（PR #12-#83 已合并 main，未打 Tag，2026-08-18）
+
+### 新增（Sprint 5C-1：Supplier Invoice / Immutable 3-Way Match / GRIR / AP Liability-OpenItem FINAL，PR #23 已合并 main `5a8dcae`，2026-08-18 治理收口）
+
+- **5C-1A Supplier Invoice Foundation（CTO #9048 Schema FINAL 99/100 + #9083 API 指令）**：Migration `0027_supplier_invoice_ap_foundation`（SupplierInvoice/Line + MatchRun/MatchLine + GrirRecord + ApLiabilityFact + ApOpenItem，**FROZEN BASELINE 禁改**）；SINV DocumentSequence **创建即取号 fail closed**；RECEIPT_BASED 三重来源链 Gate（WHR POSTED + WHR Line↔PO Line↔Item↔Supplier 一致 + 数量≤已入库）；DRAFT→SUBMITTED（第三次来源链验证，**SUBMITTED ≠ POSTED**）；金额 Server-side Decimal canonical（禁客户端直传）
+- **5C-1B Immutable 3-Way Match（CTO #9238/#9247/#9342）**：Match Engine + Match API（MatchRun + MatchLine immutable，+ current projection 同事务）+ Workflow Approval Reference（不 mutate MatchRun）；累计数量 self-exclusion 回归（H15/H16）；事件 `SupplierInvoiceMatched` ✅（EVENTS v1.32）
+- **5C-1C0 Accounting Readiness（CTO #9477/#9547）**：GRIR Producer Foundation——**WHR POST 原子产生 GRIR ACCRUAL（同一事务边界，不得出现 WHR POSTED 而无 ACCRUAL）** / WHR-based PurchaseReturn RETURN 产生 **GRIR REVERSAL** / Σ REVERSAL ≤ Σ ACCRUAL 无负 GRIR；Migration `0028_grir_historical_fact_backfill`（historical ACCRUAL/REVERSAL backfill + canonical sourceKey + idempotency + source business timestamp）
+- **5C-1C1 Supplier Invoice POST（CTO #9678 六条不变量 + #9757/#9781 精确更新）**：**POST 同事务 = GRIR CONSUME + ApLiabilityFact + ApOpenItem + Invoice POSTED，禁止 partial success**；POST 锁内重验 approved MatchRun snapshot + GRIR remaining quantity；**并发锁序 = collect→dedupe→sort→`SELECT ... ORDER BY id FOR UPDATE`（POST 与 Return REVERSAL 完全一致，Blocking Gate）**；GRIR 为 Immutable Accounting Fact（**禁止 `UPDATE GrirRecord SET quantity`**，纠错只能新增事实）；maker-checker（Poster ≠ Creator/Approval actor）+ 幂等（已 POSTED → 409）；事件 `SupplierInvoicePosted` / `GrirConsumed` ✅（EVENTS v1.33）
+- **边界**：Supplier Payment / AP Allocation / Payment Reversal / Supplier CN-DN / AP Write-Off / GL Posting（5C-2 / Sprint 7）继续 HOLD；Supplier Invoice Fact 与 Tax Invoice（中国增值税发票）区分建模
+- **文档**：Sprint5C_QA.md（5C-1A→1C1 状态同步）、docs/test-cases/SupplierInvoice_API.md、ADR-0027（APPROVED→Implemented）、OpenAPI Sprint 5C 段、EVENTS v1.31→v1.33、ROADMAP v1.21（Sprint 5 ✅）
+
+### 新增（Frontend Operations 收口 + Project Lifecycle，PR #24-#83，2026-08-18 治理收口）
+
+- **Track A Iteration 1（PR #24）**：10 模块 List Workspace（PR/PO/Receipt/Inspection/WHR/PurchaseReturn + Transfer/Count/Adjustment/Conversion）+ Error Contract Hardening（CTO Scale-Out Gate Required）
+- **F2-0 IA v2**：Module Registry + 分组导航（ready/preview/hold 三层投影 + PERMISSIONS 收口）；**F2-1 UI 系统底座**（capability registry dual-layer：contract vs ui，CTO 99/100 FINAL）；**F2-2 Master Data 工作台**（409 CAS 冲突 UX + dirty-state guard，CTO 99/100）
+- **F2-3 PO/Receipt/WHR**：create + DRAFT edit 选择性移植（Batch A/B/C，CTO 99/100）；**F2-4A CRM/Project Workspace**（Opportunities + Projects CRUD，CTO 99/100）；**F2-4B1 Project Detail Read Tabs**（capability-aware + stage-based closed gates，CTO 99/100）；**B2-0** CLOSED 写门禁（`assertProjectWritable` 锁序 Project→Child，CTO #12228/#12278/#12333 FINAL）；**B2-1A** Stakeholders/Members/Milestones/Tasks CRUD（CTO 99/100）；**B2-1B** Risks/Visits/Products/Tags CRUD（CTO #13762）
+- **F2-5A Navigation Reset**（ready/hold 分层 + 当前域自动展开，CTO 99/100）；**F2-5B Dashboard v2**（四区模型：今日工作/快捷操作/业务入口/系统状态，CTO 99/100）；**F2-5C ready-surface 权限连通**（CTO 99/100）；**F2-6-0 / F2-6A**（Registry 对齐 final API surface + Sales 只读 Quotation/SO/Delivery/Invoice/AR List+Detail，CTO 99/100）
+- **F2-6B Batch 1-3（CTO FINAL APPROVED）**：Quotation create/edit + source-driven convert/delivery/invoice actions；Receipt-Allocation + Credit/Debit Note 工作台；Sales order/delivery/invoice action wiring；audit-logs 页面；Purchasing Tier2/3 actions；Inventory Transfer/Count/Adjustment/Conversion actions；**Supplier Invoice 前端（list/detail/create + submit/match/post）**；PR convert 对话框
+- **B2-2A / B2-2B**：Project Budgets/Expenses/Progresses 工作台 + `Project.progressPercent` aggregate integrity（PR #70-#75，**31/31 Runtime Acceptance ACCEPTED**，见 docs/qa/B2-2_Runtime_QA.md）
+- **Project Lifecycle L0-L2-B1（PR #77-#83）**：L0 lifecycle contract integrity（force-close progressPercent 合并进 single Project close mutation，CTO 98/100）；L1-A closure 不可删除 + CLOSED gate 以 stage 为 authoritative（CTO 裁决）；L1-B attachment contract（capability + CLOSED write gate）；L2-A Acceptance Tab（Add/Edit/Delete + changed-only 按提交语义比较）；L2-B0 allowedTransitions Read Contract 投影；L2-B1 Project Detail Transition action
+- **RBAC Registry 系列修复**：purchase-requisition / Operations 5 模块 / Sprint 4 sales 模块 / project subresource 17 模块 / tax-profile 权限注册（PR #28/#30/#64/#67/#75）；**ADR-0028**（API referenced permission ⊆ ALL_ACTION_PERMISSIONS 治理规则，CI 静态 Gate = 独立 Governance backlog）
+
+### 修复（P0 Incidents 与生产加固，2026-08-13~18）
+
+- **R1 Health Contract Repair**：/api/health/live 与 /ready 拆分 + DB probe + prisma/migrations 路径在 standalone runtime 解析（PR #39/#42）
+- **R2 Runtime Error Observability**：统一 server-side error logging（PR #40）
+- **R3 Release Version SSOT**：RELEASE_VERSION manifest = v0.6.0-alpha + releaseVersion() 定义修复（PR #41，CI root cause）
+- **Seed Credential Hardening（P0 Phase S0，PR #43）**：禁止 test-user bootstrap in production + 无默认 SUPER_ADMIN + 写库前校验测试配置 + bootstrap role 规范化（CTO 99/100 FINAL）
+- **Frontend Auth Transport Contract Repair（P0，PR #34）**：统一 apiFetch + Bearer（same-origin /api/* 自动附加 + 401 统一收敛）
+- **Master-Data Read API（P0，PR #33）**：GET /api/warehouses、/api/warehouse-locations、/api/unit-of-measures 只读端点 + RBAC registry 注册
+- **Frontend Release Metadata（P0.5，PR #35）**：build-time 注入 APP_VERSION/GIT_SHA/BUILD_ID/DEPLOYMENT_ENV（version SSOT = root package.json）
+- **Agent Commit Rule（Server Safe Mode，PR #47）**：AGENTS.md 提交规范（AI/OpenClaw commits 用 HUSKY=0 bypass 本地 hooks，CTO 100/100）
 
 ### 新增（B2-2A / B2-2B：Project Budgets + Expenses + Progresses FINAL CLOSED，PR #70-#75，2026-08-17）
 

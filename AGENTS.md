@@ -63,25 +63,24 @@
 
 ## 3. 当前阶段边界
 
-（依据 CTO Directive 2026-08-12 Post-6B 双轨执行 Gate 与 2026-08-13 CI-First Enforcement / 阶段重排；ROADMAP 更新后必须同步本节。）
+（依据 CTO Directive 2026-08-12 Post-6B 双轨执行 Gate、2026-08-13 CI-First Enforcement 与 **2026-08-18 双轨收口治理**；ROADMAP v1.21 更新后本节同步。）
 
-- **Track A Frontend Tier 1 Reference（Batch 1/2）— CLOSED**：Purchase Requisition / Inventory Transfer（PR #27）、Inspection / Purchase Return（PR #32）Create + DRAFT Edit 均已合入 main。
+- **Sprint 5C-1（Supplier Invoice / Immutable 3-Way Match / GRIR / AP Liability / AP Open Item）— CLOSED / Accounting Baseline（PR #23 已合并 main `5a8dcae`）**：5C-1A Foundation（SINV 创建即取号 / RECEIPT_BASED 三重来源链 Gate / DRAFT→SUBMITTED）→ 5C-1B Match（immutable MatchRun + Workflow Approval Reference）→ 5C-1C0 Readiness + Migration 0028（GRIR Historical Backfill）→ 5C-1C1 POST（GRIR CONSUME + AP Liability + AP Open Item 同事务）；**生产 migration baseline = 0028**。
+- **5C-2（Supplier Payment / AP Allocation / Payment Reversal / Supplier CN/DN / AP Write-Off / GL Posting）— HOLD**（前端 Supplier CN/DN 权限置 null，不伪造权限）。
+- **Track A Frontend Operations — CLOSED（PR #24 + F2-0~F2-6B + B2-0~B2-2B 全部合入 main）**：10 模块 List Workspace → IA v2 / UI 底座 / Master Data / PO-Receipt-WHR / CRM-Project Workspace / Dashboard v2 / Sales source-driven actions / Purchasing+Inventory Tier2/3 actions / **Supplier Invoice 前端（list/detail/create + submit/match/post）**；B2-2A/B2-2B **31/31 Runtime Acceptance ACCEPTED**（docs/qa/B2-2_Runtime_QA.md）。
+- **Project Lifecycle（Acceptance / Transition / Close / Attachments）— L0-L2-B1 已合并 main（PR #77-#83）**：CLOSED gate 以 stage 为 authoritative、closure 不可删除、allowedTransitions Read Contract 投影、Transition action；下一项 = **Project Lifecycle Contract Audit 收口（FINAL/GAP/HOLD matrix）**。
 - **Frontend Auth Transport Contract Repair — CLOSED（PR #34）**：统一认证传输 `apiFetch` + Bearer（same-origin `/api/*` 自动附加 + 401 统一收敛）已合入。
-- **Master-Data Read API（P0）— CLOSED（PR #33）**：`GET /api/warehouses`、`/api/warehouse-locations`、`/api/unit-of-measures` 只读端点 + `warehouse`/`warehouse-location` RBAC registry 注册；Batch 3/4 selector 依赖已解除。
-- **Frontend Release Metadata + Dashboard Stale Cleanup（P0.5）— CLOSED（PR #35）**：version SSOT = root `package.json`；build-time 注入 `APP_VERSION/GIT_SHA/BUILD_ID/DEPLOYMENT_ENV`（生产来源 = 构建平台变量 Railway/GitHub，不依赖 .git）；Footer + Dashboard System Overview 只消费构建注入值；Dashboard 删除 Sprint 编号卡与静态“认证服务：正常”等健康状态声称。
-- **5C-1 Supplier Invoice / GRIR / AP Liability / AP Open Item — CLOSED / Accounting Baseline（PR #23 已合入）**。
-- **5C-2（Supplier Payment / AP Allocation / Payment Reversal / Supplier CN/DN / AP Write-Off / GL Posting）— HOLD**。
-- **Batch 3（PO/Receipt/WHR）、Batch 4（Count/Adjustment/Conversion）— HOLD pending next Gate**：P0.5 与 Governance CLOSED 后先做 Batch 3 Readiness Recheck（selector 映射 / 权限 / 返回 envelope），确认无新 contract gap 再解除 implementation HOLD。
-- **Tier 2/3（Submit/Approve/Confirm/Complete/Post/Execute/Return/Cancel 等）— HOLD**。
+- **Master-Data Read API（P0）— CLOSED（PR #33）**：`GET /api/warehouses`、`/api/warehouse-locations`、`/api/unit-of-measures` 只读端点 + `warehouse`/`warehouse-location` RBAC registry 注册。
+- **Frontend Release Metadata + Dashboard Stale Cleanup（P0.5）— CLOSED（PR #35）**：version SSOT = root `package.json`；build-time 注入 `APP_VERSION/GIT_SHA/BUILD_ID/DEPLOYMENT_ENV`（生产来源 = 构建平台变量 Railway/GitHub，不依赖 .git）；Footer + Dashboard System Overview 只消费构建注入值；Dashboard 不再声称未经证的运行状态。
 - **GRIR 是不可变会计事实**：只允许 ACCRUAL / REVERSAL / CONSUME，禁止 `UPDATE GrirRecord SET quantity = ...`。
 - **WHR POST 与 GRIR ACCRUAL 必须同一事务**；Purchase Return（sourceRefType=WAREHOUSE_RECEIPT_LINE）必须产生 GRIR REVERSAL，且 Σ REVERSAL ≤ Σ ACCRUAL，任何并发路径不得制造负 GRIR。
 - **Invoice POST 同事务必须产生 GRIR CONSUME + AP Liability + AP Open Item**，禁止 partial success；金额一律 Server-side Decimal canonical 计算，禁止信任 client amount/tax/matched quantity。
 - **并发锁序（Blocking Gate）**：collect IDs → deduplicate → sort → `SELECT ... ORDER BY id FOR UPDATE`；POST 与 Return REVERSAL 必须使用完全一致锁序。
-- **Migration 0027 = FROZEN BASELINE**，禁止修改；Migration 0028 通过 Final Gate 后立即冻结。
+- **Migration 0027 = FROZEN BASELINE**，禁止修改；**Migration 0028（GRIR Historical Backfill）= FINAL 已冻结**（PR #23 已通过 Final Gate）。
 - **Inventory Read Model（P1）**：只允许设计 StockProjection Query / InventoryMovement Query 的 Query Contract，实现 HOLD until Contract Review；禁止前端自拼余额、SUM Movement 当权威余额、客户端重建 StockProjection。
 - **HOLD（解除需 CTO 单独指令）**：Reservation / AvailableQty / FIFO / Moving Average / Inventory Costing / General Ledger / Financial Statements / BI / OA / Mobile。
 - **UI 状态机红线**：APPROVED ≠ CONFIRMED、CREATED ≠ POSTED、APPROVED ≠ APPLIED、COMPLETED ≠ ADJUSTED、DRAFT ≠ SUBMITTED；前端按钮显隐只能消费后端状态契约。
-- 下一阶段开发必须先进行 **Design / Scope Gate**，再进入 Schema/API 实现。
+- 下一阶段开发必须先进行 **Design / Scope Gate**，再进入 Schema/API 实现；下一 Governance 项 = **Project Lifecycle Contract Audit 收口 + v0.7.0-alpha Release Gate**（schema/migration/API/frontend baseline + known limitations + HOLD 清单）。
 
 ## 4. 每个任务的执行循环
 

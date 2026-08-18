@@ -1,11 +1,12 @@
 # Sprint 5C QA — Supplier Invoice Foundation（5C-1A Vertical Slice）
 
 > Sprint：5C-1A（Supplier Invoice Foundation）| 模块：Supplier Invoice——RECEIPT_BASED 首版（PO Line + POSTED WHR Line 双溯源）+ SINV 创建即取号 + 三次来源链验证 + DRAFT→SUBMITTED | 分支：feature/sprint5c-supplier-invoice-ap（PR #23）
-> 日期：2026-08-11
-> 状态：⏳ 待 CTO 5C-1A API Review（CTO #9048 Schema FINAL APPROVED + #9083 API 指令授权；5C-1B Match / 5C-1C POST-GRIR-AP 继续 HOLD）
-> 关联：ADR-0027（APPROVED）、Sprint5C_Supplier_Invoice_Three_Way_Match_AP_Gate.md、Sprint5C_Field_Matrix.md、P1-P12 Final、EVENTS.md v1.31（SupplierInvoiceCreated 注册位保持 ⏳）、docs/test-cases/SupplierInvoice_API.md、openapi.yaml（Sprint 5C-1A 段）
+> 日期：2026-08-11（5C-1A）；**2026-08-18 治理收口（5C-1B / 5C-1C0 / 5C-1C1 状态同步）**
+> 状态：✅ **FINAL CLOSED——PR #23 已合并 main `5a8dcae`**（Sprint 5C-1 Supplier Invoice / 3-Way Match / GRIR / AP Foundation FINAL；本文件主体为 5C-1A Vertical Slice 验收，5C-1B / 5C-1C0 / 5C-1C1 的 FINAL 验收证据见 CHANGELOG（Sprint 5C-1 条目）、ROADMAP v1.21、EVENTS v1.32/v1.33、docs/test-cases/SupplierInvoice_API.md、openapi.yaml（Sprint 5C 段））
+> 关联：ADR-0027（APPROVED→Implemented）、Sprint5C_Supplier_Invoice_Three_Way_Match_AP_Gate.md、Sprint5C_Field_Matrix.md、P1-P12 Final、EVENTS.md v1.31→v1.33（SupplierInvoiceMatched/Posted + GrirAccrued/Reversed/Consumed ✅）、docs/test-cases/SupplierInvoice_API.md、openapi.yaml（Sprint 5C 段）
 > 5C-1A 事实链：**SupplierInvoice DRAFT（SINV 创建即取号，P1）→ Create/PATCH 两次来源链验证 → Submit（DRAFT→SUBMITTED，第三次来源链验证；**SUBMITTED ≠ POSTED**，不生成 MatchRun/GRIR/ApLiabilityFact）**
 > 四条 API 红线（CTO #9048 锁死）：① Create/Match/POST 都必须重新验证 WHR header = POSTED + WHR Line ↔ PO Line ↔ Item ↔ Supplier 来源链一致；② POST 锁内重验 approved MatchRun snapshot（5C-1C）；③ POSTED + GRIR CONSUME + ApLiabilityFact + ApOpenItem 同一事务（5C-1C）；④ 禁止 UPDATE immutable MatchRun/GRIR/ApLiabilityFact（5C-1B/1C）。
+> 5C-1 后续子阶段（已实现并 FINAL，CTO：5C-1B #9238/#9247/#9342、5C-1C0 #9477/#9547、5C-1C1 #9678/#9757/#9781）：**Match（immutable MatchRun + Workflow Approval Reference）→ GRIR Producer（WHR POST 原子 ACCRUAL / WHR-based Return REVERSAL / Σ REVERSAL ≤ Σ ACCRUAL；Migration 0028 backfill）→ POST（GRIR CONSUME + ApLiabilityFact + ApOpenItem 同事务；锁序 collect→dedupe→sort→FOR UPDATE；金额 Server-side Decimal canonical）**；生产 migration baseline = 0028；5C-2（Payment / Allocation / Supplier CN-DN / GL）HOLD。
 
 ## 1. 交付范围
 
