@@ -1,4 +1,4 @@
-/** Frontend 中文显示标签（中文化审计）— diag7 */
+/** Frontend 中文显示标签（中文化审计）— diag8 */
 export const ROLE_LABELS: Record<string, string> = {
   SUPER_ADMIN: "超级管理员",
   ADMIN: "管理员",
@@ -169,5 +169,8 @@ export function moduleLabel(slug: string): string {
 export function permissionLabel(code: string): string {
   const idx = code.indexOf(":");
   if (idx <= 0) return code;
-  return moduleLabel(code.slice(0, idx)) + "·" + (ACTION_LABELS[code.slice(idx + 1)] || code.slice(idx + 1));
+  const module = code.slice(0, idx);
+  const action = code.slice(idx + 1);
+  const actionLabel = ACTION_LABELS[action] || action;
+  return moduleLabel(module) + "·" + actionLabel;
 }
