@@ -6,6 +6,8 @@
 - 状态：**Page Skeleton 阶段——骨架页（PlaceholderPage 模式），不实现完整 CRUD UI**
 
 > 路由采用 Next.js App Router 既有模式：`apps/web/src/app/(dashboard)/<segment>/page.tsx` + `PermissionGuard` + `PlaceholderPage`。骨架页只做 IA 占位 + 权限守卫，真实列表/表单在后续迭代（经 CTO 批准）逐个实现。
+>
+> **更新（2026-08-18，Pending Pages Completion Gate，ADR-0029）**：9 个 Placeholder 页面已全部替换——7 个真实 CRUD（business-partners / technical-standards / commercial-terms / document-sequences / users / departments / roles，列表 + 新建 + 编辑）+ 2 个引导页（project-visits / project-risks，CRUD 在项目详情 Tab）。详见 `docs/frontend/contract-cards/pending-pages-completion-gate.md`。
 
 ---
 

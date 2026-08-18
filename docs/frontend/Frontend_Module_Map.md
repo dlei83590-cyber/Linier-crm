@@ -6,6 +6,8 @@
 - 维护者：CIO（JINZA）｜审核：CTO
 - 状态：**IA / UX Flow / API Contract Mapping / Page Skeleton 阶段——不重写全页面**
 
+> **更新（2026-08-18，Pending Pages Completion Gate，ADR-0029）**：本文档聚焦采购/库存工作台；主数据/系统管理模块（business-partners / technical-standards / commercial-terms / document-sequences / users / departments / roles）与走访/风险引导页的完成情况见 `docs/frontend/contract-cards/pending-pages-completion-gate.md`（7 模块 registry 已从 hold 解除为 ready，ui=UI_LIST_CRUD）。
+
 > **红线（CTO #8777）**：① 首批只消费**已 FINAL 的后端契约**（5A/5B/6A/6B），**不反向改库存事实模型**；② Dashboard/Query 只允许 read-model 优化，**禁止前端自行计算"权威库存余额"**、**禁止绕过 API 组合事实**；③ Reservation / Costing 继续 HOLD（前端也不做）。
 
 ---

@@ -2,6 +2,30 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Pending Pages Completion（9 个待开发页面打通，2026-08-18）
+
+### 新增（Design/Scope Gate → 3 批实现，ADR-0029；7 域 CRUD + 2 引导页，零 Schema/Migration 变更）
+
+- **Batch 1 — Master Data 4 模块 CRUD（8ca5f06，CI ✅）**：
+  - `/api/business-partners`（往来单位统一主数据，list/get/create/patch/delete；过滤 code/name/mnemonic/type/region/industry/isActive；code/uscc 唯一；approvalStatus=APPROVED）
+  - `/api/technical-standards`（技术标准 CRUD，含关联物料计数）
+  - `/api/commercial-terms`（商业条款 CRUD）
+  - `/api/document-sequences`（单据序列 CRUD；**nextNo 编号引擎只读**，客户端不可写）
+  - 前端：4 模块列表/新建/编辑页（复用 F2 Workspace 共享层 EntityListWorkspace/EntityFormWorkspace/useListQuery/PermissionGuard）
+- **Batch 2 — System 3 模块 CRUD（053e256，CI ✅）**：
+  - `/api/users`（user:view/create/edit/delete；密码 bcryptjs 服务端 hash 不落明文；DELETE=停用语义；角色全量替换；无 CAS——User 无 version）
+  - `/api/departments`（部门 CRUD；循环引用校验：不得设为自身/子孙为父；无 DELETE/启停——模型无字段）
+  - `/api/roles`（角色 CRUD；permissionCodes 按 Permission 目录 code 校验连接；无 DELETE/CAS）
+  - **RBAC（ADR-0028）**：department 模块注册进 shared PERMISSION_MODULES + seed SEED_ACTION_MODULES + MANAGER/MEMBER department:view
+  - 前端：3 模块列表/新建/编辑页（users 角色多选 + 密码重置；departments parent 列 + 父级选择；roles 权限只读分组展示）
+- **Batch 3 — 走访/风险独立页改引导（05183cc）**：/project-visits 与 /project-risks 由 Placeholder 改为引导页（说明 CRUD 在项目详情 Tab + 跳转 /projects）；**不建平行 CRUD**（B2-1B 已在项目详情交付风险/走访完整 CRUD Tab，AGENTS.md 禁止平行业务真相）
+- **模块注册表（modules.ts）**：business-partners / technical-standards / commercial-terms / document-sequences / users / departments / roles → availability ready + ui=UI_LIST_CRUD（list/create/edit，无独立详情页不虚报）+ createRoute/createPermission；project-visits / project-risks 保持 hold（独立页无独立能力）
+- **边界**：零 Schema/Migration；主数据/系统域无审批流（approvalStatus=APPROVED 沿用 price-lists 先例）；不触碰 HOLD 领域（Reservation/Costing/5C-2/GL/BI/OA/Mobile）；不新建 customers/suppliers 平行业务真相
+
+### 文档
+- ADR-0029（Pending Pages Completion 决策记录）、docs/frontend/contract-cards/pending-pages-completion-gate.md（Design/Scope Gate 文档）、OpenAPI +7 域 paths、Frontend Module Map / Page Route Map 解除 hold 标记、docs/qa/PendingPages_QA.md、docs/test-cases/MasterData_Admin_CRUD_API.md、ROADMAP v1.23、SPRINT_PLAN
+
+---
 ## [Unreleased] - Inventory Read Model（P1，2026-08-18）
 
 ### 新增（Inventory Read Model Query API + 前端两页替换 Placeholder，Design Gate 批准后实现）

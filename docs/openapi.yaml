@@ -12151,6 +12151,835 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  # ===== Pending Pages Completion Gate（2026-08-18，ADR-0029）：7 域 CRUD =====
+  /api/business-partners:
+    get:
+      tags: [Business Partners]
+      summary: 分页列表
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: code
+          in: query
+          schema: { type: string }
+        - name: name
+          in: query
+          schema: { type: string }
+        - name: mnemonic
+          in: query
+          schema: { type: string }
+        - name: type
+          in: query
+          schema: { type: string }
+        - name: region
+          in: query
+          schema: { type: string }
+        - name: industry
+          in: query
+          schema: { type: string }
+        - name: isActive
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BusinessPartnerListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Business Partners]
+      summary: 创建
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BusinessPartnerCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BusinessPartner"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/business-partners/{id}:
+    get:
+      tags: [Business Partners]
+      summary: 详情
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BusinessPartner"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Business Partners]
+      summary: 更新
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BusinessPartnerUpdateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BusinessPartner"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Business Partners]
+      summary: 删除（软删除/停用）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/technical-standards:
+    get:
+      tags: [Technical Standards]
+      summary: 分页列表
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: code
+          in: query
+          schema: { type: string }
+        - name: name
+          in: query
+          schema: { type: string }
+        - name: isActive
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TechnicalStandardListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Technical Standards]
+      summary: 创建
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TechnicalStandardCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TechnicalStandard"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/technical-standards/{id}:
+    get:
+      tags: [Technical Standards]
+      summary: 详情
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TechnicalStandard"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Technical Standards]
+      summary: 更新
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TechnicalStandardUpdateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TechnicalStandard"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Technical Standards]
+      summary: 删除（软删除/停用）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/commercial-terms:
+    get:
+      tags: [Commercial Terms]
+      summary: 分页列表
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: code
+          in: query
+          schema: { type: string }
+        - name: name
+          in: query
+          schema: { type: string }
+        - name: isActive
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommercialTermListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Commercial Terms]
+      summary: 创建
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommercialTermCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommercialTerm"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/commercial-terms/{id}:
+    get:
+      tags: [Commercial Terms]
+      summary: 详情
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommercialTerm"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Commercial Terms]
+      summary: 更新
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommercialTermUpdateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommercialTerm"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Commercial Terms]
+      summary: 删除（软删除/停用）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/document-sequences:
+    get:
+      tags: [Document Sequences]
+      summary: 分页列表
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: code
+          in: query
+          schema: { type: string }
+        - name: name
+          in: query
+          schema: { type: string }
+        - name: docType
+          in: query
+          schema: { type: string }
+        - name: isActive
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentSequenceListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Document Sequences]
+      summary: 创建
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DocumentSequenceCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentSequence"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/document-sequences/{id}:
+    get:
+      tags: [Document Sequences]
+      summary: 详情
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentSequence"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Document Sequences]
+      summary: 更新
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DocumentSequenceUpdateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentSequence"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Document Sequences]
+      summary: 删除（软删除/停用）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/users:
+    get:
+      tags: [Users]
+      summary: 分页列表
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: email
+          in: query
+          schema: { type: string }
+        - name: name
+          in: query
+          schema: { type: string }
+        - name: departmentId
+          in: query
+          schema: { type: string }
+        - name: isActive
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Users]
+      summary: 创建
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/users/{id}:
+    get:
+      tags: [Users]
+      summary: 详情
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Users]
+      summary: 更新
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Users]
+      summary: 删除（软删除/停用）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/departments:
+    get:
+      tags: [Departments]
+      summary: 分页列表
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: code
+          in: query
+          schema: { type: string }
+        - name: name
+          in: query
+          schema: { type: string }
+        - name: parentId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepartmentListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Departments]
+      summary: 创建
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DepartmentCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Department"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/departments/{id}:
+    get:
+      tags: [Departments]
+      summary: 详情
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Department"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Departments]
+      summary: 更新
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DepartmentUpdateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Department"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/roles:
+    get:
+      tags: [Roles]
+      summary: 分页列表
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: code
+          in: query
+          schema: { type: string }
+        - name: name
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Roles]
+      summary: 创建
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/roles/{id}:
+    get:
+      tags: [Roles]
+      summary: 详情
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Roles]
+      summary: 更新
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleUpdateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
 components:
   securitySchemes:
     bearerAuth:
@@ -19301,4 +20130,360 @@ components:
                       priceVariance: { type: string }
                       taxVariance: { type: string }
                       result: { type: string, enum: [MATCHED, VARIANCE] }
+
+  # ===== Pending Pages Completion Gate（2026-08-18，ADR-0029）：7 域 schemas =====
+    BusinessPartner:
+      type: object
+      required: [id, code, name, type]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        mnemonic: { type: [string, 'null'] }
+        name: { type: string }
+        type: { type: string, enum: [CUSTOMER, SUPPLIER, BOTH] }
+        uscc: { type: [string, 'null'] }
+        taxpayerType: { type: [string, 'null'] }
+        legalRepresentative: { type: [string, 'null'] }
+        registeredAddress: { type: [string, 'null'] }
+        region: { type: [string, 'null'] }
+        industry: { type: [string, 'null'] }
+        companySize: { type: [string, 'null'] }
+        contactPerson: { type: [string, 'null'] }
+        phone: { type: [string, 'null'] }
+        email: { type: [string, 'null'] }
+        address: { type: [string, 'null'] }
+        bankName: { type: [string, 'null'] }
+        bankAccount: { type: [string, 'null'] }
+        settlementTerms: { type: [string, 'null'] }
+        registeredCapital: { type: [string, 'null'], description: Decimal 字符串 }
+        employeeCount: { type: [integer, 'null'] }
+        isActive: { type: boolean }
+        approvalStatus: { type: string }
+        version: { type: integer }
+        createdAt: { type: string, format: date-time }
+    BusinessPartnerListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/BusinessPartner" }
+        meta:
+          type: object
+          required: [page, pageSize, total]
+          properties:
+            page: { type: integer }
+            pageSize: { type: integer }
+            total: { type: integer }
+    BusinessPartnerCreateRequest:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string }
+        mnemonic: { type: [string, 'null'] }
+        name: { type: string }
+        type: { type: string, enum: [CUSTOMER, SUPPLIER, BOTH] }
+        uscc: { type: [string, 'null'] }
+        taxpayerType: { type: [string, 'null'] }
+        legalRepresentative: { type: [string, 'null'] }
+        registeredAddress: { type: [string, 'null'] }
+        region: { type: [string, 'null'] }
+        industry: { type: [string, 'null'] }
+        companySize: { type: [string, 'null'] }
+        contactPerson: { type: [string, 'null'] }
+        phone: { type: [string, 'null'] }
+        email: { type: [string, 'null'] }
+        address: { type: [string, 'null'] }
+        bankName: { type: [string, 'null'] }
+        bankAccount: { type: [string, 'null'] }
+        settlementTerms: { type: [string, 'null'] }
+        registeredCapital: { type: [string, 'null'] }
+        employeeCount: { type: [integer, 'null'] }
+        website: { type: [string, 'null'] }
+    BusinessPartnerUpdateRequest:
+      type: object
+      required: [version]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        type: { type: string, enum: [CUSTOMER, SUPPLIER, BOTH] }
+        uscc: { type: [string, 'null'] }
+        region: { type: [string, 'null'] }
+        industry: { type: [string, 'null'] }
+        contactPerson: { type: [string, 'null'] }
+        phone: { type: [string, 'null'] }
+        email: { type: [string, 'null'] }
+        address: { type: [string, 'null'] }
+        bankName: { type: [string, 'null'] }
+        bankAccount: { type: [string, 'null'] }
+        settlementTerms: { type: [string, 'null'] }
+        registeredCapital: { type: [string, 'null'] }
+        employeeCount: { type: [integer, 'null'] }
+        isActive: { type: boolean }
+        version: { type: integer }
+    TechnicalStandard:
+      type: object
+      required: [id, code, name]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        isActive: { type: boolean }
+        approvalStatus: { type: string }
+        version: { type: integer }
+        _count: { type: object, properties: { items: { type: integer } } }
+        createdAt: { type: string, format: date-time }
+    TechnicalStandardListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/TechnicalStandard" }
+        meta:
+          type: object
+          required: [page, pageSize, total]
+          properties:
+            page: { type: integer }
+            pageSize: { type: integer }
+            total: { type: integer }
+    TechnicalStandardCreateRequest:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+    TechnicalStandardUpdateRequest:
+      type: object
+      required: [version]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        isActive: { type: boolean }
+        version: { type: integer }
+    CommercialTerm:
+      type: object
+      required: [id, code, name]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        isActive: { type: boolean }
+        approvalStatus: { type: string }
+        version: { type: integer }
+        createdAt: { type: string, format: date-time }
+    CommercialTermListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/CommercialTerm" }
+        meta:
+          type: object
+          required: [page, pageSize, total]
+          properties:
+            page: { type: integer }
+            pageSize: { type: integer }
+            total: { type: integer }
+    CommercialTermCreateRequest:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+    CommercialTermUpdateRequest:
+      type: object
+      required: [version]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        isActive: { type: boolean }
+        version: { type: integer }
+    DocumentSequence:
+      type: object
+      required: [id, code, name, docType]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        docType: { type: string }
+        prefix: { type: [string, 'null'] }
+        nextNo: { type: integer, description: 编号引擎系统管理（客户端只读） }
+        padLength: { type: integer }
+        isActive: { type: boolean }
+        version: { type: integer }
+        createdAt: { type: string, format: date-time }
+    DocumentSequenceListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/DocumentSequence" }
+        meta:
+          type: object
+          required: [page, pageSize, total]
+          properties:
+            page: { type: integer }
+            pageSize: { type: integer }
+            total: { type: integer }
+    DocumentSequenceCreateRequest:
+      type: object
+      required: [code, name, docType]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        docType: { type: string }
+        prefix: { type: [string, 'null'] }
+        padLength: { type: integer, default: 4 }
+    DocumentSequenceUpdateRequest:
+      type: object
+      required: [version]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        docType: { type: string }
+        prefix: { type: [string, 'null'] }
+        padLength: { type: integer }
+        isActive: { type: boolean }
+        version: { type: integer }
+    UserSummary:
+      type: object
+      required: [id, email]
+      properties:
+        id: { type: string }
+        email: { type: string }
+        name: { type: [string, 'null'] }
+        isActive: { type: boolean }
+        departmentId: { type: [string, 'null'] }
+        department: { type: [object, 'null'], properties: { id: { type: string }, code: { type: string }, name: { type: string } } }
+        roles:
+          type: array
+          items: { type: object, properties: { role: { type: object, properties: { id: { type: string }, code: { type: string }, name: { type: string } } } } }
+        createdAt: { type: string, format: date-time }
+    UserListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/UserSummary" }
+        meta:
+          type: object
+          required: [page, pageSize, total]
+          properties:
+            page: { type: integer }
+            pageSize: { type: integer }
+            total: { type: integer }
+    UserCreateRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 6, description: 服务端 bcrypt 加密，不落明文 }
+        name: { type: [string, 'null'] }
+        departmentId: { type: [string, 'null'] }
+        roleIds: { type: array, items: { type: string } }
+        isActive: { type: boolean, default: true }
+    UserUpdateRequest:
+      type: object
+      properties:
+        name: { type: [string, 'null'] }
+        departmentId: { type: [string, 'null'] }
+        isActive: { type: boolean }
+        password: { type: string, minLength: 6, description: 非空才重置 }
+        roleIds: { type: array, items: { type: string }, description: 全量替换 }
+    Department:
+      type: object
+      required: [id, code, name]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        parentId: { type: [string, 'null'] }
+        parent: { type: [object, 'null'], properties: { id: { type: string }, code: { type: string }, name: { type: string } } }
+        _count: { type: object, properties: { users: { type: integer }, children: { type: integer } } }
+        createdAt: { type: string, format: date-time }
+    DepartmentListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Department" }
+        meta:
+          type: object
+          required: [page, pageSize, total]
+          properties:
+            page: { type: integer }
+            pageSize: { type: integer }
+            total: { type: integer }
+    DepartmentCreateRequest:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        parentId: { type: [string, 'null'] }
+    DepartmentUpdateRequest:
+      type: object
+      properties:
+        code: { type: string }
+        name: { type: string }
+        parentId: { type: [string, 'null'], description: 循环引用校验：不得设为自身/子孙为父 }
+    RoleDetail:
+      type: object
+      required: [id, code, name]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        permissions:
+          type: array
+          items: { type: object, properties: { id: { type: string }, code: { type: string }, module: { type: string }, name: { type: string } } }
+        _count: { type: object, properties: { users: { type: integer }, permissions: { type: integer } } }
+        createdAt: { type: string, format: date-time }
+    RoleListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/RoleDetail" }
+        meta:
+          type: object
+          required: [page, pageSize, total]
+          properties:
+            page: { type: integer }
+            pageSize: { type: integer }
+            total: { type: integer }
+    RoleCreateRequest:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string, pattern: '^[A-Z][A-Z0-9_]*$' }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        permissionCodes: { type: array, items: { type: string }, description: 按 Permission 目录 code 校验连接 }
+    RoleUpdateRequest:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        permissionCodes: { type: array, items: { type: string }, description: 全量替换 RolePermissions（API 能力；前端只读展示） }
                       disposition: { type: string, enum: [ACCEPT, REJECT, HOLD, CREATE_CN_DN] }
