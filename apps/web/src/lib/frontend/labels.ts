@@ -1,9 +1,4 @@
-/**
- * Frontend 中文显示标签（Pending Pages Completion — 中文化审计，2026-08-18）
- * 数据模型字段名保持英文（全仓 API 契约惯例）；本文件只做展示层中文映射。
- */
-
-/** 内置角色中文名（seed Role.name 为英文；自定义角色回退 DB name） */
+/** Frontend 中文显示标签（中文化审计）— diag4 */
 export const ROLE_LABELS: Record<string, string> = {
   SUPER_ADMIN: "超级管理员",
   ADMIN: "管理员",
@@ -11,14 +6,11 @@ export const ROLE_LABELS: Record<string, string> = {
   MEMBER: "成员",
   VIEWER: "访客",
 };
-
 export function roleLabel(code: string, fallback?: string | null): string {
   const mapped = ROLE_LABELS[code];
   if (mapped) return mapped;
   return fallback || code;
 }
-
-/** 权限动作中文（PERMISSION_ACTIONS） */
 export const ACTION_LABELS: Record<string, string> = {
   view: "查看",
   create: "新建",
@@ -31,8 +23,6 @@ export const ACTION_LABELS: Record<string, string> = {
   assign: "分配",
   close: "关闭",
 };
-
-/** 权限模块中文（与 shared PERMISSION_MODULES 对应；未收录模块回退 slug） */
 export const MODULE_LABELS: Record<string, string> = {
   "user": "用户",
   "role": "角色",
@@ -171,14 +161,11 @@ export const MODULE_LABELS: Record<string, string> = {
   "inventory-movement": "库存流水",
   "supplier-invoice": "供应商发票",
 };
-
 export function moduleLabel(slug: string): string {
   const mapped = MODULE_LABELS[slug];
   if (mapped) return mapped;
   return slug;
 }
-
-/** 权限码中文：item:view → 物料 · 查看（未收录回退原码） */
 export function permissionLabel(code: string): string {
   const idx = code.indexOf(":");
   if (idx <= 0) return code;
