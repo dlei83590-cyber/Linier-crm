@@ -10,7 +10,6 @@ import { AppPage, EntityListWorkspace } from "@/components/workspace";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
 import { apiFetch } from "@/lib/api-client";
-import { roleLabel } from "@/lib/frontend/labels";
 
 interface UserRow {
   id: string;
@@ -164,7 +163,7 @@ function UserList() {
           {
             key: "roles",
             header: "角色",
-            render: (row) => row.roles.map((r) => roleLabel(r.role.code, r.role.name)).join("、") || "—",
+            render: (row) => row.roles.map((r) => r.role.name).join("、") || "—",
           },
           { key: "isActive", header: "状态", render: (row) => (row.isActive ? "启用" : "停用") },
           { key: "createdAt", header: "创建时间", render: (row) => formatDate(row.createdAt) },

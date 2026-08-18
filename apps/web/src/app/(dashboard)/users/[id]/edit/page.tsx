@@ -7,7 +7,6 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityFormWorkspace } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
-import { roleLabel } from "@/lib/frontend/labels";
 
 interface DepartmentOption {
   id: string;
@@ -192,7 +191,7 @@ function UserEditForm() {
                       checked={roleIds.includes(r.id)}
                       onChange={() => toggleRole(r.id)}
                     />
-                    {roleLabel(r.code, r.name)}
+                    {r.name}
                   </label>
                 ))}
               </div>
