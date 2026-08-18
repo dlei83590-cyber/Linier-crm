@@ -1,4 +1,4 @@
-/** Frontend 中文显示标签（中文化审计）— diag6 */
+/** Frontend 中文显示标签（中文化审计）— diag7 */
 export const ROLE_LABELS: Record<string, string> = {
   SUPER_ADMIN: "超级管理员",
   ADMIN: "管理员",
@@ -7,7 +7,9 @@ export const ROLE_LABELS: Record<string, string> = {
   VIEWER: "访客",
 };
 export function roleLabel(code: string, fallback?: string | null): string {
-  return ROLE_LABELS[code] || fallback || code;
+  const mapped = ROLE_LABELS[code];
+  if (mapped) return mapped;
+  return fallback || code;
 }
 export const ACTION_LABELS: Record<string, string> = {
   view: "查看",
@@ -160,7 +162,9 @@ export const MODULE_LABELS: Record<string, string> = {
   "supplier-invoice": "供应商发票",
 };
 export function moduleLabel(slug: string): string {
-  return MODULE_LABELS[slug] || slug;
+  const mapped = MODULE_LABELS[slug];
+  if (mapped) return mapped;
+  return slug;
 }
 export function permissionLabel(code: string): string {
   const idx = code.indexOf(":");
