@@ -1,4 +1,4 @@
-/** Frontend 中文显示标签（中文化审计）— diag4 */
+/** Frontend 中文显示标签（中文化审计）— diag5: reserved-word keys quoted */
 export const ROLE_LABELS: Record<string, string> = {
   SUPER_ADMIN: "超级管理员",
   ADMIN: "管理员",
@@ -15,11 +15,11 @@ export const ACTION_LABELS: Record<string, string> = {
   view: "查看",
   create: "新建",
   edit: "编辑",
-  delete: "删除",
+  "delete": "删除",
   approve: "审批",
   audit: "审计",
-  export: "导出",
-  import: "导入",
+  "export": "导出",
+  "import": "导入",
   assign: "分配",
   close: "关闭",
 };
