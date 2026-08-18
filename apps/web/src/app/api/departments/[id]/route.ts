@@ -62,7 +62,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const parent = await prisma.department.findUnique({ where: { id: parsed.data.parentId } });
     if (!parent) return failConflict(ERROR_CODES.NOT_FOUND, "父级部门不存在");
     // 循环引用校验：沿候选父级链向上，不得回到自身（把自身/子孙设为父 → 409）
-    let cursor = parsed.data.parentId;
+    let cursor: string | null = parsed.data.parentId;
     let cycleDetected = false;
     const guard = new Set<string>();
     while (cursor) {
