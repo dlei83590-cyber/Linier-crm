@@ -1,5 +1,44 @@
 # Release Notes
 
+## v0.7.0-alpha — Linier ERP Purchase · Inventory · AP Accounting & Frontend Operations（2026-08-18 Release Candidate）
+
+> **Release 标题：** Linier ERP v0.7.0-alpha — Purchase, Inventory & AP Accounting + Frontend Operations
+> **Release 摘要：** Sprint 5（5A Purchase Requisition/PO、5B Goods Receipt & Inbound、5C-1 Supplier Invoice / 3-Way Match / GRIR / AP）与 Sprint 6（6A Inventory Ledger、6B Inventory Operations）后端事实链全部 FINAL，叠加 Track A Frontend Operations（10 模块 List Workspace → F2-6B 动作接线 → B2-2A/B2-2B 项目财务/进度工作台 → Project Lifecycle L0-L2B1），使已 FINAL 的后端能力成为可操作工作台，并完成采购 → 入库 → 暂估应付 → 三单匹配 → 应付挂账（GRIR CONSUME + AP Liability + AP Open Item）的会计事实闭环。
+> **Release Gate：** 候选条件达成（CTO Directive 2026-08-12 §21：5C-1 FINAL + Frontend Operations Iteration 1 可用基线）——5C-1 已合并 main `5a8dcae`（CTO #9048/#9238/#9678 系列 FINAL）；B2-2A/B2-2B **31/31 Runtime Acceptance PASS — ACCEPTED**（docs/qa/B2-2_Runtime_QA.md）；发布基线 commit CI 全绿（Quality Gates / Build / Secret Scanning）；生产 migration baseline 已核验 = `0028_grir_historical_fact_backfill`（/api/health/ready）。证据：docs/reviews/ReleaseGate_v0.7.0_Acceptance.md
+> **Tag：** `v0.7.0-alpha`（annotated tag；GitHub Pre-release）
+> **版本治理：** 以 Git Tag 为发布事实源；`RELEASE_VERSION` manifest = v0.7.0-alpha（/api/health 与前端 Footer/Dashboard 统一消费 `NEXT_PUBLIC_RELEASE_VERSION`）；root package.json 不随本版修改。
+
+### Compatibility / Upgrade Guide
+
+- **Schema baseline**：Migration 0001–0028（0027 = FROZEN BASELINE 禁改；0028 = GRIR Historical Backfill FINAL 已冻结）。
+- **Database**：PostgreSQL 16（依赖 `UNIQUE NULLS NOT DISTINCT`、`FOR UPDATE SKIP LOCKED`）。
+- **Migration**：部署自动执行 `prisma migrate deploy`（Railway）；生产 baseline 已核验 = `0028_grir_historical_fact_backfill`。
+- **Breaking Changes**：无破坏性变更（0001–0028 全部增量迁移）；GRIR / AP / MatchRun 为不可变会计事实（禁止 UPDATE）；`InventoryMovement` COMMITTED 后不可变（纠错只能追加 Reversal/Correction）。
+- **Upgrade Guide**：v0.6.0-alpha → 直接部署新版本（0027/0028 自动应用）；0028 为幂等 historical backfill，无需人工数据动作；升级后 /api/health/ready 返回 baseline=true 即验证成功。
+
+### 新增能力（业务视角）
+
+- **采购履约全链**：请购 → 审批 → 采购订单（**APPROVED ≠ CONFIRMED**，CONFIRMED 才可收货）→ 到货收货 → 质检（SKIP/SPOT/FULL）→ 入库（**Created ≠ Posted**，Posted 生效）→ 退货（来源可退额度 + 锁内防超退 + REPLACE_REQUIRED 重开 PO 履约）
+- **库存账本（SSOT）**：入库/退货/调拨/盘点/调整/转换全部经 Shared InventoryLedgerCommand 原子落账；库存流水不可变、五元幂等、禁负库存、可追溯
+- **供应商发票与应付**：SINV 创建即取号 → 三单匹配（immutable MatchRun + Workflow Approval Reference）→ 过账（POST）**同事务**产生 GRIR CONSUME + AP Liability + AP Open Item——采购暂估应付 → 到票 → 匹配 → 应付挂账会计闭环；金额一律 Server-side Decimal canonical
+- **Frontend 工作台**：10 采购/库存模块 List+Detail+Create/Edit + Sales O2C 只读与 source-driven actions（convert/delivery/invoice）+ CRM/Project Workspace（机会/项目/子资源/预算/费用/进度）+ Dashboard v2（四区模型）+ **Supplier Invoice 前端（创建/匹配/过账）** + audit-logs 页面
+- **Project Lifecycle**：验收（Acceptance Tab）/ 结项（Close，stage 为 authoritative，closure 不可删）/ 附件（Attachment contract）/ 阶段流转（Transition + allowedTransitions Read Contract）
+
+### Known Limitations（2026-08-18）
+
+1. **5C-2 HOLD**：供应商付款、AP 核销、付款冲销、供应商贷项/借项通知单、AP 坏账核销、GL 过账未实现（前端 Supplier CN/DN 权限置 null，不伪造权限入口）
+2. **Reservation / AvailableQty HOLD**：预留库存与可用量未实现（Stock Projection 仅表达已 FINAL 的 quantity fact）
+3. **Inventory Costing HOLD**：FIFO / 移动平均 / 库存价值 / unitCost 未实现
+4. **Inventory Read Model Query API 未发布**：StockProjection / InventoryMovement Query Contract 设计先行、实现 HOLD——前端库存余额/流水页为 Placeholder，禁止自拼余额或 SUM Movement 当权威余额
+5. **Sprint 7 财务（GL / 总账 / 利润 / 现金流）HOLD**；BI / OA / Mobile 未开始
+6. **Contract（合同）模块未开始**；Notification 模板可配置但真实发送后续
+7. **Project Lifecycle Contract Audit 待收口**：L0-L2-B1 已合并，FINAL/GAP/HOLD matrix 审计为下一 Governance 项
+8. **版本显示**：前端 Footer 与 /api/health 显示 RELEASE_VERSION manifest（v0.7.0-alpha）；Web package.json（0.2.0-alpha）不再作为系统版本展示
+
+### HOLD 清单（解除需 CTO 单独指令）
+
+5C-2（Supplier Payment / AP Allocation / Supplier CN-DN / AP Write-Off / GL Posting）、Reservation、AvailableQty、FIFO、Moving Average、Inventory Costing、General Ledger、Financial Statements、BI、OA、Mobile、Inventory Read Model 实现。
+
 ## Sprint 6A — Inventory Ledger Foundation（2026-08-10，PR #21 待 CTO Final Review——CTO Inventory Consumer + Ledger Command FINAL APPROVED 99/100 #7683，6A 核心库存账闭环成立）
 
 > **业务价值：** 库存数量从此有了**唯一的账本事实源**——入库、退货不再只是单据流转，而是真正形成可追溯、不可篡改的库存流水和实时库存余额。
