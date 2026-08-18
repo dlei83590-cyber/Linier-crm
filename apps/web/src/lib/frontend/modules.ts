@@ -651,15 +651,18 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     createPermission: actionPermission('item', 'create'),
     order: 1,
   },
-  // business-partners：后端尚无统一 read/write API（仅 /{id}/roles 子资源）→ 契约缺失，保持 HOLD
+  // business-partners：Pending Pages Completion Gate（Batch 1）——/api/business-partners CRUD FINAL（list/get/create/patch/delete）
+  // 权限码对齐 API requirePermission("business-partner:view/create/edit/delete")（原 PERMISSIONS 值为 read 风格）
   {
     id: 'business-partners',
     domain: 'master-data',
     label: '往来单位',
     route: '/business-partners',
-    permission: PERMISSIONS.BUSINESS_PARTNER_READ,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
+    permission: actionPermission('business-partner', 'view'),
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_DETAIL_CRUD },
+    createRoute: '/business-partners/new',
+    createPermission: actionPermission('business-partner', 'create'),
     order: 2,
   },
   {
@@ -674,14 +677,17 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     createPermission: actionPermission('price-list', 'create'),
     order: 3,
   },
+  // technical-standards：Pending Pages Completion Gate（Batch 1）——/api/technical-standards CRUD FINAL
   {
     id: 'technical-standards',
     domain: 'master-data',
     label: '技术标准',
     route: '/technical-standards',
-    permission: PERMISSIONS.TECHNICAL_STANDARD_READ,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
+    permission: actionPermission('technical-standard', 'view'),
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_DETAIL_CRUD },
+    createRoute: '/technical-standards/new',
+    createPermission: actionPermission('technical-standard', 'create'),
     order: 4,
   },
   // unit-of-measures：GET 列表 FINAL；main 已有列表页 → ui list 开放（无 detail/create/edit 路由）
@@ -695,24 +701,30 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_LIST },
     order: 5,
   },
+  // commercial-terms：Pending Pages Completion Gate（Batch 1）——/api/commercial-terms CRUD FINAL
   {
     id: 'commercial-terms',
     domain: 'master-data',
     label: '商业条款',
     route: '/commercial-terms',
-    permission: PERMISSIONS.COMMERCIAL_TERM_READ,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
+    permission: actionPermission('commercial-term', 'view'),
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_DETAIL_CRUD },
+    createRoute: '/commercial-terms/new',
+    createPermission: actionPermission('commercial-term', 'create'),
     order: 6,
   },
+  // document-sequences：Pending Pages Completion Gate（Batch 1）——/api/document-sequences CRUD FINAL（nextNo 编号引擎只读）
   {
     id: 'document-sequences',
     domain: 'master-data',
     label: '单据序列',
     route: '/document-sequences',
-    permission: PERMISSIONS.DOCUMENT_SEQUENCE_READ,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
+    permission: actionPermission('document-sequence', 'view'),
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_DETAIL_CRUD },
+    createRoute: '/document-sequences/new',
+    createPermission: actionPermission('document-sequence', 'create'),
     order: 7,
   },
   // F2-2 Wave 1：仓库/库位（GET 列表 FINAL；main 已有列表页 → ui list 开放；Detail 待后端 /{id} 契约）
