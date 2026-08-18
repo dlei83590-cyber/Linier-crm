@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission } from "@/lib/api-helpers";
 import { requestLog } from "@/lib/api/logger";
@@ -78,7 +79,7 @@ export async function GET(request: NextRequest) {
     committedAt.lte = d;
   }
 
-  const where = {
+  const where: Prisma.InventoryMovementWhereInput = {
     ...(item
       ? {
           item: {
@@ -92,9 +93,9 @@ export async function GET(request: NextRequest) {
     ...(itemId ? { itemId } : {}),
     ...(warehouseId ? { warehouseId } : {}),
     ...(locationId ? { locationId } : {}),
-    ...(movementType ? { movementType } : {}),
-    ...(direction ? { direction } : {}),
-    ...(sourceType ? { sourceType } : {}),
+    ...(movementType ? { movementType: movementType as Prisma.InventoryMovementType } : {}),
+    ...(direction ? { direction: direction as Prisma.InventoryMovementDirection } : {}),
+    ...(sourceType ? { sourceType: sourceType as Prisma.InventoryMovementSourceType } : {}),
     ...(sourceId ? { sourceId } : {}),
     ...(movementGroupId ? { movementGroupId } : {}),
     ...(committedAt.gte || committedAt.lte ? { committedAt } : {}),
