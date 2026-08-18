@@ -2,7 +2,9 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased] - Sprint 4A-4E-3 + 5A/5B/5C-1 + 6A/6B + Frontend Operations（F2-0~F2-6B / B2-0~B2-2B / Project Lifecycle L0-L2B1）+ P0 修复（PR #12-#83 已合并 main，未打 Tag，2026-08-18）
+## [v0.7.0-alpha] - 2026-08-18（Release：Linier ERP v0.7.0-alpha — Purchase, Inventory & AP Accounting + Frontend Operations）
+
+> 本段汇总 PR #19-#83（Sprint 5A/5B/5C-1、Sprint 6A/6B、Frontend Operations F2/B2/L、P0 R1-R3 修复）与治理收口；Sprint 4A-4E-3 历史条目（PR #12-#18）属 v0.6.0-alpha 发布段，按仓库既有惯例保留在本文件前部未迁移。
 
 ### 新增（Sprint 5C-1：Supplier Invoice / Immutable 3-Way Match / GRIR / AP Liability-OpenItem FINAL，PR #23 已合并 main `5a8dcae`，2026-08-18 治理收口）
 
