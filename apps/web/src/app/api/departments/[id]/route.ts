@@ -72,8 +72,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       }
       if (guard.has(cursor)) break;
       guard.add(cursor);
-      const row = await prisma.department.findUnique({ where: { id: cursor }, select: { parentId: true } });
-      cursor = row?.parentId ?? null;
+      // 显式类型注解：打破 cursor（循环内重赋值）与查询结果之间的循环类型推断（TS7022）
+      const parentRow: { parentId: string | null } | null = await prisma.department.findUnique({
+        where: { id: cursor },
+        select: { parentId: true },
+      });
+      cursor = parentRow?.parentId ?? null;
     }
     if (cycleDetected) {
       return failConflict(ERROR_CODES.CONFLICT, "不能将部门设为自身或下级部门的子部门");
