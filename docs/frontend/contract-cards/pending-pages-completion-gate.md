@@ -54,6 +54,7 @@
 - 更新：全部可选 + version（refine ≥1 字段）；uscc 冲突 409
 - 详情：含 roles（BusinessPartnerRole）摘要
 - 边界：**不新建 customers/suppliers 平行业务真相**（Sprint 3C 的 Customer/Supplier 模型各自已有 API，本 API 只覆盖 BusinessPartner 本体主数据）；红线段：type/uscc 变更走常规编辑，无审批流（主数据）
+- **中文化（2026-08-18 审计）**：uscc 服务端归一化大写 + GB 32100-2015 18 位校验（不含 I/O/S/V/Z，400 中文错误）；前端展示层新增 `apps/web/src/lib/frontend/labels.ts`（ROLE_LABELS / MODULE_LABELS / ACTION_LABELS）——角色名、权限模块/动作全部中文展示（seed Role.name 为英文，展示层映射，不改 DB）
 
 ### 4.2 /api/technical-standards（技术标准）
 - 过滤：code / name / isActive / approvalStatus；创建必填 code/name，可选 description；更新同范式；详情含 items 计数

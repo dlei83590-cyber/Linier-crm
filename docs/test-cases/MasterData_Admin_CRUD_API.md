@@ -27,6 +27,8 @@
 | BP-8 | PATCH 过期 version | 409 VERSION_CONFLICT |
 | BP-9 | DELETE /{id} | 200 { id, deleted:true }；再 GET → 404 |
 | BP-10 | PATCH 改 code 与他人冲突 | 409 CONFLICT |
+| BP-11 | POST/PATCH uscc 非 18 位或含 I/O/S/V/Z | 400 VALIDATION_ERROR（GB 32100-2015） |
+| BP-12 | POST/PATCH uscc 小写输入 | 200/201；落库为大写（服务端归一化） |
 
 ## 3. /api/technical-standards（technical-standard:*）
 
@@ -72,6 +74,7 @@
 | USR-8 | PATCH { password } | 200；新密码可登录 |
 | USR-9 | DELETE /{id} | 200 { id, deactivated:true }；isActive=false（非物理删除） |
 | USR-10 | PATCH departmentId 指向不存在部门 | 409 NOT_FOUND |
+| USR-11 | 角色列展示（SUPER_ADMIN/ADMIN 等） | 中文名（超级管理员/管理员…，labels.ts ROLE_LABELS） |
 
 ## 7. /api/departments（department:view/create/edit；无 DELETE）
 
@@ -98,6 +101,7 @@
 | ROL-6 | PATCH { permissionCodes:[...] } | 200；权限集合被替换（set 语义） |
 | ROL-7 | GET /{id} | 200 含 permissions 全量 code（module 分组可展示） |
 | ROL-8 | DELETE | 405/404（无 DELETE 端点） |
+| ROL-9 | 权限展示（roles 编辑页） | 中文（物料 · 查看，labels.ts moduleLabel/permissionLabel） |
 
 ## 9. 前端页面（生产 Runtime smoke）
 

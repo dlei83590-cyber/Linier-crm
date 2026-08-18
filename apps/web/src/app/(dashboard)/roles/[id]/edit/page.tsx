@@ -7,6 +7,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityFormWorkspace } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { moduleLabel, permissionLabel } from "@/lib/frontend/labels";
 
 interface RolePermission {
   id: string;
@@ -170,11 +171,11 @@ function RoleEditForm() {
           <div className="space-y-2">
             {Object.entries(grouped).map(([module, list]) => (
               <div key={module} className="rounded-md border border-border p-2">
-                <div className="mb-1 text-xs font-medium text-ink-secondary">{module}（{list.length}）</div>
+                <div className="mb-1 text-xs font-medium text-ink-secondary">{moduleLabel(module)}（{list.length}）</div>
                 <div className="flex flex-wrap gap-1">
                   {list.map((p) => (
                     <span key={p.id} className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-ink-secondary">
-                      {p.code}
+                      {permissionLabel(p.code)}
                     </span>
                   ))}
                 </div>

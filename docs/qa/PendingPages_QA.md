@@ -24,6 +24,7 @@
 - [x] 模块注册表：7 模块 hold→ready + ui=UI_LIST_CRUD（不虚报 detail）；走访/风险保持 hold
 - [x] 密码服务端 bcryptjs hash（复用 lib/auth.ts hashPassword），响应不返回 passwordHash
 - [x] 前端页面全部复用 F2 Workspace 共享层（AppPage / EntityListWorkspace / EntityFormWorkspace / useListQuery / PermissionGuard）
+- [x] **中文化审计（2026-08-18）**：9 页面全部 UI 标签/占位/错误消息为中文；uscc 按 GB 32100-2015 18 位校验（服务端大写归一化）；角色名/权限模块/动作经 labels.ts 中文映射展示（seed Role.name 英文不改 DB，仅展示层）
 
 ## 3. 需在生产 Runtime 验收（部署后执行，CI-First 模式）
 

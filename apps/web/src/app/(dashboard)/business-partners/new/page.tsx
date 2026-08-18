@@ -150,7 +150,7 @@ function BusinessPartnerCreateForm() {
           </select>
         </Field>
         <Field label="统一社会信用代码">
-          <input value={uscc} onChange={(e) => setUscc(e.target.value)} className={inputClass} />
+          <input value={uscc} onChange={(e) => setUscc(e.target.value)} className={inputClass} placeholder="18 位统一社会信用代码（GB 32100-2015）" />
         </Field>
         <Field label="纳税人类型">
           <input value={taxpayerType} onChange={(e) => setTaxpayerType(e.target.value)} className={inputClass} placeholder="一般纳税人/小规模纳税人" />

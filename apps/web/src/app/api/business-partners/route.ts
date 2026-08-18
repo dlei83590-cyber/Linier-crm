@@ -100,8 +100,13 @@ export async function POST(request: NextRequest) {
   if (existing && !existing.deletedAt) {
     return failConflict(ERROR_CODES.CONFLICT, "往来单位编码已存在");
   }
+  // 中文化校验（GB 32100-2015）：统一社会信用代码 = 18 位大写字母/数字（不含 I/O/S/V/Z），服务端归一化大写
   if (parsed.data.uscc) {
-    const usccExisting = await prisma.businessPartner.findUnique({ where: { uscc: parsed.data.uscc } });
+    const usccNormalized = parsed.data.uscc.toUpperCase();
+    if (!/^[0-9A-HJ-NPQRTUWXY]{18}$/.test(usccNormalized)) {
+      return failValidation({ uscc: "统一社会信用代码须为 18 位（GB 32100-2015，不含 I/O/S/V/Z）" });
+    }
+    const usccExisting = await prisma.businessPartner.findUnique({ where: { uscc: usccNormalized } });
     if (usccExisting && !usccExisting.deletedAt) {
       return failConflict(ERROR_CODES.CONFLICT, "统一社会信用代码已存在");
     }
@@ -113,7 +118,7 @@ export async function POST(request: NextRequest) {
       mnemonic: parsed.data.mnemonic ?? null,
       name: parsed.data.name,
       type: (parsed.data.type as PartnerType) ?? "SUPPLIER",
-      uscc: parsed.data.uscc ?? null,
+      uscc: parsed.data.uscc ? parsed.data.uscc.toUpperCase() : null,
       taxpayerType: parsed.data.taxpayerType ?? null,
       legalRepresentative: parsed.data.legalRepresentative ?? null,
       registeredAddress: parsed.data.registeredAddress ?? null,
