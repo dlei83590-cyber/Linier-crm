@@ -90,14 +90,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return failConflict(ERROR_CODES.CONFLICT, "往来单位编码已存在");
     }
   }
-  // 中文化校验（GB 32100-2015）：18 位大写字母/数字（不含 I/O/S/V/Z），服务端归一化大写
   if (updates.uscc) {
-    const usccNormalized = updates.uscc.toUpperCase();
-    if (!/^[0-9A-HJ-NPQRTUWXY]{18}$/.test(usccNormalized)) {
-      return failValidation({ uscc: "统一社会信用代码须为 18 位（GB 32100-2015，不含 I/O/S/V/Z）" });
-    }
-    updates.uscc = usccNormalized;
-    const usccExisting = await prisma.businessPartner.findUnique({ where: { uscc: usccNormalized } });
+    const usccExisting = await prisma.businessPartner.findUnique({ where: { uscc: updates.uscc } });
     if (usccExisting && usccExisting.id !== id && !usccExisting.deletedAt) {
       return failConflict(ERROR_CODES.CONFLICT, "统一社会信用代码已存在");
     }
