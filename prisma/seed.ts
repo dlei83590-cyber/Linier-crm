@@ -47,6 +47,8 @@ const SEED_PERMISSIONS: Array<{ name: string; code: string; module: string; desc
 const SEED_ACTION_MODULES = [
   "user",
   "role",
+  // Pending Pages Completion Gate（Batch 2）：department 模块注册，与 shared PERMISSION_MODULES 保持一致（ADR-0028）
+  "department",
   "audit",
   "item",
   "business-partner",

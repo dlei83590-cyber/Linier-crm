@@ -32,6 +32,7 @@ const ROLE_PERMISSIONS: Record<RoleCode, PermissionCode[]> = {
     PERMISSIONS.PROJECT_RISK_READ,
     PERMISSIONS.PROJECT_RISK_WRITE,
     // 动作级：主数据与项目模块 view/create/edit/delete/approve/audit/export/import/assign/close
+    "department:view", // Pending Pages Completion Gate（Batch 2）：部门树只读（部门维护仅 ADMIN/SUPER_ADMIN）
     "item:view", "item:create", "item:edit", "item:delete", "item:approve", "item:audit", "item:export", "item:import", "item:assign", "item:close",
     "business-partner:view", "business-partner:create", "business-partner:edit", "business-partner:delete", "business-partner:approve", "business-partner:audit", "business-partner:export", "business-partner:import", "business-partner:assign", "business-partner:close",
     "price-list:view", "price-list:create", "price-list:edit", "price-list:delete", "price-list:approve", "price-list:audit", "price-list:export", "price-list:import", "price-list:assign", "price-list:close",
@@ -105,6 +106,7 @@ const ROLE_PERMISSIONS: Record<RoleCode, PermissionCode[]> = {
   ],
   MEMBER: [
     PERMISSIONS.USER_READ,
+    "department:view", // Pending Pages Completion Gate（Batch 2）：部门树只读（MANAGER/MEMBER），部门维护仅 ADMIN/SUPER_ADMIN
     PERMISSIONS.ITEM_READ,
     PERMISSIONS.BUSINESS_PARTNER_READ,
     PERMISSIONS.PROJECT_OPPORTUNITY_READ,

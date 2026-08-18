@@ -72,24 +72,24 @@
 ### 5.1 /api/users（用户管理）
 - 列表过滤：email / name / departmentId / isActive；include department 摘要 + roles（code）
 - 创建（user:create）：email（唯一）+ password（服务端 bcryptjs hash，复用 lib/auth.ts hashPassword，**不落明文**）+ name + departmentId? + roleIds[]（UserRole 批量建）+ isActive（默认 true）
-- PATCH（user:edit）：name / departmentId / isActive / password?（非空才重置）/ roleIds?（全量替换 UserRole）+ version CAS（User 有 version）
+- PATCH（user:edit）：name / departmentId / isActive / password?（非空才重置）/ roleIds?（全量替换 UserRole）；**User 模型无 version 字段 → PATCH 无 CAS**（与 Role 一致，零迁移边界）
 - DELETE（user:delete）= **停用语义**：User 无 deletedAt 字段 → isActive=false（前端文案停用），不物理删除（保留审计/单据引用完整性）
-- 详情：含 roles + department + 最近 auditLogs 摘要（可选）
+- 详情：含 roles + department（不含 passwordHash）
 - 安全：禁止返回 passwordHash；创建/重置密码仅允许 user:create / user:edit 授权者操作；auditLog action=user.create/update/deactivate
 
 ### 5.2 /api/departments（部门管理）
-- 列表过滤：code / name / parentId?（不传=顶层 + 全量树）；返回扁平列表 + parent 摘要（前端组树）
+- 列表过滤：code / name / parentId?；返回扁平列表 + parent 摘要（前端 parent 列展示）
 - 创建（department:create）：code（唯一）+ name + parentId?（校验父级存在且非自身）
-- PATCH（department:edit）：name / parentId? / isActive? + version CAS；**禁止把部门设为自身/子孙为父**（循环引用校验：沿 parent 链）
-- DELETE（department:delete）：软删除；有子部门或关联用户 → 409（防孤儿树/悬空归属）；User.departmentId onDelete SetNull
-- 详情：含父级链 + 用户数 + 子部门数
+- PATCH（department:edit）：code? / name / parentId?；**禁止把部门设为自身/子孙为父**（循环引用校验：沿候选父级链向上）；**Department 模型无 version/isActive/deletedAt → 无 CAS、无启停、无 DELETE**
+- DELETE：**不提供**（无软删字段，物理删除破坏组织树与审计链）
+- 详情：含 parent 摘要 + 用户数 + 子部门数
 
 ### 5.3 /api/roles（角色权限）
 - 列表过滤：code / name；include permissions（code）计数
-- 创建（role:create）：code（唯一，大写）+ name + description? + permissionCodes[]?（按 code connect Permission 目录，未知 code → 400 VALIDATION_ERROR）
-- PATCH（role:edit）：name / description? / permissionCodes?（全量替换 RolePermissions）；Role 无 version 字段 → PATCH 不做 CAS
+- 创建（role:create）：code（唯一，大写）+ name + description? + permissionCodes[]?（按 code connect Permission 目录，未知 code → 400 VALIDATION_ERROR；**前端新建页暂不提供权限勾选——千级 checkbox 不可用 UX，权限分配由 seed/ADMIN 治理**）
+- PATCH（role:edit）：name / description? / permissionCodes?（全量替换 RolePermissions，API 能力保留）；Role 无 version 字段 → PATCH 不做 CAS
 - DELETE：**不提供**（Role 无软删字段 + UserRole 引用完整性；停用角色 = 从用户移除），API 只读+创建+编辑
-- 详情：含 permissions 全量 code 列表（前端按 module 分组展示）
+- 详情：含 permissions 全量 code 列表（前端编辑页按 module 分组**只读展示**）
 - 边界：内置角色（SUPER_ADMIN/ADMIN/MANAGER/MEMBER/VIEWER，seed 定义 ROLE_PERMISSIONS）仍由 seed 治理；本 API 覆盖 DB Role 记录的 CRUD，不改 seed 静态映射语义
 
 ## 6. Batch 3 — 走访/风险独立页改引导（复用项目内子资源）
@@ -118,7 +118,7 @@
 
 - 不触碰 HOLD 领域：Reservation / Costing / 5C-2 / GL / BI / OA / Mobile
 - 不新建平行业务真相：BusinessPartner API 不并入 customers/suppliers；走访/风险不建独立 CRUD
-- 不改 Schema/Migration（7 域模型已存在，本 Gate **零迁移**；User/Role/Department 无新字段）
+- 不改 Schema/Migration（7 域模型已存在，本 Gate **零迁移**；User/Role/Department 无新字段、无 version/deletedAt → 无 CAS/软删，按既有字段能力设计）
 - 不提供 roles DELETE（无软删字段 + 引用完整性）；users DELETE = 停用
 - 不发明审批流：主数据/系统域 CRUD 无 submit/approve 状态机（approvalStatus 常量 APPROVED 沿用 price-lists 先例）
 - DocumentSequence.nextNo 客户端不可写（编号引擎唯一事实源）

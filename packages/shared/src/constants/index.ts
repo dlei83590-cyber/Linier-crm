@@ -132,6 +132,9 @@ export const PERMISSION_ACTIONS = [
 export const PERMISSION_MODULES = [
   "user",
   "role",
+  // Pending Pages Completion Gate（Batch 2）：部门管理 API requirePermission("department:view/create/edit/delete")
+  // 必须 ∈ ALL_ACTION_PERMISSIONS（ADR-0028：API referenced permission ⊆ ALL_ACTION_PERMISSIONS）
+  "department",
   "audit",
   "item",
   "business-partner",

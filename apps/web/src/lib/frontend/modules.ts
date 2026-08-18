@@ -193,6 +193,15 @@ const UI_LIST_DETAIL_CRUD: CapabilityFlags = {
   workflow: false,
   factActions: false,
 };
+/** 列表 + Create/Edit 页（无独立详情页：主数据/系统管理简单编辑即详情） */
+const UI_LIST_CRUD: CapabilityFlags = {
+  list: true,
+  detail: false,
+  create: true,
+  edit: true,
+  workflow: false,
+  factActions: false,
+};
 /** 列表 + 详情 + 状态动作按钮（F2-6B：Detail 已开放 source-driven factActions，无 Create/Edit 页） */
 const UI_LIST_DETAIL_ACTIONS: CapabilityFlags = {
   list: true,
@@ -660,7 +669,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/business-partners',
     permission: actionPermission('business-partner', 'view'),
     availability: 'ready',
-    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_DETAIL_CRUD },
+    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_CRUD },
     createRoute: '/business-partners/new',
     createPermission: actionPermission('business-partner', 'create'),
     order: 2,
@@ -685,7 +694,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/technical-standards',
     permission: actionPermission('technical-standard', 'view'),
     availability: 'ready',
-    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_DETAIL_CRUD },
+    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_CRUD },
     createRoute: '/technical-standards/new',
     createPermission: actionPermission('technical-standard', 'create'),
     order: 4,
@@ -709,7 +718,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/commercial-terms',
     permission: actionPermission('commercial-term', 'view'),
     availability: 'ready',
-    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_DETAIL_CRUD },
+    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_CRUD },
     createRoute: '/commercial-terms/new',
     createPermission: actionPermission('commercial-term', 'create'),
     order: 6,
@@ -722,7 +731,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/document-sequences',
     permission: actionPermission('document-sequence', 'view'),
     availability: 'ready',
-    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_DETAIL_CRUD },
+    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_CRUD },
     createRoute: '/document-sequences/new',
     createPermission: actionPermission('document-sequence', 'create'),
     order: 7,
@@ -750,34 +759,43 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
   },
 
   // ===== 系统管理（当前 Placeholder → hold；后续独立规划）=====
+  // users：Pending Pages Completion Gate（Batch 2）——/api/users CRUD FINAL（停用语义：DELETE=isActive=false；无 CAS）
   {
     id: 'users',
     domain: 'system',
     label: '用户管理',
     route: '/users',
-    permission: PERMISSIONS.USER_READ,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
+    permission: actionPermission('user', 'view'),
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_CRUD },
+    createRoute: '/users/new',
+    createPermission: actionPermission('user', 'create'),
     order: 1,
   },
+  // departments：Pending Pages Completion Gate（Batch 2）——/api/departments CRUD FINAL（无 DELETE/isActive/CAS）
   {
     id: 'departments',
     domain: 'system',
     label: '部门管理',
     route: '/departments',
-    permission: PERMISSIONS.USER_READ,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
+    permission: actionPermission('department', 'view'),
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_CRUD },
+    createRoute: '/departments/new',
+    createPermission: actionPermission('department', 'create'),
     order: 2,
   },
+  // roles：Pending Pages Completion Gate（Batch 2）——/api/roles CRUD FINAL（无 DELETE/CAS；权限映射由 seed/ADMIN 治理）
   {
     id: 'roles',
     domain: 'system',
     label: '角色权限',
     route: '/roles',
-    permission: PERMISSIONS.ROLE_READ,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
+    permission: actionPermission('role', 'view'),
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_CRUD },
+    createRoute: '/roles/new',
+    createPermission: actionPermission('role', 'create'),
     order: 3,
   },
   // audit-logs：F2-6B 批 3 已开放 list/detail（只读）
