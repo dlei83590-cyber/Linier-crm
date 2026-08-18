@@ -324,13 +324,14 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     createPermission: actionPermission('project', 'create'),
     order: 2,
   },
-  // project-visits / project-risks：后端无 read API 路由（契约缺失）
+  // project-visits / project-risks：独立页=引导页（Pending Pages Batch 3）——CRUD 在项目详情 Tab（B2-1B 已交付 风险/走访 完整 CRUD）；
+  // 保持 hold：独立页无独立能力（能力归属 projects 模块），不建平行 CRUD（AGENTS.md 禁止平行业务真相）
   {
     id: 'project-visits',
     domain: 'customer-project',
     label: '客户走访',
     route: '/project-visits',
-    permission: PERMISSIONS.PROJECT_VISIT_READ,
+    permission: actionPermission('project', 'view'),
     availability: 'hold',
     capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
     order: 3,
@@ -340,7 +341,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     domain: 'customer-project',
     label: '项目风险',
     route: '/project-risks',
-    permission: PERMISSIONS.PROJECT_RISK_READ,
+    permission: actionPermission('project', 'view'),
     availability: 'hold',
     capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
     order: 4,
