@@ -8,6 +8,7 @@ import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace } from "@/components/workspace";
 import { useListQuery } from "@/lib/use-list-query";
+import { roleLabel } from "@/lib/frontend/labels";
 
 interface RoleRow {
   id: string;
@@ -111,7 +112,7 @@ function RoleList() {
               </Link>
             ),
           },
-          { key: "name", header: "名称" },
+          { key: "name", header: "名称", render: (row) => roleLabel(row.code, row.name) },
           { key: "description", header: "描述", render: (row) => row.description ?? "—" },
           { key: "permissionCount", header: "权限数", render: (row) => row._count?.permissions ?? 0 },
           { key: "userCount", header: "用户数", render: (row) => row._count?.users ?? 0 },

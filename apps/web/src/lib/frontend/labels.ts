@@ -1,0 +1,189 @@
+/**
+ * Frontend 中文显示标签（Pending Pages Completion — 中文化审计，2026-08-18）
+ * 数据模型字段名保持英文（全仓 API 契约惯例）；本文件只做展示层中文映射。
+ */
+
+/** 内置角色中文名（seed Role.name 为英文；自定义角色回退 DB name） */
+export const ROLE_LABELS: Record<string, string> = {
+  SUPER_ADMIN: "超级管理员",
+  ADMIN: "管理员",
+  MANAGER: "经理",
+  MEMBER: "成员",
+  VIEWER: "访客",
+};
+
+export function roleLabel(code: string, fallback?: string | null): string {
+  const mapped = ROLE_LABELS[code];
+  if (mapped) return mapped;
+  return fallback || code;
+}
+
+/** 权限动作中文（PERMISSION_ACTIONS） */
+export const ACTION_LABELS: Record<string, string> = {
+  view: "查看",
+  create: "新建",
+  edit: "编辑",
+  delete: "删除",
+  approve: "审批",
+  audit: "审计",
+  export: "导出",
+  import: "导入",
+  assign: "分配",
+  close: "关闭",
+};
+
+/** 权限模块中文（与 shared PERMISSION_MODULES 对应；未收录模块回退 slug） */
+export const MODULE_LABELS: Record<string, string> = {
+  "user": "用户",
+  "role": "角色",
+  "department": "部门",
+  "audit": "审计日志",
+  "item": "物料",
+  "business-partner": "往来单位",
+  "price-list": "价格表",
+  "tax-profile": "税率档案",
+  "exchange-rate": "汇率",
+  "partner-price": "伙伴价格",
+  "price-policy": "价格策略",
+  "price-rule": "价格规则",
+  "price-list-version": "价格表版本",
+  "promotion": "促销",
+  "tax-rate": "税率",
+  "pricing-engine": "定价引擎",
+  "price-audit": "价格审计",
+  "technical-standard": "技术标准",
+  "unit-of-measure": "计量单位",
+  "commercial-term": "商业条款",
+  "document-sequence": "单据序列",
+  "project-opportunity": "项目机会",
+  "project": "项目",
+  "project-visit": "项目走访",
+  "project-risk": "项目风险",
+  "project-stakeholder": "项目干系人",
+  "project-member": "项目成员",
+  "project-milestone": "项目里程碑",
+  "project-task": "项目任务",
+  "project-budget": "项目预算",
+  "project-expense": "项目费用",
+  "project-product": "项目产品",
+  "project-progress": "项目进度",
+  "project-acceptance": "项目验收",
+  "project-closure": "项目结项",
+  "project-tag": "项目标签",
+  "project-attachment": "项目附件",
+  "workflow-definition": "工作流定义",
+  "workflow-step": "工作流步骤",
+  "workflow-condition": "工作流条件",
+  "workflow-instance": "工作流实例",
+  "workflow-action": "工作流动作",
+  "workflow-history": "工作流历史",
+  "approver": "审批人",
+  "approver-group": "审批组",
+  "approval-delegate": "审批委托",
+  "approval-escalation": "审批升级",
+  "approval-timeout": "审批超时",
+  "approval-reminder": "审批提醒",
+  "notification-template": "通知模板",
+  "notification-message": "通知消息",
+  "notification-channel": "通知渠道",
+  "notification-log": "通知日志",
+  "dictionary-type": "字典类型",
+  "dictionary-item": "字典项",
+  "system-setting": "系统设置",
+  "tenant-setting": "租户设置",
+  "user-setting": "用户设置",
+  "menu": "菜单",
+  "menu-group": "菜单组",
+  "dashboard-widget": "仪表盘组件",
+  "dashboard-layout": "仪表盘布局",
+  "dashboard-kpi": "仪表盘指标",
+  "dashboard-chart": "仪表盘图表",
+  "file": "文件",
+  "file-folder": "文件目录",
+  "file-version": "文件版本",
+  "file-attachment": "文件附件",
+  "customer": "客户",
+  "customer-contact": "客户联系人",
+  "customer-address": "客户地址",
+  "customer-tag": "客户标签",
+  "customer-credit": "客户信用",
+  "industry": "行业",
+  "tag": "标签",
+  "supplier": "供应商",
+  "supplier-qualification": "供应商资质",
+  "supplier-certificate": "供应商证书",
+  "supplier-settlement": "供应商结算",
+  "business-partner-role": "往来单位角色",
+  "partner-contact": "伙伴联系人",
+  "partner-address": "伙伴地址",
+  "partner-tag": "伙伴标签",
+  "partner-bank-account": "伙伴银行账户",
+  "partner-credit": "伙伴信用",
+  "item-category": "物料分类",
+  "item-specification": "物料规格",
+  "item-uom": "物料计量",
+  "item-cost": "物料成本",
+  "item-supplier": "物料供应商",
+  "item-revision": "物料版本",
+  "item-tag": "物料标签",
+  "item-attachment": "物料附件",
+  "quotation": "报价单",
+  "quotation-line": "报价单行",
+  "quotation-revision": "报价单版本",
+  "quotation-snapshot": "报价单快照",
+  "approval-policy": "审批策略",
+  "approval-policy-rule": "审批策略规则",
+  "sales-order": "销售订单",
+  "sales-order-line": "销售订单行",
+  "sales-order-revision": "销售订单版本",
+  "sales-order-snapshot": "销售订单快照",
+  "delivery": "送货单",
+  "delivery-line": "送货单行",
+  "delivery-revision": "送货单版本",
+  "delivery-snapshot": "送货单快照",
+  "invoice": "发票",
+  "invoice-line": "发票行",
+  "invoice-revision": "发票版本",
+  "invoice-snapshot": "发票快照",
+  "accounts-receivable": "应收账款",
+  "accounts-receivable-revision": "应收版本",
+  "accounts-receivable-snapshot": "应收快照",
+  "receipt": "收款单",
+  "receipt-allocation": "收款核销",
+  "receipt-revision": "收款版本",
+  "receipt-snapshot": "收款快照",
+  "write-off": "坏账核销",
+  "write-off-allocation": "坏账分配",
+  "credit-debit-note": "贷项/借项通知单",
+  "purchase-requisition": "采购申请",
+  "purchase-order": "采购订单",
+  "purchase-receipt": "到货收货",
+  "inspection": "质检",
+  "warehouse-receipt": "采购入库",
+  "purchase-return": "采购退货",
+  "warehouse": "仓库",
+  "warehouse-location": "库位",
+  "inventory-transfer": "库存调拨",
+  "stock-count": "库存盘点",
+  "inventory-adjustment": "库存调整",
+  "inventory-conversion": "库存转换",
+  "stock-projection": "库存余额投影",
+  "inventory-movement": "库存流水",
+  "supplier-invoice": "供应商发票",
+};
+
+export function moduleLabel(slug: string): string {
+  const mapped = MODULE_LABELS[slug];
+  if (mapped) return mapped;
+  return slug;
+}
+
+/** 权限码中文：item:view → 物料 · 查看（未收录回退原码） */
+export function permissionLabel(code: string): string {
+  const idx = code.indexOf(":");
+  if (idx <= 0) return code;
+  const module = code.slice(0, idx);
+  const action = code.slice(idx + 1);
+  const actionLabel = ACTION_LABELS[action] || action;
+  return moduleLabel(module) + " · " + actionLabel;
+}
