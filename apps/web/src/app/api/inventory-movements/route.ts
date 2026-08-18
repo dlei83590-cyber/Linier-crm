@@ -1,5 +1,10 @@
 import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
+import type {
+  InventoryMovementType,
+  InventoryMovementDirection,
+  InventoryMovementSourceType,
+} from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission } from "@/lib/api-helpers";
 import { requestLog } from "@/lib/api/logger";
@@ -93,9 +98,9 @@ export async function GET(request: NextRequest) {
     ...(itemId ? { itemId } : {}),
     ...(warehouseId ? { warehouseId } : {}),
     ...(locationId ? { locationId } : {}),
-    ...(movementType ? { movementType: movementType as Prisma.InventoryMovementType } : {}),
-    ...(direction ? { direction: direction as Prisma.InventoryMovementDirection } : {}),
-    ...(sourceType ? { sourceType: sourceType as Prisma.InventoryMovementSourceType } : {}),
+    ...(movementType ? { movementType: movementType as InventoryMovementType } : {}),
+    ...(direction ? { direction: direction as InventoryMovementDirection } : {}),
+    ...(sourceType ? { sourceType: sourceType as InventoryMovementSourceType } : {}),
     ...(sourceId ? { sourceId } : {}),
     ...(movementGroupId ? { movementGroupId } : {}),
     ...(committedAt.gte || committedAt.lte ? { committedAt } : {}),
