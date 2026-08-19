@@ -11,7 +11,7 @@ import { formatDate, formatMoney } from "@/lib/format";
 
 interface GlEntryRow {
   id: string;
-  voucherNo: string;
+  voucherNo: string | null;
   postingDate: string;
   status: string;
   sourceType: string;
@@ -67,7 +67,7 @@ function GlEntryList() {
           </>
         }
         columns={[
-          { key: "voucherNo", header: "凭证号", render: (row) => (<Link href={`/finance/gl-journal-entries/${row.id}`} className="font-medium text-brand-600 hover:underline">{row.voucherNo}</Link>) },
+          { key: "voucherNo", header: "凭证号", render: (row) => (<Link href={`/finance/gl-journal-entries/${row.id}`} className="font-medium text-brand-600 hover:underline">{row.voucherNo ?? "（未取号）"}</Link>) },
           { key: "postingDate", header: "过账日期", render: (row) => formatDate(row.postingDate) },
           { key: "sourceType", header: "来源", render: (row) => SOURCE_LABELS[row.sourceType] ?? row.sourceType },
           { key: "summary", header: "摘要", render: (row) => row.summary ?? "—" },
