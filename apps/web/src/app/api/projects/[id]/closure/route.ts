@@ -7,7 +7,9 @@ import { requestLog } from '@/lib/api/logger';
 
 export const dynamic = 'force-dynamic';
 
-/** GET /api/projects/:id/closure（项目结项详情，1:1；结项通过 POST /api/projects/:id/close 执行） */
+/**
+ * GET /api/projects/:id/closure（项目结项详情，1:1；结项通过 POST /api/projects/:id/close 执行）
+ * L1-A Closure Contract：Closure 为不可变 lifecycle fact，**无 DELETE endpoint**（请求 DELETE → 405；恢复走正式 reopen 流程，DESIGN HOLD）。 */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await authenticate(request);
   const denied = requirePermission(user, 'project-closure:view');
