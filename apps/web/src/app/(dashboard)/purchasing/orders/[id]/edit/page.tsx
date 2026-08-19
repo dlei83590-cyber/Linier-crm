@@ -25,6 +25,7 @@ import {
   type LineRow,
 } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 
 interface ItemOption {
@@ -96,25 +97,6 @@ const PRICE_SOURCE_OPTIONS = [
 
 const inputClass = INPUT_CLASS;
 
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-sm font-medium text-ink-secondary">
-        {label}
-        {required ? <span className="ml-0.5 text-status-danger-text">*</span> : null}
-      </span>
-      {children}
-    </label>
-  );
-}
 
 function PurchaseOrderEditForm() {
   const params = useParams();
@@ -363,7 +345,7 @@ function PurchaseOrderEditForm() {
         <section className="border-border rounded-md border p-4">
           <h2 className="text-ink-primary mb-3 text-sm font-semibold">基本信息</h2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <Field label="期望交货日期">
+            <FormField label="期望交货日期">
               <input
                 type="date"
                 value={expectedDeliveryDate}
@@ -373,8 +355,8 @@ function PurchaseOrderEditForm() {
                 }}
                 className={inputClass}
               />
-            </Field>
-            <Field label="备注">
+            </FormField>
+            <FormField label="备注">
               <textarea
                 value={remark}
                 onChange={(e) => {
@@ -384,8 +366,8 @@ function PurchaseOrderEditForm() {
                 rows={2}
                 className={inputClass}
               />
-            </Field>
-            <Field label="变更原因">
+            </FormField>
+            <FormField label="变更原因">
               <input
                 value={changeReason}
                 onChange={(e) => {
@@ -395,7 +377,7 @@ function PurchaseOrderEditForm() {
                 placeholder="编辑产生 Revision，请说明变更原因"
                 className={inputClass}
               />
-            </Field>
+            </FormField>
           </div>
         </section>
 

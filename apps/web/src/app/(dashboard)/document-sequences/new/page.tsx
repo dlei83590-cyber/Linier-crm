@@ -7,6 +7,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityFormWorkspace } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 
 const DOC_TYPE_OPTIONS = [
@@ -42,25 +43,6 @@ const DOC_TYPE_OPTIONS = [
 
 const inputClass = INPUT_CLASS;
 
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-sm font-medium text-ink-secondary">
-        {label}
-        {required ? <span className="ml-0.5 text-status-danger-text">*</span> : null}
-      </span>
-      {children}
-    </label>
-  );
-}
 
 function DocumentSequenceCreateForm() {
   const router = useRouter();
@@ -114,13 +96,13 @@ function DocumentSequenceCreateForm() {
     >
       <section className="rounded-md border border-border p-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <Field label="编码" required>
+          <FormField label="编码" required>
             <input value={code} onChange={(e) => setCode(e.target.value)} className={inputClass} placeholder="如 SO/PO/QUO" />
-          </Field>
-          <Field label="名称" required>
+          </FormField>
+          <FormField label="名称" required>
             <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
-          </Field>
-          <Field label="单据类型" required>
+          </FormField>
+          <FormField label="单据类型" required>
             <select value={docType} onChange={(e) => setDocType(e.target.value)} className={inputClass}>
               <option value="">请选择</option>
               {DOC_TYPE_OPTIONS.map((o) => (
@@ -129,13 +111,13 @@ function DocumentSequenceCreateForm() {
                 </option>
               ))}
             </select>
-          </Field>
-          <Field label="前缀">
+          </FormField>
+          <FormField label="前缀">
             <input value={prefix} onChange={(e) => setPrefix(e.target.value)} className={inputClass} placeholder="如 SO-" />
-          </Field>
-          <Field label="序号位数">
+          </FormField>
+          <FormField label="序号位数">
             <input type="number" min={1} max={12} value={padLength} onChange={(e) => setPadLength(e.target.value)} className={inputClass} />
-          </Field>
+          </FormField>
         </div>
       </section>
     </EntityFormWorkspace>

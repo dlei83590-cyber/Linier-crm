@@ -12,6 +12,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityFormWorkspace, ReferenceSelector } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 
 interface PolicyOption {
@@ -58,25 +59,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-sm font-medium text-ink-secondary">
-        {label}
-        {required ? <span className="ml-0.5 text-status-danger-text">*</span> : null}
-      </span>
-      {children}
-    </label>
-  );
-}
 
 function PriceListCreateForm() {
   const router = useRouter();
@@ -168,13 +150,13 @@ function PriceListCreateForm() {
       onCancel={() => router.push("/price-lists")}
     >
       <Section title="基本信息">
-        <Field label="编码" required>
+        <FormField label="编码" required>
           <input value={code} onChange={(e) => setCode(e.target.value)} className={inputClass} placeholder="唯一编码" />
-        </Field>
-        <Field label="名称" required>
+        </FormField>
+        <FormField label="名称" required>
           <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="价格类型">
+        </FormField>
+        <FormField label="价格类型">
           <select value={priceType} onChange={(e) => setPriceType(e.target.value)} className={inputClass}>
             <option value="">请选择</option>
             {PRICE_TYPE_OPTIONS.map((o) => (
@@ -183,8 +165,8 @@ function PriceListCreateForm() {
               </option>
             ))}
           </select>
-        </Field>
-        <Field label="状态">
+        </FormField>
+        <FormField label="状态">
           <select value={status} onChange={(e) => setStatus(e.target.value)} className={inputClass}>
             {STATUS_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -192,8 +174,8 @@ function PriceListCreateForm() {
               </option>
             ))}
           </select>
-        </Field>
-        <Field label="价格策略">
+        </FormField>
+        <FormField label="价格策略">
           <ReferenceSelector
             value={pricePolicyId}
             onChange={setPricePolicyId}
@@ -202,17 +184,17 @@ function PriceListCreateForm() {
             loading={policiesLoading}
             error={policiesError}
           />
-        </Field>
-        <Field label="币种">
+        </FormField>
+        <FormField label="币种">
           <input value={currency} onChange={(e) => setCurrency(e.target.value)} className={inputClass} placeholder="如 CNY / USD" />
-        </Field>
-        <Field label="基准币种">
+        </FormField>
+        <FormField label="基准币种">
           <input value={baseCurrency} onChange={(e) => setBaseCurrency(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="报价币种">
+        </FormField>
+        <FormField label="报价币种">
           <input value={quoteCurrency} onChange={(e) => setQuoteCurrency(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="价格来源">
+        </FormField>
+        <FormField label="价格来源">
           <select value={priceSource} onChange={(e) => setPriceSource(e.target.value)} className={inputClass}>
             <option value="">请选择</option>
             {PRICE_SOURCE_OPTIONS.map((o) => (
@@ -221,22 +203,22 @@ function PriceListCreateForm() {
               </option>
             ))}
           </select>
-        </Field>
+        </FormField>
       </Section>
 
       <Section title="有效期">
-        <Field label="生效日期">
+        <FormField label="生效日期">
           <input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="失效日期">
+        </FormField>
+        <FormField label="失效日期">
           <input type="date" value={effectiveTo} onChange={(e) => setEffectiveTo(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="有效起始">
+        </FormField>
+        <FormField label="有效起始">
           <input type="date" value={validFrom} onChange={(e) => setValidFrom(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="有效截止">
+        </FormField>
+        <FormField label="有效截止">
           <input type="date" value={validTo} onChange={(e) => setValidTo(e.target.value)} className={inputClass} />
-        </Field>
+        </FormField>
         <label className="flex items-center gap-2 text-sm text-ink-secondary">
           <input type="checkbox" checked={freightIncluded} onChange={(e) => setFreightIncluded(e.target.checked)} />
           含运费

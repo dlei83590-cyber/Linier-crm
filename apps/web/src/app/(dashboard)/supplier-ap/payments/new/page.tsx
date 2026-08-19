@@ -7,20 +7,13 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityFormWorkspace } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 
 interface SupplierOption { id: string; code: string; name: string; }
 
 const inputClass = INPUT_CLASS;
 
-function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-sm font-medium text-ink-secondary">{label}{required ? <span className="ml-0.5 text-status-danger-text">*</span> : null}</span>
-      {children}
-    </label>
-  );
-}
 
 const METHOD_OPTIONS = [
   { value: "BANK_TRANSFER", label: "银行转账" },
@@ -92,29 +85,29 @@ function PaymentCreateForm() {
     >
       <section className="rounded-md border border-border p-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <Field label="供应商" required>
+          <FormField label="供应商" required>
             <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className={inputClass}>
               <option value="">请选择</option>
               {suppliers.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
             </select>
-          </Field>
-          <Field label="币种">
+          </FormField>
+          <FormField label="币种">
             <input value={currency} onChange={(e) => setCurrency(e.target.value)} className={inputClass} />
-          </Field>
-          <Field label="付款金额" required>
+          </FormField>
+          <FormField label="付款金额" required>
             <input type="number" min={0.01} step="any" value={amount} onChange={(e) => setAmount(e.target.value)} className={inputClass} />
-          </Field>
-          <Field label="付款日期" required>
+          </FormField>
+          <FormField label="付款日期" required>
             <input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className={inputClass} />
-          </Field>
-          <Field label="付款方式" required>
+          </FormField>
+          <FormField label="付款方式" required>
             <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className={inputClass}>
               {METHOD_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
             </select>
-          </Field>
-          <Field label="银行流水号/备注">
+          </FormField>
+          <FormField label="银行流水号/备注">
             <input value={referenceNo} onChange={(e) => setReferenceNo(e.target.value)} className={inputClass} />
-          </Field>
+          </FormField>
         </div>
       </section>
     </EntityFormWorkspace>

@@ -28,6 +28,7 @@ import {
   type LineRow,
 } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 
 interface ReceiptOption {
@@ -83,25 +84,6 @@ interface WhrLineRow extends LineRow {
 
 const inputClass = INPUT_CLASS;
 
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-sm font-medium text-ink-secondary">
-        {label}
-        {required ? <span className="ml-0.5 text-status-danger-text">*</span> : null}
-      </span>
-      {children}
-    </label>
-  );
-}
 
 function WhrCreateForm() {
   const router = useRouter();
@@ -333,7 +315,7 @@ function WhrCreateForm() {
       <section className="border-border rounded-md border p-4">
         <h2 className="text-ink-primary mb-3 text-sm font-semibold">基本信息</h2>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <Field label="来源收货单" required>
+          <FormField label="来源收货单" required>
             <ReferenceSelector
               value={purchaseReceiptId}
               onChange={handleReceiptChange}
@@ -341,8 +323,8 @@ function WhrCreateForm() {
               placeholder="请选择来源收货单（RECEIVED）"
               loading={selectorsLoading}
             />
-          </Field>
-          <Field label="仓库" required>
+          </FormField>
+          <FormField label="仓库" required>
             <ReferenceSelector
               value={warehouseId}
               onChange={handleWarehouseChange}
@@ -350,8 +332,8 @@ function WhrCreateForm() {
               placeholder="请选择仓库"
               loading={selectorsLoading}
             />
-          </Field>
-          <Field label="库位（属于所选仓库）">
+          </FormField>
+          <FormField label="库位（属于所选仓库）">
             <ReferenceSelector
               value={locationId}
               onChange={(v) => {
@@ -362,8 +344,8 @@ function WhrCreateForm() {
               placeholder="可选（随仓库变化）"
               loading={selectorsLoading}
             />
-          </Field>
-          <Field label="备注">
+          </FormField>
+          <FormField label="备注">
             <textarea
               value={remark}
               onChange={(e) => {
@@ -373,7 +355,7 @@ function WhrCreateForm() {
               rows={2}
               className={inputClass}
             />
-          </Field>
+          </FormField>
         </div>
       </section>
 

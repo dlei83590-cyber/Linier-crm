@@ -17,6 +17,7 @@ import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shar
 import { useSession } from "@/lib/session-context";
 import { AppPage, EntityFormWorkspace, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 
 interface OpportunityDetail {
@@ -73,25 +74,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-sm font-medium text-ink-secondary">
-        {label}
-        {required ? <span className="ml-0.5 text-status-danger-text">*</span> : null}
-      </span>
-      {children}
-    </label>
-  );
-}
 
 function OpportunityEditForm() {
   const params = useParams();
@@ -269,16 +251,16 @@ function OpportunityEditForm() {
         onCancel={() => router.push(`/project-opportunities/${id}`)}
       >
         <Section title="基本信息">
-          <Field label="机会编号" required>
+          <FormField label="机会编号" required>
             <input value={code} disabled className={inputClass} />
-          </Field>
-          <Field label="机会名称" required>
+          </FormField>
+          <FormField label="机会名称" required>
             <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
-          </Field>
-          <Field label="客户" required>
+          </FormField>
+          <FormField label="客户" required>
             <input value={customerLabel} disabled className={inputClass} />
-          </Field>
-          <Field label="阶段">
+          </FormField>
+          <FormField label="阶段">
             <select
               value={stage}
               onChange={(e) => setStage(e.target.value)}
@@ -291,35 +273,35 @@ function OpportunityEditForm() {
                 </option>
               ))}
             </select>
-          </Field>
-          <Field label="负责人">
+          </FormField>
+          <FormField label="负责人">
             <input value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className={inputClass} placeholder="负责人 ID（可选）" />
-          </Field>
+          </FormField>
         </Section>
 
         <Section title="商业预测">
-          <Field label="预计营收">
+          <FormField label="预计营收">
             <input type="number" value={expectedRevenue} onChange={(e) => setExpectedRevenue(e.target.value)} className={inputClass} />
-          </Field>
-          <Field label="预计成本">
+          </FormField>
+          <FormField label="预计成本">
             <input type="number" value={expectedCost} onChange={(e) => setExpectedCost(e.target.value)} className={inputClass} />
-          </Field>
-          <Field label="毛利">
+          </FormField>
+          <FormField label="毛利">
             <input type="number" value={grossProfit} onChange={(e) => setGrossProfit(e.target.value)} className={inputClass} />
-          </Field>
-          <Field label="成功率（%）">
+          </FormField>
+          <FormField label="成功率（%）">
             <input type="number" min={0} max={100} value={successProbability} onChange={(e) => setSuccessProbability(e.target.value)} className={inputClass} />
-          </Field>
-          <Field label="销售目标">
+          </FormField>
+          <FormField label="销售目标">
             <input type="number" value={salesTarget} onChange={(e) => setSalesTarget(e.target.value)} className={inputClass} />
-          </Field>
-          <Field label="费用预算">
+          </FormField>
+          <FormField label="费用预算">
             <input type="number" value={expenseBudget} onChange={(e) => setExpenseBudget(e.target.value)} className={inputClass} />
-          </Field>
-          <Field label="客户投入">
+          </FormField>
+          <FormField label="客户投入">
             <input type="number" value={customerInvestment} onChange={(e) => setCustomerInvestment(e.target.value)} className={inputClass} />
-          </Field>
-          <Field label="回款状态">
+          </FormField>
+          <FormField label="回款状态">
             <select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)} className={inputClass}>
               {PAYMENT_OPTIONS.map((p) => (
                 <option key={p.value} value={p.value}>
@@ -327,11 +309,11 @@ function OpportunityEditForm() {
                 </option>
               ))}
             </select>
-          </Field>
+          </FormField>
         </Section>
 
         <Section title="其他">
-          <Field label="竞争对手">
+          <FormField label="竞争对手">
             <textarea
               value={competitorsText}
               onChange={(e) => setCompetitorsText(e.target.value)}
@@ -339,8 +321,8 @@ function OpportunityEditForm() {
               rows={3}
               placeholder={"每行一个竞争对手，格式：名称 或 名称|备注"}
             />
-          </Field>
-          <Field label="描述">
+          </FormField>
+          <FormField label="描述">
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -348,7 +330,7 @@ function OpportunityEditForm() {
               rows={3}
               placeholder="机会描述（可选）"
             />
-          </Field>
+          </FormField>
         </Section>
       </EntityFormWorkspace>
     </AppPage>

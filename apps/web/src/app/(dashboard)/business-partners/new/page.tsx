@@ -10,6 +10,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityFormWorkspace } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 
 const TYPE_OPTIONS = [
@@ -29,25 +30,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-sm font-medium text-ink-secondary">
-        {label}
-        {required ? <span className="ml-0.5 text-status-danger-text">*</span> : null}
-      </span>
-      {children}
-    </label>
-  );
-}
 
 function BusinessPartnerCreateForm() {
   const router = useRouter();
@@ -131,16 +113,16 @@ function BusinessPartnerCreateForm() {
       onCancel={() => router.push("/business-partners")}
     >
       <Section title="基本信息">
-        <Field label="编码" required>
+        <FormField label="编码" required>
           <input value={code} onChange={(e) => setCode(e.target.value)} className={inputClass} placeholder="唯一内部编码" />
-        </Field>
-        <Field label="名称" required>
+        </FormField>
+        <FormField label="名称" required>
           <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="助记码">
+        </FormField>
+        <FormField label="助记码">
           <input value={mnemonic} onChange={(e) => setMnemonic(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="类型">
+        </FormField>
+        <FormField label="类型">
           <select value={type} onChange={(e) => setType(e.target.value)} className={inputClass}>
             {TYPE_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -148,59 +130,59 @@ function BusinessPartnerCreateForm() {
               </option>
             ))}
           </select>
-        </Field>
-        <Field label="统一社会信用代码">
+        </FormField>
+        <FormField label="统一社会信用代码">
           <input value={uscc} onChange={(e) => setUscc(e.target.value)} className={inputClass} placeholder="18 位统一社会信用代码（GB 32100-2015）" />
-        </Field>
-        <Field label="纳税人类型">
+        </FormField>
+        <FormField label="纳税人类型">
           <input value={taxpayerType} onChange={(e) => setTaxpayerType(e.target.value)} className={inputClass} placeholder="一般纳税人/小规模纳税人" />
-        </Field>
-        <Field label="法定代表人">
+        </FormField>
+        <FormField label="法定代表人">
           <input value={legalRepresentative} onChange={(e) => setLegalRepresentative(e.target.value)} className={inputClass} />
-        </Field>
+        </FormField>
       </Section>
       <Section title="联系与区域">
-        <Field label="区域">
+        <FormField label="区域">
           <input value={region} onChange={(e) => setRegion(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="行业">
+        </FormField>
+        <FormField label="行业">
           <input value={industry} onChange={(e) => setIndustry(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="企业规模">
+        </FormField>
+        <FormField label="企业规模">
           <input value={companySize} onChange={(e) => setCompanySize(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="联系人">
+        </FormField>
+        <FormField label="联系人">
           <input value={contactPerson} onChange={(e) => setContactPerson(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="电话">
+        </FormField>
+        <FormField label="电话">
           <input value={phone} onChange={(e) => setPhone(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="邮箱">
+        </FormField>
+        <FormField label="邮箱">
           <input value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="地址">
+        </FormField>
+        <FormField label="地址">
           <input value={address} onChange={(e) => setAddress(e.target.value)} className={inputClass} />
-        </Field>
+        </FormField>
       </Section>
       <Section title="财务与开票">
-        <Field label="开户银行">
+        <FormField label="开户银行">
           <input value={bankName} onChange={(e) => setBankName(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="银行账号">
+        </FormField>
+        <FormField label="银行账号">
           <input value={bankAccount} onChange={(e) => setBankAccount(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="结算条款">
+        </FormField>
+        <FormField label="结算条款">
           <input value={settlementTerms} onChange={(e) => setSettlementTerms(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="注册资本（万元）">
+        </FormField>
+        <FormField label="注册资本（万元）">
           <input value={registeredCapital} onChange={(e) => setRegisteredCapital(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="员工人数">
+        </FormField>
+        <FormField label="员工人数">
           <input type="number" value={employeeCount} onChange={(e) => setEmployeeCount(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="官网">
+        </FormField>
+        <FormField label="官网">
           <input value={website} onChange={(e) => setWebsite(e.target.value)} className={inputClass} />
-        </Field>
+        </FormField>
       </Section>
     </EntityFormWorkspace>
   );

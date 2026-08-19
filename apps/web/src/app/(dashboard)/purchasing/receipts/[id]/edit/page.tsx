@@ -26,6 +26,7 @@ import {
   type LineRow,
 } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 
 interface WarehouseOption {
@@ -73,25 +74,6 @@ interface ReceiptEditLineRow extends LineRow {
 
 const inputClass = INPUT_CLASS;
 
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-sm font-medium text-ink-secondary">
-        {label}
-        {required ? <span className="ml-0.5 text-status-danger-text">*</span> : null}
-      </span>
-      {children}
-    </label>
-  );
-}
 
 function ReceiptEditForm() {
   const params = useParams();
@@ -298,7 +280,7 @@ function ReceiptEditForm() {
         <section className="border-border rounded-md border p-4">
           <h2 className="text-ink-primary mb-3 text-sm font-semibold">基本信息</h2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <Field label="仓库（公司仓库到货）">
+            <FormField label="仓库（公司仓库到货）">
               <ReferenceSelector
                 value={warehouseId}
                 onChange={(v) => {
@@ -309,8 +291,8 @@ function ReceiptEditForm() {
                 placeholder="可选（DIRECT_PROJECT 不要求）"
                 loading={warehousesLoading}
               />
-            </Field>
-            <Field label="备注">
+            </FormField>
+            <FormField label="备注">
               <textarea
                 value={remark}
                 onChange={(e) => {
@@ -320,7 +302,7 @@ function ReceiptEditForm() {
                 rows={2}
                 className={inputClass}
               />
-            </Field>
+            </FormField>
           </div>
         </section>
 

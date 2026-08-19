@@ -33,7 +33,8 @@
 - **Login 页**：背景品牌渐变 + 卡片 shadow-elevation-lg + 渐变品牌标识、输入框聚焦 ring + 语义占位色、错误提示 status-danger 语义、主按钮 elevation
 - **Dashboard**：四卡片统一 rounded-xl + shadow-elevation-sm 分层、标题层级（ink-primary semibold）、快捷操作/业务入口链接 hover 过渡 + 语义色、系统状态卡片
 - **共享组件语义化**：EntityListWorkspace（表头 bg-canvas + 行 hover 过渡 brand-50/40）、EntityFormWorkspace（409 冲突面板 status-warning 语义类 + 按钮过渡）、Pagination / ListStates（border/ink/status 语义色）
-- **表单控件统一（批次3）**：新增 FormField 组件 + lib/ui-classes（INPUT_CLASS/BUTTON_*/CARD_CLASS 单一来源）；**31 个新建/编辑页** inputClass 常量改为共享引用（消除重复，JSX/Field 定义原样保留）
+- **表单控件统一（批次3）**：新增 FormField 组件 + lib/ui-classes（INPUT_CLASS/BUTTON_*/CARD_CLASS 单一来源）；**31 个新建/编辑页** inputClass 常量改为共享引用（消除重复）
+- **Field 函数迁移（批次4）**：**30 个页面**页面级重复 `Field` 函数全部删除，JSX 迁移到共享 `FormField` 组件（-1046 行重复定义；逐文件精准 edit，无 JSX 破坏）
 
 ### 边界
 

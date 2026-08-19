@@ -25,6 +25,7 @@ import {
   type LineRow,
 } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 
 interface SupplierOption {
@@ -75,25 +76,6 @@ const PRICE_SOURCE_OPTIONS = [
 
 const inputClass = INPUT_CLASS;
 
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-sm font-medium text-ink-secondary">
-        {label}
-        {required ? <span className="ml-0.5 text-status-danger-text">*</span> : null}
-      </span>
-      {children}
-    </label>
-  );
-}
 
 function PurchaseOrderCreateForm() {
   const router = useRouter();
@@ -238,7 +220,7 @@ function PurchaseOrderCreateForm() {
       <section className="border-border rounded-md border p-4">
         <h2 className="text-ink-primary mb-3 text-sm font-semibold">基本信息</h2>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <Field label="供应商" required>
+          <FormField label="供应商" required>
             <ReferenceSelector
               value={supplierId}
               onChange={(v) => {
@@ -253,8 +235,8 @@ function PurchaseOrderCreateForm() {
               placeholder="请选择供应商"
               loading={selectorsLoading}
             />
-          </Field>
-          <Field label="币种">
+          </FormField>
+          <FormField label="币种">
             <input
               value={currency}
               onChange={(e) => {
@@ -264,8 +246,8 @@ function PurchaseOrderCreateForm() {
               placeholder="如 CNY / USD"
               className={inputClass}
             />
-          </Field>
-          <Field label="期望交货日期">
+          </FormField>
+          <FormField label="期望交货日期">
             <input
               type="date"
               value={expectedDeliveryDate}
@@ -275,8 +257,8 @@ function PurchaseOrderCreateForm() {
               }}
               className={inputClass}
             />
-          </Field>
-          <Field label="备注">
+          </FormField>
+          <FormField label="备注">
             <textarea
               value={remark}
               onChange={(e) => {
@@ -286,7 +268,7 @@ function PurchaseOrderCreateForm() {
               rows={2}
               className={inputClass}
             />
-          </Field>
+          </FormField>
         </div>
       </section>
 

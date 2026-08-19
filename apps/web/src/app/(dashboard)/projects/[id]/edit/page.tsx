@@ -20,6 +20,7 @@ import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shar
 import { useSession } from "@/lib/session-context";
 import { AppPage, EntityFormWorkspace, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 
 interface ProjectDetail {
@@ -80,25 +81,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-sm font-medium text-ink-secondary">
-        {label}
-        {required ? <span className="ml-0.5 text-status-danger-text">*</span> : null}
-      </span>
-      {children}
-    </label>
-  );
-}
 
 function ProjectEditForm() {
   const params = useParams();
@@ -267,22 +249,22 @@ function ProjectEditForm() {
         onCancel={() => router.push(`/projects/${id}`)}
       >
         <Section title="基本信息">
-          <Field label="项目编号" required>
+          <FormField label="项目编号" required>
             <input value={code} disabled className={inputClass} />
-          </Field>
-          <Field label="项目名称" required>
+          </FormField>
+          <FormField label="项目名称" required>
             <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
-          </Field>
-          <Field label="客户" required>
+          </FormField>
+          <FormField label="客户" required>
             <input value={customerLabel} disabled className={inputClass} />
-          </Field>
-          <Field label="来源机会">
+          </FormField>
+          <FormField label="来源机会">
             <input value={opportunityLabel} disabled className={inputClass} />
-          </Field>
-          <Field label="阶段">
+          </FormField>
+          <FormField label="阶段">
             <input value={STAGE_LABELS[stage] ?? stage} disabled className={inputClass} />
-          </Field>
-          <Field label="优先级">
+          </FormField>
+          <FormField label="优先级">
             <select value={priority} onChange={(e) => setPriority(e.target.value)} className={inputClass}>
               <option value="">请选择</option>
               {PRIORITY_OPTIONS.map((p) => (
@@ -291,35 +273,35 @@ function ProjectEditForm() {
                 </option>
               ))}
             </select>
-          </Field>
-          <Field label="负责人">
+          </FormField>
+          <FormField label="负责人">
             <input value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className={inputClass} placeholder="负责人 ID（可选）" />
-          </Field>
-          <Field label="进度（%）">
+          </FormField>
+          <FormField label="进度（%）">
             <input type="number" min={0} max={100} value={progressPercent} onChange={(e) => setProgressPercent(e.target.value)} className={inputClass} />
-          </Field>
-          <Field label="项目评级">
+          </FormField>
+          <FormField label="项目评级">
             <input value={projectRating} onChange={(e) => setProjectRating(e.target.value)} className={inputClass} placeholder="项目评级（可选）" />
-          </Field>
+          </FormField>
         </Section>
 
         <Section title="商务字段（只读，Edit 不可修改）">
-          <Field label="预计合同金额">
+          <FormField label="预计合同金额">
             <input value={expectedContractAmount} disabled className={inputClass} />
-          </Field>
-          <Field label="预计利润">
+          </FormField>
+          <FormField label="预计利润">
             <input value={expectedProfit} disabled className={inputClass} />
-          </Field>
-          <Field label="预计毛利率（%）">
+          </FormField>
+          <FormField label="预计毛利率（%）">
             <input value={expectedGrossMarginRate} disabled className={inputClass} />
-          </Field>
-          <Field label="回款状态">
+          </FormField>
+          <FormField label="回款状态">
             <input value={PAYMENT_LABELS[paymentStatus] ?? paymentStatus} disabled className={inputClass} />
-          </Field>
+          </FormField>
         </Section>
 
         <Section title="其他">
-          <Field label="描述">
+          <FormField label="描述">
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -327,7 +309,7 @@ function ProjectEditForm() {
               rows={3}
               placeholder="项目描述（可选）"
             />
-          </Field>
+          </FormField>
         </Section>
       </EntityFormWorkspace>
     </AppPage>

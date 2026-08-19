@@ -7,6 +7,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityFormWorkspace } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 import { roleLabel } from "@/lib/frontend/labels";
 
@@ -24,25 +25,6 @@ interface RoleOption {
 
 const inputClass = INPUT_CLASS;
 
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-sm font-medium text-ink-secondary">
-        {label}
-        {required ? <span className="ml-0.5 text-status-danger-text">*</span> : null}
-      </span>
-      {children}
-    </label>
-  );
-}
 
 function UserCreateForm() {
   const router = useRouter();
@@ -118,16 +100,16 @@ function UserCreateForm() {
     >
       <section className="rounded-md border border-border p-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <Field label="邮箱" required>
+          <FormField label="邮箱" required>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
-          </Field>
-          <Field label="初始密码" required>
+          </FormField>
+          <FormField label="初始密码" required>
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputClass} placeholder="至少 6 位" />
-          </Field>
-          <Field label="姓名">
+          </FormField>
+          <FormField label="姓名">
             <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
-          </Field>
-          <Field label="部门">
+          </FormField>
+          <FormField label="部门">
             <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} className={inputClass}>
               <option value="">未分配</option>
               {depts.map((d) => (
@@ -136,9 +118,9 @@ function UserCreateForm() {
                 </option>
               ))}
             </select>
-          </Field>
+          </FormField>
           <div className="md:col-span-2">
-            <Field label="角色">
+            <FormField label="角色">
               <div className="flex flex-wrap gap-2">
                 {roles.map((r) => (
                   <label key={r.id} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-sm">
@@ -151,14 +133,14 @@ function UserCreateForm() {
                   </label>
                 ))}
               </div>
-            </Field>
+            </FormField>
           </div>
-          <Field label="启用">
+          <FormField label="启用">
             <select value={isActive ? "true" : "false"} onChange={(e) => setIsActive(e.target.value === "true")} className={inputClass}>
               <option value="true">是</option>
               <option value="false">否</option>
             </select>
-          </Field>
+          </FormField>
         </div>
       </section>
     </EntityFormWorkspace>

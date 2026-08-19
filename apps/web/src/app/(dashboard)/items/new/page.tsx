@@ -13,6 +13,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityFormWorkspace, ReferenceSelector } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 
 interface ItemOption {
@@ -60,25 +61,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-sm font-medium text-ink-secondary">
-        {label}
-        {required ? <span className="ml-0.5 text-status-danger-text">*</span> : null}
-      </span>
-      {children}
-    </label>
-  );
-}
 
 function ItemCreateForm() {
   const router = useRouter();
@@ -199,16 +181,16 @@ function ItemCreateForm() {
       onCancel={() => router.push("/items")}
     >
       <Section title="基本信息">
-        <Field label="编码" required>
+        <FormField label="编码" required>
           <input value={code} onChange={(e) => setCode(e.target.value)} className={inputClass} placeholder="唯一编码" />
-        </Field>
-        <Field label="名称" required>
+        </FormField>
+        <FormField label="名称" required>
           <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="助记码">
+        </FormField>
+        <FormField label="助记码">
           <input value={mnemonic} onChange={(e) => setMnemonic(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="类型">
+        </FormField>
+        <FormField label="类型">
           <select value={itemType} onChange={(e) => setItemType(e.target.value)} className={inputClass}>
             <option value="">请选择</option>
             {ITEM_TYPE_OPTIONS.map((o) => (
@@ -217,8 +199,8 @@ function ItemCreateForm() {
               </option>
             ))}
           </select>
-        </Field>
-        <Field label="分类">
+        </FormField>
+        <FormField label="分类">
           <ReferenceSelector
             value={categoryId}
             onChange={setCategoryId}
@@ -227,17 +209,17 @@ function ItemCreateForm() {
             loading={selectorsLoading}
             error={selectorsError}
           />
-        </Field>
-        <Field label="品牌">
+        </FormField>
+        <FormField label="品牌">
           <input value={brand} onChange={(e) => setBrand(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="制造商">
+        </FormField>
+        <FormField label="制造商">
           <input value={manufacturer} onChange={(e) => setManufacturer(e.target.value)} className={inputClass} />
-        </Field>
+        </FormField>
       </Section>
 
       <Section title="计量与状态">
-        <Field label="库存单位">
+        <FormField label="库存单位">
           <ReferenceSelector
             value={stockUomId}
             onChange={setStockUomId}
@@ -246,8 +228,8 @@ function ItemCreateForm() {
             loading={selectorsLoading}
             error={selectorsError}
           />
-        </Field>
-        <Field label="采购单位">
+        </FormField>
+        <FormField label="采购单位">
           <ReferenceSelector
             value={purchaseUomId}
             onChange={setPurchaseUomId}
@@ -256,8 +238,8 @@ function ItemCreateForm() {
             loading={selectorsLoading}
             error={selectorsError}
           />
-        </Field>
-        <Field label="销售单位">
+        </FormField>
+        <FormField label="销售单位">
           <ReferenceSelector
             value={salesUomId}
             onChange={setSalesUomId}
@@ -266,8 +248,8 @@ function ItemCreateForm() {
             loading={selectorsLoading}
             error={selectorsError}
           />
-        </Field>
-        <Field label="生命周期">
+        </FormField>
+        <FormField label="生命周期">
           <select value={lifecycle} onChange={(e) => setLifecycle(e.target.value)} className={inputClass}>
             <option value="">请选择</option>
             {LIFECYCLE_OPTIONS.map((o) => (
@@ -276,8 +258,8 @@ function ItemCreateForm() {
               </option>
             ))}
           </select>
-        </Field>
-        <Field label="状态">
+        </FormField>
+        <FormField label="状态">
           <select value={status} onChange={(e) => setStatus(e.target.value)} className={inputClass}>
             {STATUS_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -285,37 +267,37 @@ function ItemCreateForm() {
               </option>
             ))}
           </select>
-        </Field>
+        </FormField>
       </Section>
 
       <Section title="技术属性">
-        <Field label="系列">
+        <FormField label="系列">
           <input value={series} onChange={(e) => setSeries(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="型号">
+        </FormField>
+        <FormField label="型号">
           <input value={model} onChange={(e) => setModel(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="变型">
+        </FormField>
+        <FormField label="变型">
           <input value={variant} onChange={(e) => setVariant(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="规格">
+        </FormField>
+        <FormField label="规格">
           <input value={spec} onChange={(e) => setSpec(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="OEM 编码">
+        </FormField>
+        <FormField label="OEM 编码">
           <input value={oemCode} onChange={(e) => setOemCode(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="条码">
+        </FormField>
+        <FormField label="条码">
           <input value={barcode} onChange={(e) => setBarcode(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="图号">
+        </FormField>
+        <FormField label="图号">
           <input value={drawingNo} onChange={(e) => setDrawingNo(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="图版">
+        </FormField>
+        <FormField label="图版">
           <input value={drawingVersion} onChange={(e) => setDrawingVersion(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="版本">
+        </FormField>
+        <FormField label="版本">
           <input value={revision} onChange={(e) => setRevision(e.target.value)} className={inputClass} />
-        </Field>
+        </FormField>
       </Section>
 
       <Section title="采购 / 销售标记">
@@ -331,9 +313,9 @@ function ItemCreateForm() {
           <input type="checkbox" checked={isManufacturable} onChange={(e) => setIsManufacturable(e.target.checked)} />
           可生产
         </label>
-        <Field label="描述">
+        <FormField label="描述">
           <input value={description} onChange={(e) => setDescription(e.target.value)} className={inputClass} />
-        </Field>
+        </FormField>
       </Section>
     </EntityFormWorkspace>
   );

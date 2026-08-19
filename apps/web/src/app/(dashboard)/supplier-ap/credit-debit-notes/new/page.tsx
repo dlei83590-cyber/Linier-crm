@@ -7,6 +7,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityFormWorkspace } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 
 interface InvoiceOption {
@@ -24,14 +25,6 @@ interface InvoiceDetail {
 
 const inputClass = INPUT_CLASS;
 
-function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-sm font-medium text-ink-secondary">{label}{required ? <span className="ml-0.5 text-status-danger-text">*</span> : null}</span>
-      {children}
-    </label>
-  );
-}
 
 function CnDnCreateForm() {
   const router = useRouter();
@@ -124,14 +117,14 @@ function CnDnCreateForm() {
     >
       <section className="rounded-md border border-border p-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <Field label="类型" required>
+          <FormField label="类型" required>
             <select value={noteType} onChange={(e) => setNoteType(e.target.value)} className={inputClass}>
               <option value="CREDIT">贷项（冲减应付）</option>
               <option value="DEBIT">借项（增加应付）</option>
             </select>
-          </Field>
+          </FormField>
           <div className="md:col-span-2">
-            <Field label="来源发票（已过账，可多选跨票）" required>
+            <FormField label="来源发票（已过账，可多选跨票）" required>
               <div className="max-h-56 overflow-y-auto rounded-md border border-border">
                 {invoices.map((inv) => (
                   <label key={inv.id} className="flex cursor-pointer items-center gap-2 border-b border-border px-3 py-1.5 text-sm last:border-b-0 hover:bg-slate-50">
@@ -146,15 +139,15 @@ function CnDnCreateForm() {
                 ))}
                 {invoices.length === 0 ? <div className="px-3 py-2 text-sm text-ink-muted">暂无已过账（POSTED）发票</div> : null}
               </div>
-            </Field>
+            </FormField>
             {hasMultipleSuppliers ? (
               <p className="mt-1 text-xs text-status-danger-text">跨票调整要求全部发票同供应商同币种，请只选择同一供应商的发票</p>
             ) : null}
           </div>
           <div className="md:col-span-2">
-            <Field label="调整原因" required>
+            <FormField label="调整原因" required>
               <input value={reason} onChange={(e) => setReason(e.target.value)} className={inputClass} placeholder="折扣/退货/价差/更正/其他" />
-            </Field>
+            </FormField>
           </div>
         </div>
       </section>
