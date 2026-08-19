@@ -7,6 +7,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
 
 interface PeriodCloseRow {
