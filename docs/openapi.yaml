@@ -13276,6 +13276,97 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/gl/journal-entries/manual:
+    post:
+      tags: [GL]
+      summary: 手工凭证创建（DRAFT；借贷平衡校验；DRAFT 不占号；gl:create；ADR-0035）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [postingDate, lines]
+              properties:
+                postingDate: { type: string, format: date }
+                summary: { type: string }
+                lines: { type: array, minItems: 2, items: { type: object, required: [accountCode], properties: { accountCode: { type: string }, debit: { type: string }, credit: { type: string }, summary: { type: string } } } }
+      responses:
+        "201":
+          description: Created（DRAFT）
+        "400":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/gl/journal-entries/{id}/{action}:
+    post:
+      tags: [GL]
+      summary: 手工凭证状态动作（submit/approve/reject/post；maker-checker；post 取号；ADR-0035）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: action
+          in: path
+          required: true
+          schema: { type: string, enum: [submit, approve, reject, post] }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version: { type: integer }
+      responses:
+        "200":
+          description: OK
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/gl/journal-entries/{id}:
+    patch:
+      tags: [GL]
+      summary: 手工凭证编辑（DRAFT/REJECTED only + version CAS；行整体替换；gl:edit；ADR-0035）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                postingDate: { type: string, format: date }
+                summary: { type: [string, 'null'] }
+                lines: { type: array, minItems: 2, items: { type: object, properties: { accountCode: { type: string }, debit: { type: string }, credit: { type: string }, summary: { type: string } } } }
+                version: { type: integer }
+      responses:
+        "200":
+          description: OK
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
   /api/gl/journal-entries/{id}:
     get:
       tags: [GL]

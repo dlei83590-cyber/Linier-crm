@@ -18,12 +18,13 @@ interface GlLine {
 }
 interface GlEntryDetail {
   id: string;
-  voucherNo: string;
+  voucherNo: string | null;
   postingDate: string;
   status: string;
   sourceType: string;
   sourceId: string;
   summary: string | null;
+  version: number;
   createdAt: string;
   lines: GlLine[];
 }
@@ -35,6 +36,7 @@ const SOURCE_LABELS: Record<string, string> = {
   SupplierPaymentReversed: "付款冲销",
 };
 const CATEGORY_LABELS: Record<string, string> = { ASSET: "资产", LIABILITY: "负债", EQUITY: "权益", REVENUE: "收入", EXPENSE: "费用" };
+const STATUS_LABELS: Record<string, string> = { DRAFT: "草稿", SUBMITTED: "已提交", APPROVED: "已批准", POSTED: "已过账", REJECTED: "已驳回" };
 
 function GlEntryDetailView() {
   const router = useRouter();
@@ -43,6 +45,8 @@ function GlEntryDetailView() {
   const [detail, setDetail] = useState<GlEntryDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<ApiClientError | null>(null);
+  const [acting, setActing] = useState(false);
+  const [actionError, setActionError] = useState<ApiClientError | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -54,21 +58,41 @@ function GlEntryDetailView() {
 
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [id]);
 
+  const runAction = (action: "submit" | "approve" | "post" | "reject") => {
+    if (!detail || acting) return;
+    setActing(true);
+    setActionError(null);
+    apiFetch<{ id: string }>(`/api/gl/journal-entries/${detail.id}/${action}`, {
+      method: "POST",
+      body: JSON.stringify({ version: detail.version }),
+    })
+      .then(() => load())
+      .catch((err: unknown) => {
+        setActionError(err instanceof ApiClientError ? err : new ApiClientError(0, "网络错误", "NETWORK_ERROR"));
+        setActing(false);
+      });
+  };
+
   if (loading) return (<AppPage><p className="px-4 py-6 text-sm text-ink-secondary">加载中…</p></AppPage>);
   if (loadError || !detail) return (<AppPage><ErrorPanel error={loadError ?? new ApiClientError(500, "加载失败", "LOAD_ERROR")} onRetry={load} /></AppPage>);
 
   return (
     <AppPage>
       <EntityFormWorkspace
-        title={`记账凭证 ${detail.voucherNo}`}
-        description={`来源：${SOURCE_LABELS[detail.sourceType] ?? detail.sourceType} ｜ 过账日期：${formatDate(detail.postingDate)} ｜ 状态：已过账（终态不可变）`}
+        title={`记账凭证 ${detail.voucherNo ?? "（未取号）"}`}
+        description={`来源：${SOURCE_LABELS[detail.sourceType] ?? (detail.sourceType === "MANUAL" ? "手工录入" : detail.sourceType)} ｜ 过账日期：${formatDate(detail.postingDate)} ｜ 状态：${STATUS_LABELS[detail.status] ?? detail.status} ｜ 凭证号：${detail.voucherNo ?? "（未取号）"}`}
         backHref="/finance/gl-journal-entries"
         mode="edit"
-        submitting={false}
-        error={null}
+        submitting={acting}
+        error={actionError}
         dirty={false}
-        saveLabel={undefined}
-        onSave={() => undefined}
+        saveLabel={detail.sourceType === "MANUAL" && detail.status === "DRAFT" ? "提交（SUBMITTED）" : detail.sourceType === "MANUAL" && detail.status === "SUBMITTED" ? "审核通过（APPROVED）" : detail.sourceType === "MANUAL" && detail.status === "APPROVED" ? "过账（POSTED）" : undefined}
+        onSave={() => {
+          if (detail.sourceType !== "MANUAL") return;
+          if (detail.status === "DRAFT") runAction("submit");
+          else if (detail.status === "SUBMITTED") runAction("approve");
+          else if (detail.status === "APPROVED") runAction("post");
+        }}
         onCancel={() => router.push("/finance/gl-journal-entries")}
       >
         <section className="rounded-md border border-border p-4">

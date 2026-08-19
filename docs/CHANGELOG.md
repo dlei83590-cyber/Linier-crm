@@ -25,6 +25,22 @@
 ### 文档
 - ADR-0029（Pending Pages Completion 决策记录）、docs/frontend/contract-cards/pending-pages-completion-gate.md（Design/Scope Gate 文档）、OpenAPI +7 域 paths、Frontend Module Map / Page Route Map 解除 hold 标记、docs/qa/PendingPages_QA.md、docs/test-cases/MasterData_Admin_CRUD_API.md、ROADMAP v1.23、SPRINT_PLAN
 
+## [Unreleased] - GL 手工凭证录入 + 审核流（2026-08-20，ADR-0035）
+
+### 新增
+
+- **Migration 0034**：GlJournalEntry.voucherNo 改可空（手工凭证 DRAFT 不占号——4D 教训；POSTED 时取号）+ approvedAt/approvedById（maker-checker 审核投影）
+- **手工凭证 API**：POST /api/gl/journal-entries/manual（创建 DRAFT，sourceType=MANUAL + cuid 幂等；借贷平衡复用核心校验）、PATCH /:id（DRAFT/REJECTED only + version CAS）、POST /:id/submit|approve|reject|post（状态机 DRAFT→SUBMITTED→APPROVED→POSTED/REJECTED；approve/post 强制 maker-checker——审核/过账人 ≠ 创建人；post 时原子取号 JRN）
+- **lib/gl/entry-helpers.ts**：validateGlLines / assertGlLinesBalanced（纯函数 + tx 科目解析，可单测）
+- **前端**：/finance/gl-journal-entries/new（手工录入：日期/摘要/借贷行动态增删 + 借贷合计实时平衡校验）+ detail 状态机按钮（submit/approve/post/reject 按状态显隐）；modules.ts gl 模块 createRoute
+- **单测**：+7 路径（行校验/借贷平衡/科目 fail closed/复核）
+
+### 边界
+
+- 自动过账路径不变（POSTED 一次性，事件驱动）；手工凭证审核流不接 Workflow（GL 首版直接状态机 + maker-checker 业务层强制）；期初结转/多币种仍后续
+
+---
+
 ## [Unreleased] - GL 余额/试算平衡/利润表（2026-08-20，ADR-0034）
 
 ### 新增

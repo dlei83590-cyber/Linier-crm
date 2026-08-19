@@ -33,5 +33,5 @@ ADR-0033 已落地 GL 过账（凭证头行 + 5C/GRIR 事件自动过账）。Fi
 
 - 期初余额 + 期末结转（month-end close）
 - 多币种折算 / 合并报表
-- GL 手工录入 + 审核流（maker-checker UI）
+- ~~GL 手工录入 + 审核流（maker-checker UI）~~ ✅（2026-08-20，ADR-0035：Migration 0034 + manual API + 状态机）
 - 成本核算（D9 HOLD 延续）

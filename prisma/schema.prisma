@@ -6132,13 +6132,15 @@ model GlAccount {
 /// POSTED 一次性终态不可变；sourceType+sourceId 幂等（防重复过账）；纠错 → 追加红字冲销凭证
 model GlJournalEntry {
   id         String   @id @default(cuid())
-  voucherNo  String   @unique // 凭证号（DocumentSequence docType=JOURNAL 创建即取号 JRN-2026-xxxx；seed 已存在）
+  voucherNo  String?  @unique // 凭证号（自动过账：创建即取号；手工凭证：DRAFT 不占号，POSTED 时取号——4D 教训，ADR-0035）
   postingDate DateTime @db.Timestamptz(3) // 过账日期
-  status     String   @default("POSTED") // 首版仅 POSTED（终态不可变）；预留状态机
-  sourceType String   // 来源类型（SupplierInvoicePosted / SupplierPaymentApplied / SupplierCreditDebitNoteApplied / SupplierPaymentReversed）
-  sourceId   String   // 来源业务事实 id（发票 id / 核销行 id / CN-DN id）
+  status     String   @default("POSTED") // 自动过账 POSTED；手工凭证 DRAFT→SUBMITTED→APPROVED→POSTED/REJECTED（ADR-0035）
+  sourceType String   // 来源类型（SupplierInvoicePosted / SupplierPaymentApplied / SupplierCreditDebitNoteApplied / SupplierPaymentReversed / MANUAL）
+  sourceId   String   // 来源业务事实 id（发票 id / 核销行 id / CN-DN id；手工凭证 = cuid）
   summary    String?  // 摘要
-  createdById String? // 触发人（consumer 过账 = 触发 consume 的 actor；系统自动过账可空）
+  createdById String? // 触发人（consumer 过账 = 触发 consume 的 actor；手工凭证 = 创建人）
+  approvedById String? // 手工凭证审核人（approver ≠ creator——maker-checker，ADR-0035）
+  approvedAt  DateTime? @db.Timestamptz(3)
   postedById  String?
   postedAt    DateTime? @db.Timestamptz(3)
   version    Int      @default(1)
