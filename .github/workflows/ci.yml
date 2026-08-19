@@ -30,6 +30,8 @@ jobs:
           fi
       - name: Lint
         run: pnpm lint
+      - name: RBAC Catalog Static Gate (ADR-0028)
+        run: node scripts/check-rbac-catalog.mjs
       - name: Generate Prisma Client
         run: pnpm db:generate
       - name: Type check
