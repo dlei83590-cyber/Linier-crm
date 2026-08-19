@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { Prisma } from "@prisma/client";
-import { upsertInboundCost } from "@/lib/inventory-cost/moving-average";
+import { upsertInboundCost, applyOutboundCost } from "@/lib/inventory-cost/moving-average";
 
 /**
  * 移动加权平均成本层单测（ADR-0038；D9 HOLD 解除）
@@ -102,4 +102,62 @@ describe("upsertInboundCost — 移动加权平均", () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.code).toBe("COST_INVALID_AMOUNT");
   });
+
+describe("applyOutboundCost — 出库结转（ADR-0039）", () => {
+  function outTx(overrides: Record<string, unknown> = {}) {
+    return {
+      inventoryCostSource: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        create: vi.fn().mockResolvedValue({}),
+      },
+      inventoryCostBalance: {
+        findFirst: vi.fn().mockResolvedValue({ id: "cb1", itemId: "it1", onHandQty: d("20"), totalCost: d("300.00"), avgUnitCost: d("15.0000") }),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      ...overrides,
+    } as unknown as Prisma.TransactionClient;
+  }
+
+  it("出库 10 件 avg15 → totalCost 300→150；avg 不变 15；outCost 150", async () => {
+    const tx = outTx();
+    const r = await applyOutboundCost(tx, { itemId: "it1", quantity: d("10"), sourceKey: "COST_OUT:mv1" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.outCost).toBe("150.0000");
+    expect(r.onHandQty).toBe("10.0000");
+    expect(r.totalCost).toBe("150.0000");
+    expect(r.avgUnitCost).toBe("15.0000");
+    const update = (tx.inventoryCostBalance.update as any).mock.calls[0][0];
+    expect(update.data.onHandQty.toFixed(4)).toBe("10.0000");
+  });
+
+  it("出库超成本层数量 → onHandQty 归零不取负；outCost 限 totalCost", async () => {
+    const tx = outTx({ inventoryCostBalance: { findFirst: vi.fn().mockResolvedValue({ id: "cb1", itemId: "it1", onHandQty: d("5"), totalCost: d("75.00"), avgUnitCost: d("15.0000") }), update: vi.fn() } });
+    const r = await applyOutboundCost(tx, { itemId: "it1", quantity: d("10"), sourceKey: "COST_OUT:mv2" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.outCost).toBe("75.0000"); // min(150, 75)
+    expect(r.onHandQty).toBe("0.0000");
+    expect(r.totalCost).toBe("0.0000");
+  });
+
+  it("无成本层 → skipped（0 成本出库边界）", async () => {
+    const tx = outTx({ inventoryCostBalance: { findFirst: vi.fn().mockResolvedValue(null), update: vi.fn() } });
+    const r = await applyOutboundCost(tx, { itemId: "it1", quantity: d("10"), sourceKey: "COST_OUT:mv3" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.skipped).toBe(true);
+    expect(tx.inventoryCostBalance.update).not.toHaveBeenCalled();
+  });
+
+  it("幂等：sourceKey 已存在 → skipped 不重复结转", async () => {
+    const tx = outTx({ inventoryCostSource: { findFirst: vi.fn().mockResolvedValue({ id: "s1" }), create: vi.fn() }, inventoryCostBalance: { findFirst: vi.fn(), update: vi.fn() } });
+    const r = await applyOutboundCost(tx, { itemId: "it1", quantity: d("10"), sourceKey: "COST_OUT:mv1" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.skipped).toBe(true);
+    expect(tx.inventoryCostBalance.update).not.toHaveBeenCalled();
+  });
+});
+
 });

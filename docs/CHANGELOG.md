@@ -25,6 +25,20 @@
 ### 文档
 - ADR-0029（Pending Pages Completion 决策记录）、docs/frontend/contract-cards/pending-pages-completion-gate.md（Design/Scope Gate 文档）、OpenAPI +7 域 paths、Frontend Module Map / Page Route Map 解除 hold 标记、docs/qa/PendingPages_QA.md、docs/test-cases/MasterData_Admin_CRUD_API.md、ROADMAP v1.23、SPRINT_PLAN
 
+## [Unreleased] - 成本核算第二步：出库结转（2026-08-20，ADR-0039）
+
+### 新增
+
+- **applyOutboundCost**（lib/inventory-cost/moving-average.ts）：OUT 落定同事务按移动平均结转——outCost = min(qty×avg, totalCost)（不制造负成本）；totalCost -= outCost；onHandQty -= qty（不足归零不取负）；avg 不变（出库不改变单位成本）；幂等 sourceKey=COST_OUT:{movementId}
+- **ledger-command 接线**：executeLedgerAtom 内 OUT 落定（Movement INSERT + Projection UPSERT）同事务调用 applyOutboundCost——6B Transfer/Adjustment/Conversion 出库自动结转（共享 Core 唯一事实点）
+- **单测**：+4 路径（出库结转/超量归零/无成本层 skipped/幂等）
+
+### 边界
+
+- **GL COGS 分录未实现**（第三步：需 InventoryMovementCommitted 事件 outbox 化 + consumer——独立 Gate，避免 ledger-command 耦合 GL）；无成本层物料按 0 成本出库（声明边界）；零 Migration
+
+---
+
 ## [Unreleased] - 成本核算首块：移动加权平均成本层（2026-08-20，ADR-0038，D9 HOLD 解除）
 
 ### 新增

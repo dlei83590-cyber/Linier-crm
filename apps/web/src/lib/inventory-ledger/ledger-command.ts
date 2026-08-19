@@ -5,6 +5,7 @@ import type {
   InventoryMovementType,
   InventoryMovementDirection,
 } from '@prisma/client';
+import { applyOutboundCost } from '@/lib/inventory-cost/moving-average';
 
 /**
  * Sprint 6B-1/6B-2 - Shared InventoryLedgerCommand Core
@@ -378,6 +379,18 @@ export async function executeLedgerAtom(
       version: { increment: 1 },
     },
   });
+
+  // 出库结转（ADR-0039）：OUT 落定同事务按移动平均结转成本层（独立表；不写 Movement/Projection——红线延续）
+  // 幂等 sourceKey=COST_OUT:{movementId}；无成本层物料 → skipped（0 成本出库边界）
+  if (atom.direction === 'OUT') {
+    const costResult = await applyOutboundCost(tx, {
+      itemId: atom.itemId,
+      quantity: atom.quantity,
+      sourceKey: 'COST_OUT:' + movementId,
+      actorId: atom.actorId,
+    });
+    if (!costResult.ok) throw new Error('COST_OUT_FAILED:' + costResult.code);
+  }
 
   return { inserted: true, movementId, movementNo };
 }

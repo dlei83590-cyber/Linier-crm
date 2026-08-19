@@ -20,6 +20,68 @@ export type InboundCostResult =
   | { ok: false; code: string; message: string; httpStatus: number };
 
 /** WHR POSTED 事务内：入库移动平均更新（同事务；重复 sourceKey 幂等跳过） */
+
+export interface OutboundCostParams {
+  itemId: string;
+  quantity: Prisma.Decimal;
+  sourceKey: string; // 幂等键：COST_OUT:{movementId}
+  actorId?: string | null;
+}
+
+export type OutboundCostResult =
+  | { ok: true; onHandQty: string; totalCost: string; avgUnitCost: string; outCost: string; skipped: boolean }
+  | { ok: false; code: string; message: string; httpStatus: number };
+
+/**
+ * 出库结转（ADR-0039）：OUT movement 落定同事务按移动平均结转。
+ * outCost = min(qty × avg, totalCost)（不制造负成本）；onHandQty -= qty（成本层镜像，不足归零不取负）。
+ * 无成本层或 avg ≤ 0 → skipped（首版边界：无成本事实物料按 0 成本出库）。幂等 sourceKey=COST_OUT:{movementId}。
+ */
+export async function applyOutboundCost(
+  tx: Prisma.TransactionClient,
+  params: OutboundCostParams,
+): Promise<OutboundCostResult> {
+  if (params.quantity.lte(0)) {
+    return { ok: false, code: 'COST_INVALID_QTY', message: '出库数量必须大于 0', httpStatus: 400 };
+  }
+  const existing = await tx.inventoryCostSource.findFirst({ where: { sourceKey: params.sourceKey } });
+  if (existing) return { ok: true, onHandQty: '0', totalCost: '0', avgUnitCost: '0', outCost: '0', skipped: true };
+
+  const balance = await tx.inventoryCostBalance.findFirst({ where: { itemId: params.itemId } });
+  if (!balance || balance.avgUnitCost.lte(0)) {
+    return { ok: true, onHandQty: balance?.onHandQty.toString() ?? '0', totalCost: balance?.totalCost.toString() ?? '0', avgUnitCost: balance?.avgUnitCost.toString() ?? '0', outCost: '0', skipped: true };
+  }
+
+  const grossCost = params.quantity.mul(balance.avgUnitCost);
+  const outCost = Prisma.Decimal.min(grossCost, balance.totalCost);
+  const newTotal = balance.totalCost.minus(outCost);
+  const newQty = balance.onHandQty.minus(params.quantity).isNegative() ? new Prisma.Decimal(0) : balance.onHandQty.minus(params.quantity);
+
+  await tx.inventoryCostBalance.update({
+    where: { id: balance.id },
+    data: {
+      onHandQty: newQty,
+      totalCost: newTotal,
+      avgUnitCost: balance.avgUnitCost, // 出库不改变单位成本（移动平均：数量减少，单位成本不变）
+      version: { increment: 1 },
+      updatedById: params.actorId ?? null,
+      updatedAt: new Date(),
+    },
+  });
+  await tx.inventoryCostSource.create({
+    data: { sourceKey: params.sourceKey, itemId: params.itemId, quantity: params.quantity, baseAmount: outCost, createdById: params.actorId ?? null },
+  });
+
+  return {
+    ok: true,
+    onHandQty: newQty.toFixed(4),
+    totalCost: newTotal.toFixed(4),
+    avgUnitCost: balance.avgUnitCost.toFixed(4),
+    outCost: outCost.toFixed(4),
+    skipped: false,
+  };
+}
+
 export async function upsertInboundCost(
   tx: Prisma.TransactionClient,
   params: InboundCostParams,

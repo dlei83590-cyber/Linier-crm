@@ -32,6 +32,6 @@ CTO 2026-08-20 授权解除 D9 成本核算 HOLD。首块范围收敛为**移动
 
 ## 后续（独立 backlog）
 
-- 出库结转 + COGS GL 过账（Movement OUT 消费）
+- ~~出库结转~~ ✅（2026-08-20，ADR-0039：applyOutboundCost + ledger-command OUT 同事务）；GL COGS 分录仍后续（需 Movement 事件 outbox 化）
 - FIFO / Cost Layer / Landed Cost / 仓库维度成本
 - 成本差异分析 / 期末成本重估
