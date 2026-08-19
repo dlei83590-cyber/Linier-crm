@@ -8,12 +8,13 @@
  * 提供「新建供应商发票」入口（supplier-invoice:create）。
  * PermissionGuard 对齐 API requirePermission("supplier-invoice:view")。
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
+import { apiFetch } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { useSession } from "@/lib/session-context";
@@ -48,16 +49,29 @@ function SupplierInvoiceList() {
     state.status === "authenticated" &&
     state.user !== null &&
     hasPermission(state.user.roles as RoleCode[], actionPermission("supplier-invoice", "create"));
+  const [suppliers, setSuppliers] = useState<Array<{ id: string; name: string | null }>>([]);
+  const [supplierInput, setSupplierInput] = useState("");
+  const [dateFromInput, setDateFromInput] = useState("");
+  const [dateToInput, setDateToInput] = useState("");
   const [noInput, setNoInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
-  const [filters, setFilters] = useState<{ invoiceNo?: string; documentStatus?: string }>({});
+  const [filters, setFilters] = useState<{ invoiceNo?: string; supplierId?: string; documentStatus?: string; dateFrom?: string; dateTo?: string }>({});
+
+  useEffect(() => {
+    apiFetch<Array<{ id: string; name: string | null }>>("/api/suppliers?pageSize=100")
+      .then((body) => setSuppliers(Array.isArray(body.data) ? body.data : []))
+      .catch(() => undefined);
+  }, []);
 
   const { items, total, page, pageSize, loading, error, setPage, refresh } =
     useListQuery<SupplierInvoiceRow>("/api/supplier-invoices", filters);
 
   const applyFilter = () => {
-    const next: { invoiceNo?: string; documentStatus?: string } = {};
+    const next: { invoiceNo?: string; supplierId?: string; documentStatus?: string; dateFrom?: string; dateTo?: string } = {};
     if (noInput.trim()) next.invoiceNo = noInput.trim();
+    if (supplierInput) next.supplierId = supplierInput;
+    if (dateFromInput) next.dateFrom = dateFromInput;
+    if (dateToInput) next.dateTo = dateToInput;
     if (statusInput) next.documentStatus = statusInput;
     setFilters(next);
     setPage(1);
@@ -65,6 +79,9 @@ function SupplierInvoiceList() {
 
   const resetFilter = () => {
     setNoInput("");
+    setSupplierInput("");
+    setDateFromInput("");
+    setDateToInput("");
     setStatusInput("");
     setFilters({});
     setPage(1);
@@ -96,6 +113,12 @@ function SupplierInvoiceList() {
               placeholder="按发票号搜索"
               className={"w-40 " + SELECT_CLASS}
             />
+            <select value={supplierInput} onChange={(e) => setSupplierInput(e.target.value)} className={SELECT_CLASS}>
+              <option value="">全部供应商</option>
+              {suppliers.map((s) => (<option key={s.id} value={s.id}>{s.name ?? s.id}</option>))}
+            </select>
+            <input type="date" value={dateFromInput} onChange={(e) => setDateFromInput(e.target.value)} className={SELECT_CLASS} />
+            <input type="date" value={dateToInput} onChange={(e) => setDateToInput(e.target.value)} className={SELECT_CLASS} />
             <select
               value={statusInput}
               onChange={(e) => setStatusInput(e.target.value)}

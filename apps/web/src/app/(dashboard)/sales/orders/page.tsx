@@ -7,7 +7,7 @@
  * 不提供新建按钮（SO 唯一入口是 Quotation Convert，F2-6B）。
  * PermissionGuard 对齐 API requirePermission("sales-order:view")。
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { actionPermission } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
@@ -15,6 +15,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
+import { apiFetch } from "@/lib/api-client";
 import { formatDate, formatMoney } from "@/lib/format";
 
 interface SalesOrderRow {
@@ -41,16 +42,29 @@ const TONE_MAP: Record<string, StatusTone> = {
 };
 
 function SalesOrderList() {
+  const [customers, setCustomers] = useState<Array<{ id: string; name: string | null }>>([]);
+  const [customerInput, setCustomerInput] = useState("");
+  const [dateFromInput, setDateFromInput] = useState("");
+  const [dateToInput, setDateToInput] = useState("");
   const [codeInput, setCodeInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
-  const [filters, setFilters] = useState<{ code?: string; status?: string }>({});
+  const [filters, setFilters] = useState<{ code?: string; customerId?: string; status?: string; dateFrom?: string; dateTo?: string }>({});
+
+  useEffect(() => {
+    apiFetch<Array<{ id: string; name: string | null }>>("/api/business-partners?pageSize=100&type=CUSTOMER")
+      .then((body) => setCustomers(Array.isArray(body.data) ? body.data : []))
+      .catch(() => undefined);
+  }, []);
 
   const { items, total, page, pageSize, loading, error, setPage, refresh } =
     useListQuery<SalesOrderRow>("/api/sales-orders", filters);
 
   const applyFilter = () => {
-    const next: { code?: string; status?: string } = {};
+    const next: { code?: string; customerId?: string; status?: string; dateFrom?: string; dateTo?: string } = {};
     if (codeInput.trim()) next.code = codeInput.trim();
+    if (customerInput) next.customerId = customerInput;
+    if (dateFromInput) next.dateFrom = dateFromInput;
+    if (dateToInput) next.dateTo = dateToInput;
     if (statusInput) next.status = statusInput;
     setFilters(next);
     setPage(1);
@@ -58,6 +72,9 @@ function SalesOrderList() {
 
   const resetFilter = () => {
     setCodeInput("");
+    setCustomerInput("");
+    setDateFromInput("");
+    setDateToInput("");
     setStatusInput("");
     setFilters({});
     setPage(1);
@@ -79,6 +96,12 @@ function SalesOrderList() {
               placeholder="按单号搜索"
               className={"w-40 " + SELECT_CLASS}
             />
+            <select value={customerInput} onChange={(e) => setCustomerInput(e.target.value)} className={SELECT_CLASS}>
+              <option value="">全部客户</option>
+              {customers.map((c) => (<option key={c.id} value={c.id}>{c.name ?? c.id}</option>))}
+            </select>
+            <input type="date" value={dateFromInput} onChange={(e) => setDateFromInput(e.target.value)} className={SELECT_CLASS} />
+            <input type="date" value={dateToInput} onChange={(e) => setDateToInput(e.target.value)} className={SELECT_CLASS} />
             <select
               value={statusInput}
               onChange={(e) => setStatusInput(e.target.value)}

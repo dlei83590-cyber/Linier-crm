@@ -1,7 +1,7 @@
 "use client";
 
 /** Supplier Payments — 付款核销列表页（5C-2，CTO 解锁 2026-08-19） */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
@@ -33,14 +33,31 @@ function PaymentList() {
     state.status === "authenticated" &&
     state.user !== null &&
     hasPermission(state.user.roles as RoleCode[], actionPermission("supplier-payment", "create"));
+  const [suppliers, setSuppliers] = useState<Array<{ id: string; name: string | null }>>([]);
+  const [supplierInput, setSupplierInput] = useState("");
+  const [dateFromInput, setDateFromInput] = useState("");
+  const [dateToInput, setDateToInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
-  const [filters, setFilters] = useState<{ status?: string }>({});
+  const [filters, setFilters] = useState<{ supplierId?: string; dateFrom?: string; dateTo?: string; status?: string }>({});
+
+  useEffect(() => {
+    apiFetch<Array<{ id: string; name: string | null }>>("/api/suppliers?pageSize=100")
+      .then((body) => setSuppliers(Array.isArray(body.data) ? body.data : []))
+      .catch(() => undefined);
+  }, []);
 
   const { items, total, page, pageSize, loading, error, setPage, refresh } =
     useListQuery<PaymentRow>("/api/supplier-payments", filters);
 
-  const applyFilter = () => { const next: { status?: string } = {}; if (statusInput) next.status = statusInput; setFilters(next); setPage(1); };
-  const resetFilter = () => { setStatusInput(""); setFilters({}); setPage(1); };
+  const applyFilter = () => {
+    const next: { supplierId?: string; dateFrom?: string; dateTo?: string; status?: string } = {};
+    if (supplierInput) next.supplierId = supplierInput;
+    if (dateFromInput) next.dateFrom = dateFromInput;
+    if (dateToInput) next.dateTo = dateToInput;
+    if (statusInput) next.status = statusInput;
+    setFilters(next); setPage(1);
+  };
+  const resetFilter = () => { setSupplierInput(""); setDateFromInput(""); setDateToInput(""); setStatusInput(""); setFilters({}); setPage(1); };
 
   return (
     <AppPage>
@@ -56,6 +73,12 @@ function PaymentList() {
         }
         filters={
           <>
+            <select value={supplierInput} onChange={(e) => setSupplierInput(e.target.value)} className={SELECT_CLASS}>
+              <option value="">全部供应商</option>
+              {suppliers.map((s) => (<option key={s.id} value={s.id}>{s.name ?? s.id}</option>))}
+            </select>
+            <input type="date" value={dateFromInput} onChange={(e) => setDateFromInput(e.target.value)} className={SELECT_CLASS} />
+            <input type="date" value={dateToInput} onChange={(e) => setDateToInput(e.target.value)} className={SELECT_CLASS} />
             <select value={statusInput} onChange={(e) => setStatusInput(e.target.value)} className={SELECT_CLASS}>
               <option value="">全部状态</option>
               <option value="UNALLOCATED">未核销</option>
