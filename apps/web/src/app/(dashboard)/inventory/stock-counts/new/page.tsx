@@ -13,6 +13,7 @@ import Link from "next/link";
 import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
+import { CARD_CLASS } from "@/lib/ui-classes";
 
 function StockCountCreateForm() {
   const router = useRouter();
@@ -52,7 +53,7 @@ function StockCountCreateForm() {
   };
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white">
+    <div className={CARD_CLASS}>
       <div className="flex items-center justify-between border-b border-slate-200 p-4">
         <h1 className="text-lg font-semibold text-slate-800">新建库存盘点单</h1>
         <Link

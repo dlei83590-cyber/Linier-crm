@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { PermissionGuard } from '@/components/guard/permission-guard';
 import { apiFetch, ApiClientError, describeStatus } from '@/lib/api-client';
+import { CARD_CLASS } from "@/lib/ui-classes";
 
 interface ItemOption {
   id: string;
@@ -261,7 +262,7 @@ function TransferEditForm() {
 
   if (notEditable && detail) {
     return (
-      <div className="rounded-lg border border-slate-200 bg-white">
+      <div className={CARD_CLASS}>
         <div className="flex items-center justify-between border-b border-slate-200 p-4">
           <h1 className="text-lg font-semibold text-slate-800">编辑库存调拨</h1>
           <Link
@@ -281,7 +282,7 @@ function TransferEditForm() {
   }
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white">
+    <div className={CARD_CLASS}>
       <div className="flex items-center justify-between border-b border-slate-200 p-4">
         <h1 className="text-lg font-semibold text-slate-800">编辑库存调拨</h1>
         <div className="flex items-center gap-2">

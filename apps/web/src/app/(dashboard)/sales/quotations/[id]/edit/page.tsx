@@ -27,6 +27,7 @@ import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shar
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { useSession } from "@/lib/session-context";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
+import { CARD_CLASS } from "@/lib/ui-classes";
 import { formatMoney } from "@/lib/format";
 
 const EDITABLE_STATUSES = ["DRAFT", "REJECTED"] as const;
@@ -404,7 +405,7 @@ function QuotationEditForm() {
 
   if (notEditable && detail) {
     return (
-      <div className="rounded-lg border border-slate-200 bg-white">
+      <div className={CARD_CLASS}>
         <div className="flex items-center justify-between border-b border-slate-200 p-4">
           <h1 className="text-lg font-semibold text-slate-800">编辑报价单 — {detail.code}</h1>
           <Link
@@ -424,7 +425,7 @@ function QuotationEditForm() {
   }
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white">
+    <div className={CARD_CLASS}>
       <div className="flex items-center justify-between border-b border-slate-200 p-4">
         <h1 className="text-lg font-semibold text-slate-800">
           编辑报价单 — {detail?.code}

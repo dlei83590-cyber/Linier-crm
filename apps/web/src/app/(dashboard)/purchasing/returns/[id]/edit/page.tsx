@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
-import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
+import { BUTTON_PRIMARY_CLASS, CARD_CLASS } from "@/lib/ui-classes";
 
 const RETURN_TYPES = ["REJECTED_ON_RECEIPT", "RETURN_AFTER_STOCK_IN", "QUALITY_ISSUE"] as const;
 const SOURCE_REF_TYPES = ["RECEIPT_LINE", "WAREHOUSE_RECEIPT_LINE", "INSPECTION"] as const;
@@ -224,7 +224,7 @@ function PurchaseReturnEditForm() {
 
   if (notEditable && detail) {
     return (
-      <div className="rounded-lg border border-slate-200 bg-white">
+      <div className={CARD_CLASS}>
         <div className="flex items-center justify-between border-b border-slate-200 p-4">
           <h1 className="text-lg font-semibold text-slate-800">编辑采购退货</h1>
           <Link
@@ -244,7 +244,7 @@ function PurchaseReturnEditForm() {
   }
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white">
+    <div className={CARD_CLASS}>
       <div className="flex items-center justify-between border-b border-slate-200 p-4">
         <h1 className="text-lg font-semibold text-slate-800">编辑采购退货</h1>
         <div className="flex items-center gap-2">

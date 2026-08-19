@@ -16,6 +16,7 @@ import Link from "next/link";
 import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
+import { CARD_CLASS } from "@/lib/ui-classes";
 import { formatMoney } from "@/lib/format";
 
 interface SalesOrderDetail {
@@ -161,7 +162,7 @@ function SalesOrderEditForm() {
 
   if (notEditable && detail) {
     return (
-      <div className="rounded-lg border border-slate-200 bg-white">
+      <div className={CARD_CLASS}>
         <div className="flex items-center justify-between border-b border-slate-200 p-4">
           <h1 className="text-lg font-semibold text-slate-800">编辑销售订单 — {detail.code}</h1>
           <Link
@@ -181,7 +182,7 @@ function SalesOrderEditForm() {
   }
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white">
+    <div className={CARD_CLASS}>
       <div className="flex items-center justify-between border-b border-slate-200 p-4">
         <h1 className="text-lg font-semibold text-slate-800">
           编辑销售订单 — {detail?.code}
