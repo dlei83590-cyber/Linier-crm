@@ -86,10 +86,25 @@ export async function writeSupplierInvoiceEventInTx(
   });
 }
 
+/** GRIR 暂估/冲回事件载荷（独立接口——SupplierInvoiceEventPayload 的 invoiceId/invoiceNo/supplierId 为发票语义必填，不适用 GRIR） */
+export interface GrirEventPayload {
+  warehouseReceiptId?: string;
+  warehouseReceiptCode?: string;
+  purchaseReturnId?: string;
+  purchaseReturnCode?: string;
+  accruedLines?: Array<{ lineId: string; warehouseReceiptLineId: string; quantity: string; unitPrice: string; baseAmount: string; sourceKey: string }>;
+  reversedLines?: Array<{ lineId: string; purchaseReturnLineId: string; quantity: string; unitPrice: string; baseAmount: string; sourceKey: string; pendingQty?: string }>;
+  accruedById?: string;
+  accruedAt?: string; // ISO
+  reversedById?: string;
+  reversedAt?: string; // ISO
+  [key: string]: unknown;
+}
+
 /** 事务内原子写 Outbox（GrirAccrued；WHR POST 同事务——幂等键 GrirAccrued|warehouseReceiptId） */
 export async function writeGrirAccruedEvent(
   tx: Prisma.TransactionClient,
-  params: { warehouseReceiptId: string; payload: SupplierInvoiceEventPayload },
+  params: { warehouseReceiptId: string; payload: GrirEventPayload },
 ) {
   await writeDomainEvent(tx, {
     eventType: 'GrirAccrued',
@@ -103,7 +118,7 @@ export async function writeGrirAccruedEvent(
 /** 事务内原子写 Outbox（GrirReversed；PurchaseReturn RETURNED 同事务——幂等键 GrirReversed|purchaseReturnId） */
 export async function writeGrirReversedEvent(
   tx: Prisma.TransactionClient,
-  params: { purchaseReturnId: string; payload: SupplierInvoiceEventPayload },
+  params: { purchaseReturnId: string; payload: GrirEventPayload },
 ) {
   await writeDomainEvent(tx, {
     eventType: 'GrirReversed',
