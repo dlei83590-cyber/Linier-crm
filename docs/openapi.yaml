@@ -12980,6 +12980,44 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+  # ===== AP Open Items 只读查询（2026-08-18，Pending Pages：ap-open-items；5C-1C1 会计投影，无 5C-2 写端点）=====
+  /api/ap-open-items:
+    get:
+      tags: [AP Open Items]
+      summary: 应付未结项只读列表（ApOpenItem materialized projection）
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: supplierId
+          in: query
+          schema: { type: string }
+        - name: settlementStatus
+          in: query
+          schema: { type: string, enum: [UNPAID, PARTIALLY_PAID, PAID] }
+        - name: currency
+          in: query
+          schema: { type: string }
+        - name: dueDateFrom
+          in: query
+          schema: { type: string, format: date }
+        - name: dueDateTo
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApOpenItemListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 components:
   securitySchemes:
     bearerAuth:
@@ -20486,4 +20524,36 @@ components:
         name: { type: string }
         description: { type: [string, 'null'] }
         permissionCodes: { type: array, items: { type: string }, description: 全量替换 RolePermissions（API 能力；前端只读展示） }
+  # ===== AP Open Items 只读查询 schemas（2026-08-18，Pending Pages：ap-open-items）=====
+    ApOpenItem:
+      type: object
+      required: [id, supplierId, currency, openAmount, settlementStatus]
+      properties:
+        id: { type: string }
+        supplierId: { type: string }
+        supplier: { type: [object, 'null'], properties: { id: { type: string }, code: { type: string }, name: { type: string } } }
+        currency: { type: string, default: CNY }
+        openAmount: { type: string, description: Decimal 字符串（服务端投影 = Liability + CN/DN - Allocations，客户端只读） }
+        settlementStatus: { type: string, enum: [UNPAID, PARTIALLY_PAID, PAID] }
+        dueDate: { type: [string, 'null'], format: date }
+        apLiabilityFact: { type: [object, 'null'], properties: { grossAmount: { type: string }, netAmount: { type: string }, inputVatAmount: { type: string }, dueDate: { type: [string, 'null'] }, supplierInvoice: { type: [object, 'null'], properties: { id: { type: string }, invoiceNo: { type: string }, supplierInvoiceNo: { type: string }, documentStatus: { type: string } } } } }
+        version: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ApOpenItemListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/ApOpenItem" }
+        meta:
+          type: object
+          required: [page, pageSize, total]
+          properties:
+            page: { type: integer }
+            pageSize: { type: integer }
+            total: { type: integer }
+
                       disposition: { type: string, enum: [ACCEPT, REJECT, HOLD, CREATE_CN_DN] }

@@ -25,6 +25,7 @@
 - [x] 密码服务端 bcryptjs hash（复用 lib/auth.ts hashPassword），响应不返回 passwordHash
 - [x] 前端页面全部复用 F2 Workspace 共享层（AppPage / EntityListWorkspace / EntityFormWorkspace / useListQuery / PermissionGuard）
 - [x] **中文化审计（2026-08-18）**：9 页面全部 UI 标签/占位/错误消息为中文；uscc 按 GB 32100-2015 18 位校验（服务端大写归一化）；角色名/权限模块/动作经 labels.ts 中文映射展示（seed Role.name 英文不改 DB，仅展示层）
+- [x] **ap-open-items 只读查询页（2026-08-18）**：GET /api/ap-open-items 只读（supplierId/settlementStatus/currency/dueDate 过滤 + include supplier/apLiabilityFact）；ap-open-item:view 权限注册（ADR-0028，SUPER_ADMIN/ADMIN only 与 supplier-invoice 一致）；前端 /supplier-ap/open-items 列表页；5C-2 写端点不提供
 
 ## 3. 需在生产 Runtime 验收（部署后执行，CI-First 模式）
 

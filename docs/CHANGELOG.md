@@ -26,6 +26,18 @@
 - ADR-0029（Pending Pages Completion 决策记录）、docs/frontend/contract-cards/pending-pages-completion-gate.md（Design/Scope Gate 文档）、OpenAPI +7 域 paths、Frontend Module Map / Page Route Map 解除 hold 标记、docs/qa/PendingPages_QA.md、docs/test-cases/MasterData_Admin_CRUD_API.md、ROADMAP v1.23、SPRINT_PLAN
 
 ---
+## [Unreleased] - AP Open Items 只读查询（2026-08-18，Pending Pages：ap-open-items）
+
+### 新增（应付未结项只读列表，5C-1C1 会计事实投影）
+
+- **GET /api/ap-open-items**（只读查询，`ap-open-item:view`）：过滤 supplierId / settlementStatus（UNPAID|PARTIALLY_PAID|PAID）/ currency / dueDateFrom-dueDateTo + 分页；include supplier 摘要 + apLiabilityFact（grossAmount/netAmount/inputVatAmount + 关联发票 invoiceNo/supplierInvoiceNo/documentStatus）；排序 settlementStatus→dueDate→createdAt
+- **红线**：openAmount 为服务端投影（= Liability + CN/DN - Allocations），只读展示；**不提供任何 5C-2 写端点**（付款/核销/冲销 HOLD，解除需 CTO 指令）
+- **RBAC（ADR-0028）**：ap-open-item 模块注册进 shared PERMISSION_MODULES + seed SEED_ACTION_MODULES（会计敏感：仅 SUPER_ADMIN/ADMIN 静态授权，MANAGER 无——与 supplier-invoice 一致）
+- **前端**：`/supplier-ap/open-items` 只读列表页（供应商下拉 + 结算状态过滤 + 未结金额 formatMoney + StatusBadge 中文状态），registry availability hold→ready（contract=CONTRACT_LIST_ONLY / ui=UI_LIST）
+- **边界**：supplier-cn-dn / payment-allocation / reports 保持 hold（5C-2 / BI HOLD，业务未实现，不伪造权限/页面）
+
+---
+
 ## [Unreleased] - Inventory Read Model（P1，2026-08-18）
 
 ### 新增（Inventory Read Model Query API + 前端两页替换 Placeholder，Design Gate 批准后实现）

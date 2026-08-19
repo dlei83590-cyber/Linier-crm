@@ -103,6 +103,17 @@
 | ROL-8 | DELETE | 405/404（无 DELETE 端点） |
 | ROL-9 | 权限展示（roles 编辑页） | 中文（物料 · 查看，labels.ts moduleLabel/permissionLabel） |
 
+## 8.5 /api/ap-open-items（ap-open-item:view，只读）
+
+| 用例 | 输入 | 期望 |
+|---|---|---|
+| APO-1 | GET 分页 + settlementStatus=UNPAID 过滤 | 200 { success, data[], meta }；UNPAID 在前 |
+| APO-2 | GET supplierId 过滤 | 200 仅该供应商 Open Items |
+| APO-3 | GET dueDateFrom/dueDateTo | 200 到期日范围过滤 |
+| APO-4 | POST/PATCH/DELETE | 405（无写端点） |
+| APO-5 | 无 ap-open-item:view 角色（MANAGER） | 403 FORBIDDEN |
+| APO-6 | 响应字段 | openAmount 为 Decimal 字符串（服务端投影），不含客户端计算 |
+
 ## 9. 前端页面（生产 Runtime smoke）
 
 | 用例 | 路径 | 期望 |

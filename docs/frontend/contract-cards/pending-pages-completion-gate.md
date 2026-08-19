@@ -30,6 +30,7 @@
 | 6 | /departments | departments | hold | 无 | ✅ Department | 新建 CRUD API + 列表/新建/编辑页（树形） |
 | 7 | /roles | roles | hold | 无 | ✅ Role + Permission | 新建 CRUD API + 列表/新建/编辑页（权限映射） |
 | 8 | /project-visits | project-visits | hold | 仅 projects/[id]/visits | ✅ ProjectVisit | **独立页改引导**（复用项目内子资源，不建平行 CRUD） |
+| 10 | /supplier-ap/open-items | ap-open-items | hold→ready | ✅ ApOpenItem（5C-1C1 POST 产生）；❌ 原无读 API | ✅ ApOpenItem | **只读查询页**（GET /api/ap-open-items + 列表页；5C-2 写端点不提供，保持红线） |
 | 9 | /project-risks | project-risks | hold | 仅 projects/[id]/risks | ✅ ProjectRisk | **独立页改引导**（同上） |
 
 **已核实可复用**：统一 API 响应（lib/api/response.ts ok/fail/parsePagination）、认证（lib/api-helpers authenticate/requirePermission/requestMeta/writeAuditLog）、价格表 CRUD 范式（price-lists）、Master-Data 只读列表范式（unit-of-measures/warehouses）、前端 Workspace 原语（AppPage/EntityListWorkspace/useListQuery/PermissionGuard/StatusBadge）。

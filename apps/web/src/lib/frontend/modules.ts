@@ -613,14 +613,15 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     createPermission: actionPermission('supplier-invoice', 'create'),
     order: 1,
   },
+  // ap-open-items：Pending Pages — 只读查询（GET /api/ap-open-items，5C-1C1 POST 产生的会计投影；不提供 5C-2 写入口）
   {
     id: 'ap-open-items',
     domain: 'supplier-ap',
     label: '应付未结项',
     route: '/supplier-ap/open-items',
-    permission: null,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
+    permission: actionPermission('ap-open-item', 'view'),
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_LIST },
     order: 2,
   },
   // Supplier CN/DN（5C-2 HOLD）：不得复用 4E-3 销售 AR CN/DN 权限（CREDIT_DEBIT_NOTE_READ 对应销售侧事实）；

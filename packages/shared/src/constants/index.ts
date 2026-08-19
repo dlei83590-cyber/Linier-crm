@@ -302,6 +302,8 @@ export const PERMISSION_MODULES = [
   "inventory-movement",
   // Sprint 5C-1：Supplier Invoice 供应商发票（动作映射：create→supplier-invoice:create（创建即取号 SINV，P1 Final）；submit→supplier-invoice:edit；cancel→supplier-invoice:close；line 仅 view/edit——见 SEED_RESTRICTED_ACTION_PERMISSIONS；**5C-1A 状态机 DRAFT→SUBMITTED（Match/POST 属 5C-1B/1C，本阶段不到达）；SUBMITTED ≠ POSTED**）
   "supplier-invoice",
+  // AP Open Item 只读查询（5C-1C1 POST 产生的会计投影；ADR-0028：ap-open-item:view ∈ ALL_ACTION_PERMISSIONS）
+  "ap-open-item",
 ] as const;
 
 /** 生成模块×动作权限码（如 "item:view"） */
