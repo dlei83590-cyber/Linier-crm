@@ -10,7 +10,7 @@ import { AppPage, EntityListWorkspace } from "@/components/workspace";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
 import { apiFetch } from "@/lib/api-client";
-import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { roleLabel } from "@/lib/frontend/labels";
 
 interface UserRow {
@@ -98,7 +98,7 @@ function UserList() {
                 if (e.key === "Enter") applyFilter();
               }}
               placeholder="按邮箱搜索"
-              className="w-48 rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={"w-48 " + SELECT_CLASS}
             />
             <input
               value={nameInput}
@@ -107,12 +107,12 @@ function UserList() {
                 if (e.key === "Enter") applyFilter();
               }}
               placeholder="按姓名搜索"
-              className="w-32 rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={"w-32 " + SELECT_CLASS}
             />
             <select
               value={deptInput}
               onChange={(e) => setDeptInput(e.target.value)}
-              className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={SELECT_CLASS}
             >
               <option value="">全部部门</option>
               {depts.map((d) => (
@@ -124,7 +124,7 @@ function UserList() {
             <select
               value={activeInput}
               onChange={(e) => setActiveInput(e.target.value)}
-              className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={SELECT_CLASS}
             >
               <option value="">全部状态</option>
               <option value="true">启用</option>

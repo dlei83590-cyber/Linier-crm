@@ -14,7 +14,7 @@ import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shar
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
-import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
@@ -97,7 +97,7 @@ function ReceiptList() {
             <select
               value={statusInput}
               onChange={(e) => setStatusInput(e.target.value)}
-              className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={SELECT_CLASS}
             >
               <option value="">全部状态</option>
               {STATUS_OPTIONS.map((s) => (

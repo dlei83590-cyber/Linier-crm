@@ -12,7 +12,7 @@ import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shar
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
-import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
 
@@ -124,7 +124,7 @@ function PriceListPage() {
                 if (e.key === "Enter") applyFilter();
               }}
               placeholder="按编码搜索"
-              className="w-40 rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={"w-40 " + SELECT_CLASS}
             />
             <input
               value={nameInput}
@@ -133,12 +133,12 @@ function PriceListPage() {
                 if (e.key === "Enter") applyFilter();
               }}
               placeholder="按名称搜索"
-              className="w-40 rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={"w-40 " + SELECT_CLASS}
             />
             <select
               value={statusInput}
               onChange={(e) => setStatusInput(e.target.value)}
-              className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={SELECT_CLASS}
             >
               <option value="">全部状态</option>
               {STATUS_OPTIONS.map((s) => (
@@ -150,7 +150,7 @@ function PriceListPage() {
             <select
               value={typeInput}
               onChange={(e) => setTypeInput(e.target.value)}
-              className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={SELECT_CLASS}
             >
               <option value="">全部类型</option>
               {PRICE_TYPE_OPTIONS.map((t) => (

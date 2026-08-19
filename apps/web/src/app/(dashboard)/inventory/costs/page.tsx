@@ -5,7 +5,7 @@ import { useState } from "react";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityListWorkspace } from "@/components/workspace";
-import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatMoney } from "@/lib/format";
 
@@ -42,7 +42,7 @@ function InventoryCostList() {
         title="库存成本（移动加权平均）"
         description="入库自动更新移动平均成本（未税采购成本口径）；成本敏感仅 SUPER_ADMIN/ADMIN 可查看"
         filters={
-          <input value={codeInput} onChange={(e) => setCodeInput(e.target.value)} placeholder="物料编码" className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none" />
+          <input value={codeInput} onChange={(e) => setCodeInput(e.target.value)} placeholder="物料编码" className={SELECT_CLASS} />
         }
         toolbarActions={
           <>

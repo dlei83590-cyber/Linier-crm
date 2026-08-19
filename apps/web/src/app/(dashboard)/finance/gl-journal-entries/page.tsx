@@ -6,7 +6,7 @@ import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
-import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate, formatMoney } from "@/lib/format";
 
@@ -52,7 +52,7 @@ function GlEntryList() {
         description="GL 过账消费 5C 会计事件自动生成（借贷平衡、幂等、POSTED 终态不可变）；无手工录入"
         filters={
           <>
-            <select value={sourceTypeInput} onChange={(e) => setSourceTypeInput(e.target.value)} className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none">
+            <select value={sourceTypeInput} onChange={(e) => setSourceTypeInput(e.target.value)} className={SELECT_CLASS}>
               <option value="">全部来源</option>
               <option value="SupplierInvoicePosted">发票过账</option>
               <option value="SupplierPaymentApplied">付款核销</option>

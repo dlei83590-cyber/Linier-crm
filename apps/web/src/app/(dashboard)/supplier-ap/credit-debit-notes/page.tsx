@@ -7,7 +7,7 @@ import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shar
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
-import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate, formatMoney } from "@/lib/format";
 
@@ -76,12 +76,12 @@ function CnDnList() {
         }
         filters={
           <>
-            <select value={typeInput} onChange={(e) => setTypeInput(e.target.value)} className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none">
+            <select value={typeInput} onChange={(e) => setTypeInput(e.target.value)} className={SELECT_CLASS}>
               <option value="">全部类型</option>
               <option value="CREDIT">贷项（冲减应付）</option>
               <option value="DEBIT">借项（增加应付）</option>
             </select>
-            <select value={statusInput} onChange={(e) => setStatusInput(e.target.value)} className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none">
+            <select value={statusInput} onChange={(e) => setStatusInput(e.target.value)} className={SELECT_CLASS}>
               <option value="">全部状态</option>
               <option value="DRAFT">草稿</option>
               <option value="SUBMITTED">已提交</option>

@@ -16,7 +16,7 @@ import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspac
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
 import { apiFetch } from "@/lib/api-client";
-import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 
 interface WarehouseOption {
   id: string;
@@ -130,12 +130,12 @@ function MovementList() {
                 if (e.key === "Enter") applyFilter();
               }}
               placeholder="按物料编码/名称搜索"
-              className="w-44 rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={"w-44 " + SELECT_CLASS}
             />
             <select
               value={warehouseInput}
               onChange={(e) => setWarehouseInput(e.target.value)}
-              className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={SELECT_CLASS}
             >
               <option value="">全部仓库</option>
               {warehouses.map((w) => (
@@ -147,7 +147,7 @@ function MovementList() {
             <select
               value={movementTypeInput}
               onChange={(e) => setMovementTypeInput(e.target.value)}
-              className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={SELECT_CLASS}
             >
               <option value="">全部类型</option>
               {MOVEMENT_TYPE_OPTIONS.map((s) => (
@@ -159,7 +159,7 @@ function MovementList() {
             <select
               value={directionInput}
               onChange={(e) => setDirectionInput(e.target.value)}
-              className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={SELECT_CLASS}
             >
               <option value="">全部方向</option>
               {DIRECTION_OPTIONS.map((s) => (
@@ -171,7 +171,7 @@ function MovementList() {
             <select
               value={sourceTypeInput}
               onChange={(e) => setSourceTypeInput(e.target.value)}
-              className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={SELECT_CLASS}
             >
               <option value="">全部来源</option>
               {SOURCE_TYPE_OPTIONS.map((s) => (
@@ -184,14 +184,14 @@ function MovementList() {
               type="date"
               value={dateFromInput}
               onChange={(e) => setDateFromInput(e.target.value)}
-              className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={SELECT_CLASS}
             />
             <span className="text-xs text-ink-muted">至</span>
             <input
               type="date"
               value={dateToInput}
               onChange={(e) => setDateToInput(e.target.value)}
-              className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={SELECT_CLASS}
             />
           </>
         }

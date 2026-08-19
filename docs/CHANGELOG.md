@@ -36,6 +36,7 @@
 - **表单控件统一（批次3）**：新增 FormField 组件 + lib/ui-classes（INPUT_CLASS/BUTTON_*/CARD_CLASS 单一来源）；**31 个新建/编辑页** inputClass 常量改为共享引用（消除重复）
 - **Field 函数迁移（批次4）**：**30 个页面**页面级重复 `Field` 函数全部删除，JSX 迁移到共享 `FormField` 组件（-1046 行重复定义；逐文件精准 edit，无 JSX 破坏）
 - **按钮/操作区统一（批次5）**：主按钮（106+14 处）迁移 BUTTON_PRIMARY_CLASS、次按钮（43 处）迁移 BUTTON_SECONDARY_CLASS（消除各页散落样式；尺寸特化变体 px-2/px-4 保留以维持布局层次）
+- **表格/列表控件统一（批次6）**：新增 SELECT_CLASS（筛选控件专用非 w-full 保 inline 布局）；**41 个列表页 91 处**筛选下拉/搜索框迁移共享类（宽度变体保留定宽 + 基础类；INPUT_CLASS 保留表单字段用）
 
 ### 边界
 

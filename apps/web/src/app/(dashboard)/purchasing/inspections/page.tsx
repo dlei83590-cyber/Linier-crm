@@ -13,7 +13,7 @@ import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@ni
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
-import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
 
@@ -83,7 +83,7 @@ function InspectionList() {
             <select
               value={modeInput}
               onChange={(e) => setModeInput(e.target.value)}
-              className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={SELECT_CLASS}
             >
               <option value="">全部模式</option>
               {MODE_OPTIONS.map((m) => (
@@ -95,7 +95,7 @@ function InspectionList() {
             <select
               value={resultInput}
               onChange={(e) => setResultInput(e.target.value)}
-              className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={SELECT_CLASS}
             >
               <option value="">全部结果</option>
               <option value="QUALIFIED">合格</option>

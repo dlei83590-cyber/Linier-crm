@@ -11,7 +11,7 @@ import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shar
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
-import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
 
@@ -108,7 +108,7 @@ function BusinessPartnerList() {
                 if (e.key === "Enter") applyFilter();
               }}
               placeholder="按编码搜索"
-              className="w-40 rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={"w-40 " + SELECT_CLASS}
             />
             <input
               value={nameInput}
@@ -117,12 +117,12 @@ function BusinessPartnerList() {
                 if (e.key === "Enter") applyFilter();
               }}
               placeholder="按名称搜索"
-              className="w-40 rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={"w-40 " + SELECT_CLASS}
             />
             <select
               value={typeInput}
               onChange={(e) => setTypeInput(e.target.value)}
-              className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={SELECT_CLASS}
             >
               <option value="">全部类型</option>
               <option value="CUSTOMER">客户</option>
@@ -136,7 +136,7 @@ function BusinessPartnerList() {
                 if (e.key === "Enter") applyFilter();
               }}
               placeholder="按区域搜索"
-              className="w-32 rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={"w-32 " + SELECT_CLASS}
             />
           </>
         }

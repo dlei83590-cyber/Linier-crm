@@ -13,7 +13,7 @@ import { actionPermission } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
-import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
 
@@ -76,7 +76,7 @@ function AuditLogList() {
                 if (e.key === "Enter") applyFilter();
               }}
               placeholder="实体类型"
-              className="w-36 rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={"w-36 " + SELECT_CLASS}
             />
             <input
               value={actionInput}
@@ -85,12 +85,12 @@ function AuditLogList() {
                 if (e.key === "Enter") applyFilter();
               }}
               placeholder="操作"
-              className="w-36 rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={"w-36 " + SELECT_CLASS}
             />
             <select
               value={resultInput}
               onChange={(e) => setResultInput(e.target.value)}
-              className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={SELECT_CLASS}
             >
               <option value="">全部结果</option>
               {RESULT_OPTIONS.map((r) => (

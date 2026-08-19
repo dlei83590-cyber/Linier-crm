@@ -13,7 +13,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { hasPermission, actionPermission, PERMISSIONS, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
-import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
 
@@ -80,12 +80,12 @@ function StockCountList() {
                 if (e.key === "Enter") applyFilter();
               }}
               placeholder="按盘点单号搜索"
-              className="w-40 rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={"w-40 " + SELECT_CLASS}
             />
             <select
               value={statusInput}
               onChange={(e) => setStatusInput(e.target.value)}
-              className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+              className={SELECT_CLASS}
             >
               <option value="">全部状态</option>
               {STATUS_OPTIONS.map((s) => (

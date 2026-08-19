@@ -7,6 +7,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityFormWorkspace, StatusBadge, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { SELECT_CLASS } from "@/lib/ui-classes";
 import { formatDate, formatMoney } from "@/lib/format";
 
 interface OpenItemRow {
@@ -130,13 +131,13 @@ function PaymentDetailView() {
             <h2 className="mb-3 text-sm font-semibold text-ink-primary">核销应付未结项（同供应商同币种；防超核销锁内重算）</h2>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <label className="flex flex-col gap-1"><span className="text-sm font-medium text-ink-secondary">未结算项</span>
-                <select value={selectedItemId} onChange={(e) => setSelectedItemId(e.target.value)} className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none">
+                <select value={selectedItemId} onChange={(e) => setSelectedItemId(e.target.value)} className={SELECT_CLASS}>
                   <option value="">请选择</option>
                   {openItems.map((oi) => (<option key={oi.id} value={oi.id}>{oi.apLiabilityFact?.supplierInvoice?.invoiceNo ?? "未结项"}（余额 {formatMoney(oi.openAmount, oi.currency)}）</option>))}
                 </select>
               </label>
               <label className="flex flex-col gap-1"><span className="text-sm font-medium text-ink-secondary">核销金额</span>
-                <input type="number" min={0.01} step="any" value={allocAmount} onChange={(e) => setAllocAmount(e.target.value)} className="rounded-md border border-border px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none" />
+                <input type="number" min={0.01} step="any" value={allocAmount} onChange={(e) => setAllocAmount(e.target.value)} className={SELECT_CLASS} />
               </label>
             </div>
             {canVoid && (<button type="button" onClick={runVoid} disabled={acting} className="mt-3 rounded-md border border-status-danger-border px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-red-50 disabled:opacity-50">作废付款单（仅未核销）</button>)}
