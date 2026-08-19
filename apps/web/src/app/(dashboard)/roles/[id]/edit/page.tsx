@@ -132,7 +132,7 @@ function RoleEditForm() {
       <section className="rounded-md border border-border p-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <FormField label="编码">
-            <input value={code} readOnly className={`${inputClass} bg-slate-50`} />
+            <input value={code} readOnly className={`${inputClass} bg-canvas`} />
           </FormField>
           <FormField label="名称" required>
             <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />

@@ -121,14 +121,14 @@ function InspectionCreateForm() {
 
   return (
     <div className={CARD_CLASS}>
-      <div className="flex items-center justify-between border-b border-slate-200 p-4">
-        <h1 className="text-lg font-semibold text-slate-800">新建质检记录</h1>
+      <div className="flex items-center justify-between border-b border-border p-4">
+        <h1 className="text-lg font-semibold text-ink-primary">新建质检记录</h1>
         <Link
           href="/purchasing/inspections"
           onClick={(e) => {
             if (dirty && !window.confirm("有未保存的更改，确定离开？")) e.preventDefault();
           }}
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+          className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
         >
           返回列表
         </Link>
@@ -136,7 +136,7 @@ function InspectionCreateForm() {
 
       <div className="p-4">
         {error && (
-          <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div className="mb-4 rounded-md bg-status-danger-bg p-3 text-sm text-status-danger-text">
             <p>
               {describeStatus(error.status)}：{error.message}
               {error.code ? `（${error.code}）` : ""}
@@ -144,15 +144,15 @@ function InspectionCreateForm() {
           </div>
         )}
 
-        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-slate-50 p-4 text-sm md:grid-cols-2">
+        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-canvas p-4 text-sm md:grid-cols-2">
           <div>
-            <label className="block text-xs text-slate-500">收货单（已 RECEIVED）</label>
+            <label className="block text-xs text-ink-secondary">收货单（已 RECEIVED）</label>
             <select
               onChange={(e) => {
                 loadReceiptLines(e.target.value);
                 markDirty();
               }}
-              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:border-brand-500 focus:outline-none"
+              className="mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:border-brand-500 focus:outline-none"
             >
               <option value="">选择收货单</option>
               {receipts.map((r) => (
@@ -163,14 +163,14 @@ function InspectionCreateForm() {
             </select>
           </div>
           <div>
-            <label className="block text-xs text-slate-500">来源收货行（必填）</label>
+            <label className="block text-xs text-ink-secondary">来源收货行（必填）</label>
             <select
               value={purchaseReceiptLineId}
               onChange={(e) => {
                 setPurchaseReceiptLineId(e.target.value);
                 markDirty();
               }}
-              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:border-brand-500 focus:outline-none"
+              className="mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:border-brand-500 focus:outline-none"
             >
               <option value="">选择收货行</option>
               {lines.map((l) => (
@@ -181,18 +181,18 @@ function InspectionCreateForm() {
               ))}
             </select>
             {fieldErrors.purchaseReceiptLineId && (
-              <p className="mt-0.5 text-xs text-red-600">{fieldErrors.purchaseReceiptLineId}</p>
+              <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.purchaseReceiptLineId}</p>
             )}
           </div>
           <div>
-            <label className="block text-xs text-slate-500">质检模式（必填）</label>
+            <label className="block text-xs text-ink-secondary">质检模式（必填）</label>
             <select
               value={inspectionMode}
               onChange={(e) => {
                 setInspectionMode(e.target.value);
                 markDirty();
               }}
-              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:border-brand-500 focus:outline-none"
+              className="mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:border-brand-500 focus:outline-none"
             >
               {MODE_OPTIONS.map((m) => (
                 <option key={m} value={m}>
@@ -201,11 +201,11 @@ function InspectionCreateForm() {
               ))}
             </select>
             {fieldErrors.inspectionMode && (
-              <p className="mt-0.5 text-xs text-red-600">{fieldErrors.inspectionMode}</p>
+              <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.inspectionMode}</p>
             )}
           </div>
           <div className="col-span-2">
-            <label className="block text-xs text-slate-500">备注（可选，≤500）</label>
+            <label className="block text-xs text-ink-secondary">备注（可选，≤500）</label>
             <textarea
               value={remark}
               onChange={(e) => {
@@ -213,7 +213,7 @@ function InspectionCreateForm() {
                 markDirty();
               }}
               rows={2}
-              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:border-brand-500 focus:outline-none"
+              className="mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:border-brand-500 focus:outline-none"
             />
           </div>
         </div>
@@ -227,7 +227,7 @@ function InspectionCreateForm() {
           >
             {submitting ? "提交中…" : "创建（PENDING）"}
           </button>
-          {dirty && <span className="text-xs text-amber-600">有未保存的更改</span>}
+          {dirty && <span className="text-xs text-status-warning-text">有未保存的更改</span>}
         </div>
       </div>
     </div>

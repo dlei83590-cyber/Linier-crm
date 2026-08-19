@@ -46,7 +46,7 @@ function DataBlock({ title, data }: { title: string; data: unknown }) {
   return (
     <section className="border-border rounded-md border p-4">
       <h2 className="text-ink-primary mb-3 text-sm font-semibold">{title}</h2>
-      <pre className="text-ink-secondary overflow-x-auto rounded-md bg-slate-50 p-3 text-xs">
+      <pre className="text-ink-secondary overflow-x-auto rounded-md bg-canvas p-3 text-xs">
         {data === undefined || data === null ? "—" : JSON.stringify(data, null, 2)}
       </pre>
     </section>

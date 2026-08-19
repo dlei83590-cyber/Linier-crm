@@ -321,7 +321,7 @@ export function TaskFields({
   return (
     <div className="space-y-3">
       {milestoneUnavailable && (
-        <p className="text-xs text-amber-600">原关联里程碑已不可用，请清空或重新选择后保存。</p>
+        <p className="text-xs text-status-warning-text">原关联里程碑已不可用，请清空或重新选择后保存。</p>
       )}
       <div>
         <label className="text-ink-secondary block text-xs font-medium">关联里程碑</label>
@@ -634,10 +634,10 @@ export function ProductFields({
   return (
     <div className="space-y-3">
       {itemUnavailable && (
-        <p className="text-xs text-amber-600">原关联物料已不可用，请重新选择后保存。</p>
+        <p className="text-xs text-status-warning-text">原关联物料已不可用，请重新选择后保存。</p>
       )}
       {error && (
-        <p className="text-xs text-red-600">物料加载失败：{error}（无法选择物料，请重试或联系管理员）</p>
+        <p className="text-xs text-status-danger-text">物料加载失败：{error}（无法选择物料，请重试或联系管理员）</p>
       )}
       <div>
         <label className="text-ink-secondary block text-xs font-medium">物料 *</label>
@@ -725,9 +725,9 @@ export function TagFields({
 
   return (
     <div className="space-y-3">
-      {duplicateHint && <p className="text-xs text-amber-600">{duplicateHint}</p>}
+      {duplicateHint && <p className="text-xs text-status-warning-text">{duplicateHint}</p>}
       {error && (
-        <p className="text-xs text-red-600">标签加载失败：{error}（无法选择标签，请重试或联系管理员）</p>
+        <p className="text-xs text-status-danger-text">标签加载失败：{error}（无法选择标签，请重试或联系管理员）</p>
       )}
       <div>
         <label className="text-ink-secondary block text-xs font-medium">标签 *</label>

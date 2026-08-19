@@ -156,7 +156,7 @@ function AdjustmentDetailPage() {
             {detail.status === "DRAFT" && canEdit && (
               <Link
                 href={`/inventory/adjustments/${id}/edit`}
-                className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-slate-50"
+                className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-canvas"
               >
                 编辑
               </Link>
@@ -186,7 +186,7 @@ function AdjustmentDetailPage() {
                 type="button"
                 onClick={() => setConfirmAction("cancel")}
                 disabled={actionBusy}
-                className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-status-danger-bg disabled:cursor-not-allowed disabled:opacity-50"
               >
                 取消
               </button>
@@ -219,7 +219,7 @@ function AdjustmentDetailPage() {
           </h2>
           <div className="overflow-x-auto">
             <table className="divide-border min-w-full divide-y text-sm">
-              <thead className="bg-slate-50 text-left text-xs font-medium text-ink-secondary">
+              <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
                 <tr>
                   <th className="px-3 py-2 font-medium">仓库</th>
                   <th className="px-3 py-2 font-medium">库位</th>

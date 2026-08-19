@@ -140,7 +140,7 @@ function PaymentDetailView() {
                 <input type="number" min={0.01} step="any" value={allocAmount} onChange={(e) => setAllocAmount(e.target.value)} className={SELECT_CLASS} />
               </label>
             </div>
-            {canVoid && (<button type="button" onClick={runVoid} disabled={acting} className="mt-3 rounded-md border border-status-danger-border px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-red-50 disabled:opacity-50">作废付款单（仅未核销）</button>)}
+            {canVoid && (<button type="button" onClick={runVoid} disabled={acting} className="mt-3 rounded-md border border-status-danger-border px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-status-danger-bg disabled:opacity-50">作废付款单（仅未核销）</button>)}
           </section>
         )}
         <section className="rounded-md border border-border p-4">

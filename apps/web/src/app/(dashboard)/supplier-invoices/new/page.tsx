@@ -150,14 +150,14 @@ function SupplierInvoiceCreateForm() {
 
   return (
     <div className={CARD_CLASS}>
-      <div className="flex items-center justify-between border-b border-slate-200 p-4">
-        <h1 className="text-lg font-semibold text-slate-800">新建供应商发票</h1>
+      <div className="flex items-center justify-between border-b border-border p-4">
+        <h1 className="text-lg font-semibold text-ink-primary">新建供应商发票</h1>
         <Link
           href="/supplier-invoices"
           onClick={(e) => {
             if (dirty && !window.confirm("有未保存的更改，确定离开？")) e.preventDefault();
           }}
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+          className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
         >
           返回列表
         </Link>
@@ -165,7 +165,7 @@ function SupplierInvoiceCreateForm() {
 
       <div className="p-4">
         {error && (
-          <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div className="mb-4 rounded-md bg-status-danger-bg p-3 text-sm text-status-danger-text">
             <p>
               {describeStatus(error.status)}：{error.message}
               {error.code ? `（${error.code}）` : ""}
@@ -173,77 +173,77 @@ function SupplierInvoiceCreateForm() {
           </div>
         )}
 
-        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-slate-50 p-4 text-sm md:grid-cols-3">
+        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-canvas p-4 text-sm md:grid-cols-3">
           <div>
-            <label className="block text-xs text-slate-500">供应商 *</label>
+            <label className="block text-xs text-ink-secondary">供应商 *</label>
             <select
               value={supplierId}
               onChange={(e) => { setSupplierId(e.target.value); markDirty(); }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             >
               <option value="">选择供应商</option>
               {suppliers.map((s) => (
                 <option key={s.id} value={s.id}>{s.code ?? ""} {s.name ?? ""}</option>
               ))}
             </select>
-            {fieldErrors.supplierId && <p className="mt-0.5 text-xs text-red-600">{fieldErrors.supplierId}</p>}
+            {fieldErrors.supplierId && <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.supplierId}</p>}
           </div>
           <div>
-            <label className="block text-xs text-slate-500">供应商发票号 *（≤100）</label>
+            <label className="block text-xs text-ink-secondary">供应商发票号 *（≤100）</label>
             <input
               value={supplierInvoiceNo}
               onChange={(e) => { setSupplierInvoiceNo(e.target.value); markDirty(); }}
               maxLength={100}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
-            {fieldErrors.supplierInvoiceNo && <p className="mt-0.5 text-xs text-red-600">{fieldErrors.supplierInvoiceNo}</p>}
+            {fieldErrors.supplierInvoiceNo && <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.supplierInvoiceNo}</p>}
           </div>
           <div>
-            <label className="block text-xs text-slate-500">开票日期 *</label>
+            <label className="block text-xs text-ink-secondary">开票日期 *</label>
             <input
               type="date"
               value={invoiceDate}
               onChange={(e) => { setInvoiceDate(e.target.value); markDirty(); }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
-            {fieldErrors.invoiceDate && <p className="mt-0.5 text-xs text-red-600">{fieldErrors.invoiceDate}</p>}
+            {fieldErrors.invoiceDate && <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.invoiceDate}</p>}
           </div>
           <div>
-            <label className="block text-xs text-slate-500">收到日期 *</label>
+            <label className="block text-xs text-ink-secondary">收到日期 *</label>
             <input
               type="date"
               value={receivedDate}
               onChange={(e) => { setReceivedDate(e.target.value); markDirty(); }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
-            {fieldErrors.receivedDate && <p className="mt-0.5 text-xs text-red-600">{fieldErrors.receivedDate}</p>}
+            {fieldErrors.receivedDate && <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.receivedDate}</p>}
           </div>
           <div>
-            <label className="block text-xs text-slate-500">币种</label>
-            <input value={currency} onChange={(e) => { setCurrency(e.target.value); markDirty(); }} maxLength={10} className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none" />
+            <label className="block text-xs text-ink-secondary">币种</label>
+            <input value={currency} onChange={(e) => { setCurrency(e.target.value); markDirty(); }} maxLength={10} className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none" />
           </div>
           <div>
-            <label className="block text-xs text-slate-500">汇率</label>
-            <input type="number" min="0" step="any" value={exchangeRate} onChange={(e) => { setExchangeRate(e.target.value); markDirty(); }} className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none" />
+            <label className="block text-xs text-ink-secondary">汇率</label>
+            <input type="number" min="0" step="any" value={exchangeRate} onChange={(e) => { setExchangeRate(e.target.value); markDirty(); }} className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none" />
           </div>
           <div>
-            <label className="block text-xs text-slate-500">账期（可选）</label>
-            <input type="date" value={paymentDueDate} onChange={(e) => { setPaymentDueDate(e.target.value); markDirty(); }} className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none" />
+            <label className="block text-xs text-ink-secondary">账期（可选）</label>
+            <input type="date" value={paymentDueDate} onChange={(e) => { setPaymentDueDate(e.target.value); markDirty(); }} className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none" />
           </div>
           <div className="col-span-2 md:col-span-1">
-            <label className="block text-xs text-slate-500">备注（可选，≤500）</label>
-            <input value={remark} onChange={(e) => { setRemark(e.target.value); markDirty(); }} maxLength={500} className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none" />
+            <label className="block text-xs text-ink-secondary">备注（可选，≤500）</label>
+            <input value={remark} onChange={(e) => { setRemark(e.target.value); markDirty(); }} maxLength={500} className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none" />
           </div>
         </div>
 
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-sm font-medium text-slate-700">发票行（至少一行；双溯源 PO 行 + 已过账入库行）</h2>
+          <h2 className="text-sm font-medium text-ink-secondary">发票行（至少一行；双溯源 PO 行 + 已过账入库行）</h2>
           <button type="button" onClick={addLine} className="bg-brand-600 hover:bg-brand-700 rounded-md px-3 py-1.5 text-sm font-medium text-white">+ 添加行</button>
         </div>
 
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500">
+            <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
               <tr>
                 <th className="px-2 py-2">PO 行 ID</th>
                 <th className="px-2 py-2">入库行 ID</th>
@@ -258,25 +258,25 @@ function SupplierInvoiceCreateForm() {
               {lines.map((line, idx) => (
                 <tr key={idx}>
                   <td className="px-2 py-2">
-                    <input value={line.purchaseOrderLineId} onChange={(e) => updateLine(idx, { purchaseOrderLineId: e.target.value })} className="focus:border-brand-500 w-full min-w-32 rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none" />
+                    <input value={line.purchaseOrderLineId} onChange={(e) => updateLine(idx, { purchaseOrderLineId: e.target.value })} className="focus:border-brand-500 w-full min-w-32 rounded-md border border-border px-2 py-1.5 focus:outline-none" />
                   </td>
                   <td className="px-2 py-2">
-                    <input value={line.warehouseReceiptLineId} onChange={(e) => updateLine(idx, { warehouseReceiptLineId: e.target.value })} className="focus:border-brand-500 w-full min-w-32 rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none" />
+                    <input value={line.warehouseReceiptLineId} onChange={(e) => updateLine(idx, { warehouseReceiptLineId: e.target.value })} className="focus:border-brand-500 w-full min-w-32 rounded-md border border-border px-2 py-1.5 focus:outline-none" />
                   </td>
                   <td className="px-2 py-2">
-                    <input type="number" min="0" step="any" value={line.quantity} onChange={(e) => updateLine(idx, { quantity: e.target.value })} className="focus:border-brand-500 w-24 rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none" />
+                    <input type="number" min="0" step="any" value={line.quantity} onChange={(e) => updateLine(idx, { quantity: e.target.value })} className="focus:border-brand-500 w-24 rounded-md border border-border px-2 py-1.5 focus:outline-none" />
                   </td>
                   <td className="px-2 py-2">
-                    <input type="number" min="0" step="any" value={line.unitPrice} onChange={(e) => updateLine(idx, { unitPrice: e.target.value })} className="focus:border-brand-500 w-24 rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none" />
+                    <input type="number" min="0" step="any" value={line.unitPrice} onChange={(e) => updateLine(idx, { unitPrice: e.target.value })} className="focus:border-brand-500 w-24 rounded-md border border-border px-2 py-1.5 focus:outline-none" />
                   </td>
                   <td className="px-2 py-2">
-                    <input type="number" min="0" max="100" step="any" value={line.taxRate} onChange={(e) => updateLine(idx, { taxRate: e.target.value })} className="focus:border-brand-500 w-20 rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none" />
+                    <input type="number" min="0" max="100" step="any" value={line.taxRate} onChange={(e) => updateLine(idx, { taxRate: e.target.value })} className="focus:border-brand-500 w-20 rounded-md border border-border px-2 py-1.5 focus:outline-none" />
                   </td>
                   <td className="px-2 py-2">
                     <input type="checkbox" checked={line.vatRecoverable} onChange={(e) => updateLine(idx, { vatRecoverable: e.target.checked })} className="h-4 w-4 accent-brand-600" />
                   </td>
                   <td className="px-2 py-2">
-                    <button type="button" onClick={() => removeLine(idx)} disabled={lines.length <= 1} className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">删除</button>
+                    <button type="button" onClick={() => removeLine(idx)} disabled={lines.length <= 1} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-40">删除</button>
                   </td>
                 </tr>
               ))}
@@ -284,14 +284,14 @@ function SupplierInvoiceCreateForm() {
           </table>
         </div>
         {Object.keys(fieldErrors).length > 0 && (
-          <p className="mt-2 text-xs text-red-600">{Object.values(fieldErrors).filter(Boolean)[0] ?? ""}</p>
+          <p className="mt-2 text-xs text-status-danger-text">{Object.values(fieldErrors).filter(Boolean)[0] ?? ""}</p>
         )}
 
         <div className="mt-4 flex items-center gap-3">
           <button type="button" onClick={handleSubmit} disabled={submitting} className="bg-brand-600 hover:bg-brand-700 rounded-md px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">
             {submitting ? "提交中…" : "创建（DRAFT）"}
           </button>
-          {dirty && <span className="text-xs text-amber-600">有未保存的更改</span>}
+          {dirty && <span className="text-xs text-status-warning-text">有未保存的更改</span>}
         </div>
       </div>
     </div>

@@ -8,9 +8,9 @@ export default function RootError({
   reset: () => void;
 }) {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-4 text-center">
-      <h1 className="text-xl font-semibold text-slate-800">页面出错了</h1>
-      <p className="mt-2 text-sm text-slate-500">{error.message || "发生未知错误，请稍后重试。"}</p>
+    <div className="flex min-h-screen flex-col items-center justify-center bg-canvas px-4 text-center">
+      <h1 className="text-xl font-semibold text-ink-primary">页面出错了</h1>
+      <p className="mt-2 text-sm text-ink-secondary">{error.message || "发生未知错误，请稍后重试。"}</p>
       <button
         type="button"
         onClick={reset}

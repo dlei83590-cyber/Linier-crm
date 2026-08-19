@@ -54,14 +54,14 @@ function StockCountCreateForm() {
 
   return (
     <div className={CARD_CLASS}>
-      <div className="flex items-center justify-between border-b border-slate-200 p-4">
-        <h1 className="text-lg font-semibold text-slate-800">新建库存盘点单</h1>
+      <div className="flex items-center justify-between border-b border-border p-4">
+        <h1 className="text-lg font-semibold text-ink-primary">新建库存盘点单</h1>
         <Link
           href="/inventory/stock-counts"
           onClick={(e) => {
             if (dirty && !window.confirm("有未保存的更改，确定离开？")) e.preventDefault();
           }}
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+          className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
         >
           返回列表
         </Link>
@@ -69,7 +69,7 @@ function StockCountCreateForm() {
 
       <div className="p-4">
         {error && (
-          <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div className="mb-4 rounded-md bg-status-danger-bg p-3 text-sm text-status-danger-text">
             <p>
               {describeStatus(error.status)}：{error.message}
               {error.code ? `（${error.code}）` : ""}
@@ -77,8 +77,8 @@ function StockCountCreateForm() {
           </div>
         )}
 
-        <div className="mb-4 rounded-md bg-slate-50 p-4 text-sm">
-          <label className="block text-xs text-slate-500">备注（可选，≤500）</label>
+        <div className="mb-4 rounded-md bg-canvas p-4 text-sm">
+          <label className="block text-xs text-ink-secondary">备注（可选，≤500）</label>
           <textarea
             value={remark}
             onChange={(e) => {
@@ -87,11 +87,11 @@ function StockCountCreateForm() {
             }}
             rows={2}
             maxLength={500}
-            className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+            className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
           />
         </div>
 
-        <p className="mb-4 rounded-md bg-amber-50 p-3 text-xs text-amber-700">
+        <p className="mb-4 rounded-md bg-status-warning-bg p-3 text-xs text-status-warning-text">
           创建后进入 DRAFT；在详情页录入盘点行（录入时服务端冻结账面数量快照并计算差异），随后完成盘点。
         </p>
 

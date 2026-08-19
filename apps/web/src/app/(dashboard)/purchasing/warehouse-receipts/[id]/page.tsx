@@ -153,7 +153,7 @@ function WarehouseReceiptDetailPage() {
             <>
               <Link
                 href={`/purchasing/warehouse-receipts/${id}/edit`}
-                className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-slate-50"
+                className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-canvas"
               >
                 编辑
               </Link>
@@ -194,7 +194,7 @@ function WarehouseReceiptDetailPage() {
           </h2>
           <div className="overflow-x-auto">
             <table className="divide-border min-w-full divide-y text-sm">
-              <thead className="bg-slate-50 text-left text-xs font-medium text-ink-secondary">
+              <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
                 <tr>
                   <th className="px-3 py-2 font-medium">物料</th>
                   <th className="px-3 py-2 font-medium">数量</th>

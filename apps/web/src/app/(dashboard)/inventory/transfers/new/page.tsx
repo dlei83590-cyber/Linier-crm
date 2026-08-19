@@ -165,14 +165,14 @@ function TransferCreateForm() {
 
   return (
     <div className={CARD_CLASS}>
-      <div className="flex items-center justify-between border-b border-slate-200 p-4">
-        <h1 className="text-lg font-semibold text-slate-800">新建库存调拨</h1>
+      <div className="flex items-center justify-between border-b border-border p-4">
+        <h1 className="text-lg font-semibold text-ink-primary">新建库存调拨</h1>
         <Link
           href="/inventory/transfers"
           onClick={(e) => {
             if (dirty && !window.confirm('有未保存的更改，确定离开？')) e.preventDefault();
           }}
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+          className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
         >
           返回列表
         </Link>
@@ -180,7 +180,7 @@ function TransferCreateForm() {
 
       <div className="p-4">
         {error && (
-          <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div className="mb-4 rounded-md bg-status-danger-bg p-3 text-sm text-status-danger-text">
             <p>
               {describeStatus(error.status)}：{error.message}
               {error.code ? `（${error.code}）` : ''}
@@ -188,59 +188,59 @@ function TransferCreateForm() {
           </div>
         )}
 
-        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-slate-50 p-4 text-sm md:grid-cols-4">
+        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-canvas p-4 text-sm md:grid-cols-4">
           <div>
-            <label className="block text-xs text-slate-500">源仓库 ID（必填）</label>
+            <label className="block text-xs text-ink-secondary">源仓库 ID（必填）</label>
             <input
               value={sourceWarehouseId}
               onChange={(e) => {
                 setSourceWarehouseId(e.target.value);
                 markDirty();
               }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
             {fieldErrors.sourceWarehouseId && (
-              <p className="mt-0.5 text-xs text-red-600">{fieldErrors.sourceWarehouseId}</p>
+              <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.sourceWarehouseId}</p>
             )}
           </div>
           <div>
-            <label className="block text-xs text-slate-500">源库位 ID（可选）</label>
+            <label className="block text-xs text-ink-secondary">源库位 ID（可选）</label>
             <input
               value={sourceLocationId}
               onChange={(e) => {
                 setSourceLocationId(e.target.value);
                 markDirty();
               }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500">目标仓库 ID（必填）</label>
+            <label className="block text-xs text-ink-secondary">目标仓库 ID（必填）</label>
             <input
               value={destinationWarehouseId}
               onChange={(e) => {
                 setDestinationWarehouseId(e.target.value);
                 markDirty();
               }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
             {fieldErrors.destinationWarehouseId && (
-              <p className="mt-0.5 text-xs text-red-600">{fieldErrors.destinationWarehouseId}</p>
+              <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.destinationWarehouseId}</p>
             )}
           </div>
           <div>
-            <label className="block text-xs text-slate-500">目标库位 ID（可选）</label>
+            <label className="block text-xs text-ink-secondary">目标库位 ID（可选）</label>
             <input
               value={destinationLocationId}
               onChange={(e) => {
                 setDestinationLocationId(e.target.value);
                 markDirty();
               }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
           </div>
           <div className="col-span-2">
-            <label className="block text-xs text-slate-500">备注（可选，≤500）</label>
+            <label className="block text-xs text-ink-secondary">备注（可选，≤500）</label>
             <textarea
               value={remark}
               onChange={(e) => {
@@ -248,11 +248,11 @@ function TransferCreateForm() {
                 markDirty();
               }}
               rows={2}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
           </div>
           <div className="col-span-2">
-            <p className="text-xs text-amber-600">
+            <p className="text-xs text-status-warning-text">
               CONTRACT GAP：main 当前无 warehouse / warehouse-location 列表 API（仅 items 有
               GET），仓库/库位暂以 ID 文本输入；服务端仍校验存在性与组合归属。
             </p>
@@ -260,7 +260,7 @@ function TransferCreateForm() {
         </div>
 
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-sm font-medium text-slate-700">调拨明细（至少一行）</h2>
+          <h2 className="text-sm font-medium text-ink-secondary">调拨明细（至少一行）</h2>
           <button
             type="button"
             onClick={addLine}
@@ -269,11 +269,11 @@ function TransferCreateForm() {
             + 添加行
           </button>
         </div>
-        {fieldErrors.lines && <p className="mb-2 text-xs text-red-600">{fieldErrors.lines}</p>}
+        {fieldErrors.lines && <p className="mb-2 text-xs text-status-danger-text">{fieldErrors.lines}</p>}
 
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500">
+            <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
               <tr>
                 <th className="px-3 py-2">物料</th>
                 <th className="px-3 py-2">数量</th>
@@ -293,7 +293,7 @@ function TransferCreateForm() {
                     <select
                       value={line.itemId}
                       onChange={(e) => updateLine(idx, { itemId: e.target.value })}
-                      className="focus:border-brand-500 w-full rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                      className="focus:border-brand-500 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
                     >
                       <option value="">选择物料</option>
                       {items.map((it) => (
@@ -303,7 +303,7 @@ function TransferCreateForm() {
                       ))}
                     </select>
                     {fieldErrors[`lines.${idx}.itemId`] && (
-                      <p className="mt-0.5 text-xs text-red-600">
+                      <p className="mt-0.5 text-xs text-status-danger-text">
                         {fieldErrors[`lines.${idx}.itemId`]}
                       </p>
                     )}
@@ -315,15 +315,15 @@ function TransferCreateForm() {
                       step="any"
                       value={line.quantity}
                       onChange={(e) => updateLine(idx, { quantity: e.target.value })}
-                      className="focus:border-brand-500 w-24 rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                      className="focus:border-brand-500 w-24 rounded-md border border-border px-2 py-1.5 focus:outline-none"
                     />
                     {fieldErrors[`lines.${idx}.quantity`] && (
-                      <p className="mt-0.5 text-xs text-red-600">
+                      <p className="mt-0.5 text-xs text-status-danger-text">
                         {fieldErrors[`lines.${idx}.quantity`]}
                       </p>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-slate-600">
+                  <td className="px-3 py-2 text-ink-secondary">
                     {line.uomId
                       ? (items.find((it) => it.id === line.itemId)?.stockUom?.symbol ?? '—')
                       : '—'}
@@ -333,7 +333,7 @@ function TransferCreateForm() {
                       value={line.batchNo}
                       onChange={(e) => updateLine(idx, { batchNo: e.target.value })}
                       placeholder="可选"
-                      className="focus:border-brand-500 w-full rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                      className="focus:border-brand-500 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
                     />
                   </td>
                   <td className="px-3 py-2">
@@ -341,7 +341,7 @@ function TransferCreateForm() {
                       value={line.serialNos}
                       onChange={(e) => updateLine(idx, { serialNos: e.target.value })}
                       placeholder="SN1,SN2"
-                      className="focus:border-brand-500 w-full rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                      className="focus:border-brand-500 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
                     />
                   </td>
                   <td className="px-3 py-2">
@@ -349,7 +349,7 @@ function TransferCreateForm() {
                       type="date"
                       value={line.mfgDate}
                       onChange={(e) => updateLine(idx, { mfgDate: e.target.value })}
-                      className="focus:border-brand-500 rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                      className="focus:border-brand-500 rounded-md border border-border px-2 py-1.5 focus:outline-none"
                     />
                   </td>
                   <td className="px-3 py-2">
@@ -357,7 +357,7 @@ function TransferCreateForm() {
                       type="date"
                       value={line.expDate}
                       onChange={(e) => updateLine(idx, { expDate: e.target.value })}
-                      className="focus:border-brand-500 rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                      className="focus:border-brand-500 rounded-md border border-border px-2 py-1.5 focus:outline-none"
                     />
                   </td>
                   <td className="px-3 py-2">
@@ -365,7 +365,7 @@ function TransferCreateForm() {
                       value={line.remark}
                       onChange={(e) => updateLine(idx, { remark: e.target.value })}
                       placeholder="可选"
-                      className="focus:border-brand-500 w-full rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                      className="focus:border-brand-500 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
                     />
                   </td>
                   <td className="px-3 py-2">
@@ -373,7 +373,7 @@ function TransferCreateForm() {
                       type="button"
                       onClick={() => removeLine(idx)}
                       disabled={lines.length <= 1}
-                      className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       删除
                     </button>
@@ -393,7 +393,7 @@ function TransferCreateForm() {
           >
             {submitting ? '提交中…' : '创建（DRAFT）'}
           </button>
-          {dirty && <span className="text-xs text-amber-600">有未保存的更改</span>}
+          {dirty && <span className="text-xs text-status-warning-text">有未保存的更改</span>}
         </div>
       </div>
     </div>

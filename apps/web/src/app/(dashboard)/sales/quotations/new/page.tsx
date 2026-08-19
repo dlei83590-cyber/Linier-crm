@@ -164,14 +164,14 @@ function QuotationCreateForm() {
 
   return (
     <div className={CARD_CLASS}>
-      <div className="flex items-center justify-between border-b border-slate-200 p-4">
-        <h1 className="text-lg font-semibold text-slate-800">新建报价单</h1>
+      <div className="flex items-center justify-between border-b border-border p-4">
+        <h1 className="text-lg font-semibold text-ink-primary">新建报价单</h1>
         <Link
           href="/sales/quotations"
           onClick={(e) => {
             if (dirty && !window.confirm("有未保存的更改，确定离开？")) e.preventDefault();
           }}
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+          className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
         >
           返回列表
         </Link>
@@ -179,7 +179,7 @@ function QuotationCreateForm() {
 
       <div className="p-4">
         {error && (
-          <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div className="mb-4 rounded-md bg-status-danger-bg p-3 text-sm text-status-danger-text">
             <p>
               {describeStatus(error.status)}：{error.message}
               {error.code ? `（${error.code}）` : ""}
@@ -187,16 +187,16 @@ function QuotationCreateForm() {
           </div>
         )}
 
-        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-slate-50 p-4 text-sm md:grid-cols-3">
+        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-canvas p-4 text-sm md:grid-cols-3">
           <div>
-            <label className="block text-xs text-slate-500">客户 *</label>
+            <label className="block text-xs text-ink-secondary">客户 *</label>
             <select
               value={customerId}
               onChange={(e) => {
                 setCustomerId(e.target.value);
                 markDirty();
               }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             >
               <option value="">选择客户</option>
               {customers.map((c) => (
@@ -206,11 +206,11 @@ function QuotationCreateForm() {
               ))}
             </select>
             {fieldErrors.customerId && (
-              <p className="mt-0.5 text-xs text-red-600">{fieldErrors.customerId}</p>
+              <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.customerId}</p>
             )}
           </div>
           <div>
-            <label className="block text-xs text-slate-500">币种</label>
+            <label className="block text-xs text-ink-secondary">币种</label>
             <input
               value={currency}
               onChange={(e) => {
@@ -218,11 +218,11 @@ function QuotationCreateForm() {
                 markDirty();
               }}
               maxLength={10}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500">有效期从（可选）</label>
+            <label className="block text-xs text-ink-secondary">有效期从（可选）</label>
             <input
               type="datetime-local"
               value={validFrom}
@@ -230,11 +230,11 @@ function QuotationCreateForm() {
                 setValidFrom(e.target.value);
                 markDirty();
               }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500">有效期至（可选）</label>
+            <label className="block text-xs text-ink-secondary">有效期至（可选）</label>
             <input
               type="datetime-local"
               value={validUntil}
@@ -242,11 +242,11 @@ function QuotationCreateForm() {
                 setValidUntil(e.target.value);
                 markDirty();
               }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
           </div>
           <div className="col-span-2 md:col-span-1">
-            <label className="block text-xs text-slate-500">备注（可选，≤1000）</label>
+            <label className="block text-xs text-ink-secondary">备注（可选，≤1000）</label>
             <textarea
               value={remark}
               onChange={(e) => {
@@ -255,13 +255,13 @@ function QuotationCreateForm() {
               }}
               rows={2}
               maxLength={1000}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
           </div>
         </div>
 
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-sm font-medium text-slate-700">报价明细（至少一行）</h2>
+          <h2 className="text-sm font-medium text-ink-secondary">报价明细（至少一行）</h2>
           <button
             type="button"
             onClick={addLine}
@@ -270,11 +270,11 @@ function QuotationCreateForm() {
             + 添加行
           </button>
         </div>
-        {fieldErrors.lines && <p className="mb-2 text-xs text-red-600">{fieldErrors.lines}</p>}
+        {fieldErrors.lines && <p className="mb-2 text-xs text-status-danger-text">{fieldErrors.lines}</p>}
 
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500">
+            <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
               <tr>
                 <th className="px-3 py-2">物料</th>
                 <th className="px-3 py-2">描述</th>
@@ -290,7 +290,7 @@ function QuotationCreateForm() {
                     <select
                       value={line.itemId}
                       onChange={(e) => updateLine(idx, { itemId: e.target.value })}
-                      className="focus:border-brand-500 w-full rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                      className="focus:border-brand-500 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
                     >
                       <option value="">选择物料</option>
                       {items.map((it) => (
@@ -300,7 +300,7 @@ function QuotationCreateForm() {
                       ))}
                     </select>
                     {fieldErrors[`lines.${idx}.itemId`] && (
-                      <p className="mt-0.5 text-xs text-red-600">
+                      <p className="mt-0.5 text-xs text-status-danger-text">
                         {fieldErrors[`lines.${idx}.itemId`]}
                       </p>
                     )}
@@ -311,7 +311,7 @@ function QuotationCreateForm() {
                       onChange={(e) => updateLine(idx, { description: e.target.value })}
                       placeholder="可选"
                       maxLength={500}
-                      className="focus:border-brand-500 w-full rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                      className="focus:border-brand-500 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
                     />
                   </td>
                   <td className="px-3 py-2">
@@ -321,15 +321,15 @@ function QuotationCreateForm() {
                       step="any"
                       value={line.quantity}
                       onChange={(e) => updateLine(idx, { quantity: e.target.value })}
-                      className="focus:border-brand-500 w-24 rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                      className="focus:border-brand-500 w-24 rounded-md border border-border px-2 py-1.5 focus:outline-none"
                     />
                     {fieldErrors[`lines.${idx}.quantity`] && (
-                      <p className="mt-0.5 text-xs text-red-600">
+                      <p className="mt-0.5 text-xs text-status-danger-text">
                         {fieldErrors[`lines.${idx}.quantity`]}
                       </p>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-slate-600">
+                  <td className="px-3 py-2 text-ink-secondary">
                     {line.uomId
                       ? (items.find((it) => it.id === line.itemId)?.stockUom?.symbol ?? "—")
                       : "—"}
@@ -339,7 +339,7 @@ function QuotationCreateForm() {
                       type="button"
                       onClick={() => removeLine(idx)}
                       disabled={lines.length <= 1}
-                      className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       删除
                     </button>
@@ -359,7 +359,7 @@ function QuotationCreateForm() {
           >
             {submitting ? "提交中…" : "创建（DRAFT）"}
           </button>
-          {dirty && <span className="text-xs text-amber-600">有未保存的更改</span>}
+          {dirty && <span className="text-xs text-status-warning-text">有未保存的更改</span>}
         </div>
       </div>
     </div>

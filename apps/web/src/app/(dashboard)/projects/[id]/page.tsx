@@ -380,7 +380,7 @@ function Table({ headers, children }: { headers: string[]; children: React.React
   return (
     <div className="overflow-x-auto">
       <table className="divide-border min-w-full divide-y text-sm">
-        <thead className="bg-slate-50 text-left text-xs font-medium text-ink-secondary">
+        <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
           <tr>
             {headers.map((h) => (
               <th key={h} className="px-3 py-2 font-medium">
@@ -2059,7 +2059,7 @@ function ProjectDetailPage() {
         <div className="mb-4 text-xs text-ink-muted">正在刷新…</div>
       )}
       {refreshError && (
-        <div className="border-amber-200 mb-4 rounded-md border bg-amber-50 p-3 text-sm text-amber-700">
+        <div className="border-status-warning-border mb-4 rounded-md border bg-status-warning-bg p-3 text-sm text-status-warning-text">
           <p>
             刷新失败（已保留当前数据）：{refreshError.message}
             {refreshError.code ? `（${refreshError.code}）` : ""}
@@ -2154,7 +2154,7 @@ function ProjectDetailPage() {
               className={`rounded-t-md px-3 py-2 text-sm font-medium transition-colors ${
                 activeTab === t.key
                   ? "border-brand-600 text-brand-700 border-b-2"
-                  : "text-ink-secondary hover:bg-slate-50 hover:text-ink-primary"
+                  : "text-ink-secondary hover:bg-canvas hover:text-ink-primary"
               }`}
             >
               {t.label}
@@ -2251,7 +2251,7 @@ function ProjectDetailPage() {
                               onClick={() =>
                                 setDeleteTarget({ resource: "stakeholder", id: s.id, name: s.name })
                               }
-                              className="text-sm text-red-600 hover:underline"
+                              className="text-sm text-status-danger-text hover:underline"
                             >
                               删除
                             </button>
@@ -2315,7 +2315,7 @@ function ProjectDetailPage() {
                               onClick={() =>
                                 setDeleteTarget({ resource: "member", id: m.id, name: m.name })
                               }
-                              className="text-sm text-red-600 hover:underline"
+                              className="text-sm text-status-danger-text hover:underline"
                             >
                               删除
                             </button>
@@ -2388,7 +2388,7 @@ function ProjectDetailPage() {
                               onClick={() =>
                                 setDeleteTarget({ resource: "milestone", id: m.id, name: m.name })
                               }
-                              className="text-sm text-red-600 hover:underline"
+                              className="text-sm text-status-danger-text hover:underline"
                             >
                               删除
                             </button>
@@ -2459,7 +2459,7 @@ function ProjectDetailPage() {
                               onClick={() =>
                                 setDeleteTarget({ resource: "task", id: t.id, name: t.name })
                               }
-                              className="text-sm text-red-600 hover:underline"
+                              className="text-sm text-status-danger-text hover:underline"
                             >
                               删除
                             </button>
@@ -2531,7 +2531,7 @@ function ProjectDetailPage() {
                                   name: `${p.item?.code ?? ""} ${p.item?.name ?? ""}`.trim() || "产品",
                                 })
                               }
-                              className="text-sm text-red-600 hover:underline"
+                              className="text-sm text-status-danger-text hover:underline"
                             >
                               删除
                             </button>
@@ -2601,7 +2601,7 @@ function ProjectDetailPage() {
                               onClick={() =>
                                 setDeleteTarget({ resource: "risk", id: r.id, name: r.description })
                               }
-                              className="text-sm text-red-600 hover:underline"
+                              className="text-sm text-status-danger-text hover:underline"
                             >
                               删除
                             </button>
@@ -2673,7 +2673,7 @@ function ProjectDetailPage() {
                                   name: v.summary ?? v.visitType,
                                 })
                               }
-                              className="text-sm text-red-600 hover:underline"
+                              className="text-sm text-status-danger-text hover:underline"
                             >
                               删除
                             </button>
@@ -2743,7 +2743,7 @@ function ProjectDetailPage() {
                                       name: b.category,
                                     })
                                   }
-                                  className="text-sm text-red-600 hover:underline"
+                                  className="text-sm text-status-danger-text hover:underline"
                                 >
                                   删除
                                 </button>
@@ -2815,7 +2815,7 @@ function ProjectDetailPage() {
                                       name: e.category,
                                     })
                                   }
-                                  className="text-sm text-red-600 hover:underline"
+                                  className="text-sm text-status-danger-text hover:underline"
                                 >
                                   删除
                                 </button>
@@ -2883,7 +2883,7 @@ function ProjectDetailPage() {
                                       name: p.summary,
                                     })
                                   }
-                                  className="text-sm text-red-600 hover:underline"
+                                  className="text-sm text-status-danger-text hover:underline"
                                 >
                                   删除
                                 </button>
@@ -2962,7 +2962,7 @@ function ProjectDetailPage() {
                                   onClick={() =>
                                     setDeleteTarget({ resource: "acceptance", id: a.id, name: a.name })
                                   }
-                                  className="text-sm text-red-600 hover:underline"
+                                  className="text-sm text-status-danger-text hover:underline"
                                 >
                                   删除
                                 </button>
@@ -3028,7 +3028,7 @@ function ProjectDetailPage() {
                             name: t.tag?.name ?? t.tag?.code ?? "标签",
                           })
                         }
-                        className="ml-1.5 text-xs text-red-600 hover:underline"
+                        className="ml-1.5 text-xs text-status-danger-text hover:underline"
                       >
                         删除
                       </button>
@@ -3312,7 +3312,7 @@ function ProjectDetailPage() {
               />
             </div>
             {transitionDialog.error && (
-              <div className="border-red-200 mt-3 rounded-md border bg-red-50 p-3 text-sm text-red-700">
+              <div className="border-status-danger-border mt-3 rounded-md border bg-status-danger-bg p-3 text-sm text-status-danger-text">
                 <p>
                   {describeStatus(transitionDialog.error.status)}：{transitionDialog.error.message}
                   {transitionDialog.error.code ? `（${transitionDialog.error.code}）` : ""}
@@ -3337,7 +3337,7 @@ function ProjectDetailPage() {
                 type="button"
                 onClick={closeTransition}
                 disabled={transitionDialog.saving}
-                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-50"
               >
                 取消
               </button>

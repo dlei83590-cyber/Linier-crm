@@ -143,12 +143,12 @@ function SalesOrderEditForm() {
   };
 
   if (loading) {
-    return <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-400">加载中…</div>;
+    return <div className="rounded-lg border border-border bg-surface p-6 text-sm text-ink-muted">加载中…</div>;
   }
 
   if (error && !detail) {
     return (
-      <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-red-700">
+      <div className="rounded-lg border border-status-danger-border bg-status-danger-bg p-6 text-sm text-status-danger-text">
         {describeStatus(error.status)}：{error.message}
         {error.code ? `（${error.code}）` : ""}
         <div className="mt-3">
@@ -163,17 +163,17 @@ function SalesOrderEditForm() {
   if (notEditable && detail) {
     return (
       <div className={CARD_CLASS}>
-        <div className="flex items-center justify-between border-b border-slate-200 p-4">
-          <h1 className="text-lg font-semibold text-slate-800">编辑销售订单 — {detail.code}</h1>
+        <div className="flex items-center justify-between border-b border-border p-4">
+          <h1 className="text-lg font-semibold text-ink-primary">编辑销售订单 — {detail.code}</h1>
           <Link
             href={`/sales/orders/${id}`}
-            className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+            className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
           >
             返回详情
           </Link>
         </div>
         <div className="p-6">
-          <p className="text-sm text-amber-600">
+          <p className="text-sm text-status-warning-text">
             仅 DRAFT 状态可编辑（当前 {detail.status}）——已确认订单需走后续 amendment 流程。
           </p>
         </div>
@@ -183,21 +183,21 @@ function SalesOrderEditForm() {
 
   return (
     <div className={CARD_CLASS}>
-      <div className="flex items-center justify-between border-b border-slate-200 p-4">
-        <h1 className="text-lg font-semibold text-slate-800">
+      <div className="flex items-center justify-between border-b border-border p-4">
+        <h1 className="text-lg font-semibold text-ink-primary">
           编辑销售订单 — {detail?.code}
-          <span className="ml-2 text-xs font-normal text-slate-400">
+          <span className="ml-2 text-xs font-normal text-ink-muted">
             {detail?.status}（v{detail?.version}）
           </span>
         </h1>
         <div className="flex items-center gap-2">
-          {dirty && <span className="text-xs text-amber-600">有未保存的更改</span>}
+          {dirty && <span className="text-xs text-status-warning-text">有未保存的更改</span>}
           <Link
             href={`/sales/orders/${id}`}
             onClick={(e) => {
               if (dirty && !window.confirm("有未保存的更改，确定离开？")) e.preventDefault();
             }}
-            className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+            className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
           >
             返回详情
           </Link>
@@ -206,7 +206,7 @@ function SalesOrderEditForm() {
 
       <div className="p-4">
         {error && (
-          <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div className="mb-4 rounded-md bg-status-danger-bg p-3 text-sm text-status-danger-text">
             <p>
               {describeStatus(error.status)}：{error.message}
               {error.code ? `（${error.code}）` : ""}
@@ -233,61 +233,61 @@ function SalesOrderEditForm() {
         )}
 
         {fieldErrors.scope && (
-          <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+          <div className="mb-4 rounded-md border border-status-warning-border bg-status-warning-bg p-3 text-sm text-status-warning-text">
             {fieldErrors.scope}
           </div>
         )}
 
-        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-slate-50 p-4 text-sm md:grid-cols-3">
+        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-canvas p-4 text-sm md:grid-cols-3">
           <div>
-            <label className="block text-xs text-slate-500">客户（只读）</label>
-            <p className="mt-1 text-slate-700">
+            <label className="block text-xs text-ink-secondary">客户（只读）</label>
+            <p className="mt-1 text-ink-secondary">
               {detail?.customer ? `${detail.customer.code ?? ""} ${detail.customer.name ?? ""}`.trim() : "—"}
             </p>
           </div>
           <div>
-            <label className="block text-xs text-slate-500">币种（只读）</label>
-            <p className="mt-1 text-slate-700">{detail?.currency ?? "—"}</p>
+            <label className="block text-xs text-ink-secondary">币种（只读）</label>
+            <p className="mt-1 text-ink-secondary">{detail?.currency ?? "—"}</p>
           </div>
           <div>
-            <label className="block text-xs text-slate-500">含税合计（只读）</label>
-            <p className="mt-1 text-slate-700">{formatMoney(detail?.totalAmount ?? "0", detail?.currency ?? "CNY")}</p>
+            <label className="block text-xs text-ink-secondary">含税合计（只读）</label>
+            <p className="mt-1 text-ink-secondary">{formatMoney(detail?.totalAmount ?? "0", detail?.currency ?? "CNY")}</p>
           </div>
           <div>
-            <label className="block text-xs text-slate-500">要求交货日期（可选，清空即置空）</label>
+            <label className="block text-xs text-ink-secondary">要求交货日期（可选，清空即置空）</label>
             <input
               type="datetime-local"
               value={requestedDeliveryDate}
               onChange={(e) => setRequestedDeliveryDate(e.target.value)}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500">付款条件（可选，≤50）</label>
+            <label className="block text-xs text-ink-secondary">付款条件（可选，≤50）</label>
             <input
               value={paymentTerm}
               onChange={(e) => setPaymentTerm(e.target.value)}
               maxLength={50}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500">贸易术语（可选，≤50）</label>
+            <label className="block text-xs text-ink-secondary">贸易术语（可选，≤50）</label>
             <input
               value={incoterm}
               onChange={(e) => setIncoterm(e.target.value)}
               maxLength={50}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
           </div>
           <div className="col-span-2 md:col-span-3">
-            <label className="block text-xs text-slate-500">备注（可选，≤1000，清空即置空）</label>
+            <label className="block text-xs text-ink-secondary">备注（可选，≤1000，清空即置空）</label>
             <textarea
               value={remark}
               onChange={(e) => setRemark(e.target.value)}
               rows={2}
               maxLength={1000}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
           </div>
         </div>
@@ -301,7 +301,7 @@ function SalesOrderEditForm() {
           >
             {submitting ? "保存中…" : "保存头字段"}
           </button>
-          {dirty && <span className="text-xs text-amber-600">有未保存的更改</span>}
+          {dirty && <span className="text-xs text-status-warning-text">有未保存的更改</span>}
         </div>
       </div>
     </div>

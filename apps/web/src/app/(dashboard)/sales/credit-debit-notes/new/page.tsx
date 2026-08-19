@@ -157,14 +157,14 @@ function CnDnCreateForm() {
 
   return (
     <div className={CARD_CLASS}>
-      <div className="flex items-center justify-between border-b border-slate-200 p-4">
-        <h1 className="text-lg font-semibold text-slate-800">新建贷项/借项通知单</h1>
+      <div className="flex items-center justify-between border-b border-border p-4">
+        <h1 className="text-lg font-semibold text-ink-primary">新建贷项/借项通知单</h1>
         <Link
           href="/sales/credit-debit-notes"
           onClick={(e) => {
             if (dirty && !window.confirm("有未保存的更改，确定离开？")) e.preventDefault();
           }}
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+          className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
         >
           返回列表
         </Link>
@@ -172,7 +172,7 @@ function CnDnCreateForm() {
 
       <div className="p-4">
         {error && (
-          <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div className="mb-4 rounded-md bg-status-danger-bg p-3 text-sm text-status-danger-text">
             <p>
               {describeStatus(error.status)}：{error.message}
               {error.code ? `（${error.code}）` : ""}
@@ -180,30 +180,30 @@ function CnDnCreateForm() {
           </div>
         )}
 
-        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-slate-50 p-4 text-sm md:grid-cols-3">
+        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-canvas p-4 text-sm md:grid-cols-3">
           <div>
-            <label className="block text-xs text-slate-500">通知单类型 *</label>
+            <label className="block text-xs text-ink-secondary">通知单类型 *</label>
             <select
               value={noteType}
               onChange={(e) => {
                 setNoteType(e.target.value);
                 markDirty();
               }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             >
               <option value="CREDIT">{NOTE_TYPE_LABEL.CREDIT}</option>
               <option value="DEBIT">{NOTE_TYPE_LABEL.DEBIT}</option>
             </select>
             {fieldErrors.noteType && (
-              <p className="mt-0.5 text-xs text-red-600">{fieldErrors.noteType}</p>
+              <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.noteType}</p>
             )}
           </div>
           <div>
-            <label className="block text-xs text-slate-500">源发票（仅 ISSUED）*</label>
+            <label className="block text-xs text-ink-secondary">源发票（仅 ISSUED）*</label>
             <select
               value={sourceInvoiceId}
               onChange={(e) => handleInvoiceChange(e.target.value)}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             >
               <option value="">选择发票</option>
               {invoices.map((inv) => (
@@ -213,11 +213,11 @@ function CnDnCreateForm() {
               ))}
             </select>
             {fieldErrors.sourceInvoiceId && (
-              <p className="mt-0.5 text-xs text-red-600">{fieldErrors.sourceInvoiceId}</p>
+              <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.sourceInvoiceId}</p>
             )}
           </div>
           <div>
-            <label className="block text-xs text-slate-500">调整原因 *（≤500）</label>
+            <label className="block text-xs text-ink-secondary">调整原因 *（≤500）</label>
             <input
               value={reason}
               onChange={(e) => {
@@ -225,27 +225,27 @@ function CnDnCreateForm() {
                 markDirty();
               }}
               maxLength={500}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
             {fieldErrors.reason && (
-              <p className="mt-0.5 text-xs text-red-600">{fieldErrors.reason}</p>
+              <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.reason}</p>
             )}
           </div>
         </div>
 
-        <p className="mb-3 rounded-md bg-amber-50 p-3 text-xs text-amber-700">
+        <p className="mb-3 rounded-md bg-status-warning-bg p-3 text-xs text-status-warning-text">
           金额/税率/价格由后端复制原发票行快照（不重算）；客户与币种从源发票继承。贷项为负向冲减应收、借项为正向调整。
         </p>
 
-        <h2 className="mb-2 text-sm font-medium text-slate-700">调整明细（填入调整数量，须大于 0）</h2>
-        {fieldErrors.lines && <p className="mb-2 text-xs text-red-600">{fieldErrors.lines}</p>}
+        <h2 className="mb-2 text-sm font-medium text-ink-secondary">调整明细（填入调整数量，须大于 0）</h2>
+        {fieldErrors.lines && <p className="mb-2 text-xs text-status-danger-text">{fieldErrors.lines}</p>}
 
         {loadingLines ? (
-          <p className="text-slate-500 py-6 text-center text-sm">加载发票明细…</p>
+          <p className="text-ink-secondary py-6 text-center text-sm">加载发票明细…</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500">
+              <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
                 <tr>
                   <th className="px-3 py-2">行号</th>
                   <th className="px-3 py-2">物料</th>
@@ -258,13 +258,13 @@ function CnDnCreateForm() {
               <tbody className="divide-y divide-slate-100">
                 {invoiceLines.map((line, idx) => (
                   <tr key={line.id}>
-                    <td className="px-3 py-2 text-slate-600">{line.lineNo}</td>
-                    <td className="px-3 py-2 text-slate-700">
+                    <td className="px-3 py-2 text-ink-secondary">{line.lineNo}</td>
+                    <td className="px-3 py-2 text-ink-secondary">
                       {line.item ? `${line.item.code ?? ""} ${line.item.name ?? ""}`.trim() : "—"}
                     </td>
-                    <td className="px-3 py-2 text-slate-500">{line.description ?? "—"}</td>
-                    <td className="px-3 py-2 text-slate-600">{line.quantity}</td>
-                    <td className="px-3 py-2 text-slate-600">{formatMoney(line.totalAmount, "CNY")}</td>
+                    <td className="px-3 py-2 text-ink-secondary">{line.description ?? "—"}</td>
+                    <td className="px-3 py-2 text-ink-secondary">{line.quantity}</td>
+                    <td className="px-3 py-2 text-ink-secondary">{formatMoney(line.totalAmount, "CNY")}</td>
                     <td className="px-3 py-2">
                       <input
                         type="number"
@@ -272,14 +272,14 @@ function CnDnCreateForm() {
                         step="any"
                         value={lines[idx]?.quantity ?? ""}
                         onChange={(e) => updateLineQty(idx, e.target.value)}
-                        className="focus:border-brand-500 w-28 rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                        className="focus:border-brand-500 w-28 rounded-md border border-border px-2 py-1.5 focus:outline-none"
                       />
                     </td>
                   </tr>
                 ))}
                 {invoiceLines.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-3 py-8 text-center text-sm text-slate-400">
+                    <td colSpan={6} className="px-3 py-8 text-center text-sm text-ink-muted">
                       {sourceInvoiceId ? "该发票无明细行" : "请先选择源发票"}
                     </td>
                   </tr>
@@ -298,7 +298,7 @@ function CnDnCreateForm() {
           >
             {submitting ? "提交中…" : "创建（DRAFT）"}
           </button>
-          {dirty && <span className="text-xs text-amber-600">有未保存的更改</span>}
+          {dirty && <span className="text-xs text-status-warning-text">有未保存的更改</span>}
         </div>
       </div>
     </div>

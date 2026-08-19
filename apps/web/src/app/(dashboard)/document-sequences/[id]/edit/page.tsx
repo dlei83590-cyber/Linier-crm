@@ -188,7 +188,7 @@ function DocumentSequenceEditForm() {
             <input type="number" min={1} max={12} value={padLength} onChange={(e) => setPadLength(e.target.value)} className={inputClass} />
           </FormField>
           <FormField label="当前序号（系统管理，只读）">
-            <input value={String(nextNo).padStart(Number(padLength) || 4, "0")} readOnly className={`${inputClass} bg-slate-50`} />
+            <input value={String(nextNo).padStart(Number(padLength) || 4, "0")} readOnly className={`${inputClass} bg-canvas`} />
           </FormField>
           <FormField label="启用">
             <select value={isActive ? "true" : "false"} onChange={(e) => setIsActive(e.target.value === "true")} className={inputClass}>

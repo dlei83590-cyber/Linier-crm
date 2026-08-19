@@ -101,12 +101,12 @@ function AdjustmentEditForm() {
   };
 
   if (loading) {
-    return <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-400">加载中…</div>;
+    return <div className="rounded-lg border border-border bg-surface p-6 text-sm text-ink-muted">加载中…</div>;
   }
 
   if (error && !detail) {
     return (
-      <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-red-700">
+      <div className="rounded-lg border border-status-danger-border bg-status-danger-bg p-6 text-sm text-status-danger-text">
         {describeStatus(error.status)}：{error.message}
         <div className="mt-3">
           <Link href={`/inventory/adjustments/${id}`} className="text-brand-600 hover:underline">返回详情</Link>
@@ -118,12 +118,12 @@ function AdjustmentEditForm() {
   if (notEditable && detail) {
     return (
       <div className={CARD_CLASS}>
-        <div className="flex items-center justify-between border-b border-slate-200 p-4">
-          <h1 className="text-lg font-semibold text-slate-800">编辑库存调整 — {detail.adjustmentNo}</h1>
-          <Link href={`/inventory/adjustments/${id}`} className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">返回详情</Link>
+        <div className="flex items-center justify-between border-b border-border p-4">
+          <h1 className="text-lg font-semibold text-ink-primary">编辑库存调整 — {detail.adjustmentNo}</h1>
+          <Link href={`/inventory/adjustments/${id}`} className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas">返回详情</Link>
         </div>
         <div className="p-6">
-          <p className="text-sm text-amber-600">仅 DRAFT 状态可编辑（当前 {detail.status}）。</p>
+          <p className="text-sm text-status-warning-text">仅 DRAFT 状态可编辑（当前 {detail.status}）。</p>
         </div>
       </div>
     );
@@ -131,19 +131,19 @@ function AdjustmentEditForm() {
 
   return (
     <div className={CARD_CLASS}>
-      <div className="flex items-center justify-between border-b border-slate-200 p-4">
-        <h1 className="text-lg font-semibold text-slate-800">
+      <div className="flex items-center justify-between border-b border-border p-4">
+        <h1 className="text-lg font-semibold text-ink-primary">
           编辑库存调整 — {detail?.adjustmentNo}
-          <span className="ml-2 text-xs font-normal text-slate-400">{detail?.status}（v{detail?.version}）</span>
+          <span className="ml-2 text-xs font-normal text-ink-muted">{detail?.status}（v{detail?.version}）</span>
         </h1>
         <div className="flex items-center gap-2">
-          {dirty && <span className="text-xs text-amber-600">有未保存的更改</span>}
+          {dirty && <span className="text-xs text-status-warning-text">有未保存的更改</span>}
           <Link
             href={`/inventory/adjustments/${id}`}
             onClick={(e) => {
               if (dirty && !window.confirm("有未保存的更改，确定离开？")) e.preventDefault();
             }}
-            className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+            className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
           >
             返回详情
           </Link>
@@ -152,7 +152,7 @@ function AdjustmentEditForm() {
 
       <div className="p-4">
         {error && (
-          <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div className="mb-4 rounded-md bg-status-danger-bg p-3 text-sm text-status-danger-text">
             <p>
               {describeStatus(error.status)}：{error.message}
               {error.code ? `（${error.code}）` : ""}
@@ -175,16 +175,16 @@ function AdjustmentEditForm() {
           </div>
         )}
         {fieldErrors.scope && (
-          <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{fieldErrors.scope}</div>
+          <div className="mb-4 rounded-md border border-status-warning-border bg-status-warning-bg p-3 text-sm text-status-warning-text">{fieldErrors.scope}</div>
         )}
 
-        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-slate-50 p-4 text-sm md:grid-cols-2">
+        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-canvas p-4 text-sm md:grid-cols-2">
           <div>
-            <label className="block text-xs text-slate-500">原因码</label>
+            <label className="block text-xs text-ink-secondary">原因码</label>
             <select
               value={reasonCode}
               onChange={(e) => setReasonCode(e.target.value)}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             >
               {REASON_CODES.map((r) => (
                 <option key={r} value={r}>{r}</option>
@@ -192,12 +192,12 @@ function AdjustmentEditForm() {
             </select>
           </div>
           <div>
-            <label className="block text-xs text-slate-500">备注（可选，≤500）</label>
+            <label className="block text-xs text-ink-secondary">备注（可选，≤500）</label>
             <input
               value={remark}
               onChange={(e) => setRemark(e.target.value)}
               maxLength={500}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
           </div>
         </div>
@@ -211,7 +211,7 @@ function AdjustmentEditForm() {
           >
             {submitting ? "保存中…" : "保存头字段"}
           </button>
-          {dirty && <span className="text-xs text-amber-600">有未保存的更改</span>}
+          {dirty && <span className="text-xs text-status-warning-text">有未保存的更改</span>}
         </div>
       </div>
     </div>

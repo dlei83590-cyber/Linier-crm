@@ -160,23 +160,23 @@ function ConversionCreateForm() {
   };
 
   const renderLine = (role: "consume" | "produce", line: LineForm, title: string) => (
-    <div className="mb-3 rounded-md border border-slate-200 p-3">
+    <div className="mb-3 rounded-md border border-border p-3">
       <h3 className="text-ink-primary mb-2 text-sm font-semibold">{title}</h3>
       <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-3">
         <div>
-          <label className="block text-xs text-slate-500">数量 *</label>
+          <label className="block text-xs text-ink-secondary">数量 *</label>
           <input
             type="number" min="0" step="any" value={line.quantity}
             onChange={(e) => updateLine(role, { quantity: e.target.value })}
-            className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+            className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
           />
         </div>
         <div>
-          <label className="block text-xs text-slate-500">业务单位 *</label>
+          <label className="block text-xs text-ink-secondary">业务单位 *</label>
           <select
             value={line.uomId}
             onChange={(e) => updateLine(role, { uomId: e.target.value })}
-            className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+            className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
           >
             <option value="">选择单位</option>
             {uoms.map((u) => (
@@ -185,19 +185,19 @@ function ConversionCreateForm() {
           </select>
         </div>
         <div>
-          <label className="block text-xs text-slate-500">换算率（业务→基准）*</label>
+          <label className="block text-xs text-ink-secondary">换算率（业务→基准）*</label>
           <input
             type="number" min="0" step="any" value={line.uomToBaseRate}
             onChange={(e) => updateLine(role, { uomToBaseRate: e.target.value })}
-            className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+            className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
           />
         </div>
         <div>
-          <label className="block text-xs text-slate-500">仓库 *</label>
+          <label className="block text-xs text-ink-secondary">仓库 *</label>
           <select
             value={line.warehouseId}
             onChange={(e) => updateLine(role, { warehouseId: e.target.value })}
-            className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+            className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
           >
             <option value="">选择仓库</option>
             {warehouses.map((w) => (
@@ -206,11 +206,11 @@ function ConversionCreateForm() {
           </select>
         </div>
         <div>
-          <label className="block text-xs text-slate-500">库位（可选）</label>
+          <label className="block text-xs text-ink-secondary">库位（可选）</label>
           <select
             value={line.locationId}
             onChange={(e) => updateLine(role, { locationId: e.target.value })}
-            className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+            className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
           >
             <option value="">未指定</option>
             {locations.map((l) => (
@@ -219,12 +219,12 @@ function ConversionCreateForm() {
           </select>
         </div>
         <div>
-          <label className="block text-xs text-slate-500">批次（可选）</label>
+          <label className="block text-xs text-ink-secondary">批次（可选）</label>
           <input
             value={line.batchNo}
             onChange={(e) => updateLine(role, { batchNo: e.target.value })}
             maxLength={100}
-            className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+            className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
           />
         </div>
       </div>
@@ -233,14 +233,14 @@ function ConversionCreateForm() {
 
   return (
     <div className={CARD_CLASS}>
-      <div className="flex items-center justify-between border-b border-slate-200 p-4">
-        <h1 className="text-lg font-semibold text-slate-800">新建库存转换单</h1>
+      <div className="flex items-center justify-between border-b border-border p-4">
+        <h1 className="text-lg font-semibold text-ink-primary">新建库存转换单</h1>
         <Link
           href="/inventory/conversions"
           onClick={(e) => {
             if (dirty && !window.confirm("有未保存的更改，确定离开？")) e.preventDefault();
           }}
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+          className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
         >
           返回列表
         </Link>
@@ -248,7 +248,7 @@ function ConversionCreateForm() {
 
       <div className="p-4">
         {error && (
-          <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div className="mb-4 rounded-md bg-status-danger-bg p-3 text-sm text-status-danger-text">
             <p>
               {describeStatus(error.status)}：{error.message}
               {error.code ? `（${error.code}）` : ""}
@@ -256,35 +256,35 @@ function ConversionCreateForm() {
           </div>
         )}
 
-        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-slate-50 p-4 text-sm md:grid-cols-3">
+        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-canvas p-4 text-sm md:grid-cols-3">
           <div>
-            <label className="block text-xs text-slate-500">物料 *（同一物料，Repack/UOM 转换）</label>
+            <label className="block text-xs text-ink-secondary">物料 *（同一物料，Repack/UOM 转换）</label>
             <select
               value={itemId}
               onChange={(e) => handleItemChange(e.target.value)}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             >
               <option value="">选择物料</option>
               {items.map((it) => (
                 <option key={it.id} value={it.id}>{it.code ?? ""} {it.name ?? ""}</option>
               ))}
             </select>
-            {fieldErrors.itemId && <p className="mt-0.5 text-xs text-red-600">{fieldErrors.itemId}</p>}
+            {fieldErrors.itemId && <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.itemId}</p>}
           </div>
           <div>
-            <label className="block text-xs text-slate-500">基准单位（自动）</label>
-            <p className="mt-1 text-slate-700">
+            <label className="block text-xs text-ink-secondary">基准单位（自动）</label>
+            <p className="mt-1 text-ink-secondary">
               {baseUomId ? (items.find((it) => it.id === itemId)?.stockUom?.symbol ?? baseUomId) : "—"}
             </p>
-            {fieldErrors.baseUomId && <p className="mt-0.5 text-xs text-red-600">{fieldErrors.baseUomId}</p>}
+            {fieldErrors.baseUomId && <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.baseUomId}</p>}
           </div>
           <div>
-            <label className="block text-xs text-slate-500">备注（可选，≤500）</label>
+            <label className="block text-xs text-ink-secondary">备注（可选，≤500）</label>
             <input
               value={remark}
               onChange={(e) => { setRemark(e.target.value); markDirty(); }}
               maxLength={500}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
           </div>
         </div>
@@ -301,7 +301,7 @@ function ConversionCreateForm() {
           >
             {submitting ? "提交中…" : "创建（DRAFT）"}
           </button>
-          {dirty && <span className="text-xs text-amber-600">有未保存的更改</span>}
+          {dirty && <span className="text-xs text-status-warning-text">有未保存的更改</span>}
         </div>
       </div>
     </div>

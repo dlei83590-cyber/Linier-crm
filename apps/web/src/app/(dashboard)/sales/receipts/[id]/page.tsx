@@ -354,7 +354,7 @@ function ReceiptDetailPage() {
                   type="button"
                   onClick={() => setVoidOpen(true)}
                   disabled={actionBusy}
-                  className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-status-danger-bg disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   作废
                 </button>
@@ -384,7 +384,7 @@ function ReceiptDetailPage() {
           </h2>
           <div className="overflow-x-auto">
             <table className="divide-border min-w-full divide-y text-sm">
-              <thead className="bg-slate-50 text-left text-xs font-medium text-ink-secondary">
+              <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
                 <tr>
                   <th className="px-3 py-2 font-medium">核销金额</th>
                   <th className="px-3 py-2 font-medium">应收（AR）</th>
@@ -416,7 +416,7 @@ function ReceiptDetailPage() {
                             setReverseError(null);
                           }}
                           disabled={actionBusy}
-                          className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           冲销
                         </button>
@@ -458,7 +458,7 @@ function ReceiptDetailPage() {
                 type="button"
                 onClick={() => setVoidOpen(false)}
                 disabled={actionBusy}
-                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-50"
               >
                 取消
               </button>
@@ -497,7 +497,7 @@ function ReceiptDetailPage() {
                 勾选要核销的应收并填写金额（默认应收余额，可改小）；至少选择一笔。金额最终由后端锁内校验。
               </p>
               {dialogError && (
-                <div className="border-red-200 mb-3 rounded-md border bg-red-50 p-2 text-sm text-red-700">
+                <div className="border-status-danger-border mb-3 rounded-md border bg-status-danger-bg p-2 text-sm text-status-danger-text">
                   {dialogError}
                 </div>
               )}
@@ -505,7 +505,7 @@ function ReceiptDetailPage() {
                 <p className="text-ink-muted py-6 text-center text-sm">加载应收未结项…</p>
               ) : (
                 <table className="min-w-full divide-y divide-slate-200 text-sm">
-                  <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500">
+                  <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
                     <tr>
                       <th className="px-3 py-2">选择</th>
                       <th className="px-3 py-2">发票</th>
@@ -527,9 +527,9 @@ function ReceiptDetailPage() {
                               className="h-4 w-4 accent-brand-600"
                             />
                           </td>
-                          <td className="px-3 py-2 text-slate-700">{ar.invoice?.code ?? ar.invoiceId}</td>
-                          <td className="px-3 py-2 text-slate-600">{ar.balanceAmount}</td>
-                          <td className="px-3 py-2 text-slate-600">{ar.status}</td>
+                          <td className="px-3 py-2 text-ink-secondary">{ar.invoice?.code ?? ar.invoiceId}</td>
+                          <td className="px-3 py-2 text-ink-secondary">{ar.balanceAmount}</td>
+                          <td className="px-3 py-2 text-ink-secondary">{ar.status}</td>
                           <td className="px-3 py-2">
                             <input
                               type="number"
@@ -538,7 +538,7 @@ function ReceiptDetailPage() {
                               value={sel?.amount ?? ""}
                               disabled={!sel?.checked}
                               onChange={(e) => updateSelection(ar.id, { amount: e.target.value })}
-                              className="focus:border-brand-500 w-28 rounded-md border border-slate-200 px-2 py-1.5 disabled:bg-slate-50 disabled:text-slate-400"
+                              className="focus:border-brand-500 w-28 rounded-md border border-border px-2 py-1.5 disabled:bg-canvas disabled:text-ink-muted"
                             />
                           </td>
                         </tr>
@@ -546,7 +546,7 @@ function ReceiptDetailPage() {
                     })}
                     {arOptions.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="px-3 py-8 text-center text-sm text-slate-400">
+                        <td colSpan={5} className="px-3 py-8 text-center text-sm text-ink-muted">
                           该客户无正余额应收未结项
                         </td>
                       </tr>
@@ -595,24 +595,24 @@ function ReceiptDetailPage() {
               将撤销这笔 {formatMoney(reverseTarget.allocatedAmount, detail.currency)} 的核销（保留逆向留痕）。
             </p>
             {reverseError && (
-              <div className="border-red-200 mt-3 rounded-md border bg-red-50 p-2 text-sm text-red-700">
+              <div className="border-status-danger-border mt-3 rounded-md border bg-status-danger-bg p-2 text-sm text-status-danger-text">
                 {reverseError}
               </div>
             )}
-            <label className="mt-4 block text-xs text-slate-500">冲销原因 *</label>
+            <label className="mt-4 block text-xs text-ink-secondary">冲销原因 *</label>
             <input
               value={reverseReason}
               onChange={(e) => setReverseReason(e.target.value)}
               maxLength={500}
               placeholder="请填写冲销原因"
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setReverseTarget(null)}
                 disabled={actionBusy}
-                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-50"
               >
                 取消
               </button>

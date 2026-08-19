@@ -38,6 +38,7 @@
 - **按钮/操作区统一（批次5）**：主按钮（106+14 处）迁移 BUTTON_PRIMARY_CLASS、次按钮（43 处）迁移 BUTTON_SECONDARY_CLASS（消除各页散落样式；尺寸特化变体 px-2/px-4 保留以维持布局层次）
 - **表格/列表控件统一（批次6）**：新增 SELECT_CLASS（筛选控件专用非 w-full 保 inline 布局）；**41 个列表页 91 处**筛选下拉/搜索框迁移共享类（宽度变体保留定宽 + 基础类；INPUT_CLASS 保留表单字段用）
 - **CARD_CLASS 应用（批次7）**：**20 个表单/详情页 27 处**外层卡片容器（rounded-lg border-slate-200 bg-white）迁移 CARD_CLASS（统一 rounded-xl + border-border + surface + elevation-sm）
+- **残留变体清理（批次8）**：全仓 53 文件清理非语义色 token——text-slate-* → ink 语义、text-red/amber → status 语义、border-slate-200 → border-border、bg-slate-50 → bg-canvas、bg-red/amber-50 → status-bg（约 1380 token；健康指示点等真实状态色保留）
 
 ### 边界
 

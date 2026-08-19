@@ -8,9 +8,9 @@ export default function DashboardError({
   reset: () => void;
 }) {
   return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center rounded-lg border border-slate-200 bg-white p-8 text-center">
-      <h1 className="text-lg font-semibold text-slate-800">页面加载失败</h1>
-      <p className="mt-2 text-sm text-slate-500">{error.message || "发生未知错误，请稍后重试。"}</p>
+    <div className="flex min-h-[60vh] flex-col items-center justify-center rounded-lg border border-border bg-white p-8 text-center">
+      <h1 className="text-lg font-semibold text-ink-primary">页面加载失败</h1>
+      <p className="mt-2 text-sm text-ink-secondary">{error.message || "发生未知错误，请稍后重试。"}</p>
       <button
         type="button"
         onClick={reset}

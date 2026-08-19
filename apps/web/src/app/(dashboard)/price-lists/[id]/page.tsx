@@ -200,7 +200,7 @@ function PriceListDetailPage() {
               </h2>
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-border text-sm">
-                  <thead className="bg-slate-50 text-left text-xs font-medium text-ink-secondary">
+                  <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
                     <tr>
                       <th className="px-3 py-2 font-medium">物料编码</th>
                       <th className="px-3 py-2 font-medium">物料名称</th>

@@ -161,7 +161,7 @@ function InspectionDetailPage() {
             <>
               <Link
                 href={`/purchasing/inspections/${id}/edit`}
-                className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-slate-50"
+                className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-canvas"
               >
                 编辑
               </Link>
@@ -242,25 +242,25 @@ function InspectionDetailPage() {
             </p>
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
               <div>
-                <label className="block text-xs text-slate-500">合格数量</label>
+                <label className="block text-xs text-ink-secondary">合格数量</label>
                 <input
                   type="number"
                   min="0"
                   step="any"
                   value={qualifiedQty}
                   onChange={(e) => setQualifiedQty(e.target.value)}
-                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
                 />
               </div>
               <div>
-                <label className="block text-xs text-slate-500">拒收数量</label>
+                <label className="block text-xs text-ink-secondary">拒收数量</label>
                 <input
                   type="number"
                   min="0"
                   step="any"
                   value={rejectedQty}
                   onChange={(e) => setRejectedQty(e.target.value)}
-                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
                 />
               </div>
             </div>
@@ -269,7 +269,7 @@ function InspectionDetailPage() {
                 type="button"
                 onClick={() => setCompleteOpen(false)}
                 disabled={actionBusy}
-                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-50"
               >
                 取消
               </button>

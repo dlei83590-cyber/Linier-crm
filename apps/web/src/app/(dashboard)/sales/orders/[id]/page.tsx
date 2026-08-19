@@ -258,7 +258,7 @@ function SalesOrderDetailPage() {
             {detail.status === "DRAFT" && canEdit && (
               <Link
                 href={`/sales/orders/${id}/edit`}
-                className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-slate-50"
+                className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-canvas"
               >
                 编辑
               </Link>
@@ -278,7 +278,7 @@ function SalesOrderDetailPage() {
                 type="button"
                 onClick={() => setConfirmAction("cancel")}
                 disabled={actionBusy}
-                className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-status-danger-bg disabled:cursor-not-allowed disabled:opacity-50"
               >
                 取消订单
               </button>
@@ -329,7 +329,7 @@ function SalesOrderDetailPage() {
           </h2>
           <div className="overflow-x-auto">
             <table className="divide-border min-w-full divide-y text-sm">
-              <thead className="bg-slate-50 text-left text-xs font-medium text-ink-secondary">
+              <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
                 <tr>
                   <th className="px-3 py-2 font-medium">行号</th>
                   <th className="px-3 py-2 font-medium">物料</th>
@@ -398,12 +398,12 @@ function SalesOrderDetailPage() {
                 勾选要交付的行并填写数量（默认剩余可交付量，可改小）；至少选择一行。数量最终由后端锁内校验。
               </p>
               {dialogError && (
-                <div className="border-red-200 mb-3 rounded-md border bg-red-50 p-2 text-sm text-red-700">
+                <div className="border-status-danger-border mb-3 rounded-md border bg-status-danger-bg p-2 text-sm text-status-danger-text">
                   {dialogError}
                 </div>
               )}
               <table className="min-w-full divide-y divide-slate-200 text-sm">
-                <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500">
+                <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
                   <tr>
                     <th className="px-3 py-2">选择</th>
                     <th className="px-3 py-2">行号</th>
@@ -428,11 +428,11 @@ function SalesOrderDetailPage() {
                             className="h-4 w-4 accent-brand-600"
                           />
                         </td>
-                        <td className="px-3 py-2 text-slate-600">{line.lineNo}</td>
-                        <td className="px-3 py-2 text-slate-700">
+                        <td className="px-3 py-2 text-ink-secondary">{line.lineNo}</td>
+                        <td className="px-3 py-2 text-ink-secondary">
                           {line.item ? `${line.item.code ?? ""} ${line.item.name ?? ""}`.trim() : "—"}
                         </td>
-                        <td className="px-3 py-2 text-slate-600">{max}</td>
+                        <td className="px-3 py-2 text-ink-secondary">{max}</td>
                         <td className="px-3 py-2">
                           <input
                             type="number"
@@ -443,7 +443,7 @@ function SalesOrderDetailPage() {
                             onChange={(e) =>
                               updateSelection(line.id, { quantity: e.target.value })
                             }
-                            className="focus:border-brand-500 w-28 rounded-md border border-slate-200 px-2 py-1.5 disabled:bg-slate-50 disabled:text-slate-400"
+                            className="focus:border-brand-500 w-28 rounded-md border border-border px-2 py-1.5 disabled:bg-canvas disabled:text-ink-muted"
                           />
                         </td>
                       </tr>
@@ -451,7 +451,7 @@ function SalesOrderDetailPage() {
                   })}
                   {remainingLines.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-3 py-8 text-center text-sm text-slate-400">
+                      <td colSpan={5} className="px-3 py-8 text-center text-sm text-ink-muted">
                         无剩余可交付数量
                       </td>
                     </tr>

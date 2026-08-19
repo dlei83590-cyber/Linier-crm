@@ -273,7 +273,7 @@ function StockCountDetailPage() {
                 type="button"
                 onClick={() => setConfirmAction("cancel")}
                 disabled={actionBusy}
-                className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-status-danger-bg disabled:cursor-not-allowed disabled:opacity-50"
               >
                 取消
               </button>
@@ -296,7 +296,7 @@ function StockCountDetailPage() {
           </h2>
           <div className="overflow-x-auto">
             <table className="divide-border min-w-full divide-y text-sm">
-              <thead className="bg-slate-50 text-left text-xs font-medium text-ink-secondary">
+              <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
                 <tr>
                   <th className="px-3 py-2 font-medium">仓库</th>
                   <th className="px-3 py-2 font-medium">库位</th>
@@ -368,18 +368,18 @@ function StockCountDetailPage() {
             <h2 className="text-ink-primary text-base font-semibold">录入盘点行</h2>
             <p className="text-ink-secondary mt-2 text-xs">录入时服务端冻结账面数量快照并计算差异。</p>
             {lineError && (
-              <div className="border-red-200 mt-3 rounded-md border bg-red-50 p-2 text-sm text-red-700">{lineError}</div>
+              <div className="border-status-danger-border mt-3 rounded-md border bg-status-danger-bg p-2 text-sm text-status-danger-text">{lineError}</div>
             )}
             {lineLoading ? (
               <p className="text-ink-muted py-6 text-center text-sm">加载基础数据…</p>
             ) : (
               <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                 <div>
-                  <label className="block text-xs text-slate-500">仓库 *</label>
+                  <label className="block text-xs text-ink-secondary">仓库 *</label>
                   <select
                     value={lineForm.warehouseId}
                     onChange={(e) => setLineForm((f) => ({ ...f, warehouseId: e.target.value }))}
-                    className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                    className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
                   >
                     <option value="">选择仓库</option>
                     {warehouses.map((w) => (
@@ -388,11 +388,11 @@ function StockCountDetailPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-500">库位（可选）</label>
+                  <label className="block text-xs text-ink-secondary">库位（可选）</label>
                   <select
                     value={lineForm.locationId}
                     onChange={(e) => setLineForm((f) => ({ ...f, locationId: e.target.value }))}
-                    className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                    className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
                   >
                     <option value="">未指定</option>
                     {locations.map((l) => (
@@ -401,11 +401,11 @@ function StockCountDetailPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-500">物料 *</label>
+                  <label className="block text-xs text-ink-secondary">物料 *</label>
                   <select
                     value={lineForm.itemId}
                     onChange={(e) => setLineForm((f) => ({ ...f, itemId: e.target.value }))}
-                    className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                    className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
                   >
                     <option value="">选择物料</option>
                     {items.map((it) => (
@@ -414,41 +414,41 @@ function StockCountDetailPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-500">实盘数量 *</label>
+                  <label className="block text-xs text-ink-secondary">实盘数量 *</label>
                   <input
                     type="number"
                     min="0"
                     step="any"
                     value={lineForm.countedQty}
                     onChange={(e) => setLineForm((f) => ({ ...f, countedQty: e.target.value }))}
-                    className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                    className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-500">批次（可选）</label>
+                  <label className="block text-xs text-ink-secondary">批次（可选）</label>
                   <input
                     value={lineForm.batchNo}
                     onChange={(e) => setLineForm((f) => ({ ...f, batchNo: e.target.value }))}
                     maxLength={100}
-                    className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                    className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-500">序列号（可选）</label>
+                  <label className="block text-xs text-ink-secondary">序列号（可选）</label>
                   <input
                     value={lineForm.serialNo}
                     onChange={(e) => setLineForm((f) => ({ ...f, serialNo: e.target.value }))}
                     maxLength={100}
-                    className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                    className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
                   />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs text-slate-500">备注（可选）</label>
+                  <label className="block text-xs text-ink-secondary">备注（可选）</label>
                   <input
                     value={lineForm.remark}
                     onChange={(e) => setLineForm((f) => ({ ...f, remark: e.target.value }))}
                     maxLength={500}
-                    className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                    className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
                   />
                 </div>
               </div>
@@ -458,7 +458,7 @@ function StockCountDetailPage() {
                 type="button"
                 onClick={() => setLineOpen(false)}
                 disabled={actionBusy}
-                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-canvas"
               >
                 取消
               </button>

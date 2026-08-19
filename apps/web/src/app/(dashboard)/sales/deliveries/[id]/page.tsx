@@ -310,7 +310,7 @@ function DeliveryDetailPage() {
             {detail.status === "DRAFT" && canEdit && (
               <Link
                 href={`/sales/deliveries/${id}/edit`}
-                className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-slate-50"
+                className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-canvas"
               >
                 编辑
               </Link>
@@ -357,7 +357,7 @@ function DeliveryDetailPage() {
                 type="button"
                 onClick={() => setConfirmAction("cancel")}
                 disabled={actionBusy}
-                className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-status-danger-bg disabled:cursor-not-allowed disabled:opacity-50"
               >
                 取消
               </button>
@@ -406,7 +406,7 @@ function DeliveryDetailPage() {
           </h2>
           <div className="overflow-x-auto">
             <table className="divide-border min-w-full divide-y text-sm">
-              <thead className="bg-slate-50 text-left text-xs font-medium text-ink-secondary">
+              <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
                 <tr>
                   <th className="px-3 py-2 font-medium">行号</th>
                   <th className="px-3 py-2 font-medium">物料</th>
@@ -470,12 +470,12 @@ function DeliveryDetailPage() {
                 勾选要开票的行并填写数量（默认剩余可开票量，可改小）；至少选择一行。数量最终由后端锁内校验，金额由后端计算。
               </p>
               {dialogError && (
-                <div className="border-red-200 mb-3 rounded-md border bg-red-50 p-2 text-sm text-red-700">
+                <div className="border-status-danger-border mb-3 rounded-md border bg-status-danger-bg p-2 text-sm text-status-danger-text">
                   {dialogError}
                 </div>
               )}
               <table className="min-w-full divide-y divide-slate-200 text-sm">
-                <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500">
+                <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
                   <tr>
                     <th className="px-3 py-2">选择</th>
                     <th className="px-3 py-2">行号</th>
@@ -500,11 +500,11 @@ function DeliveryDetailPage() {
                             className="h-4 w-4 accent-brand-600"
                           />
                         </td>
-                        <td className="px-3 py-2 text-slate-600">{line.lineNo}</td>
-                        <td className="px-3 py-2 text-slate-700">
+                        <td className="px-3 py-2 text-ink-secondary">{line.lineNo}</td>
+                        <td className="px-3 py-2 text-ink-secondary">
                           {line.item ? `${line.item.code ?? ""} ${line.item.name ?? ""}`.trim() : "—"}
                         </td>
-                        <td className="px-3 py-2 text-slate-600">{max}</td>
+                        <td className="px-3 py-2 text-ink-secondary">{max}</td>
                         <td className="px-3 py-2">
                           <input
                             type="number"
@@ -515,7 +515,7 @@ function DeliveryDetailPage() {
                             onChange={(e) =>
                               updateSelection(line.id, { quantity: e.target.value })
                             }
-                            className="focus:border-brand-500 w-28 rounded-md border border-slate-200 px-2 py-1.5 disabled:bg-slate-50 disabled:text-slate-400"
+                            className="focus:border-brand-500 w-28 rounded-md border border-border px-2 py-1.5 disabled:bg-canvas disabled:text-ink-muted"
                           />
                         </td>
                       </tr>
@@ -523,7 +523,7 @@ function DeliveryDetailPage() {
                   })}
                   {invoicableLines.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-3 py-8 text-center text-sm text-slate-400">
+                      <td colSpan={5} className="px-3 py-8 text-center text-sm text-ink-muted">
                         无剩余可开票数量
                       </td>
                     </tr>
@@ -589,21 +589,21 @@ function DeliveryDetailPage() {
             <p className="text-ink-secondary mt-2 text-sm">发运将状态推进为 DISPATCHED（发运 ≠ 客户收货）。</p>
             <div className="mt-4 space-y-3">
               <div>
-                <label className="block text-xs text-slate-500">承运方（可选，≤100）</label>
+                <label className="block text-xs text-ink-secondary">承运方（可选，≤100）</label>
                 <input
                   value={dispatchCarrier}
                   onChange={(e) => setDispatchCarrier(e.target.value)}
                   maxLength={100}
-                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
                 />
               </div>
               <div>
-                <label className="block text-xs text-slate-500">运单号（可选，≤100）</label>
+                <label className="block text-xs text-ink-secondary">运单号（可选，≤100）</label>
                 <input
                   value={dispatchTrackingNo}
                   onChange={(e) => setDispatchTrackingNo(e.target.value)}
                   maxLength={100}
-                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
                 />
               </div>
             </div>
@@ -612,7 +612,7 @@ function DeliveryDetailPage() {
                 type="button"
                 onClick={() => setDispatchOpen(false)}
                 disabled={actionBusy}
-                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-50"
               >
                 取消
               </button>
@@ -646,11 +646,11 @@ function DeliveryDetailPage() {
               确认后将状态推进为 DELIVERED，并回写销售订单交付投影（不可逆）。
             </p>
             <div className="mt-4">
-              <label className="block text-xs text-slate-500">签收状态（POD）</label>
+              <label className="block text-xs text-ink-secondary">签收状态（POD）</label>
               <select
                 value={podStatus}
                 onChange={(e) => setPodStatus(e.target.value as "RECEIVED" | "WAIVED")}
-                className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+                className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
               >
                 <option value="RECEIVED">已签收（RECEIVED）</option>
                 <option value="WAIVED">豁免签收（WAIVED）</option>
@@ -661,7 +661,7 @@ function DeliveryDetailPage() {
                 type="button"
                 onClick={() => setConfirmDeliverOpen(false)}
                 disabled={actionBusy}
-                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-50"
               >
                 取消
               </button>

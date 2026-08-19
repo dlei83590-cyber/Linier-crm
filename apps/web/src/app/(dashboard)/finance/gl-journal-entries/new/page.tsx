@@ -110,7 +110,7 @@ function ManualEntryForm() {
             <span>借方合计：<b>{totalDebit.toFixed(2)}</b></span>
             <span>贷方合计：<b>{totalCredit.toFixed(2)}</b></span>
             <span className={balanced ? "text-status-success-text" : "text-status-danger-text"}>{balanced ? "平衡 ✓" : "不平衡 ✗"}</span>
-            <button type="button" onClick={addLine} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary hover:bg-slate-50">+ 添加行</button>
+            <button type="button" onClick={addLine} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary hover:bg-canvas">+ 添加行</button>
           </div>
         </div>
         <div className="overflow-x-auto">

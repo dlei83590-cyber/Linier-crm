@@ -204,7 +204,7 @@ function RequisitionDetailPage() {
               <>
                 <Link
                   href={`/purchasing/requisitions/${id}/edit`}
-                  className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-slate-50"
+                  className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-canvas"
                 >
                   编辑
                 </Link>
@@ -247,7 +247,7 @@ function RequisitionDetailPage() {
           </h2>
           <div className="overflow-x-auto">
             <table className="divide-border min-w-full divide-y text-sm">
-              <thead className="bg-slate-50 text-left text-xs font-medium text-ink-secondary">
+              <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
                 <tr>
                   <th className="px-3 py-2 font-medium">行号</th>
                   <th className="px-3 py-2 font-medium">物料</th>
@@ -311,15 +311,15 @@ function RequisitionDetailPage() {
             <h2 className="text-ink-primary text-base font-semibold">转采购订单</h2>
             <p className="text-ink-secondary mt-2 text-xs">将采购申请行复制为采购订单（DRAFT）；请选择供应商。</p>
             {convertError && (
-              <div className="border-red-200 mt-3 rounded-md border bg-red-50 p-2 text-sm text-red-700">{convertError}</div>
+              <div className="border-status-danger-border mt-3 rounded-md border bg-status-danger-bg p-2 text-sm text-status-danger-text">{convertError}</div>
             )}
             <div className="mt-4 space-y-3 text-sm">
               <div>
-                <label className="block text-xs text-slate-500">供应商 *</label>
+                <label className="block text-xs text-ink-secondary">供应商 *</label>
                 <select
                   value={convertSupplierId}
                   onChange={(e) => setConvertSupplierId(e.target.value)}
-                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
                 >
                   <option value="">选择供应商</option>
                   {suppliers.map((s) => (
@@ -328,30 +328,30 @@ function RequisitionDetailPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-slate-500">期望交期（可选）</label>
+                <label className="block text-xs text-ink-secondary">期望交期（可选）</label>
                 <input
                   type="datetime-local"
                   value={convertDeliveryDate}
                   onChange={(e) => setConvertDeliveryDate(e.target.value)}
-                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
                 />
               </div>
               <div>
-                <label className="block text-xs text-slate-500">付款条件（可选，≤100）</label>
+                <label className="block text-xs text-ink-secondary">付款条件（可选，≤100）</label>
                 <input
                   value={convertPaymentTerm}
                   onChange={(e) => setConvertPaymentTerm(e.target.value)}
                   maxLength={100}
-                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
                 />
               </div>
               <div>
-                <label className="block text-xs text-slate-500">备注（可选，≤1000）</label>
+                <label className="block text-xs text-ink-secondary">备注（可选，≤1000）</label>
                 <input
                   value={convertRemark}
                   onChange={(e) => setConvertRemark(e.target.value)}
                   maxLength={1000}
-                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
                 />
               </div>
             </div>
@@ -360,7 +360,7 @@ function RequisitionDetailPage() {
                 type="button"
                 onClick={() => setConvertOpen(false)}
                 disabled={actionBusy}
-                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-50"
               >
                 取消
               </button>

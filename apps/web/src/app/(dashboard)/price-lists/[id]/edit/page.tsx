@@ -208,7 +208,7 @@ function PriceListEditForm() {
     >
       <Section title="基本信息">
         <FormField label="编码">
-          <input value={code} disabled className={`${inputClass} disabled:bg-slate-50 disabled:text-ink-muted`} />
+          <input value={code} disabled className={`${inputClass} disabled:bg-canvas disabled:text-ink-muted`} />
         </FormField>
         <FormField label="名称" required>
           <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />

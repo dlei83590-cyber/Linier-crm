@@ -143,7 +143,7 @@ function UserEditForm() {
       <section className="rounded-md border border-border p-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <FormField label="邮箱">
-            <input value={email} readOnly className={`${inputClass} bg-slate-50`} />
+            <input value={email} readOnly className={`${inputClass} bg-canvas`} />
           </FormField>
           <FormField label="姓名">
             <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />

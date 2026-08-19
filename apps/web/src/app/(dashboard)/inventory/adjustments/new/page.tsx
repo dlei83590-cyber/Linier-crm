@@ -155,14 +155,14 @@ function AdjustmentCreateForm() {
 
   return (
     <div className={CARD_CLASS}>
-      <div className="flex items-center justify-between border-b border-slate-200 p-4">
-        <h1 className="text-lg font-semibold text-slate-800">新建库存调整单</h1>
+      <div className="flex items-center justify-between border-b border-border p-4">
+        <h1 className="text-lg font-semibold text-ink-primary">新建库存调整单</h1>
         <Link
           href="/inventory/adjustments"
           onClick={(e) => {
             if (dirty && !window.confirm("有未保存的更改，确定离开？")) e.preventDefault();
           }}
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+          className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
         >
           返回列表
         </Link>
@@ -170,7 +170,7 @@ function AdjustmentCreateForm() {
 
       <div className="p-4">
         {error && (
-          <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div className="mb-4 rounded-md bg-status-danger-bg p-3 text-sm text-status-danger-text">
             <p>
               {describeStatus(error.status)}：{error.message}
               {error.code ? `（${error.code}）` : ""}
@@ -178,25 +178,25 @@ function AdjustmentCreateForm() {
           </div>
         )}
 
-        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-slate-50 p-4 text-sm md:grid-cols-3">
+        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-canvas p-4 text-sm md:grid-cols-3">
           <div>
-            <label className="block text-xs text-slate-500">原因码 *</label>
+            <label className="block text-xs text-ink-secondary">原因码 *</label>
             <select
               value={reasonCode}
               onChange={(e) => {
                 setReasonCode(e.target.value);
                 markDirty();
               }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             >
               {REASON_CODES.map((r) => (
                 <option key={r} value={r}>{r}</option>
               ))}
             </select>
-            {fieldErrors.reasonCode && <p className="mt-0.5 text-xs text-red-600">{fieldErrors.reasonCode}</p>}
+            {fieldErrors.reasonCode && <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.reasonCode}</p>}
           </div>
           <div className="col-span-2">
-            <label className="block text-xs text-slate-500">备注（可选，≤500）</label>
+            <label className="block text-xs text-ink-secondary">备注（可选，≤500）</label>
             <input
               value={remark}
               onChange={(e) => {
@@ -204,13 +204,13 @@ function AdjustmentCreateForm() {
                 markDirty();
               }}
               maxLength={500}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
           </div>
         </div>
 
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-sm font-medium text-slate-700">调整行（至少一行）</h2>
+          <h2 className="text-sm font-medium text-ink-secondary">调整行（至少一行）</h2>
           <button
             type="button"
             onClick={addLine}
@@ -222,7 +222,7 @@ function AdjustmentCreateForm() {
 
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500">
+            <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
               <tr>
                 <th className="px-2 py-2">仓库</th>
                 <th className="px-2 py-2">库位</th>
@@ -241,7 +241,7 @@ function AdjustmentCreateForm() {
                     <select
                       value={line.warehouseId}
                       onChange={(e) => updateLine(idx, { warehouseId: e.target.value })}
-                      className="focus:border-brand-500 w-full min-w-28 rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                      className="focus:border-brand-500 w-full min-w-28 rounded-md border border-border px-2 py-1.5 focus:outline-none"
                     >
                       <option value="">选择仓库</option>
                       {warehouses.map((w) => (
@@ -253,7 +253,7 @@ function AdjustmentCreateForm() {
                     <select
                       value={line.locationId}
                       onChange={(e) => updateLine(idx, { locationId: e.target.value })}
-                      className="focus:border-brand-500 w-full min-w-24 rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                      className="focus:border-brand-500 w-full min-w-24 rounded-md border border-border px-2 py-1.5 focus:outline-none"
                     >
                       <option value="">未指定</option>
                       {locations.map((l) => (
@@ -268,7 +268,7 @@ function AdjustmentCreateForm() {
                         const item = items.find((it) => it.id === e.target.value);
                         updateLine(idx, { itemId: e.target.value, uomId: item?.stockUom?.id ?? "" });
                       }}
-                      className="focus:border-brand-500 w-full min-w-32 rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                      className="focus:border-brand-500 w-full min-w-32 rounded-md border border-border px-2 py-1.5 focus:outline-none"
                     >
                       <option value="">选择物料</option>
                       {items.map((it) => (
@@ -280,7 +280,7 @@ function AdjustmentCreateForm() {
                     <select
                       value={line.direction}
                       onChange={(e) => updateLine(idx, { direction: e.target.value as "IN" | "OUT" })}
-                      className="focus:border-brand-500 rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                      className="focus:border-brand-500 rounded-md border border-border px-2 py-1.5 focus:outline-none"
                     >
                       <option value="OUT">OUT（出库）</option>
                       <option value="IN">IN（入库）</option>
@@ -293,7 +293,7 @@ function AdjustmentCreateForm() {
                       step="any"
                       value={line.quantity}
                       onChange={(e) => updateLine(idx, { quantity: e.target.value })}
-                      className="focus:border-brand-500 w-24 rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                      className="focus:border-brand-500 w-24 rounded-md border border-border px-2 py-1.5 focus:outline-none"
                     />
                   </td>
                   <td className="px-2 py-2">
@@ -301,7 +301,7 @@ function AdjustmentCreateForm() {
                       value={line.batchNo}
                       onChange={(e) => updateLine(idx, { batchNo: e.target.value })}
                       maxLength={100}
-                      className="focus:border-brand-500 w-24 rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                      className="focus:border-brand-500 w-24 rounded-md border border-border px-2 py-1.5 focus:outline-none"
                     />
                   </td>
                   <td className="px-2 py-2">
@@ -309,7 +309,7 @@ function AdjustmentCreateForm() {
                       value={line.serialNo}
                       onChange={(e) => updateLine(idx, { serialNo: e.target.value })}
                       maxLength={100}
-                      className="focus:border-brand-500 w-24 rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none"
+                      className="focus:border-brand-500 w-24 rounded-md border border-border px-2 py-1.5 focus:outline-none"
                     />
                   </td>
                   <td className="px-2 py-2">
@@ -317,7 +317,7 @@ function AdjustmentCreateForm() {
                       type="button"
                       onClick={() => removeLine(idx)}
                       disabled={lines.length <= 1}
-                      className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       删除
                     </button>
@@ -328,7 +328,7 @@ function AdjustmentCreateForm() {
           </table>
         </div>
         {Object.keys(fieldErrors).length > 0 && (
-          <p className="mt-2 text-xs text-red-600">
+          <p className="mt-2 text-xs text-status-danger-text">
             {Object.values(fieldErrors).filter(Boolean)[0] ?? ""}
           </p>
         )}
@@ -342,7 +342,7 @@ function AdjustmentCreateForm() {
           >
             {submitting ? "提交中…" : "创建（DRAFT）"}
           </button>
-          {dirty && <span className="text-xs text-amber-600">有未保存的更改</span>}
+          {dirty && <span className="text-xs text-status-warning-text">有未保存的更改</span>}
         </div>
       </div>
     </div>

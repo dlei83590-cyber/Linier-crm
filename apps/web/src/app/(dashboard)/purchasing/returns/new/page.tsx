@@ -164,14 +164,14 @@ function PurchaseReturnCreateForm() {
 
   return (
     <div className={CARD_CLASS}>
-      <div className="flex items-center justify-between border-b border-slate-200 p-4">
-        <h1 className="text-lg font-semibold text-slate-800">新建采购退货</h1>
+      <div className="flex items-center justify-between border-b border-border p-4">
+        <h1 className="text-lg font-semibold text-ink-primary">新建采购退货</h1>
         <Link
           href="/purchasing/returns"
           onClick={(e) => {
             if (dirty && !window.confirm("有未保存的更改，确定离开？")) e.preventDefault();
           }}
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+          className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
         >
           返回列表
         </Link>
@@ -179,7 +179,7 @@ function PurchaseReturnCreateForm() {
 
       <div className="p-4">
         {error && (
-          <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div className="mb-4 rounded-md bg-status-danger-bg p-3 text-sm text-status-danger-text">
             <p>
               {describeStatus(error.status)}：{error.message}
               {error.code ? `（${error.code}）` : ""}
@@ -187,16 +187,16 @@ function PurchaseReturnCreateForm() {
           </div>
         )}
 
-        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-slate-50 p-4 text-sm md:grid-cols-3">
+        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-canvas p-4 text-sm md:grid-cols-3">
           <div>
-            <label className="block text-xs text-slate-500">采购订单（必填）</label>
+            <label className="block text-xs text-ink-secondary">采购订单（必填）</label>
             <select
               value={purchaseOrderId}
               onChange={(e) => {
                 setPurchaseOrderId(e.target.value);
                 markDirty();
               }}
-              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:border-brand-500 focus:outline-none"
+              className="mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:border-brand-500 focus:outline-none"
             >
               <option value="">选择采购订单</option>
               {purchaseOrders.map((po) => (
@@ -206,18 +206,18 @@ function PurchaseReturnCreateForm() {
               ))}
             </select>
             {fieldErrors.purchaseOrderId && (
-              <p className="mt-0.5 text-xs text-red-600">{fieldErrors.purchaseOrderId}</p>
+              <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.purchaseOrderId}</p>
             )}
           </div>
           <div>
-            <label className="block text-xs text-slate-500">退货类型（必填）</label>
+            <label className="block text-xs text-ink-secondary">退货类型（必填）</label>
             <select
               value={returnType}
               onChange={(e) => {
                 setReturnType(e.target.value);
                 markDirty();
               }}
-              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:border-brand-500 focus:outline-none"
+              className="mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:border-brand-500 focus:outline-none"
             >
               {RETURN_TYPES.map((t) => (
                 <option key={t} value={t}>
@@ -227,7 +227,7 @@ function PurchaseReturnCreateForm() {
             </select>
           </div>
           <div className="col-span-2">
-            <label className="block text-xs text-slate-500">备注（可选，≤500）</label>
+            <label className="block text-xs text-ink-secondary">备注（可选，≤500）</label>
             <textarea
               value={remark}
               onChange={(e) => {
@@ -235,13 +235,13 @@ function PurchaseReturnCreateForm() {
                 markDirty();
               }}
               rows={2}
-              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:border-brand-500 focus:outline-none"
+              className="mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:border-brand-500 focus:outline-none"
             />
           </div>
         </div>
 
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-sm font-medium text-slate-700">退货明细（至少一行）</h2>
+          <h2 className="text-sm font-medium text-ink-secondary">退货明细（至少一行）</h2>
           <button
             type="button"
             onClick={addLine}
@@ -250,11 +250,11 @@ function PurchaseReturnCreateForm() {
             + 添加行
           </button>
         </div>
-        {fieldErrors.lines && <p className="mb-2 text-xs text-red-600">{fieldErrors.lines}</p>}
+        {fieldErrors.lines && <p className="mb-2 text-xs text-status-danger-text">{fieldErrors.lines}</p>}
 
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500">
+            <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
               <tr>
                 <th className="px-3 py-2">来源类型</th>
                 <th className="px-3 py-2">来源 ID（exactly-one）</th>
@@ -273,7 +273,7 @@ function PurchaseReturnCreateForm() {
                     <select
                       value={line.sourceRefType}
                       onChange={(e) => updateLine(idx, { sourceRefType: e.target.value })}
-                      className="w-full rounded-md border border-slate-200 px-2 py-1.5 focus:border-brand-500 focus:outline-none"
+                      className="w-full rounded-md border border-border px-2 py-1.5 focus:border-brand-500 focus:outline-none"
                     >
                       {SOURCE_REF_TYPES.map((t) => (
                         <option key={t} value={t}>
@@ -288,7 +288,7 @@ function PurchaseReturnCreateForm() {
                         value={line.sourcePurchaseReceiptLineId}
                         onChange={(e) => updateLine(idx, { sourcePurchaseReceiptLineId: e.target.value })}
                         placeholder="收货行 ID"
-                        className="w-full rounded-md border border-slate-200 px-2 py-1.5 focus:border-brand-500 focus:outline-none"
+                        className="w-full rounded-md border border-border px-2 py-1.5 focus:border-brand-500 focus:outline-none"
                       />
                     )}
                     {line.sourceRefType === "WAREHOUSE_RECEIPT_LINE" && (
@@ -296,7 +296,7 @@ function PurchaseReturnCreateForm() {
                         value={line.sourceWarehouseReceiptLineId}
                         onChange={(e) => updateLine(idx, { sourceWarehouseReceiptLineId: e.target.value })}
                         placeholder="入库行 ID"
-                        className="w-full rounded-md border border-slate-200 px-2 py-1.5 focus:border-brand-500 focus:outline-none"
+                        className="w-full rounded-md border border-border px-2 py-1.5 focus:border-brand-500 focus:outline-none"
                       />
                     )}
                     {line.sourceRefType === "INSPECTION" && (
@@ -304,11 +304,11 @@ function PurchaseReturnCreateForm() {
                         value={line.sourceInspectionId}
                         onChange={(e) => updateLine(idx, { sourceInspectionId: e.target.value })}
                         placeholder="质检 ID"
-                        className="w-full rounded-md border border-slate-200 px-2 py-1.5 focus:border-brand-500 focus:outline-none"
+                        className="w-full rounded-md border border-border px-2 py-1.5 focus:border-brand-500 focus:outline-none"
                       />
                     )}
                     {fieldErrors[`lines.${idx}.source`] && (
-                      <p className="mt-0.5 text-xs text-red-600">{fieldErrors[`lines.${idx}.source`]}</p>
+                      <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors[`lines.${idx}.source`]}</p>
                     )}
                   </td>
                   <td className="px-3 py-2">
@@ -318,17 +318,17 @@ function PurchaseReturnCreateForm() {
                       step="any"
                       value={line.quantity}
                       onChange={(e) => updateLine(idx, { quantity: e.target.value })}
-                      className="w-20 rounded-md border border-slate-200 px-2 py-1.5 focus:border-brand-500 focus:outline-none"
+                      className="w-20 rounded-md border border-border px-2 py-1.5 focus:border-brand-500 focus:outline-none"
                     />
                     {fieldErrors[`lines.${idx}.quantity`] && (
-                      <p className="mt-0.5 text-xs text-red-600">{fieldErrors[`lines.${idx}.quantity`]}</p>
+                      <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors[`lines.${idx}.quantity`]}</p>
                     )}
                   </td>
                   <td className="px-3 py-2">
                     <select
                       value={line.disposition}
                       onChange={(e) => updateLine(idx, { disposition: e.target.value })}
-                      className="w-full rounded-md border border-slate-200 px-2 py-1.5 focus:border-brand-500 focus:outline-none"
+                      className="w-full rounded-md border border-border px-2 py-1.5 focus:border-brand-500 focus:outline-none"
                     >
                       {DISPOSITIONS.map((d) => (
                         <option key={d} value={d}>
@@ -342,10 +342,10 @@ function PurchaseReturnCreateForm() {
                       value={line.returnReason}
                       onChange={(e) => updateLine(idx, { returnReason: e.target.value })}
                       placeholder="必填"
-                      className="w-full rounded-md border border-slate-200 px-2 py-1.5 focus:border-brand-500 focus:outline-none"
+                      className="w-full rounded-md border border-border px-2 py-1.5 focus:border-brand-500 focus:outline-none"
                     />
                     {fieldErrors[`lines.${idx}.returnReason`] && (
-                      <p className="mt-0.5 text-xs text-red-600">{fieldErrors[`lines.${idx}.returnReason`]}</p>
+                      <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors[`lines.${idx}.returnReason`]}</p>
                     )}
                   </td>
                   <td className="px-3 py-2">
@@ -353,13 +353,13 @@ function PurchaseReturnCreateForm() {
                       value={line.batchNo}
                       onChange={(e) => updateLine(idx, { batchNo: e.target.value })}
                       placeholder="批次"
-                      className="mb-1 w-full rounded-md border border-slate-200 px-2 py-1.5 focus:border-brand-500 focus:outline-none"
+                      className="mb-1 w-full rounded-md border border-border px-2 py-1.5 focus:border-brand-500 focus:outline-none"
                     />
                     <input
                       value={line.serialNos}
                       onChange={(e) => updateLine(idx, { serialNos: e.target.value })}
                       placeholder="序列号（逗号分隔）"
-                      className="w-full rounded-md border border-slate-200 px-2 py-1.5 focus:border-brand-500 focus:outline-none"
+                      className="w-full rounded-md border border-border px-2 py-1.5 focus:border-brand-500 focus:outline-none"
                     />
                   </td>
                   <td className="px-3 py-2">
@@ -367,7 +367,7 @@ function PurchaseReturnCreateForm() {
                       value={line.remark}
                       onChange={(e) => updateLine(idx, { remark: e.target.value })}
                       placeholder="可选"
-                      className="w-full rounded-md border border-slate-200 px-2 py-1.5 focus:border-brand-500 focus:outline-none"
+                      className="w-full rounded-md border border-border px-2 py-1.5 focus:border-brand-500 focus:outline-none"
                     />
                   </td>
                   <td className="px-3 py-2">
@@ -375,7 +375,7 @@ function PurchaseReturnCreateForm() {
                       type="button"
                       onClick={() => removeLine(idx)}
                       disabled={lines.length <= 1}
-                      className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       删除
                     </button>
@@ -386,7 +386,7 @@ function PurchaseReturnCreateForm() {
           </table>
         </div>
 
-        <div className="mt-2 rounded-md bg-amber-50 p-3 text-xs text-amber-700">
+        <div className="mt-2 rounded-md bg-status-warning-bg p-3 text-xs text-status-warning-text">
           CONTRACT GAP：来源行（收货行 / 入库行 / 质检）为父单据详情行 ID，当前无行级独立列表 API；来源 ID 可从对应父单据详情
           GET（/api/purchase-receipts/{'{id}'}、/api/warehouse-receipts/{'{id}'}、/api/inspections/{'{id}'}）获取。服务端校验来源归属、POSTED
           状态与可退余额（SSOT）。
@@ -401,7 +401,7 @@ function PurchaseReturnCreateForm() {
           >
             {submitting ? "提交中…" : "创建（DRAFT）"}
           </button>
-          {dirty && <span className="text-xs text-amber-600">有未保存的更改</span>}
+          {dirty && <span className="text-xs text-status-warning-text">有未保存的更改</span>}
         </div>
       </div>
     </div>

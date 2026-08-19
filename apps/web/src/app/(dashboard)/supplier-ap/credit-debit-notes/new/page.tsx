@@ -127,7 +127,7 @@ function CnDnCreateForm() {
             <FormField label="来源发票（已过账，可多选跨票）" required>
               <div className="max-h-56 overflow-y-auto rounded-md border border-border">
                 {invoices.map((inv) => (
-                  <label key={inv.id} className="flex cursor-pointer items-center gap-2 border-b border-border px-3 py-1.5 text-sm last:border-b-0 hover:bg-slate-50">
+                  <label key={inv.id} className="flex cursor-pointer items-center gap-2 border-b border-border px-3 py-1.5 text-sm last:border-b-0 hover:bg-canvas">
                     <input
                       type="checkbox"
                       checked={selectedInvoiceIds.includes(inv.id)}

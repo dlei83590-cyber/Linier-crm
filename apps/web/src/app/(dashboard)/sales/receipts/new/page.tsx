@@ -123,14 +123,14 @@ function ReceiptCreateForm() {
 
   return (
     <div className={CARD_CLASS}>
-      <div className="flex items-center justify-between border-b border-slate-200 p-4">
-        <h1 className="text-lg font-semibold text-slate-800">新建收款单</h1>
+      <div className="flex items-center justify-between border-b border-border p-4">
+        <h1 className="text-lg font-semibold text-ink-primary">新建收款单</h1>
         <Link
           href="/sales/receipts"
           onClick={(e) => {
             if (dirty && !window.confirm("有未保存的更改，确定离开？")) e.preventDefault();
           }}
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+          className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
         >
           返回列表
         </Link>
@@ -138,7 +138,7 @@ function ReceiptCreateForm() {
 
       <div className="p-4">
         {error && (
-          <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div className="mb-4 rounded-md bg-status-danger-bg p-3 text-sm text-status-danger-text">
             <p>
               {describeStatus(error.status)}：{error.message}
               {error.code ? `（${error.code}）` : ""}
@@ -146,16 +146,16 @@ function ReceiptCreateForm() {
           </div>
         )}
 
-        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-slate-50 p-4 text-sm md:grid-cols-3">
+        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-canvas p-4 text-sm md:grid-cols-3">
           <div>
-            <label className="block text-xs text-slate-500">客户 *</label>
+            <label className="block text-xs text-ink-secondary">客户 *</label>
             <select
               value={customerId}
               onChange={(e) => {
                 setCustomerId(e.target.value);
                 markDirty();
               }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             >
               <option value="">选择客户</option>
               {customers.map((c) => (
@@ -165,11 +165,11 @@ function ReceiptCreateForm() {
               ))}
             </select>
             {fieldErrors.customerId && (
-              <p className="mt-0.5 text-xs text-red-600">{fieldErrors.customerId}</p>
+              <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.customerId}</p>
             )}
           </div>
           <div>
-            <label className="block text-xs text-slate-500">币种</label>
+            <label className="block text-xs text-ink-secondary">币种</label>
             <input
               value={currency}
               onChange={(e) => {
@@ -177,11 +177,11 @@ function ReceiptCreateForm() {
                 markDirty();
               }}
               maxLength={10}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500">收款金额 *</label>
+            <label className="block text-xs text-ink-secondary">收款金额 *</label>
             <input
               type="number"
               min="0"
@@ -191,14 +191,14 @@ function ReceiptCreateForm() {
                 setAmount(e.target.value);
                 markDirty();
               }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
             {fieldErrors.amount && (
-              <p className="mt-0.5 text-xs text-red-600">{fieldErrors.amount}</p>
+              <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.amount}</p>
             )}
           </div>
           <div>
-            <label className="block text-xs text-slate-500">收款日期（可选）</label>
+            <label className="block text-xs text-ink-secondary">收款日期（可选）</label>
             <input
               type="datetime-local"
               value={receiptDate}
@@ -206,18 +206,18 @@ function ReceiptCreateForm() {
                 setReceiptDate(e.target.value);
                 markDirty();
               }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500">收款方式 *</label>
+            <label className="block text-xs text-ink-secondary">收款方式 *</label>
             <select
               value={paymentMethod}
               onChange={(e) => {
                 setPaymentMethod(e.target.value);
                 markDirty();
               }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             >
               {PAYMENT_METHODS.map((m) => (
                 <option key={m} value={m}>
@@ -226,11 +226,11 @@ function ReceiptCreateForm() {
               ))}
             </select>
             {fieldErrors.paymentMethod && (
-              <p className="mt-0.5 text-xs text-red-600">{fieldErrors.paymentMethod}</p>
+              <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.paymentMethod}</p>
             )}
           </div>
           <div>
-            <label className="block text-xs text-slate-500">参考号（可选，≤100）</label>
+            <label className="block text-xs text-ink-secondary">参考号（可选，≤100）</label>
             <input
               value={referenceNo}
               onChange={(e) => {
@@ -238,11 +238,11 @@ function ReceiptCreateForm() {
                 markDirty();
               }}
               maxLength={100}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
           </div>
           <div className="col-span-2">
-            <label className="block text-xs text-slate-500">变更说明（可选，≤500）</label>
+            <label className="block text-xs text-ink-secondary">变更说明（可选，≤500）</label>
             <input
               value={changeReason}
               onChange={(e) => {
@@ -250,12 +250,12 @@ function ReceiptCreateForm() {
                 markDirty();
               }}
               maxLength={500}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 focus:outline-none"
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
           </div>
         </div>
 
-        <p className="mb-4 rounded-md bg-amber-50 p-3 text-xs text-amber-700">
+        <p className="mb-4 rounded-md bg-status-warning-bg p-3 text-xs text-status-warning-text">
           创建后收款单为「未核销（UNALLOCATED）」状态；核销请进入详情页按应收未结项逐笔核销。
         </p>
 
@@ -268,7 +268,7 @@ function ReceiptCreateForm() {
           >
             {submitting ? "提交中…" : "创建收款单"}
           </button>
-          {dirty && <span className="text-xs text-amber-600">有未保存的更改</span>}
+          {dirty && <span className="text-xs text-status-warning-text">有未保存的更改</span>}
         </div>
       </div>
     </div>
