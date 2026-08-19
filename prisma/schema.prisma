@@ -496,6 +496,7 @@ model TechnicalStandard {
   version     Int            @default(1)
   deletedAt   DateTime?
   items       ItemStandard[]
+  creditDebitNoteLines SupplierCreditDebitNoteLine[] // 5C-2：供应商贷/借项行（SupplierCreditDebitNoteLine.itemId 方向）
   createdAt   DateTime       @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime       @updatedAt @db.Timestamptz(3)
 
@@ -2871,6 +2872,7 @@ model Supplier {
   purchaseReturns PurchaseReturn[] // 5B：退货单（PurchaseReturn.supplierId 方向，快照自 PO）
   supplierInvoices SupplierInvoice[] // 5C-1：供应商发票（SupplierInvoice.supplierId 方向）
   apLiabilityFacts ApLiabilityFact[] // 5C-1：AP 应付债务事实（ApLiabilityFact.supplierId 方向）
+  creditDebitNotes SupplierCreditDebitNote[] // 5C-2：供应商贷/借项（SupplierCreditDebitNote.supplierId 方向）
   isActive      Boolean  @default(true)
   createdById   String?
   updatedById   String?
@@ -5746,6 +5748,7 @@ model SupplierInvoice {
   matchRuns SupplierInvoiceMatchRun[] @relation("SupplierInvoiceMatchRuns") // 反向：本发票的 MatchRun（immutable snapshot 集合）
   grirRecords GrirRecord[]
   apLiabilityFact ApLiabilityFact?
+  creditDebitNotes SupplierCreditDebitNote[] // 5C-2：供应商贷/借项（SupplierCreditDebitNote.sourceSupplierInvoiceId 方向）
 
   @@unique([supplierId, supplierInvoiceNo]) // 不变量②：供应商发票号唯一（组合，不全局误锁）
   @@index([invoiceNo])
@@ -5793,6 +5796,7 @@ model SupplierInvoiceLine {
   matchLines SupplierInvoiceMatchLine[]
   grirRecords GrirRecord[]
   currentMatchRun SupplierInvoiceMatchRun? @relation("SupplierInvoiceLineCurrentMatchRun", fields: [currentMatchRunId], references: [id], onDelete: Restrict) // Hardening ①：行级 current run 引用完整性
+  creditDebitNoteLines SupplierCreditDebitNoteLine[] // 5C-2：供应商贷/借项行（SupplierCreditDebitNoteLine.sourceSupplierInvoiceLineId 方向）
 
   @@unique([supplierInvoiceId, lineNo])
   @@index([supplierInvoiceId])
