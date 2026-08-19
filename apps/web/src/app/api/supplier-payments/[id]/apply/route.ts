@@ -7,7 +7,7 @@ import { ERROR_CODES, type ErrorCode } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
 import { z } from 'zod';
 import { applySupplierPaymentAllocation } from '@/lib/supplier-payment/apply-helper';
-import { publishSupplierPaymentEvent } from '@/lib/supplier-payment/events';
+import { publishSupplierPaymentEvent, writeSupplierPaymentAppliedEvent } from '@/lib/supplier-payment/events';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,6 +45,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const p = await tx.supplierPayment.findFirst({
         where: { id },
         select: { code: true, supplierId: true },
+      });
+      // 事件总线落地：同事务原子写 Outbox（可靠持久化；AuditLog 留痕保留在发布侧）
+      await writeSupplierPaymentAppliedEvent(tx, {
+        paymentId: id,
+        apOpenItemId: parsed.data.apOpenItemId,
+        payload: {
+          paymentId: id,
+          code: p?.code ?? '',
+          supplierId: p?.supplierId ?? '',
+          apOpenItemId: parsed.data.apOpenItemId,
+          allocatedAmount: parsed.data.allocatedAmount.toString(),
+          openAmountAfter: r.openAmountAfter,
+          unallocatedAmountAfter: r.unallocatedAmountAfter,
+          allocatedById: actorId,
+          allocatedAt: new Date().toISOString(),
+        },
       });
       await writeAuditLog({
         actorId: user?.id,

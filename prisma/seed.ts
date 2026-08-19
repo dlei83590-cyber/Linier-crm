@@ -224,6 +224,7 @@ const SEED_RESTRICTED_ACTION_PERMISSIONS: Array<{ name: string; code: string; mo
 // Sprint 6A：Inventory Ledger 受限系统权限（consume 为后台执行动作——**不进入全局 PERMISSION_ACTIONS**（consume 非通用 CRUD action）；仅 SUPER_ADMIN/ADMIN 静态授权（见 packages/shared/src/rbac/index.ts SYSTEM_PERMISSIONS）；Manager/Member/Viewer 默认无权限 → 403；seed 注册该 Permission 供权限矩阵/审计可见）
 const SEED_SYSTEM_ACTION_PERMISSIONS: Array<{ name: string; code: string; module: string }> = [
   { name: "consume inventory-ledger", code: "inventory-ledger:consume", module: "inventory-ledger" },
+  { name: "consume domain-events", code: "domain-event:consume", module: "domain-event" },
   // Sprint 6B-3：Adjustment Apply 受限系统权限（P8/P9 Final：Adjustment 直接动库存账且 MANUAL 高风险——apply 仅 SUPER_ADMIN/ADMIN，不进入全局 PERMISSION_ACTIONS（apply 非通用 CRUD action）；seed 注册供权限矩阵/审计可见）
   { name: "apply inventory-adjustment", code: "inventory-adjustment:apply", module: "inventory-adjustment" },
 ];

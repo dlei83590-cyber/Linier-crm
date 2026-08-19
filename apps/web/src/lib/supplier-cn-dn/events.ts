@@ -1,4 +1,6 @@
 import { writeAuditLog } from '@/lib/api-helpers';
+import { Prisma } from '@prisma/client';
+import { writeDomainEvent } from '@/lib/domain-events/writer';
 
 /**
  * Sprint 5C-2 - Supplier CN/DN Domain Events 发布（EVENTS.md v1.34 注册）
@@ -20,6 +22,20 @@ export interface SupplierCnDnEventPayload {
   appliedById?: string;
   appliedAt?: string; // ISO
   [key: string]: unknown;
+}
+
+/** 事务内原子写 Outbox（事件总线落地；幂等键 SupplierCreditDebitNoteApplied|cnDnId） */
+export async function writeSupplierCnDnAppliedEvent(
+  tx: Prisma.TransactionClient,
+  params: { cnDnId: string; payload: SupplierCnDnEventPayload },
+) {
+  await writeDomainEvent(tx, {
+    eventType: 'SupplierCreditDebitNoteApplied',
+    aggregateType: 'SupplierCreditDebitNote',
+    aggregateId: params.cnDnId,
+    payload: params.payload,
+    idempotencyKey: `SupplierCreditDebitNoteApplied|${params.cnDnId}`,
+  });
 }
 
 export async function publishSupplierCnDnEvent(params: {

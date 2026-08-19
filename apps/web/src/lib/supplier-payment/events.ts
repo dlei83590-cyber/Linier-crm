@@ -1,4 +1,6 @@
 import { writeAuditLog } from '@/lib/api-helpers';
+import { Prisma } from '@prisma/client';
+import { writeDomainEvent } from '@/lib/domain-events/writer';
 
 /**
  * Sprint 5C-2 - Supplier Payment Domain Events 发布（EVENTS.md v1.34 注册）
@@ -17,6 +19,20 @@ export interface SupplierPaymentEventPayload {
   allocatedById?: string;
   allocatedAt?: string; // ISO
   [key: string]: unknown;
+}
+
+/** 事务内原子写 Outbox（事件总线落地；幂等键 SupplierPaymentApplied|paymentId|apOpenItemId） */
+export async function writeSupplierPaymentAppliedEvent(
+  tx: Prisma.TransactionClient,
+  params: { paymentId: string; apOpenItemId: string; payload: SupplierPaymentEventPayload },
+) {
+  await writeDomainEvent(tx, {
+    eventType: 'SupplierPaymentApplied',
+    aggregateType: 'SupplierPayment',
+    aggregateId: params.paymentId,
+    payload: params.payload,
+    idempotencyKey: `SupplierPaymentApplied|${params.paymentId}|${params.apOpenItemId}`,
+  });
 }
 
 export async function publishSupplierPaymentEvent(params: {

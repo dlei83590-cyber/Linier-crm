@@ -26,6 +26,16 @@
 - ADR-0029（Pending Pages Completion 决策记录）、docs/frontend/contract-cards/pending-pages-completion-gate.md（Design/Scope Gate 文档）、OpenAPI +7 域 paths、Frontend Module Map / Page Route Map 解除 hold 标记、docs/qa/PendingPages_QA.md、docs/test-cases/MasterData_Admin_CRUD_API.md、ROADMAP v1.23、SPRINT_PLAN
 
 ---
+## [Unreleased] - Domain Event Outbox（事件总线落地，2026-08-19，ADR-0031）
+
+### 新增
+
+- **通用 Domain Event Outbox**：`lib/domain-events/writer.ts`（业务事务内原子写 OutboxMessage，复用 6A 表）+ `lib/domain-events/consumer.ts`（claim FOR UPDATE SKIP LOCKED → PROCESSED/retry/DEAD_LETTER，库存链事件白名单排除）+ `POST /api/domain-events/consume` 触发端点（`domain-event:consume` SYSTEM_PERMISSIONS）
+- **5C-2 事件升级**：`SupplierCreditDebitNoteApplied` / `SupplierPaymentApplied` 由 AuditLog-only 升级为**事务内原子写 Outbox**（幂等键 eventType|aggregateId）；AuditLog 留痕保留
+- **边界**：GL/Notification 业务消费者后续阶段注册 handler；5C-1 事件 outbox 化列后续批；6A 库存链事件不变
+
+---
+
 ## [v0.8.0-alpha] - 2026-08-19（Release：Linier ERP v0.8.0-alpha — Frontend 全模块打通 + 5C-2 + Read Models）
 
 > 汇总发布内容：Inventory Read Model、Pending Pages Completion（9 页面 + ap-open-items）、中文化审计、5C-2（Supplier CN/DN + Payment Allocation，Migration 0029/0030）、5C-2 会计单测。详见下方各段与 docs/RELEASE_NOTES.md v0.8.0-alpha 段（RELEASE_VERSION manifest = v0.8.0-alpha；Tag v0.8.0-alpha）。

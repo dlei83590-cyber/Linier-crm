@@ -325,6 +325,8 @@ export const ALL_ACTION_PERMISSIONS: string[] = PERMISSION_MODULES.flatMap((m) =
 /** 受限系统权限（Sprint 6A：inventory-ledger:consume 为后台执行动作——**不进入全局 PERMISSION_ACTIONS/PERMISSION_MODULES**（consume 非通用 CRUD action）；仅 SUPER_ADMIN/ADMIN 静态授权，seed 同步注册（见 prisma/seed.ts SEED_SYSTEM_ACTION_PERMISSIONS）；Manager/Member/Viewer 默认无权限 → 403） */
 export const SYSTEM_PERMISSIONS = [
   "inventory-ledger:consume",
+  // Sprint 5C-2/事件总线：Domain Event Consumer 触发（通用领域事件可靠消费；后台执行动作，不开放给普通角色）
+  "domain-event:consume",
   // Sprint 6B-3：Inventory Adjustment Apply 受限系统权限（P8/P9 Final：Adjustment 直接动库存账且 Manual 高风险——apply 仅 SUPER_ADMIN/ADMIN 静态授权（见 rbac SYSTEM_PERMISSIONS）；Manager/Member/Viewer 默认无权限 → 403；seed 同步注册（见 prisma/seed.ts SEED_SYSTEM_ACTION_PERMISSIONS））
   "inventory-adjustment:apply",
 ] as const;

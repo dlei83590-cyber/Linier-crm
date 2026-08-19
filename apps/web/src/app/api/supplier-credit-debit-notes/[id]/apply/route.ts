@@ -6,7 +6,7 @@ import { ERROR_CODES, type ErrorCode } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
 import { z } from 'zod';
 import { applySupplierCnDn } from '@/lib/supplier-cn-dn/apply-helper';
-import { publishSupplierCnDnEvent } from '@/lib/supplier-cn-dn/events';
+import { publishSupplierCnDnEvent, writeSupplierCnDnAppliedEvent } from '@/lib/supplier-cn-dn/events';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,6 +64,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             adjustmentTotal: n.adjustmentTotal.toString(),
           }
         : null;
+      // 事件总线落地：同事务原子写 Outbox（可靠持久化；AuditLog 留痕保留在发布侧）
+      if (n) {
+        await writeSupplierCnDnAppliedEvent(tx, {
+          cnDnId: id,
+          payload: {
+            cnDnId: id,
+            code: n.code,
+            noteType: n.noteType as string,
+            supplierId: n.supplierId,
+            sourceSupplierInvoiceId: n.sourceSupplierInvoiceId,
+            adjustmentTotal: n.adjustmentTotal.toString(),
+            openAmountAfter: r.openAmountAfter,
+            appliedById: actorId,
+            appliedAt: new Date().toISOString(),
+          },
+        });
+      }
       await writeAuditLog({
         actorId: user?.id,
         action: 'supplier-credit-debit-note.apply',
