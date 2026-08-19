@@ -38,7 +38,7 @@ export async function writeSupplierPaymentAppliedEvent(
 /** 事务内原子写 Outbox（SupplierPaymentReversed；幂等键 SupplierPaymentReversed|paymentId） */
 export async function writeSupplierPaymentReversedEvent(
   tx: Prisma.TransactionClient,
-  params: { paymentId: string; payload: SupplierPaymentEventPayload & { reversedAllocations: number } },
+  params: { paymentId: string; payload: SupplierPaymentEventPayload },
 ) {
   return writeDomainEvent(tx, {
     eventType: 'SupplierPaymentReversed',
