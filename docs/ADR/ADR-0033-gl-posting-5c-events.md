@@ -44,6 +44,6 @@ ADR-0027 D8（P11 Final）：5C 阶段不建 GL 总账，只产出"财务事实 
 ## 后续（独立 backlog）
 
 - ~~GRIR 暂估/冲回过账（Accrual/Reversal 事件消费）~~ ✅（2026-08-20：GrirAccrued/GrirReversed outbox 化 + GL 分录映射，EVENTS v1.39）
-- GL 余额/试算平衡/利润表（Finance 深化）
+- ~~GL 余额/试算平衡/利润表~~ ✅（2026-08-20，ADR-0034：实时聚合只读 API + 前端；不建余额投影表）
 - GL 手工录入 + 审核流（maker-checker UI）
 - 成本核算（D9 HOLD 延续）

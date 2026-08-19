@@ -25,6 +25,21 @@
 ### 文档
 - ADR-0029（Pending Pages Completion 决策记录）、docs/frontend/contract-cards/pending-pages-completion-gate.md（Design/Scope Gate 文档）、OpenAPI +7 域 paths、Frontend Module Map / Page Route Map 解除 hold 标记、docs/qa/PendingPages_QA.md、docs/test-cases/MasterData_Admin_CRUD_API.md、ROADMAP v1.23、SPRINT_PLAN
 
+## [Unreleased] - GL 余额/试算平衡/利润表（2026-08-20，ADR-0034）
+
+### 新增
+
+- **查询 API（只读，实时聚合派生）**：GET /api/gl/trial-balance（按科目 SUM 借贷 + direction 余额方向 + 借贷平衡校验 inBalance）、GET /api/gl/account-balances（期间发生额 + 期末余额）、GET /api/gl/profit-statement（简化利润表：REVENUE − EXPENSE = 利润）；均支持 dateFrom/dateTo 期间过滤，gl:view 权限
+- **lib/gl/balances.ts**：纯函数聚合核心（computeTrialBalance / computeProfitStatement，可单测）
+- **前端**：/finance/gl-trial-balance（试算平衡表 + 平衡状态提示）、/finance/gl-profit-statement（收入/成本/利润卡片 + 明细）；modules.ts 注册 gl-balance
+- **单测**：+6 路径（方向余额/平衡校验/利润/亏损/空数据）
+
+### 边界
+
+- **不建余额投影表**（ADR-0034：凭证为 immutable 事实源，余额一律实时派生——对齐 6A StockProjection 投影漂移教训）；期初余额/期末结转/多币种折算 = 后续 backlog；零 Migration
+
+---
+
 ## [Unreleased] - GL 过账消费 GRIR 事件（2026-08-20，ADR-0033 后续）
 
 ### 新增

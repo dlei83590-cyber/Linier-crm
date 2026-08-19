@@ -13170,7 +13170,68 @@ paths:
           description: OK（返回 { id, status: APPLIED, openAmountsAfter: [{ supplierInvoiceId, openAmountAfter }] }）
         "409":
           $ref: "#/components/responses/Conflict"
+  /api/gl/trial-balance:
+    get:
+      tags: [GL]
+      summary: 试算平衡（按科目 SUM 借贷 + 余额方向 + 平衡校验；ADR-0034）
+      parameters:
+        - name: dateFrom
+          in: query
+          schema: { type: string, format: date }
+        - name: dateTo
+          in: query
+          schema: { type: string, format: date }
+        - name: accountId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK（{ lines, totals, inBalance }）
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/gl/account-balances:
+    get:
+      tags: [GL]
+      summary: 科目余额（期间发生额 + 期末余额；ADR-0034）
+      parameters:
+        - name: dateFrom
+          in: query
+          schema: { type: string, format: date }
+        - name: dateTo
+          in: query
+          schema: { type: string, format: date }
+        - name: category
+          in: query
+          schema: { type: string, enum: [ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE] }
+      responses:
+        "200":
+          description: OK
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/gl/profit-statement:
+    get:
+      tags: [GL]
+      summary: 利润表（简化：收入−成本/费用=利润；ADR-0034）
+      parameters:
+        - name: dateFrom
+          in: query
+          schema: { type: string, format: date }
+        - name: dateTo
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: OK（{ revenue, expense, profit, lines }）
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/gl/accounts:
+
     get:
       tags: [GL]
       summary: 会计科目表（只读主数据；Sprint 7，ADR-0033）

@@ -662,6 +662,17 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_LIST_DETAIL, ui: UI_LIST_DETAIL_ACTIONS },
     order: 1,
   },
+  // gl-balance：Sprint 7 Finance（ADR-0034）——试算平衡/科目余额/利润表只读（实时聚合派生）
+  {
+    id: 'gl-balance',
+    domain: 'supplier-ap',
+    label: '试算平衡/利润表',
+    route: '/finance/gl-trial-balance',
+    permission: actionPermission('gl', 'view'),
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_LIST_DETAIL, ui: UI_LIST_DETAIL_ACTIONS },
+    order: 2,
+  },
 
   // ===== 基础资料（F2-2 Wave 1 已交付 → ready；契约缺失项保持 hold）=====
   // items / price-lists：contract CRUD FINAL；main 已有 list/detail/new/edit → ui CRUD 开放
