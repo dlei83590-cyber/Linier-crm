@@ -52,6 +52,18 @@ export interface SupplierInvoiceEventPayload {
   }>;
   consumedById?: string;
   consumedAt?: string; // ISO
+  /** GrirAccrued（WHR POST，5C-1C0-B）：暂估事实 */
+  warehouseReceiptId?: string;
+  warehouseReceiptCode?: string;
+  accruedLines?: Array<{ lineId: string; warehouseReceiptLineId: string; quantity: string; unitPrice: string; baseAmount: string; sourceKey: string }>;
+  accruedById?: string;
+  accruedAt?: string; // ISO
+  /** GrirReversed（WHR-based Return，5C-1C0-C）：冲减暂估事实 */
+  purchaseReturnId?: string;
+  purchaseReturnCode?: string;
+  reversedLines?: Array<{ lineId: string; purchaseReturnLineId: string; quantity: string; unitPrice: string; baseAmount: string; sourceKey: string; pendingQty?: string }>;
+  reversedById?: string;
+  reversedAt?: string; // ISO
   [key: string]: unknown;
 }
 
@@ -71,6 +83,34 @@ export async function writeSupplierInvoiceEventInTx(
     aggregateId: params.invoiceId,
     payload: params.payload,
     idempotencyKey: params.idempotencyKey,
+  });
+}
+
+/** 事务内原子写 Outbox（GrirAccrued；WHR POST 同事务——幂等键 GrirAccrued|warehouseReceiptId） */
+export async function writeGrirAccruedEvent(
+  tx: Prisma.TransactionClient,
+  params: { warehouseReceiptId: string; payload: SupplierInvoiceEventPayload },
+) {
+  await writeDomainEvent(tx, {
+    eventType: 'GrirAccrued',
+    aggregateType: 'WarehouseReceipt',
+    aggregateId: params.warehouseReceiptId,
+    payload: params.payload,
+    idempotencyKey: `GrirAccrued|${params.warehouseReceiptId}`,
+  });
+}
+
+/** 事务内原子写 Outbox（GrirReversed；PurchaseReturn RETURNED 同事务——幂等键 GrirReversed|purchaseReturnId） */
+export async function writeGrirReversedEvent(
+  tx: Prisma.TransactionClient,
+  params: { purchaseReturnId: string; payload: SupplierInvoiceEventPayload },
+) {
+  await writeDomainEvent(tx, {
+    eventType: 'GrirReversed',
+    aggregateType: 'PurchaseReturn',
+    aggregateId: params.purchaseReturnId,
+    payload: params.payload,
+    idempotencyKey: `GrirReversed|${params.purchaseReturnId}`,
   });
 }
 

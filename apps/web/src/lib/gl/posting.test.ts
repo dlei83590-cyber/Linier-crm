@@ -186,6 +186,42 @@ describe("glPostFromEvent — 5C 事件 → GL 分录映射（ADR-0033）", () =
     expect(debit.debit.toFixed(2)).toBe("500.00"); // 300 + 200
   });
 
+  it("GrirAccrued：借 原材料 贷 应付账款-暂估（按行 baseAmount 合计）", async () => {
+    const tx = makeTx();
+    const r = await glPostFromEvent(tx, "GrirAccrued", {
+      warehouseReceiptId: "whr1",
+      warehouseReceiptCode: "WHR-2026-000001",
+      accruedLines: [
+        { baseAmount: "100.00" },
+        { baseAmount: "50.00" },
+      ],
+    });
+    expect(r.ok).toBe(true);
+    const created = (tx.glJournalEntry.create as any).mock.calls[0][0];
+    expect(created.data.sourceType).toBe("GrirAccrued");
+    expect(created.data.sourceId).toBe("whr1");
+    const debit = created.data.lines.create.find((l: any) => l.accountId === "acct-1403");
+    expect(debit.debit.toFixed(2)).toBe("150.00");
+    const credit = created.data.lines.create.find((l: any) => l.accountId === "acct-2203");
+    expect(credit.credit.toFixed(2)).toBe("150.00");
+  });
+
+  it("GrirReversed：借 应付账款-暂估 贷 原材料（反向红字）", async () => {
+    const tx = makeTx();
+    const r = await glPostFromEvent(tx, "GrirReversed", {
+      purchaseReturnId: "prt1",
+      purchaseReturnCode: "PRT-2026-000001",
+      reversedLines: [{ baseAmount: "80.00" }],
+    });
+    expect(r.ok).toBe(true);
+    const created = (tx.glJournalEntry.create as any).mock.calls[0][0];
+    expect(created.data.sourceType).toBe("GrirReversed");
+    const debit = created.data.lines.create.find((l: any) => l.accountId === "acct-2203");
+    expect(debit.debit.toFixed(2)).toBe("80.00");
+    const credit = created.data.lines.create.find((l: any) => l.accountId === "acct-1403");
+    expect(credit.credit.toFixed(2)).toBe("80.00");
+  });
+
   it("未注册事件 → UNSUPPORTED_EVENT", async () => {
     const tx = makeTx();
     const r = await glPostFromEvent(tx, "SomeOtherEvent", {});

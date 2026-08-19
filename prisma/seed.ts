@@ -578,6 +578,7 @@ const SEED_GL_ACCOUNTS = [
   { code: "1002", name: "银行存款", category: "ASSET", direction: "DEBIT", remark: "GL_ACCOUNT_BANK" },
   { code: "1403", name: "原材料", category: "ASSET", direction: "DEBIT", remark: "GL_ACCOUNT_PURCHASE" },
   { code: "2202", name: "应付账款", category: "LIABILITY", direction: "CREDIT", remark: "GL_ACCOUNT_AP" },
+  { code: "2203", name: "应付账款-暂估（GRIR）", category: "LIABILITY", direction: "CREDIT", remark: "GL_ACCOUNT_AP_ESTIMATE" },
   { code: "222101", name: "应交税费-应交增值税-进项税额", category: "LIABILITY", direction: "CREDIT", remark: "GL_ACCOUNT_TAX_INPUT" },
   { code: "6111", name: "采购调整", category: "EXPENSE", direction: "DEBIT", remark: "GL_ACCOUNT_ADJUST" },
 ] as const;

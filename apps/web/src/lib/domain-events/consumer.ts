@@ -29,6 +29,8 @@ const GL_POSTED_EVENTS = new Set([
   'SupplierPaymentApplied',
   'SupplierCreditDebitNoteApplied',
   'SupplierPaymentReversed',
+  'GrirAccrued',
+  'GrirReversed',
 ]);
 
 interface ClaimedOutboxRow {

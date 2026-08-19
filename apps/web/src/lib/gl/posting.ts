@@ -175,6 +175,38 @@ export async function glPostFromEvent(
         actorId: payload.appliedById ? String(payload.appliedById) : null,
       });
     }
+    case 'GrirAccrued': {
+      // 暂估应付（GRIR ACCRUAL）：借 原材料(1403) 贷 应付账款-暂估(2203)；按行 baseAmount 合计（未税暂估净额）
+      const accruedLines = (payload.accruedLines ?? []) as Array<{ baseAmount: string }>;
+      const total = accruedLines.reduce((acc, l) => acc.add(new Prisma.Decimal(l.baseAmount ?? '0')), new Prisma.Decimal(0));
+      return postGlEntry(tx, {
+        sourceType: 'GrirAccrued',
+        sourceId: String(payload.warehouseReceiptId),
+        postingDate: payload.accruedAt ? new Date(String(payload.accruedAt)) : new Date(),
+        summary: '采购入库暂估：' + String(payload.warehouseReceiptCode ?? ''),
+        lines: [
+          { accountCode: '1403', debit: total.toFixed(2), credit: '0', summary: '暂估入库（原材料）', sourceRef: String(payload.warehouseReceiptId) },
+          { accountCode: '2203', debit: '0', credit: total.toFixed(2), summary: '应付账款-暂估（GRIR）', sourceRef: String(payload.warehouseReceiptId) },
+        ],
+        actorId: payload.accruedById ? String(payload.accruedById) : null,
+      });
+    }
+    case 'GrirReversed': {
+      // 冲减暂估（GRIR REVERSAL）：借 应付账款-暂估(2203) 贷 原材料(1403)；反向红字（按行 baseAmount 合计）
+      const reversedLines = (payload.reversedLines ?? []) as Array<{ baseAmount: string }>;
+      const total = reversedLines.reduce((acc, l) => acc.add(new Prisma.Decimal(l.baseAmount ?? '0')), new Prisma.Decimal(0));
+      return postGlEntry(tx, {
+        sourceType: 'GrirReversed',
+        sourceId: String(payload.purchaseReturnId),
+        postingDate: payload.reversedAt ? new Date(String(payload.reversedAt)) : new Date(),
+        summary: '采购退货冲减暂估：' + String(payload.purchaseReturnCode ?? ''),
+        lines: [
+          { accountCode: '2203', debit: total.toFixed(2), credit: '0', summary: '冲减应付账款-暂估', sourceRef: String(payload.purchaseReturnId) },
+          { accountCode: '1403', debit: '0', credit: total.toFixed(2), summary: '冲减暂估入库（原材料）', sourceRef: String(payload.purchaseReturnId) },
+        ],
+        actorId: payload.reversedById ? String(payload.reversedById) : null,
+      });
+    }
     case 'SupplierPaymentReversed': {
       // 反转核销金额合计（从业务事实读取：付款单未反转核销行的 reversed 金额——事件载荷只有数量）
       const amount = await totalReversedAllocations(tx, String(payload.paymentId));

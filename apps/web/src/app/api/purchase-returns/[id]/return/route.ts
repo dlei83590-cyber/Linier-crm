@@ -9,6 +9,7 @@ import { purchaseReturnReturnSchema } from '@/lib/api/schemas';
 import { computeSourceReturnedQty, computeSourceAvailableQty } from '@/lib/purchase-return/helpers';
 import { publishPurchaseReturnEvent } from '@/lib/purchase-return/events';
 import { createGrirReversalsForReturn } from '@/lib/supplier-invoice/grir-helpers';
+import { writeGrirReversedEvent } from '@/lib/supplier-invoice/events';
 import {
   InventoryOutboxError,
   expandSourceLineAtoms,
@@ -431,6 +432,29 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         })),
         actorId,
         purchaseReturnCode: pr.code,
+      });
+
+      // ⑥c GrirReversed 领域事件（ADR-0033 GL 过账消费；同事务原子写 Outbox——幂等键 GrirReversed|purchaseReturnId）
+      const reversedRows = await tx.grirRecord.findMany({
+        where: { grirType: 'REVERSAL', purchaseReturnLineId: { in: lines.map((l) => l.id) } },
+        select: { purchaseReturnLineId: true, quantity: true, unitPrice: true, baseAmount: true, sourceKey: true },
+      });
+      await writeGrirReversedEvent(tx, {
+        purchaseReturnId: pr.id,
+        payload: {
+          purchaseReturnId: pr.id,
+          purchaseReturnCode: pr.code,
+          reversedLines: reversedRows.map((r) => ({
+            lineId: r.purchaseReturnLineId ?? '',
+            purchaseReturnLineId: r.purchaseReturnLineId ?? '',
+            quantity: r.quantity.toString(),
+            unitPrice: r.unitPrice.toString(),
+            baseAmount: r.baseAmount.toString(),
+            sourceKey: r.sourceKey,
+          })),
+          reversedById: actorId,
+          reversedAt: returnedAt.toISOString(),
+        },
       });
 
       // ⑦ line-level disposition（CTO Re-review Minor）：事件/Audit 不再只取第一行 disposition

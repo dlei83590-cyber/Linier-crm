@@ -25,6 +25,21 @@
 ### 文档
 - ADR-0029（Pending Pages Completion 决策记录）、docs/frontend/contract-cards/pending-pages-completion-gate.md（Design/Scope Gate 文档）、OpenAPI +7 域 paths、Frontend Module Map / Page Route Map 解除 hold 标记、docs/qa/PendingPages_QA.md、docs/test-cases/MasterData_Admin_CRUD_API.md、ROADMAP v1.23、SPRINT_PLAN
 
+## [Unreleased] - GL 过账消费 GRIR 事件（2026-08-20，ADR-0033 后续）
+
+### 新增
+
+- **事件 outbox 化**：`GrirAccrued`（WHR POST 同事务原子写，幂等键 GrirAccrued|whrId）/ `GrirReversed`（PurchaseReturn RETURNED 同事务，幂等键 GrirReversed|purchaseReturnId）——EVENTS v1.39
+- **GL 分录映射**：GrirAccrued → 借 原材料(1403) 贷 应付账款-暂估(2203)（按行 baseAmount 合计）；GrirReversed → 反向红字（借 2203 贷 1403）；Consumer 注册 2 个 handler
+- **seed**：新增 2203 应付账款-暂估（GRIR）科目
+- **单测**：+2 路径（GrirAccrued / GrirReversed 映射）
+
+### 边界
+
+- GRIR 不产生 Input VAT（P9 Final：暂估未税）；Invoice POST consume 时已由 SupplierInvoicePosted 分录承接；GRIR 余额/试算仍后续 backlog
+
+---
+
 ## [Unreleased] - Sprint 7 Finance 首块：GL 过账消费 5C 事件（2026-08-20，ADR-0033）
 
 ### 新增

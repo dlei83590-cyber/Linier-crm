@@ -12,6 +12,7 @@ import {
 } from '@/lib/warehouse-receipt/helpers';
 import { publishWarehouseReceiptEvent } from '@/lib/warehouse-receipt/events';
 import { createGrirAccrualsForWhrPost } from '@/lib/supplier-invoice/grir-helpers';
+import { writeGrirAccruedEvent } from '@/lib/supplier-invoice/events';
 import {
   InventoryOutboxError,
   expandSourceLineAtoms,
@@ -190,6 +191,29 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         })),
         actorId,
         warehouseReceiptCode: receipt.code,
+      });
+
+      // ⑤c GrirAccrued 领域事件（ADR-0033 GL 过账消费；同事务原子写 Outbox——幂等键 GrirAccrued|whrId）
+      const accruedRows = await tx.grirRecord.findMany({
+        where: { grirType: 'ACCRUAL', warehouseReceiptLineId: { in: lines.map((l) => l.id) } },
+        select: { warehouseReceiptLineId: true, quantity: true, unitPrice: true, baseAmount: true, sourceKey: true },
+      });
+      await writeGrirAccruedEvent(tx, {
+        warehouseReceiptId: receipt.id,
+        payload: {
+          warehouseReceiptId: receipt.id,
+          warehouseReceiptCode: receipt.code,
+          accruedLines: accruedRows.map((r) => ({
+            lineId: r.warehouseReceiptLineId ?? '',
+            warehouseReceiptLineId: r.warehouseReceiptLineId ?? '',
+            quantity: r.quantity.toString(),
+            unitPrice: r.unitPrice.toString(),
+            baseAmount: r.baseAmount.toString(),
+            sourceKey: r.sourceKey,
+          })),
+          accruedById: actorId,
+          accruedAt: postedAt.toISOString(),
+        },
       });
 
       return {
