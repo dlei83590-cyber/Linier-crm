@@ -124,7 +124,7 @@
 
 ### Phase D — Commit / Push / CI
 
-只有在获得对应 Git 操作授权后：
+**持续授权（CTO 2026-08-20 生效）**：CTO 已授予持续 Git 操作授权（standing authorization）——AI 在正常开发循环（Phase A-E）内完成静态复核后，**可直接 stage / commit / push，无需逐次请求授权**，以提高开发效率。授权范围 = 当前任务明确文件 + 必要文档同步；超出任务范围的变更（重构/删除/大范围 schema 变更）仍需先报告。
 
 1. stage 当前任务明确文件
 2. commit
@@ -195,6 +195,8 @@
 不要用本地服务器输出作为验证证据。不要伪造未执行的测试结果。不要把代码静态检查表述成测试通过。
 
 ## 8. Agent Commit Rule（Server Safe Mode）
+
+**持续授权（CTO 2026-08-20）**：AI 提交不再逐次请求授权（Phase D standing authorization）；CI-First / No Local Server 约束不变——提交质量由 GitHub CI 把关，本地 hooks 一律 bypass。
 
 AI/OpenClaw commits MUST bypass local Husky/lint-staged hooks:
 
