@@ -37,7 +37,6 @@ interface PaymentDetail {
 const STATUS_LABELS: Record<string, string> = { UNALLOCATED: "未核销", PARTIALLY_ALLOCATED: "部分核销", ALLOCATED: "已全额核销" };
 const STATUS_TONE_MAP: Record<string, "neutral" | "info" | "success" | "warning" | "danger"> = { UNALLOCATED: "neutral", PARTIALLY_ALLOCATED: "info", ALLOCATED: "success" };
 const METHOD_LABELS: Record<string, string> = { BANK_TRANSFER: "银行转账", CHEQUE: "支票", CASH: "现金", CARD: "刷卡", OTHER: "其他" };
-const SETTLEMENT_LABELS: Record<string, string> = { UNPAID: "未结算", PARTIALLY_PAID: "部分结算", PAID: "已结算" };
 
 function PaymentDetailView() {
   const router = useRouter();
