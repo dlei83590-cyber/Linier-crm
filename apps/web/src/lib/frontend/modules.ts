@@ -38,6 +38,7 @@ export type ModuleDomain =
   | 'purchasing'
   | 'inventory'
   | 'supplier-ap'
+  | 'finance'
   | 'master-data'
   | 'system'
   | 'reports'
@@ -278,9 +279,10 @@ export const MODULE_DOMAINS: ReadonlyArray<ModuleDomainDef> = [
   { id: 'purchasing', label: '采购管理', order: 4 },
   { id: 'inventory', label: '库存管理', order: 5 },
   { id: 'supplier-ap', label: '采购财务', order: 6 },
-  { id: 'master-data', label: '基础资料', order: 7 },
-  { id: 'system', label: '系统管理', order: 8 },
-  { id: 'reports', label: '分析与报表', order: 9 },
+  { id: 'finance', label: '财务总账', order: 7 },
+  { id: 'master-data', label: '基础资料', order: 8 },
+  { id: 'system', label: '系统管理', order: 9 },
+  { id: 'reports', label: '分析与报表', order: 10 },
 ];
 
 export const MODULES: ReadonlyArray<FrontendModule> = [
@@ -654,7 +656,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
   // gl：Sprint 7 Finance 首块（CTO 解锁 2026-08-20，ADR-0033）——/api/gl/journal-entries 只读（事件驱动自动过账；无手工过账 UI）
   {
     id: 'gl',
-    domain: 'supplier-ap',
+    domain: 'finance',
     label: '记账凭证（GL）',
     route: '/finance/gl-journal-entries',
     permission: actionPermission('gl', 'view'),
@@ -667,7 +669,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
   // gl-balance：Sprint 7 Finance（ADR-0034）——试算平衡/科目余额/利润表只读（实时聚合派生）
   {
     id: 'gl-balance',
-    domain: 'supplier-ap',
+    domain: 'finance',
     label: '试算平衡/利润表',
     route: '/finance/gl-trial-balance',
     permission: actionPermission('gl', 'view'),
@@ -689,10 +691,10 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
   // gl-period-close：Sprint 7 Finance（ADR-0036）——期末结转（收入/费用 → 本年利润；防重复月结）
   {
     id: 'gl-period-close',
-    domain: 'supplier-ap',
+    domain: 'finance',
     label: '期末结转',
     route: '/finance/gl-period-close',
-    permission: actionPermission('gl', 'create'),
+    permission: actionPermission('gl', 'view'),
     availability: 'ready',
     capabilities: { contract: CONTRACT_LIST_DETAIL, ui: UI_LIST_DETAIL_ACTIONS },
     order: 3,

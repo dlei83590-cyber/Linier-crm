@@ -4,7 +4,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { actionPermission } from "@nilier-crm/shared";
+import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
+import { useSession } from "@/lib/session-context";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
@@ -28,6 +29,9 @@ interface CloseResult {
 }
 
 function PeriodCloseView() {
+  const { state } = useSession();
+  const roles = (state.user?.roles ?? []) as RoleCode[];
+  const canOperate = hasPermission(roles, actionPermission("gl", "create"));
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
   const [closing, setClosing] = useState(false);
   const [closeError, setCloseError] = useState<ApiClientError | null>(null);
@@ -78,9 +82,11 @@ function PeriodCloseView() {
             <span className="text-sm font-medium text-ink-secondary">结转期间（YYYY-MM）</span>
             <input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} className="w-44 rounded-md border border-border px-3 py-1.5 text-sm" />
           </label>
-          <button type="button" onClick={handleClose} disabled={closing} className={BUTTON_PRIMARY_CLASS}>
-            {closing ? "结转中…" : "执行结转"}
-          </button>
+          {canOperate ? (
+            <button type="button" onClick={handleClose} disabled={closing} className={BUTTON_PRIMARY_CLASS}>
+              {closing ? "结转中…" : "执行结转"}
+            </button>
+          ) : null}
           {closeError ? <p className="text-sm text-status-danger-text">{closeError.message}</p> : null}
         </div>
         {lastResult ? (
@@ -97,7 +103,7 @@ function PeriodCloseView() {
             { key: "journalEntry", header: "结转凭证", render: (row) => (row.journalEntry ? <Link href={`/finance/gl-journal-entries/${row.journalEntry.id}`} className="font-medium text-brand-600 hover:underline">{row.journalEntry.voucherNo ?? "—"}</Link> : "—") },
             { key: "closedAt", header: "结转时间", render: (row) => formatDate(row.closedAt) },
             { key: "status", header: "状态", render: () => (<StatusBadge status="CLOSED" label="已结转" toneMap={{ CLOSED: "success" }} />) },
-            { key: "actions", header: "操作", render: (row) => (<button type="button" onClick={() => handleReopen(row)} disabled={reopeningId !== null} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary hover:bg-canvas disabled:opacity-50">{reopeningId === row.id ? "重开中…" : "重开"}</button>) },
+            { key: "actions", header: "操作", render: (row) => (canOperate ? <button type="button" onClick={() => handleReopen(row)} disabled={reopeningId !== null} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary hover:bg-canvas disabled:opacity-50">{reopeningId === row.id ? "重开中…" : "重开"}</button> : "—") },
           ]}
           rows={items}
           rowKey={(row) => row.id}
@@ -116,7 +122,7 @@ function PeriodCloseView() {
 
 export default function Page() {
   return (
-    <PermissionGuard permission={actionPermission("gl", "create")}>
+    <PermissionGuard permission={actionPermission("gl", "view")}>
       <PeriodCloseView />
     </PermissionGuard>
   );
