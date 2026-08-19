@@ -7,6 +7,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityFormWorkspace } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { INPUT_CLASS } from "@/lib/ui-classes";
 import { roleLabel } from "@/lib/frontend/labels";
 
 interface DepartmentOption {
@@ -30,8 +31,7 @@ interface UserDetail {
   roles: Array<{ role: { id: string; code: string; name: string } }>;
 }
 
-const inputClass =
-  "w-full rounded-md border border-border px-3 py-1.5 text-sm text-ink-primary placeholder:text-ink-muted focus:border-brand-500 focus:outline-none";
+const inputClass = INPUT_CLASS;
 
 function Field({
   label,

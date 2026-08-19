@@ -13,6 +13,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityFormWorkspace, ReferenceSelector } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { INPUT_CLASS } from "@/lib/ui-classes";
 
 interface ItemOption {
   id: string;
@@ -48,8 +49,7 @@ const LIFECYCLE_OPTIONS = [
   { value: "OBSOLETE", label: "淘汰" },
 ];
 
-const inputClass =
-  "w-full rounded-md border border-border px-3 py-1.5 text-sm text-ink-primary placeholder:text-ink-muted focus:border-brand-500 focus:outline-none";
+const inputClass = INPUT_CLASS;
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (

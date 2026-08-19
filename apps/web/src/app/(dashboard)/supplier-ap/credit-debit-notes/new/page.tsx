@@ -7,6 +7,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityFormWorkspace } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { INPUT_CLASS } from "@/lib/ui-classes";
 
 interface InvoiceOption {
   id: string;
@@ -21,7 +22,7 @@ interface InvoiceDetail {
   lines: Array<{ id: string; lineNo: number; item?: { id: string; code: string; name: string } | null; quantity: string; unitPrice: string; netAmount: string }>;
 }
 
-const inputClass = "w-full rounded-md border border-border px-3 py-1.5 text-sm text-ink-primary placeholder:text-ink-muted focus:border-brand-500 focus:outline-none";
+const inputClass = INPUT_CLASS;
 
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (

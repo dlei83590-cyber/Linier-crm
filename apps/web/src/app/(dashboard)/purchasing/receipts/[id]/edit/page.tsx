@@ -26,6 +26,7 @@ import {
   type LineRow,
 } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { INPUT_CLASS } from "@/lib/ui-classes";
 
 interface WarehouseOption {
   id: string;
@@ -70,8 +71,7 @@ interface ReceiptEditLineRow extends LineRow {
   rejectedOnReceiptQty: string;
 }
 
-const inputClass =
-  "w-full rounded-md border border-border px-3 py-1.5 text-sm text-ink-primary placeholder:text-ink-muted focus:border-brand-500 focus:outline-none";
+const inputClass = INPUT_CLASS;
 
 function Field({
   label,

@@ -25,6 +25,7 @@ import {
   type LineRow,
 } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { INPUT_CLASS } from "@/lib/ui-classes";
 
 interface ItemOption {
   id: string;
@@ -93,8 +94,7 @@ const PRICE_SOURCE_OPTIONS = [
   { value: "MANUAL", label: "手工定价" },
 ];
 
-const inputClass =
-  "w-full rounded-md border border-border px-3 py-1.5 text-sm text-ink-primary placeholder:text-ink-muted focus:border-brand-500 focus:outline-none";
+const inputClass = INPUT_CLASS;
 
 function Field({
   label,

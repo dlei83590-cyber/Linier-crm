@@ -20,6 +20,7 @@ import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shar
 import { useSession } from "@/lib/session-context";
 import { AppPage, EntityFormWorkspace, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { INPUT_CLASS } from "@/lib/ui-classes";
 
 interface ProjectDetail {
   id: string;
@@ -68,8 +69,7 @@ const PAYMENT_LABELS: Record<string, string> = {
   OVERDUE: "逾期",
 };
 
-const inputClass =
-  "w-full rounded-md border border-border px-3 py-1.5 text-sm text-ink-primary placeholder:text-ink-muted focus:border-brand-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-ink-muted";
+const inputClass = INPUT_CLASS;
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
