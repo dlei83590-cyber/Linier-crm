@@ -13055,7 +13055,7 @@ paths:
           $ref: "#/components/responses/Forbidden"
     post:
       tags: [Supplier CN/DN]
-      summary: 创建（来源发票须 POSTED；code 创建即取号；金额服务端计算）
+      summary: 创建（来源发票须 POSTED；支持跨票 sourceSupplierInvoiceIds[]；code 创建即取号；金额服务端计算）
       requestBody:
         required: true
         content:
@@ -13150,7 +13150,7 @@ paths:
   /api/supplier-credit-debit-notes/{id}/apply:
     post:
       tags: [Supplier CN/DN]
-      summary: 应用（APPROVED→APPLIED；同事务重算 ApOpenItem.openAmount 投影；防超调锁内重算；maker-checker）
+      summary: 应用（APPROVED→APPLIED；同事务重算 ApOpenItem.openAmount 投影；跨票按行归属分摊 + 逐票防超调；锁序业务头→openItems ORDER BY id FOR UPDATE；maker-checker）
       parameters:
         - name: id
           in: path
@@ -13167,7 +13167,7 @@ paths:
                 version: { type: integer }
       responses:
         "200":
-          description: OK
+          description: OK（返回 { id, status: APPLIED, openAmountsAfter: [{ supplierInvoiceId, openAmountAfter }] }）
         "409":
           $ref: "#/components/responses/Conflict"
   /api/supplier-payments:
@@ -20846,7 +20846,9 @@ components:
         id: { type: string }
         code: { type: string }
         noteType: { type: string, enum: [CREDIT, DEBIT] }
-        sourceSupplierInvoiceId: { type: string }
+        sourceSupplierInvoiceId: { type: [string, 'null'], description: 单票兼容（历史数据）；跨票走 invoices }
+        invoices: { type: array, description: 跨票关联发票集合（M:N，Migration 0032）
+          items: { type: object, properties: { supplierInvoice: { type: [object, 'null'], properties: { id: { type: string }, invoiceNo: { type: string }, supplierInvoiceNo: { type: string }, documentStatus: { type: string } } } } } }
         supplierId: { type: string }
         supplier: { type: [object, 'null'], properties: { id: { type: string }, code: { type: string }, name: { type: string } } }
         currency: { type: string, default: CNY }
@@ -20878,10 +20880,12 @@ components:
         meta: { type: object, required: [page, pageSize, total], properties: { page: { type: integer }, pageSize: { type: integer }, total: { type: integer } } }
     SupplierCreditDebitNoteCreateRequest:
       type: object
-      required: [noteType, sourceSupplierInvoiceId, reason, lines]
+      required: [noteType, reason, lines]
       properties:
         noteType: { type: string, enum: [CREDIT, DEBIT] }
-        sourceSupplierInvoiceId: { type: string }
+        sourceSupplierInvoiceId: { type: string, description: 单票兼容（旧客户端）；与 sourceSupplierInvoiceIds 二选一 }
+        sourceSupplierInvoiceIds: { type: array, description: 跨票关联发票集合（全部 POSTED、同供应商同币种、行归属任一发票）
+          items: { type: string } }
         reason: { type: string }
         lines: { type: array, items: { type: object, required: [sourceSupplierInvoiceLineId, quantity], properties: { sourceSupplierInvoiceLineId: { type: string }, itemId: { type: [string, 'null'] }, quantity: { type: number } } } }
     SupplierCreditDebitNoteUpdateRequest:
@@ -20889,6 +20893,8 @@ components:
       required: [version]
       properties:
         reason: { type: string }
+        sourceSupplierInvoiceIds: { type: array, description: 跨票：DRAFT 可替换关联发票集合（全部 POSTED、同供应商同币种）
+          items: { type: string } }
         lines: { type: array, items: { type: object, required: [sourceSupplierInvoiceLineId, quantity], properties: { sourceSupplierInvoiceLineId: { type: string }, quantity: { type: number } } } }
         version: { type: integer }
 
