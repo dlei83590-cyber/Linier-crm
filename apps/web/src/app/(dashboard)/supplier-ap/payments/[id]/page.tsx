@@ -44,6 +44,7 @@ function PaymentDetailView() {
   const { state } = useSession();
   const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
   const canEdit = hasPermission(roles, actionPermission("supplier-payment", "edit"));
+  const canClose = hasPermission(roles, actionPermission("supplier-payment", "close"));
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const id = params.id;
@@ -103,7 +104,7 @@ function PaymentDetailView() {
   if (loadError || !detail) return (<AppPage><ErrorPanel error={loadError ?? new ApiClientError(500, "加载失败", "LOAD_ERROR")} onRetry={load} /></AppPage>);
 
   const canApply = canEdit && !detail.voidedAt && detail.status !== "ALLOCATED";
-  const canVoid = canEdit && !detail.voidedAt && detail.status === "UNALLOCATED";
+  const canVoid = canClose && !detail.voidedAt && detail.status === "UNALLOCATED";
 
   return (
     <AppPage>
