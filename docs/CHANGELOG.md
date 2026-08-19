@@ -39,6 +39,7 @@
 - **表格/列表控件统一（批次6）**：新增 SELECT_CLASS（筛选控件专用非 w-full 保 inline 布局）；**41 个列表页 91 处**筛选下拉/搜索框迁移共享类（宽度变体保留定宽 + 基础类；INPUT_CLASS 保留表单字段用）
 - **CARD_CLASS 应用（批次7）**：**20 个表单/详情页 27 处**外层卡片容器（rounded-lg border-slate-200 bg-white）迁移 CARD_CLASS（统一 rounded-xl + border-border + surface + elevation-sm）
 - **残留变体清理（批次8）**：全仓 53 文件清理非语义色 token——text-slate-* → ink 语义、text-red/amber → status 语义、border-slate-200 → border-border、bg-slate-50 → bg-canvas、bg-red/amber-50 → status-bg（约 1380 token；健康指示点等真实状态色保留）
+- **UI 收尾验收（批次9）**：UI 统一 QA 文档（docs/qa/UI_Unification_QA.md）——8 批次范围/静态验收/共享类统计（FormField 514/BUTTON_PRIMARY 187/SELECT_CLASS 140 等）/Runtime 验收清单
 
 ### 边界
 
