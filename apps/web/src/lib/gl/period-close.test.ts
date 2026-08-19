@@ -117,10 +117,9 @@ describe("reopenPeriod — 期间重开（ADR-0037）", () => {
     journalEntry: {
       id: "entry-close",
       lines: [
-        { accountId: "acc-rev", debit: new Prisma.Decimal("0"), credit: new Prisma.Decimal("500.00"), summary: "结转收入" },
+        { accountId: "acc-rev", debit: new Prisma.Decimal("500.00"), credit: new Prisma.Decimal("0"), summary: "结转收入" },
+        { accountId: "acc-exp", debit: new Prisma.Decimal("0"), credit: new Prisma.Decimal("300.00"), summary: "结转费用" },
         { accountId: "acc-ret", debit: new Prisma.Decimal("0"), credit: new Prisma.Decimal("200.00"), summary: "本年利润" },
-        { accountId: "acc-exp", debit: new Prisma.Decimal("300.00"), credit: new Prisma.Decimal("0"), summary: "结转费用" },
-        { accountId: "acc-ret", debit: new Prisma.Decimal("300.00"), credit: new Prisma.Decimal("0"), summary: "本年利润(费用)" },
       ],
     },
   };
@@ -152,10 +151,10 @@ describe("reopenPeriod — 期间重开（ADR-0037）", () => {
     const sumD = created.data.lines.create.reduce((acc: Prisma.Decimal, l: any) => acc.add(l.debit), new Prisma.Decimal(0));
     const sumC = created.data.lines.create.reduce((acc: Prisma.Decimal, l: any) => acc.add(l.credit), new Prisma.Decimal(0));
     expect(sumD.eq(sumC)).toBe(true);
-    // 反向：原贷 500 → 冲销借 500
+    // 反向：原借 500 → 冲销贷 500
     const revLine = created.data.lines.create.find((l: any) => l.accountId === "acc-rev");
-    expect(revLine.debit.toFixed(2)).toBe("500.00");
-    expect(revLine.credit.toFixed(2)).toBe("0.00");
+    expect(revLine.credit.toFixed(2)).toBe("500.00");
+    expect(revLine.debit.toFixed(2)).toBe("0.00");
     expect(tx.glPeriodClose.delete).toHaveBeenCalledWith({ where: { id: "pc1" } });
   });
 
