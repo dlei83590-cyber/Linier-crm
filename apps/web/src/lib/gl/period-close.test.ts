@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { Prisma } from "@prisma/client";
-import { closePeriod, computeBalancesWithOpening, RETAINED_EARNINGS_CODE } from "@/lib/gl/period-close";
+import { closePeriod, computeBalancesWithOpening, reopenPeriod, RETAINED_EARNINGS_CODE } from "@/lib/gl/period-close";
 
 /**
  * GL 期末结转核心单测（Sprint 7 Finance，ADR-0036）
@@ -109,6 +109,71 @@ describe("closePeriod — 期末结转", () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.code).toBe("GL_PERIOD_NO_ACTIVITY");
   });
+
+describe("reopenPeriod — 期间重开（ADR-0037）", () => {
+  const closeRow = {
+    id: "pc1",
+    periodKey: "2026-08",
+    journalEntry: {
+      id: "entry-close",
+      lines: [
+        { accountId: "acc-rev", debit: new Prisma.Decimal("0"), credit: new Prisma.Decimal("500.00"), summary: "结转收入" },
+        { accountId: "acc-ret", debit: new Prisma.Decimal("0"), credit: new Prisma.Decimal("200.00"), summary: "本年利润" },
+        { accountId: "acc-exp", debit: new Prisma.Decimal("300.00"), credit: new Prisma.Decimal("0"), summary: "结转费用" },
+        { accountId: "acc-ret", debit: new Prisma.Decimal("300.00"), credit: new Prisma.Decimal("0"), summary: "本年利润(费用)" },
+      ],
+    },
+  };
+
+  function reopenTx(overrides: Record<string, unknown> = {}) {
+    return {
+      glPeriodClose: {
+        findFirst: vi.fn().mockResolvedValue(closeRow),
+        delete: vi.fn().mockResolvedValue({}),
+      },
+      documentSequence: {
+        findFirst: vi.fn().mockResolvedValue({ id: "seq-jrn", docType: "JOURNAL", prefix: "JRN", nextNo: 200, padLength: 6 }),
+        update: vi.fn().mockResolvedValue({ id: "seq-jrn", nextNo: 201 }),
+      },
+      glJournalEntry: {
+        create: vi.fn().mockImplementation((args: any) => Promise.resolve({ id: "entry-rev", voucherNo: args.data.voucherNo, ...args.data })),
+      },
+      ...overrides,
+    } as unknown as Prisma.TransactionClient;
+  }
+
+  it("生成红字冲销凭证（逐行反向，借贷平衡）+ 删除 GlPeriodClose", async () => {
+    const tx = reopenTx();
+    const r = await reopenPeriod(tx, { periodCloseId: "pc1", actorId: "user-a" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const created = (tx.glJournalEntry.create as any).mock.calls[0][0];
+    expect(created.data.sourceType).toBe("PERIOD_CLOSE_REVERSAL");
+    const sumD = created.data.lines.create.reduce((acc: Prisma.Decimal, l: any) => acc.add(l.debit), new Prisma.Decimal(0));
+    const sumC = created.data.lines.create.reduce((acc: Prisma.Decimal, l: any) => acc.add(l.credit), new Prisma.Decimal(0));
+    expect(sumD.eq(sumC)).toBe(true);
+    // 反向：原贷 500 → 冲销借 500
+    const revLine = created.data.lines.create.find((l: any) => l.accountId === "acc-rev");
+    expect(revLine.debit.toFixed(2)).toBe("500.00");
+    expect(revLine.credit.toFixed(2)).toBe("0.00");
+    expect(tx.glPeriodClose.delete).toHaveBeenCalledWith({ where: { id: "pc1" } });
+  });
+
+  it("已重开（无结转记录）→ GL_PERIOD_NOT_CLOSED", async () => {
+    const tx = reopenTx({ glPeriodClose: { findFirst: vi.fn().mockResolvedValue(null), delete: vi.fn() } });
+    const r = await reopenPeriod(tx, { periodCloseId: "pc-x", actorId: "user-a" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("GL_PERIOD_NOT_CLOSED");
+  });
+
+  it("结转凭证无分录 → GL_REOPEN_NO_SOURCE", async () => {
+    const tx = reopenTx({ glPeriodClose: { findFirst: vi.fn().mockResolvedValue({ id: "pc1", periodKey: "2026-08", journalEntry: { id: "e", lines: [] } }), delete: vi.fn() } });
+    const r = await reopenPeriod(tx, { periodCloseId: "pc1", actorId: "user-a" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("GL_REOPEN_NO_SOURCE");
+  });
+});
+
 });
 
 describe("computeBalancesWithOpening — 期初余额派生（ADR-0036）", () => {

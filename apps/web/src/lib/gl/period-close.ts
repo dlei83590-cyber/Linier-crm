@@ -57,6 +57,76 @@ export async function computeBalancesWithOpening(
 }
 
 /** 期末结转：收入/费用 → 本年利润（同事务生成结转凭证 + GlPeriodClose） */
+
+/** 期间重开：红字冲销结转凭证 + 删除 GlPeriodClose（ADR-0037；同事务；借贷平衡数学保证） */
+export async function reopenPeriod(
+  tx: Prisma.TransactionClient,
+  params: { periodCloseId: string; actorId?: string | null },
+): Promise<PeriodCloseResult> {
+  const close = await tx.glPeriodClose.findFirst({
+    where: { id: params.periodCloseId },
+    include: { journalEntry: { include: { lines: { select: { accountId: true, debit: true, credit: true, summary: true } } } } },
+  });
+  if (!close) {
+    return { ok: false, code: 'GL_PERIOD_NOT_CLOSED', message: '该期间未结转或已重开（无结转记录）', httpStatus: 409 };
+  }
+  const original = close.journalEntry;
+  if (!original || original.lines.length === 0) {
+    return { ok: false, code: 'GL_REOPEN_NO_SOURCE', message: '结转凭证无分录，无法冲销', httpStatus: 409 };
+  }
+
+  // 红字冲销：逐行反向（debit↔credit）
+  const reversalLines = original.lines.map((l) => ({
+    accountId: l.accountId,
+    debit: l.credit,
+    credit: l.debit,
+    summary: '冲销结转：' + (l.summary ?? ''),
+  }));
+  // 借贷平衡（数学保证：反向行 Σdebit' = Σcredit 原 = Σdebit 原 = Σcredit'）
+  {
+    const sumD = reversalLines.reduce((acc, l) => acc.add(l.debit), new Prisma.Decimal(0));
+    const sumC = reversalLines.reduce((acc, l) => acc.add(l.credit), new Prisma.Decimal(0));
+    if (!sumD.eq(sumC)) {
+      return { ok: false, code: 'GL_UNBALANCED', message: '冲销分录借贷不平衡（内部错误）', httpStatus: 500 };
+    }
+  }
+
+  // 取号
+  const seq = await tx.documentSequence.findFirst({ where: { docType: 'JOURNAL' as never, isActive: true, deletedAt: null } });
+  if (!seq) return { ok: false, code: 'JOURNAL_SEQUENCE_MISSING', message: 'JOURNAL 序列缺失（部署配置错误）', httpStatus: 500 };
+  const updated = await tx.documentSequence.update({ where: { id: seq.id }, data: { nextNo: { increment: 1 } } });
+  const voucherNo = `${seq.prefix}${String(updated.nextNo - 1).padStart(seq.padLength, '0')}`;
+
+  // 冲销凭证（sourceType=PERIOD_CLOSE_REVERSAL, sourceId 唯一）
+  const reversal = await tx.glJournalEntry.create({
+    data: {
+      voucherNo,
+      postingDate: new Date(),
+      status: 'POSTED',
+      sourceType: 'PERIOD_CLOSE_REVERSAL',
+      sourceId: `${close.periodKey}|reopen|${Date.now()}`,
+      summary: '冲销结转：' + close.periodKey,
+      createdById: params.actorId ?? null,
+      postedById: params.actorId ?? null,
+      postedAt: new Date(),
+      lines: { create: reversalLines },
+    },
+  });
+
+  // 删除 GlPeriodClose（允许重新结转）
+  await tx.glPeriodClose.delete({ where: { id: params.periodCloseId } });
+
+  return {
+    ok: true,
+    periodKey: close.periodKey,
+    journalEntryId: reversal.id,
+    voucherNo,
+    revenueNet: '0.00',
+    expenseNet: '0.00',
+    profit: '0.00',
+  };
+}
+
 export async function closePeriod(
   tx: Prisma.TransactionClient,
   params: { periodKey: string; actorId?: string | null },

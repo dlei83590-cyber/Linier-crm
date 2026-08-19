@@ -34,6 +34,22 @@ function PeriodCloseView() {
   const { items, total, page, pageSize, loading, error, setPage, refresh } =
     useListQuery<PeriodCloseRow>("/api/gl/period-closes", {});
 
+  const [reopeningId, setReopeningId] = useState<string | null>(null);
+
+  const handleReopen = (row: PeriodCloseRow) => {
+    if (reopeningId || !window.confirm(`确认重开期间 ${row.periodKey}？将生成红字冲销结转凭证`)) return;
+    setReopeningId(row.id);
+    apiFetch<{ periodKey: string }>(`/api/gl/period-closes/${row.id}/reopen`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    })
+      .then(() => { setReopeningId(null); refresh(); })
+      .catch((err: unknown) => {
+        alert(err instanceof ApiClientError ? err.message : "重开失败");
+        setReopeningId(null);
+      });
+  };
+
   const handleClose = () => {
     if (closing) return;
     setClosing(true);
@@ -80,6 +96,7 @@ function PeriodCloseView() {
             { key: "journalEntry", header: "结转凭证", render: (row) => (row.journalEntry ? <Link href={`/finance/gl-journal-entries/${row.journalEntry.id}`} className="font-medium text-brand-600 hover:underline">{row.journalEntry.voucherNo ?? "—"}</Link> : "—") },
             { key: "closedAt", header: "结转时间", render: (row) => formatDate(row.closedAt) },
             { key: "status", header: "状态", render: () => (<StatusBadge status="CLOSED" label="已结转" toneMap={{ CLOSED: "success" }} />) },
+            { key: "actions", header: "操作", render: (row) => (<button type="button" onClick={() => handleReopen(row)} disabled={reopeningId !== null} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary hover:bg-slate-50 disabled:opacity-50">{reopeningId === row.id ? "重开中…" : "重开"}</button>) },
           ]}
           rows={items}
           rowKey={(row) => row.id}

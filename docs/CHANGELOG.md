@@ -25,6 +25,21 @@
 ### 文档
 - ADR-0029（Pending Pages Completion 决策记录）、docs/frontend/contract-cards/pending-pages-completion-gate.md（Design/Scope Gate 文档）、OpenAPI +7 域 paths、Frontend Module Map / Page Route Map 解除 hold 标记、docs/qa/PendingPages_QA.md、docs/test-cases/MasterData_Admin_CRUD_API.md、ROADMAP v1.23、SPRINT_PLAN
 
+## [Unreleased] - GL 期间解锁/重开（2026-08-20，ADR-0037）
+
+### 新增
+
+- **reopenPeriod**（lib/gl/period-close.ts）：红字冲销结转凭证（逐行反向 debit↔credit，借贷平衡数学保证；sourceType=PERIOD_CLOSE_REVERSAL, sourceId=periodKey|reopen|ts）+ 删除 GlPeriodClose（允许重新结转）同事务
+- **API**：POST /api/gl/period-closes/:id/reopen（gl:create；409 未结转/无分录）
+- **前端**：period-close 页已结转列表"重开"按钮（确认后调用 + 刷新）
+- **单测**：+3 路径（红字冲销借贷平衡/反向分录/未结转 409/无分录 409）
+
+### 边界
+
+- 不删除原结转凭证（GL 不可变纪律——冲销为追加事实）；重开后该期间可再次结转（多轮 结转→重开→结转 事实链完整）；零 Migration
+
+---
+
 ## [Unreleased] - GL 期初余额 + 期末结转（2026-08-20，ADR-0036）
 
 ### 新增

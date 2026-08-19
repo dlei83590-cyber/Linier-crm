@@ -13311,6 +13311,26 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/gl/period-closes/{id}/reopen:
+    post:
+      tags: [GL]
+      summary: 期间重开（红字冲销结转凭证 + 删除 GlPeriodClose；gl:create；ADR-0037）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK（{ periodKey, journalEntryId, voucherNo }）
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
   /api/gl/journal-entries/manual:
     post:
       tags: [GL]
