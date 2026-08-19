@@ -304,6 +304,8 @@ export const PERMISSION_MODULES = [
   "supplier-invoice",
   // AP Open Item 只读查询（5C-1C1 POST 产生的会计投影；ADR-0028：ap-open-item:view ∈ ALL_ACTION_PERMISSIONS）
   "ap-open-item",
+  // 5C-2（CTO 解锁 2026-08-19）：Supplier CN/DN（动作映射：create→supplier-credit-debit-note:create（创建即取号）；submit→:edit；apply→:edit（maker-checker 业务层强制，不新造 apply 权限）；cancel DRAFT→:close）
+  "supplier-credit-debit-note",
 ] as const;
 
 /** 生成模块×动作权限码（如 "item:view"） */

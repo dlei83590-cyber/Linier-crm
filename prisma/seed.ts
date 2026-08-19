@@ -145,6 +145,8 @@ const SEED_ACTION_MODULES = [
   "supplier-invoice",
   // AP Open Item 只读查询（Pending Pages — ap-open-items 只读列表，5C-1C1 事实投影；与 shared PERMISSION_MODULES 一致）
   "ap-open-item",
+  // 5C-2（CTO 解锁 2026-08-19）：Supplier CN/DN（与 shared PERMISSION_MODULES 保持一致，ADR-0028）
+  "supplier-credit-debit-note",
   // Sprint 3A：平台底座模块
   "workflow-definition",
   "workflow-step",

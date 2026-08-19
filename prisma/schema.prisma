@@ -190,6 +190,8 @@ enum DocumentType {
   INVENTORY_ADJUSTMENT // 库存调整单 ADJ（Sprint 6B 新增）
   INVENTORY_CONVERSION // 库存转换单 CVT（Sprint 6B 新增，同 item Repack / UOM Conversion）
   SUPPLIER_INVOICE // 供应商发票 SINV（Sprint 5C-1 新增；DocumentSequence docType=SUPPLIER_INVOICE，创建即取号 P1 Final，缺失 fail closed）
+  SUPPLIER_CREDIT_NOTE // 供应商贷项通知单 SCN（Sprint 5C-2 新增；AP 侧冲减，5C-2 创建即取号）
+  SUPPLIER_DEBIT_NOTE // 供应商借项通知单 SDN（Sprint 5C-2 新增；AP 侧增加，5C-2 创建即取号）
 }
 
 /// Platform user account. Identity and credential record.
@@ -5800,6 +5802,75 @@ model SupplierInvoiceLine {
   @@index([deletedAt])
 }
 
+/// 供应商贷项/借项调整类型（5C-2，AP 侧；方向与 4E-3 相反——CN 冲减 AP，DN 增加 AP）
+enum SupplierCnDnType {
+  CREDIT
+  DEBIT
+}
+
+/// 供应商贷项/借项状态机（5C-2：DRAFT → SUBMITTED → APPROVED → APPLIED / CANCELLED）
+enum SupplierCnDnStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  APPLIED
+  CANCELLED
+}
+
+/// 供应商贷项/借项通知单（5C-2，AP 侧独立事实；ADR-0027 D6：APPLIED 时调整 ApOpenItem 投影，不修改已 POSTED Invoice）
+model SupplierCreditDebitNote {
+  id            String   @id @default(cuid())
+  code          String   @unique // SCN-/SDN-2026-xxxx（DocumentSequence docType=SUPPLIER_CREDIT_NOTE/SUPPLIER_DEBIT_NOTE 创建即取号，缺失 fail closed）
+  noteType      SupplierCnDnType
+  sourceSupplierInvoiceId String // 单票制：必填且唯一（跨票 Consolidated 延后，对齐 4E-3 CTO 拍板）
+  sourceSupplierInvoice SupplierInvoice @relation(fields: [sourceSupplierInvoiceId], references: [id], onDelete: Restrict)
+  supplierId    String // 继承 sourceInvoice.supplierId（硬规则）
+  supplier      Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  currency      String   @default("CNY") // 继承 sourceInvoice.currency
+  reason        String   // 调整原因（折扣/退货/价差/更正/其他）
+  adjustmentTotal Decimal @db.Decimal(18, 4) // = Σ lines（服务端计算，禁止直传头金额）；CREDIT 负向 / DEBIT 正向 signed
+  status        SupplierCnDnStatus @default(DRAFT)
+  approvalStatus ApprovalStatus @default(DRAFT)
+  approvedAt    DateTime? @db.Timestamptz(3)
+  approvedById  String?
+  appliedAt     DateTime? @db.Timestamptz(3) // APPLIED 才回写 AP Open Item 投影（maker-checker）
+  appliedById   String?
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  lines SupplierCreditDebitNoteLine[]
+
+  @@index([supplierId])
+  @@index([status])
+  @@index([sourceSupplierInvoiceId])
+  @@index([deletedAt])
+}
+
+/// 供应商贷/借项行（来源发票行快照；金额服务端计算）
+model SupplierCreditDebitNoteLine {
+  id           String   @id @default(cuid())
+  creditDebitNoteId String
+  creditDebitNote SupplierCreditDebitNote @relation(fields: [creditDebitNoteId], references: [id], onDelete: Cascade)
+  sourceSupplierInvoiceLineId String // 来源发票行（必填可追溯）
+  sourceSupplierInvoiceLine SupplierInvoiceLine @relation(fields: [sourceSupplierInvoiceLineId], references: [id], onDelete: Restrict)
+  lineNo       Int      @default(10)
+  itemId       String?
+  item         Item?    @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  description  String
+  quantity     Decimal  @db.Decimal(18, 4) // 调整数量 > 0；部分行数量调整（累计防超调）
+  unitPrice    Decimal  @db.Decimal(18, 6) // 单价快照（复制，不重算）
+  taxRate      Decimal  @db.Decimal(18, 4) // 税率快照
+  amount       Decimal  @db.Decimal(18, 4) // 调整行金额 = quantity × unitPrice（服务端计算）
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([creditDebitNoteId])
+  @@index([sourceSupplierInvoiceLineId])
+}
 /// 匹配 Run 头（immutable Match Snapshot——Blocking ②：自创建后禁止业务字段 UPDATE/DELETE；
 /// 审批事实引用此 Run（approvedMatchRunId/revision 存 SupplierInvoice），不 mutates MatchRun）
 model SupplierInvoiceMatchRun {

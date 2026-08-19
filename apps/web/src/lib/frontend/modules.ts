@@ -624,17 +624,18 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_LIST },
     order: 2,
   },
-  // Supplier CN/DN（5C-2 HOLD）：不得复用 4E-3 销售 AR CN/DN 权限（CREDIT_DEBIT_NOTE_READ 对应销售侧事实）；
-  // seed 尚无独立 supplier CN/DN permission，5C-2 未定义 → permission=null（与 AP Open Items / Payment 一致），
-  // 待 5C-2 Design/Schema/API 定义后再换正式 permission constant（不虚构 supplier-credit-debit-note:view）
+  // supplier-cn-dn：5C-2（CTO 解锁 2026-08-19）——/api/supplier-credit-debit-notes CRUD + submit/apply
+  // 权限码 supplier-credit-debit-note:view/create/edit/approve/close（apply→:edit，maker-checker 业务层强制）
   {
     id: 'supplier-cn-dn',
     domain: 'supplier-ap',
     label: '供应商贷项/借项',
     route: '/supplier-ap/credit-debit-notes',
-    permission: null,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
+    permission: actionPermission('supplier-credit-debit-note', 'view'),
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD_ACTIONS },
+    createRoute: '/supplier-ap/credit-debit-notes/new',
+    createPermission: actionPermission('supplier-credit-debit-note', 'create'),
     order: 3,
   },
   {
