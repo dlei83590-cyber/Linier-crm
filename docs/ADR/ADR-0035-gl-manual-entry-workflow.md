@@ -41,5 +41,5 @@ ADR-0033/0034 落地 GL 自动过账（事件驱动）与只读查询。剩余�
 ## 后续（独立 backlog）
 
 - ~~期初余额 + 期末结转（month-end close）~~ ✅（2026-08-20，ADR-0036：GlPeriodClose + closePeriod + openingBalance 派生）
-- 多币种折算 / 合并报表
+- ~~多币种折算 / 合并报表~~ **不实施**（CTO 2026-08-20 拍板：系统仅中国市场，单币种 CNY）
 - 成本核算（D9 HOLD 延续）

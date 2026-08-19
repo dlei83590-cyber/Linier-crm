@@ -18,7 +18,7 @@ CTO 指令 2026-08-20 解锁 Sprint 7 Finance 首块 = **GL 过账消费 5C 事�
 |---|---|
 | 会计科目 GlAccount（seed 标准中国科目最小集） | GL 余额/试算平衡/利润表/现金流 |
 | 记账凭证 GlJournalEntry/Line（POSTED 一次性不可变） | GL 手工录入/审核流 UI |
-| lib/gl/posting.ts 过账服务（借贷平衡/幂等/科目校验） | 多币种折算、成本核算（D9 HOLD） |
+| lib/gl/posting.ts 过账服务（借贷平衡/幂等/科目校验） | 成本核算（D9 HOLD）；多币种折算不实施（中国市场单币种 CNY） |
 | consumer 注册 4 个 5C 事件 handler 自动过账 | GRIR 暂估/冲回过账（Accrual/Reversal 后续） |
 | GET /api/gl/accounts + journal-entries 只读 API | reports（BI）仍 HOLD |
 | 前端 /finance/gl-journal-entries 只读列表页 | — |

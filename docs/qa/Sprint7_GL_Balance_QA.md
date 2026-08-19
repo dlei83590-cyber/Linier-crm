@@ -26,7 +26,7 @@
 
 ## 4. 已知限制 / 边界
 
-- 期初余额/期末结转（month-end close）、多币种折算、合并报表 = 后续 backlog
+- 期初余额/期末结转（month-end close）= 后续 backlog；多币种折算/合并报表不实施（中国市场单币种 CNY）
 - reports（BI）仍 HOLD（待 20 份报表清单）
 
 ## 5. 验收人

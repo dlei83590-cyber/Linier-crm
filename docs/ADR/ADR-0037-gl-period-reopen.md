@@ -26,9 +26,9 @@ ADR-0036 已实现期末结转（GlPeriodClose 防重复月结）。业务上可
 
 - 零 Migration（无 schema 变更；复用 GlJournalEntry/Line + GlPeriodClose）
 - 冲销凭证源 type=PERIOD_CLOSE_REVERSAL，试算/余额自动包含（派生聚合）
-- 多币种折算/合并报表仍后续 backlog
+- 多币种折算/合并报表**不实施**（CTO 2026-08-20 拍板：系统仅中国市场，单币种 CNY）
 
 ## 后续（独立 backlog）
 
-- 多币种折算 / 合并报表
+- ~~多币种折算 / 合并报表~~ **不实施**（中国市场单币种 CNY）
 - 成本核算（D9 HOLD 延续）

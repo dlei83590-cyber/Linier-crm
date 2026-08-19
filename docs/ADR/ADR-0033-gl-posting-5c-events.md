@@ -13,7 +13,7 @@ ADR-0027 D8（P11 Final）：5C 阶段不建 GL 总账，只产出"财务事实 
 
 ## 决策
 
-1. **首版最小闭环（Scope）**：会计科目（GlAccount）+ 记账凭证（GlJournalEntry/GlJournalEntryLine）+ 过账服务（lib/gl/posting.ts）+ 消费 5C 事件自动过账（consumer handler）+ 只读查询 API + 前端列表页。**不做**：GL 余额/试算平衡表、利润表/现金流量表、GL 手工录入/审核流、多币种折算、成本核算（D9 HOLD 延续）。
+1. **首版最小闭环（Scope）**：会计科目（GlAccount）+ 记账凭证（GlJournalEntry/GlJournalEntryLine）+ 过账服务（lib/gl/posting.ts）+ 消费 5C 事件自动过账（consumer handler）+ 只读查询 API + 前端列表页。**不做**：GL 余额/试算平衡表、利润表/现金流量表、GL 手工录入/审核流、成本核算（D9 HOLD 延续）。**单币种 CNY（CTO 2026-08-20 拍板：系统仅中国市场，多币种折算不实施）**。
 2. **模型（Migration 0033）**：
    - `GlAccount`（会计科目：code @unique / name / category（ASSET/LIABILITY/EQUITY/REVENUE/EXPENSE）/ direction（DEBIT/CREDIT 余额方向）/ isActive；seed 标准中国会计科目最小集）
    - `GlJournalEntry`（凭证头：voucherNo @unique（DocumentSequence docType=JOURNAL 创建即取号 JRN，seed 已存在）/ postingDate / status=POSTED（一次性终态，不可变）/ sourceType / sourceId / **@@unique([sourceType, sourceId]) 幂等防重复过账** / maker-checker（createdById ≠ postedById）/ version CAS）

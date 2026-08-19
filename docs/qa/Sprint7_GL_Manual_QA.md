@@ -28,7 +28,7 @@
 
 ## 4. 已知限制 / 边界
 
-- 手工凭证审核流不接 Workflow（GL 首版直接状态机 + maker-checker）；期初结转/多币种折算仍后续
+- 手工凭证审核流不接 Workflow（GL 首版直接状态机 + maker-checker）；期初结转仍后续；多币种折算不实施（中国市场单币种 CNY）
 - reports（BI）仍 HOLD（待 20 份报表清单）
 
 ## 5. 验收人
