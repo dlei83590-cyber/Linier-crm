@@ -26,6 +26,18 @@
 - ADR-0029（Pending Pages Completion 决策记录）、docs/frontend/contract-cards/pending-pages-completion-gate.md（Design/Scope Gate 文档）、OpenAPI +7 域 paths、Frontend Module Map / Page Route Map 解除 hold 标记、docs/qa/PendingPages_QA.md、docs/test-cases/MasterData_Admin_CRUD_API.md、ROADMAP v1.23、SPRINT_PLAN
 
 ---
+## [Unreleased] - 5C-2 Payment 整体冲销（Red Reversal，2026-08-19）
+
+### 新增
+
+- **Migration 0031**：SupplierPayment 新增 reversedAt / reversedById / reverseReason（区分作废 void 与已核销后冲销）
+- **POST /api/supplier-payments/:id/reverse**：整体冲销（锁 payment → 反转全部未反转 allocations + 回滚各 ApOpenItem.openAmount 投影 + 回滚 payment 投影 + 标记 reversed；maker-checker/幂等/锁序与 apply 一致）
+- **事件 `SupplierPaymentReversed`**（EVENTS v1.36，事务内原子写 Outbox）
+- **单测**：reverse-helper 8 路径（对齐 P0-1）
+- **边界**：未核销场景走 void（reverse 无核销 → 409 NO_ALLOCATIONS）；纠错不手改 openAmount（追加 reversal 纪律）
+
+---
+
 ## [Unreleased] - Domain Event Outbox（事件总线落地，2026-08-19，ADR-0031）
 
 ### 新增

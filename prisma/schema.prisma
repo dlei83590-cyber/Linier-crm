@@ -5899,6 +5899,10 @@ model SupplierPayment {
   status       SupplierPaymentStatus @default(UNALLOCATED) // 受控投影（事务更新，禁止 PATCH）
   voidedAt     DateTime? @db.Timestamptz(3)
   voidedById   String?
+  // 整体冲销（Red Reversal，5C-2：已核销付款单的纠错——反转全部未反转 allocations + 回滚投影）
+  reversedAt     DateTime? @db.Timestamptz(3)
+  reversedById   String?
+  reverseReason  String?
   isActive    Boolean  @default(true)
   createdById String?
   updatedById String?

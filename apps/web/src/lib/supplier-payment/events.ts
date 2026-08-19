@@ -35,6 +35,20 @@ export async function writeSupplierPaymentAppliedEvent(
   });
 }
 
+/** 事务内原子写 Outbox（SupplierPaymentReversed；幂等键 SupplierPaymentReversed|paymentId） */
+export async function writeSupplierPaymentReversedEvent(
+  tx: Prisma.TransactionClient,
+  params: { paymentId: string; payload: SupplierPaymentEventPayload & { reversedAllocations: number } },
+) {
+  return writeDomainEvent(tx, {
+    eventType: 'SupplierPaymentReversed',
+    aggregateType: 'SupplierPayment',
+    aggregateId: params.paymentId,
+    payload: params.payload,
+    idempotencyKey: `SupplierPaymentReversed|${params.paymentId}`,
+  });
+}
+
 export async function publishSupplierPaymentEvent(params: {
   eventType: 'SupplierPaymentApplied';
   actorId?: string | null;

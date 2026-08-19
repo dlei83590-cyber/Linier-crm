@@ -34,7 +34,7 @@ CTO 授权解锁 5C-2（Supplier Payment / AP Allocation / Supplier CN-DN）HOLD
 
 ## 后续（独立 backlog）
 
-- Payment reversal（核销反转已实现；付款单整体冲销/红字付款未实现）
+- ~~Payment 整体冲销~~ ✅（2026-08-19 已实现：Migration 0031 + POST /:id/reverse + SupplierPaymentReversed 事件；核销反转 + 整体冲销均齐）
 - Supplier CN/DN 跨票 Consolidated 调整（当前单票制）
 - GL 过账消费 5C 事件（Finance 阶段）
 - ADR-0028 CI 静态 Gate（独立 Governance backlog）
