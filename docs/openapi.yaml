@@ -13018,6 +13018,296 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  # ===== 5C-2 Supplier CN/DN + Payment（2026-08-19，ADR-0030）=====
+  /api/supplier-credit-debit-notes:
+    get:
+      tags: [Supplier CN/DN]
+      summary: 供应商贷/借项分页列表（noteType/supplierId/status/sourceSupplierInvoiceId 过滤）
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: noteType
+          in: query
+          schema: { type: string, enum: [CREDIT, DEBIT] }
+        - name: supplierId
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, enum: [DRAFT, SUBMITTED, APPROVED, APPLIED, CANCELLED] }
+        - name: sourceSupplierInvoiceId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierCreditDebitNoteListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Supplier CN/DN]
+      summary: 创建（来源发票须 POSTED；code 创建即取号；金额服务端计算）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierCreditDebitNoteCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierCreditDebitNote"
+        "400":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/supplier-credit-debit-notes/{id}:
+    get:
+      tags: [Supplier CN/DN]
+      summary: 详情（含行 + 供应商/来源发票摘要）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierCreditDebitNote"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Supplier CN/DN]
+      summary: 更新（DRAFT only + version CAS；行整体替换）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierCreditDebitNoteUpdateRequest"
+      responses:
+        "200":
+          description: OK
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/supplier-credit-debit-notes/{id}/submit:
+    post:
+      tags: [Supplier CN/DN]
+      summary: 提交（DRAFT→SUBMITTED；来源链重验；apply→:edit 权限）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version: { type: integer }
+      responses:
+        "200":
+          description: OK
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/supplier-credit-debit-notes/{id}/apply:
+    post:
+      tags: [Supplier CN/DN]
+      summary: 应用（APPROVED→APPLIED；同事务重算 ApOpenItem.openAmount 投影；防超调锁内重算；maker-checker）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version: { type: integer }
+      responses:
+        "200":
+          description: OK
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/supplier-payments:
+    get:
+      tags: [Supplier Payments]
+      summary: 付款单分页列表（supplierId/status/currency/paymentDate 范围过滤）
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: supplierId
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, enum: [UNALLOCATED, PARTIALLY_ALLOCATED, ALLOCATED] }
+        - name: currency
+          in: query
+          schema: { type: string }
+        - name: dateFrom
+          in: query
+          schema: { type: string, format: date }
+        - name: dateTo
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierPaymentListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Supplier Payments]
+      summary: 创建付款单（code 取号 PAYMENT_VOUCHER；Created ≠ Applied）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierPaymentCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierPayment"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/supplier-payments/{id}:
+    get:
+      tags: [Supplier Payments]
+      summary: 详情（含未作废核销行 + Open Item 摘要）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierPayment"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/supplier-payments/{id}/apply:
+    post:
+      tags: [Supplier Payments]
+      summary: 核销一个 AP Open Item（防超核销锁内重算 + 同供应商同币种 + maker-checker；apply→:edit 权限）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [apOpenItemId, allocatedAmount]
+              properties:
+                apOpenItemId: { type: string }
+                allocatedAmount: { type: number }
+      responses:
+        "200":
+          description: OK
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/supplier-payments/{id}/void:
+    post:
+      tags: [Supplier Payments]
+      summary: 作废付款单（UNALLOCATED only；void→:close 权限）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/supplier-payment-allocations/{id}/reverse:
+    post:
+      tags: [Supplier Payments]
+      summary: 核销反转（纠错；reversedAt 留痕 + 投影回滚；不物理删除）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        "200":
+          description: OK
+        "409":
+          $ref: "#/components/responses/Conflict"
 components:
   securitySchemes:
     bearerAuth:
@@ -20548,6 +20838,96 @@ components:
         data:
           type: array
           items: { $ref: "#/components/schemas/ApOpenItem" }
+  # ===== 5C-2 schemas（2026-08-19，ADR-0030）=====
+    SupplierCreditDebitNote:
+      type: object
+      required: [id, code, noteType, supplierId, adjustmentTotal, status]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        noteType: { type: string, enum: [CREDIT, DEBIT] }
+        sourceSupplierInvoiceId: { type: string }
+        supplierId: { type: string }
+        supplier: { type: [object, 'null'], properties: { id: { type: string }, code: { type: string }, name: { type: string } } }
+        currency: { type: string, default: CNY }
+        reason: { type: string }
+        adjustmentTotal: { type: string, description: Decimal 字符串（服务端 = Σ 行金额；CREDIT 负向 / DEBIT 正向 signed） }
+        status: { type: string, enum: [DRAFT, SUBMITTED, APPROVED, APPLIED, CANCELLED] }
+        approvalStatus: { type: string }
+        appliedAt: { type: [string, 'null'] }
+        version: { type: integer }
+        createdAt: { type: string, format: date-time }
+        lines: { type: array, items: { $ref: '#/components/schemas/SupplierCreditDebitNoteLine' } }
+    SupplierCreditDebitNoteLine:
+      type: object
+      required: [id, sourceSupplierInvoiceLineId, quantity, unitPrice, amount]
+      properties:
+        id: { type: string }
+        sourceSupplierInvoiceLineId: { type: string }
+        itemId: { type: [string, 'null'] }
+        description: { type: string }
+        quantity: { type: string }
+        unitPrice: { type: string }
+        amount: { type: string }
+    SupplierCreditDebitNoteListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data: { type: array, items: { $ref: '#/components/schemas/SupplierCreditDebitNote' } }
+        meta: { type: object, required: [page, pageSize, total], properties: { page: { type: integer }, pageSize: { type: integer }, total: { type: integer } } }
+    SupplierCreditDebitNoteCreateRequest:
+      type: object
+      required: [noteType, sourceSupplierInvoiceId, reason, lines]
+      properties:
+        noteType: { type: string, enum: [CREDIT, DEBIT] }
+        sourceSupplierInvoiceId: { type: string }
+        reason: { type: string }
+        lines: { type: array, items: { type: object, required: [sourceSupplierInvoiceLineId, quantity], properties: { sourceSupplierInvoiceLineId: { type: string }, itemId: { type: [string, 'null'] }, quantity: { type: number } } } }
+    SupplierCreditDebitNoteUpdateRequest:
+      type: object
+      required: [version]
+      properties:
+        reason: { type: string }
+        lines: { type: array, items: { type: object, required: [sourceSupplierInvoiceLineId, quantity], properties: { sourceSupplierInvoiceLineId: { type: string }, quantity: { type: number } } } }
+        version: { type: integer }
+
+    SupplierPayment:
+      type: object
+      required: [id, code, supplierId, amount, status]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        supplierId: { type: string }
+        supplier: { type: [object, 'null'], properties: { id: { type: string }, code: { type: string }, name: { type: string } } }
+        currency: { type: string, default: CNY }
+        amount: { type: string, description: Decimal 字符串（付款事实） }
+        allocatedAmount: { type: string, description: 受控投影 = Σ allocations }
+        unallocatedAmount: { type: string }
+        paymentDate: { type: string, format: date-time }
+        paymentMethod: { type: string, enum: [BANK_TRANSFER, CHEQUE, CASH, CARD, OTHER] }
+        referenceNo: { type: [string, 'null'] }
+        status: { type: string, enum: [UNALLOCATED, PARTIALLY_ALLOCATED, ALLOCATED] }
+        voidedAt: { type: [string, 'null'] }
+        version: { type: integer }
+        allocations: { type: array, items: { type: object, properties: { id: { type: string }, allocatedAmount: { type: string }, allocatedAt: { type: string }, apOpenItem: { type: [object, 'null'], properties: { id: { type: string }, openAmount: { type: string } } } } } }
+    SupplierPaymentListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, example: true }
+        data: { type: array, items: { $ref: '#/components/schemas/SupplierPayment' } }
+        meta: { type: object, required: [page, pageSize, total], properties: { page: { type: integer }, pageSize: { type: integer }, total: { type: integer } } }
+    SupplierPaymentCreateRequest:
+      type: object
+      required: [supplierId, amount, paymentDate, paymentMethod]
+      properties:
+        supplierId: { type: string }
+        currency: { type: string }
+        amount: { type: number }
+        paymentDate: { type: string, format: date-time }
+        paymentMethod: { type: string, enum: [BANK_TRANSFER, CHEQUE, CASH, CARD, OTHER] }
+        referenceNo: { type: [string, 'null'] }
         meta:
           type: object
           required: [page, pageSize, total]

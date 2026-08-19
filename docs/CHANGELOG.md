@@ -26,6 +26,18 @@
 - ADR-0029（Pending Pages Completion 决策记录）、docs/frontend/contract-cards/pending-pages-completion-gate.md（Design/Scope Gate 文档）、OpenAPI +7 域 paths、Frontend Module Map / Page Route Map 解除 hold 标记、docs/qa/PendingPages_QA.md、docs/test-cases/MasterData_Admin_CRUD_API.md、ROADMAP v1.23、SPRINT_PLAN
 
 ---
+## [Unreleased] - 5C-2 Supplier CN/DN + Payment Allocation（CTO 解锁，2026-08-19）
+
+### 新增（5C-2 两批实现，ADR-0030；Migration 0029 + 0030）
+
+- **Batch 1 — Supplier CN/DN（Migration 0029）**：`/api/supplier-credit-debit-notes` CRUD + submit/apply（创建即取号 SCN/SDN、来源发票须 POSTED、金额服务端计算、APPLIED 同事务重算 ApOpenItem.openAmount 投影、防超调锁内重算、maker-checker）；前端 /supplier-ap/credit-debit-notes（列表/新建/详情 + 状态机按钮）
+- **Batch 2 — Payment Allocation（Migration 0030）**：`/api/supplier-payments` CRUD + apply/void + `/api/supplier-payment-allocations/:id/reverse`（付款取号 PAYMENT_VOUCHER、Created ≠ Applied、Apply 唯一回写结算投影、防超核销/同供应商同币种、reversal 纠错）；前端 /supplier-ap/payments（列表/新建/详情 + 核销录入）
+- **事件（EVENTS v1.34）**：`SupplierCreditDebitNoteApplied` / `SupplierPaymentApplied`（AuditLog 留痕，事务提交后发布）
+- **权限（ADR-0028）**：supplier-credit-debit-note / supplier-payment / supplier-payment-allocation 模块注册（仅 SUPER_ADMIN/ADMIN 静态授权）
+- **registry**：supplier-cn-dn / payment-allocation hold→ready
+- **边界**：不建 GL（D8）、不触碰库存成本/Reservation；reports 保持信息架构（待 20 份报表清单）
+
+---
 ## [Unreleased] - AP Open Items 只读查询（2026-08-18，Pending Pages：ap-open-items）
 
 ### 新增（应付未结项只读列表，5C-1C1 会计事实投影）
