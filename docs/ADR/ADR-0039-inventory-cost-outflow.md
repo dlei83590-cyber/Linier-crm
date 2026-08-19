@@ -33,6 +33,6 @@ ADR-0038 已落地入库移动平均。第二步 = **出库结转**：库存 OUT
 
 ## 后续（独立 backlog）
 
-- GL COGS 分录（Movement 事件 outbox 化 + consumer）
+- ~~GL COGS 分录~~ ✅（2026-08-20，ADR-0040：出库结转同事务 postGlEntry 借 6401 贷 1403；事件驱动列后续）
 - FIFO / Cost Layer / Landed Cost / 仓库维度成本
 - 成本差异分析 / 期末成本重估

@@ -25,6 +25,19 @@
 ### 文档
 - ADR-0029（Pending Pages Completion 决策记录）、docs/frontend/contract-cards/pending-pages-completion-gate.md（Design/Scope Gate 文档）、OpenAPI +7 域 paths、Frontend Module Map / Page Route Map 解除 hold 标记、docs/qa/PendingPages_QA.md、docs/test-cases/MasterData_Admin_CRUD_API.md、ROADMAP v1.23、SPRINT_PLAN
 
+## [Unreleased] - 成本核算第三步：GL COGS 分录（2026-08-20，ADR-0040）
+
+### 新增
+
+- **ledger-command COGS 接线**：executeLedgerAtom 出库结转后（outCost > 0）同事务调 postGlEntry——借 6401 主营业务成本 / 贷 1403 原材料（复用幂等 @@unique(sourceType,sourceId) + JRN 取号；COGS 与出库结转原子）
+- **seed**：新增 6401 主营业务成本（EXPENSE, DEBIT）科目
+
+### 边界
+
+- 首版固定科目映射（6401/1403；按物料类型/费用类别多 COGS 科目 = 后续 backlog）；无成本层物料 skipped → 无 COGS 分录（0 成本出库）；**不依赖 InventoryMovementCommitted 事件 outbox 化**（当前 best-effort AuditLog；事务内直调保证原子，事件驱动列后续）；ledger-command → gl/posting 单向依赖（无循环）
+
+---
+
 ## [Unreleased] - 成本核算第二步：出库结转（2026-08-20，ADR-0039）
 
 ### 新增

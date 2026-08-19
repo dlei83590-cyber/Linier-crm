@@ -6,6 +6,7 @@ import type {
   InventoryMovementDirection,
 } from '@prisma/client';
 import { applyOutboundCost } from '@/lib/inventory-cost/moving-average';
+import { postGlEntry } from '@/lib/gl/posting';
 
 /**
  * Sprint 6B-1/6B-2 - Shared InventoryLedgerCommand Core
@@ -382,6 +383,7 @@ export async function executeLedgerAtom(
 
   // 出库结转（ADR-0039）：OUT 落定同事务按移动平均结转成本层（独立表；不写 Movement/Projection——红线延续）
   // 幂等 sourceKey=COST_OUT:{movementId}；无成本层物料 → skipped（0 成本出库边界）
+  let outCost = new Prisma.Decimal(0);
   if (atom.direction === 'OUT') {
     const costResult = await applyOutboundCost(tx, {
       itemId: atom.itemId,
@@ -390,6 +392,23 @@ export async function executeLedgerAtom(
       actorId: atom.actorId,
     });
     if (!costResult.ok) throw new Error('COST_OUT_FAILED:' + costResult.code);
+    outCost = new Prisma.Decimal(costResult.outCost);
+  }
+
+  // GL COGS 分录（ADR-0040）：OUT 且 outCost > 0 → 同事务过账 借 6401 主营业务成本 / 贷 1403 原材料（复用 postGlEntry 幂等/取号）
+  if (atom.direction === 'OUT' && outCost.gt(0)) {
+    const glResult = await postGlEntry(tx, {
+      sourceType: 'InventoryMovementCommitted',
+      sourceId: movementId,
+      postingDate: atom.occurredAt ? new Date(atom.occurredAt) : new Date(),
+      summary: '出库结转（COGS）：' + (atom.referenceNo ?? movementNo),
+      lines: [
+        { accountCode: '6401', debit: outCost.toFixed(2), credit: '0', summary: '主营业务成本', sourceRef: movementId },
+        { accountCode: '1403', debit: '0', credit: outCost.toFixed(2), summary: '库存出库（原材料）', sourceRef: movementId },
+      ],
+      actorId: atom.actorId,
+    });
+    if (!glResult.ok) throw new Error('GL_COGS_FAILED:' + glResult.code);
   }
 
   return { inserted: true, movementId, movementNo };

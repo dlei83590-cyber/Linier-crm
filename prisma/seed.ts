@@ -584,6 +584,7 @@ const SEED_GL_ACCOUNTS = [
   { code: "222101", name: "应交税费-应交增值税-进项税额", category: "LIABILITY", direction: "CREDIT", remark: "GL_ACCOUNT_TAX_INPUT" },
   { code: "6111", name: "采购调整", category: "EXPENSE", direction: "DEBIT", remark: "GL_ACCOUNT_ADJUST" },
   { code: "4103", name: "本年利润", category: "EQUITY", direction: "CREDIT", remark: "GL_ACCOUNT_RETAINED_EARNINGS（期末结转目标）" },
+  { code: "6401", name: "主营业务成本", category: "EXPENSE", direction: "DEBIT", remark: "GL_ACCOUNT_COGS（出库结转，ADR-0040）" },
 ] as const;
 
 /** Sprint 3A：工作流定义示例（Workflow Foundation） */
