@@ -7,7 +7,7 @@ import { requestLog } from '@/lib/api/logger';
 import { supplierInvoiceMatchSchema } from '@/lib/api/schemas';
 import { runMatch } from '@/lib/supplier-invoice/match-helpers';
 import { maybeTriggerSupplierInvoiceApproval } from '@/lib/supplier-invoice/workflow-sync';
-import { publishSupplierInvoiceEvent } from '@/lib/supplier-invoice/events';
+import { publishSupplierInvoiceEvent, writeSupplierInvoiceEventInTx } from '@/lib/supplier-invoice/events';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,7 +43,28 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   let result;
   try {
     result = await prisma.$transaction(async (tx) => {
-      return runMatch(tx, { invoiceId: id, version, actorId });
+      const r = await runMatch(tx, { invoiceId: id, version, actorId });
+      // 事件总线落地（ADR-0031）：Match 事务内原子写 Outbox（可靠持久化；事务后 AuditLog 留痕保留）
+      if (r.ok) {
+        await writeSupplierInvoiceEventInTx(tx, {
+          eventType: 'SupplierInvoiceMatched',
+          invoiceId: r.invoice.id,
+          idempotencyKey: `SupplierInvoiceMatched|${r.invoice.id}|${r.run.id}`,
+          payload: {
+            invoiceId: r.invoice.id,
+            invoiceNo: r.invoice.invoiceNo,
+            supplierId: r.invoice.supplierId,
+            matchRunId: r.run.id,
+            revision: r.run.revision,
+            result: r.run.result,
+            disposition: r.run.disposition,
+            lineCount: r.run.lines.length,
+            matchedById: actorId,
+            matchedAt: new Date().toISOString(),
+          },
+        });
+      }
+      return r;
     });
   } catch (err) {
     console.error('[supplier-invoice.match]', err);

@@ -31,7 +31,7 @@
 ### 新增
 
 - **通用 Domain Event Outbox**：`lib/domain-events/writer.ts`（业务事务内原子写 OutboxMessage，复用 6A 表）+ `lib/domain-events/consumer.ts`（claim FOR UPDATE SKIP LOCKED → PROCESSED/retry/DEAD_LETTER，库存链事件白名单排除）+ `POST /api/domain-events/consume` 触发端点（`domain-event:consume` SYSTEM_PERMISSIONS）
-- **5C-2 事件升级**：`SupplierCreditDebitNoteApplied` / `SupplierPaymentApplied` 由 AuditLog-only 升级为**事务内原子写 Outbox**（幂等键 eventType|aggregateId）；AuditLog 留痕保留
+- **5C-1/5C-2 事件升级**：`SupplierInvoiceMatched` / `SupplierInvoicePosted` / `GrirConsumed` / `SupplierCreditDebitNoteApplied` / `SupplierPaymentApplied` 全部由 AuditLog-only 升级为**事务内原子写 Outbox**（幂等键 eventType|aggregateId[|runId]）；AuditLog 留痕保留
 - **边界**：GL/Notification 业务消费者后续阶段注册 handler；5C-1 事件 outbox 化列后续批；6A 库存链事件不变
 
 ---

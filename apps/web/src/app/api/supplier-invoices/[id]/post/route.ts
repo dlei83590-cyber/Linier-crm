@@ -11,7 +11,7 @@ import {
   SupplierInvoicePostVersionConflictError,
   SupplierInvoicePostInternalError,
 } from '@/lib/supplier-invoice/post-helpers';
-import { publishSupplierInvoiceEvent } from '@/lib/supplier-invoice/events';
+import { publishSupplierInvoiceEvent, writeSupplierInvoiceEventInTx } from '@/lib/supplier-invoice/events';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,7 +53,43 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   let result;
   try {
     result = await prisma.$transaction(async (tx) => {
-      return postSupplierInvoice(tx, { invoiceId: id, version, actorId });
+      const r = await postSupplierInvoice(tx, { invoiceId: id, version, actorId });
+      // 事件总线落地（ADR-0031）：POST 事务内原子写 Outbox（可靠持久化；事务后 AuditLog 留痕保留）
+      if (r.ok) {
+        await writeSupplierInvoiceEventInTx(tx, {
+          eventType: 'SupplierInvoicePosted',
+          invoiceId: r.invoice.id,
+          idempotencyKey: `SupplierInvoicePosted|${r.invoice.id}`,
+          payload: {
+            invoiceId: r.invoice.id,
+            invoiceNo: r.invoice.invoiceNo,
+            supplierId: r.invoice.supplierId,
+            grossAmount: r.invoice.grossAmount.toString(),
+            netAmount: r.invoice.netAmount.toString(),
+            inputVatAmount: r.inputVatAmount.toString(),
+            nonRecoverableTaxAmount: r.nonRecoverableTaxAmount.toString(),
+            liabilityId: r.liability.id,
+            openItemId: r.openItem.id,
+            consumeCount: r.consumes.length,
+            postedById: actorId,
+            postedAt: r.invoice.postedAt?.toISOString() ?? new Date().toISOString(),
+          },
+        });
+        await writeSupplierInvoiceEventInTx(tx, {
+          eventType: 'GrirConsumed',
+          invoiceId: r.invoice.id,
+          idempotencyKey: `GrirConsumed|${r.invoice.id}`,
+          payload: {
+            invoiceId: r.invoice.id,
+            invoiceNo: r.invoice.invoiceNo,
+            supplierId: r.invoice.supplierId,
+            consumes: r.consumes,
+            consumedById: actorId,
+            consumedAt: r.invoice.postedAt?.toISOString() ?? new Date().toISOString(),
+          },
+        });
+      }
+      return r;
     });
   } catch (err) {
     // B1（CTO Static Gate 2026-08-12）：postSupplierInvoice 从第一笔 accounting write 之后

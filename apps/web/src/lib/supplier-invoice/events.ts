@@ -1,4 +1,6 @@
 import { writeAuditLog } from '@/lib/api-helpers';
+import { Prisma } from '@prisma/client';
+import { writeDomainEvent } from '@/lib/domain-events/writer';
 
 /**
  * Sprint 5C-1B/1C - SupplierInvoice Domain Events 发布（EVENTS.md v1.32/1.33 注册）
@@ -51,6 +53,25 @@ export interface SupplierInvoiceEventPayload {
   consumedById?: string;
   consumedAt?: string; // ISO
   [key: string]: unknown;
+}
+
+/** 事务内原子写 Outbox（事件总线落地 ADR-0031；幂等键 eventType|invoiceId[|runId]；AuditLog 留痕保留在发布侧） */
+export async function writeSupplierInvoiceEventInTx(
+  tx: Prisma.TransactionClient,
+  params: {
+    eventType: 'SupplierInvoiceMatched' | 'SupplierInvoicePosted' | 'GrirConsumed';
+    invoiceId: string;
+    idempotencyKey: string;
+    payload: SupplierInvoiceEventPayload;
+  },
+) {
+  await writeDomainEvent(tx, {
+    eventType: params.eventType,
+    aggregateType: 'SupplierInvoice',
+    aggregateId: params.invoiceId,
+    payload: params.payload,
+    idempotencyKey: params.idempotencyKey,
+  });
 }
 
 export async function publishSupplierInvoiceEvent(params: {
