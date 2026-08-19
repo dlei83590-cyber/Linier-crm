@@ -456,6 +456,7 @@ model Item {
   @@index([categoryId])
   @@index([replacementItemId])
   @@index([deletedAt])
+  supplierCreditDebitNoteLines SupplierCreditDebitNoteLine[] // 5C-2：供应商贷/借项行（SupplierCreditDebitNoteLine.itemId 方向）
 }
 
 /// 直线导轨专用扩展规格（关联 Item，1:1）。
@@ -496,7 +497,6 @@ model TechnicalStandard {
   version     Int            @default(1)
   deletedAt   DateTime?
   items       ItemStandard[]
-  creditDebitNoteLines SupplierCreditDebitNoteLine[] // 5C-2：供应商贷/借项行（SupplierCreditDebitNoteLine.itemId 方向）
   createdAt   DateTime       @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime       @updatedAt @db.Timestamptz(3)
 
