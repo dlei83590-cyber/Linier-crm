@@ -5,6 +5,7 @@ import { useState } from "react";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityListWorkspace } from "@/components/workspace";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatMoney } from "@/lib/format";
 
@@ -45,8 +46,8 @@ function InventoryCostList() {
         }
         toolbarActions={
           <>
-            <button type="button" onClick={applyFilter} className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">查询</button>
-            <button type="button" onClick={resetFilter} className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-slate-50">重置</button>
+            <button type="button" onClick={applyFilter} className={BUTTON_PRIMARY_CLASS}>查询</button>
+            <button type="button" onClick={resetFilter} className={BUTTON_SECONDARY_CLASS}>重置</button>
           </>
         }
         columns={[

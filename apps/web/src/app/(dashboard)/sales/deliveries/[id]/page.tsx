@@ -21,6 +21,7 @@ import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { useSession } from "@/lib/session-context";
 import { formatDate } from "@/lib/format";
 
@@ -319,7 +320,7 @@ function DeliveryDetailPage() {
                 type="button"
                 onClick={() => setConfirmAction("ready")}
                 disabled={actionBusy}
-                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className={BUTTON_PRIMARY_CLASS}
               >
                 {actionBusy ? "处理中…" : "就绪"}
               </button>
@@ -333,7 +334,7 @@ function DeliveryDetailPage() {
                   setDispatchOpen(true);
                 }}
                 disabled={actionBusy}
-                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className={BUTTON_PRIMARY_CLASS}
               >
                 {actionBusy ? "处理中…" : "发运"}
               </button>
@@ -346,7 +347,7 @@ function DeliveryDetailPage() {
                   setConfirmDeliverOpen(true);
                 }}
                 disabled={actionBusy}
-                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className={BUTTON_PRIMARY_CLASS}
               >
                 {actionBusy ? "处理中…" : "确认收货"}
               </button>
@@ -367,7 +368,7 @@ function DeliveryDetailPage() {
                 onClick={openInvoiceDialog}
                 disabled={actionBusy || invoicableLines.length === 0}
                 title={invoicableLines.length === 0 ? "无剩余可开票数量" : undefined}
-                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className={BUTTON_PRIMARY_CLASS}
               >
                 {actionBusy ? "创建中…" : "创建发票"}
               </button>
@@ -536,7 +537,7 @@ function DeliveryDetailPage() {
                 type="button"
                 onClick={closeInvoiceDialog}
                 disabled={actionBusy}
-                className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-slate-50"
+                className={BUTTON_SECONDARY_CLASS}
               >
                 取消
               </button>
@@ -544,7 +545,7 @@ function DeliveryDetailPage() {
                 type="button"
                 onClick={handleCreateInvoice}
                 disabled={actionBusy}
-                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className={BUTTON_PRIMARY_CLASS}
               >
                 {actionBusy ? "创建中…" : "创建发票"}
               </button>

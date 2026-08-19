@@ -35,6 +35,7 @@
 - **共享组件语义化**：EntityListWorkspace（表头 bg-canvas + 行 hover 过渡 brand-50/40）、EntityFormWorkspace（409 冲突面板 status-warning 语义类 + 按钮过渡）、Pagination / ListStates（border/ink/status 语义色）
 - **表单控件统一（批次3）**：新增 FormField 组件 + lib/ui-classes（INPUT_CLASS/BUTTON_*/CARD_CLASS 单一来源）；**31 个新建/编辑页** inputClass 常量改为共享引用（消除重复）
 - **Field 函数迁移（批次4）**：**30 个页面**页面级重复 `Field` 函数全部删除，JSX 迁移到共享 `FormField` 组件（-1046 行重复定义；逐文件精准 edit，无 JSX 破坏）
+- **按钮/操作区统一（批次5）**：主按钮（106+14 处）迁移 BUTTON_PRIMARY_CLASS、次按钮（43 处）迁移 BUTTON_SECONDARY_CLASS（消除各页散落样式；尺寸特化变体 px-2/px-4 保留以维持布局层次）
 
 ### 边界
 

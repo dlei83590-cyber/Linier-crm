@@ -27,6 +27,7 @@ import {
   ProjectSubresourceDialog,
 } from "@/components/workspace";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
+import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
 import { formatDate } from "@/lib/format";
 import {
   StakeholderFields,
@@ -2076,7 +2077,7 @@ function ProjectDetailPage() {
             <div className="flex items-center gap-2">
               <Link
                 href={`/projects/${id}/edit`}
-                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                className={BUTTON_PRIMARY_CLASS}
               >
                 编辑
               </Link>
@@ -2084,7 +2085,7 @@ function ProjectDetailPage() {
                 <button
                   type="button"
                   onClick={openTransition}
-                  className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                  className={BUTTON_PRIMARY_CLASS}
                 >
                   阶段流转
                 </button>
@@ -2203,7 +2204,7 @@ function ProjectDetailPage() {
                   <button
                     type="button"
                     onClick={openStakeholderCreate}
-                    className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                    className={BUTTON_PRIMARY_CLASS}
                   >
                     添加关系人
                   </button>
@@ -2275,7 +2276,7 @@ function ProjectDetailPage() {
                   <button
                     type="button"
                     onClick={openMemberCreate}
-                    className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                    className={BUTTON_PRIMARY_CLASS}
                   >
                     添加成员
                   </button>
@@ -2339,7 +2340,7 @@ function ProjectDetailPage() {
                   <button
                     type="button"
                     onClick={openMilestoneCreate}
-                    className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                    className={BUTTON_PRIMARY_CLASS}
                   >
                     添加里程碑
                   </button>
@@ -2415,7 +2416,7 @@ function ProjectDetailPage() {
                   <button
                     type="button"
                     onClick={openTaskCreate}
-                    className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                    className={BUTTON_PRIMARY_CLASS}
                   >
                     添加任务
                   </button>
@@ -2483,7 +2484,7 @@ function ProjectDetailPage() {
                   <button
                     type="button"
                     onClick={openProductCreate}
-                    className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                    className={BUTTON_PRIMARY_CLASS}
                   >
                     添加产品
                   </button>
@@ -2555,7 +2556,7 @@ function ProjectDetailPage() {
                   <button
                     type="button"
                     onClick={openRiskCreate}
-                    className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                    className={BUTTON_PRIMARY_CLASS}
                   >
                     添加风险
                   </button>
@@ -2625,7 +2626,7 @@ function ProjectDetailPage() {
                   <button
                     type="button"
                     onClick={openVisitCreate}
-                    className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                    className={BUTTON_PRIMARY_CLASS}
                   >
                     添加走访
                   </button>
@@ -2699,7 +2700,7 @@ function ProjectDetailPage() {
                       <button
                         type="button"
                         onClick={openBudgetCreate}
-                        className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                        className={BUTTON_PRIMARY_CLASS}
                       >
                         添加预算
                       </button>
@@ -2769,7 +2770,7 @@ function ProjectDetailPage() {
                       <button
                         type="button"
                         onClick={openExpenseCreate}
-                        className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                        className={BUTTON_PRIMARY_CLASS}
                       >
                         添加费用
                       </button>
@@ -2841,7 +2842,7 @@ function ProjectDetailPage() {
                       <button
                         type="button"
                         onClick={openProgressCreate}
-                        className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                        className={BUTTON_PRIMARY_CLASS}
                       >
                         添加进度
                       </button>
@@ -2914,7 +2915,7 @@ function ProjectDetailPage() {
                       <button
                         type="button"
                         onClick={openAcceptanceCreate}
-                        className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                        className={BUTTON_PRIMARY_CLASS}
                       >
                         添加验收项
                       </button>
@@ -3000,7 +3001,7 @@ function ProjectDetailPage() {
                   <button
                     type="button"
                     onClick={openTagCreate}
-                    className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                    className={BUTTON_PRIMARY_CLASS}
                   >
                     添加标签
                   </button>

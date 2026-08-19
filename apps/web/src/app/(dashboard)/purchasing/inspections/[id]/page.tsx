@@ -15,6 +15,7 @@ import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@ni
 import { useSession } from "@/lib/session-context";
 import { AppPage, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { formatDate } from "@/lib/format";
 
 interface InspectionDetail {
@@ -172,7 +173,7 @@ function InspectionDetailPage() {
                   setCompleteOpen(true);
                 }}
                 disabled={actionBusy}
-                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className={BUTTON_PRIMARY_CLASS}
               >
                 {actionBusy ? "处理中…" : "完成质检"}
               </button>

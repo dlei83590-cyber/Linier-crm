@@ -14,6 +14,7 @@ import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shar
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
@@ -85,7 +86,7 @@ function ReceiptList() {
           canCreate ? (
             <Link
               href="/sales/receipts/new"
-              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+              className={BUTTON_PRIMARY_CLASS}
             >
               + 新建收款单
             </Link>
@@ -112,14 +113,14 @@ function ReceiptList() {
             <button
               type="button"
               onClick={applyFilter}
-              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+              className={BUTTON_PRIMARY_CLASS}
             >
               查询
             </button>
             <button
               type="button"
               onClick={resetFilter}
-              className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-slate-50"
+              className={BUTTON_SECONDARY_CLASS}
             >
               重置
             </button>

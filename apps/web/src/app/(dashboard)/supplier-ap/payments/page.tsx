@@ -7,6 +7,7 @@ import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shar
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate, formatMoney } from "@/lib/format";
 
@@ -48,7 +49,7 @@ function PaymentList() {
         description="供应商付款单与应付未结项核销（Created ≠ Applied；Apply 唯一回写结算投影；防超核销锁内重算）"
         headerActions={
           canCreate ? (
-            <Link href="/supplier-ap/payments/new" className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
+            <Link href="/supplier-ap/payments/new" className={BUTTON_PRIMARY_CLASS}>
               + 新建付款单
             </Link>
           ) : undefined
@@ -65,8 +66,8 @@ function PaymentList() {
         }
         toolbarActions={
           <>
-            <button type="button" onClick={applyFilter} className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">查询</button>
-            <button type="button" onClick={resetFilter} className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-slate-50">重置</button>
+            <button type="button" onClick={applyFilter} className={BUTTON_PRIMARY_CLASS}>查询</button>
+            <button type="button" onClick={resetFilter} className={BUTTON_SECONDARY_CLASS}>重置</button>
           </>
         }
         columns={[

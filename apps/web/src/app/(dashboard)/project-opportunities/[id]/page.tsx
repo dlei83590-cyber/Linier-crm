@@ -15,6 +15,7 @@ import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shar
 import { useSession } from "@/lib/session-context";
 import { AppPage, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { formatDate } from "@/lib/format";
 
 interface OpportunityDetail {
@@ -146,7 +147,7 @@ function OpportunityDetailPage() {
           canEdit ? (
             <Link
               href={`/project-opportunities/${id}/edit`}
-              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+              className={BUTTON_PRIMARY_CLASS}
             >
               编辑
             </Link>

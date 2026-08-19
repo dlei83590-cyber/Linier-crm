@@ -13,7 +13,7 @@ export const BUTTON_PRIMARY_CLASS =
 
 /** 次按钮（secondary） */
 export const BUTTON_SECONDARY_CLASS =
-  'rounded-md border border-border px-3 py-1.5 text-sm font-medium text-ink-secondary transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50';
+  'rounded-md border border-border px-3 py-1.5 text-sm font-medium text-ink-secondary transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50';
 
 /** 列表/详情页卡片容器 */
 export const CARD_CLASS = 'rounded-xl border border-border bg-surface shadow-elevation-sm overflow-hidden';

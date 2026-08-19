@@ -21,6 +21,7 @@ import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
 
@@ -267,7 +268,7 @@ function SalesOrderDetailPage() {
                 type="button"
                 onClick={() => setConfirmAction("confirm")}
                 disabled={actionBusy}
-                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className={BUTTON_PRIMARY_CLASS}
               >
                 {actionBusy ? "处理中…" : "确认订单"}
               </button>
@@ -288,7 +289,7 @@ function SalesOrderDetailPage() {
                 onClick={openDeliveryDialog}
                 disabled={actionBusy || remainingLines.length === 0}
                 title={remainingLines.length === 0 ? "无剩余可交付数量" : undefined}
-                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className={BUTTON_PRIMARY_CLASS}
               >
                 {actionBusy ? "创建中…" : "创建送货单"}
               </button>
@@ -464,7 +465,7 @@ function SalesOrderDetailPage() {
                 type="button"
                 onClick={closeDeliveryDialog}
                 disabled={actionBusy}
-                className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-slate-50"
+                className={BUTTON_SECONDARY_CLASS}
               >
                 取消
               </button>
@@ -472,7 +473,7 @@ function SalesOrderDetailPage() {
                 type="button"
                 onClick={handleCreateDelivery}
                 disabled={actionBusy}
-                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className={BUTTON_PRIMARY_CLASS}
               >
                 {actionBusy ? "创建中…" : "创建送货单"}
               </button>

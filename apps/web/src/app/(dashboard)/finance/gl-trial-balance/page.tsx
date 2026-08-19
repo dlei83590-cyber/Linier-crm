@@ -6,6 +6,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { formatMoney } from "@/lib/format";
 
 interface TrialLine {
@@ -57,7 +58,7 @@ function TrialBalanceView() {
           <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-md border border-border px-2 py-1.5 text-sm" />
           <span className="text-sm text-ink-secondary">至</span>
           <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-md border border-border px-2 py-1.5 text-sm" />
-          <button type="button" onClick={() => load()} className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">查询</button>
+          <button type="button" onClick={() => load()} className={BUTTON_PRIMARY_CLASS}>查询</button>
         </div>
       </div>
       <div className="p-4">

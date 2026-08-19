@@ -15,6 +15,7 @@ import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { formatDate } from "@/lib/format";
 
 interface OrderDetail {
@@ -157,7 +158,7 @@ function OrderDetailPage() {
                 type="button"
                 onClick={() => setConfirmAction("submit")}
                 disabled={actionBusy}
-                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className={BUTTON_PRIMARY_CLASS}
               >
                 {actionBusy ? "处理中…" : "提交审批"}
               </button>
@@ -167,7 +168,7 @@ function OrderDetailPage() {
                 type="button"
                 onClick={() => setConfirmAction("confirm")}
                 disabled={actionBusy}
-                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className={BUTTON_PRIMARY_CLASS}
               >
                 {actionBusy ? "处理中…" : "确认订单"}
               </button>

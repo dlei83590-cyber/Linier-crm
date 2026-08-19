@@ -7,6 +7,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
 
@@ -77,7 +78,7 @@ function PeriodCloseView() {
             <span className="text-sm font-medium text-ink-secondary">结转期间（YYYY-MM）</span>
             <input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} className="w-44 rounded-md border border-border px-3 py-1.5 text-sm" />
           </label>
-          <button type="button" onClick={handleClose} disabled={closing} className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">
+          <button type="button" onClick={handleClose} disabled={closing} className={BUTTON_PRIMARY_CLASS}>
             {closing ? "结转中…" : "执行结转"}
           </button>
           {closeError ? <p className="text-sm text-status-danger-text">{closeError.message}</p> : null}

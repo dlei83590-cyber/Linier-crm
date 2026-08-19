@@ -19,6 +19,7 @@ import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
@@ -170,7 +171,7 @@ function CnDnList() {
           canCreate ? (
             <Link
               href="/sales/credit-debit-notes/new"
-              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+              className={BUTTON_PRIMARY_CLASS}
             >
               + 新建通知单
             </Link>
@@ -209,14 +210,14 @@ function CnDnList() {
             <button
               type="button"
               onClick={applyFilter}
-              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+              className={BUTTON_PRIMARY_CLASS}
             >
               查询
             </button>
             <button
               type="button"
               onClick={resetFilter}
-              className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-slate-50"
+              className={BUTTON_SECONDARY_CLASS}
             >
               重置
             </button>

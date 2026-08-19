@@ -17,6 +17,7 @@ import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@ni
 import { useSession } from "@/lib/session-context";
 import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { formatDate } from "@/lib/format";
 
 interface StockCountDetail {
@@ -252,7 +253,7 @@ function StockCountDetailPage() {
                 type="button"
                 onClick={openLineDialog}
                 disabled={actionBusy}
-                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className={BUTTON_PRIMARY_CLASS}
               >
                 录入盘点行
               </button>
@@ -262,7 +263,7 @@ function StockCountDetailPage() {
                 type="button"
                 onClick={() => setConfirmAction("complete")}
                 disabled={actionBusy}
-                className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className={BUTTON_PRIMARY_CLASS}
               >
                 完成盘点
               </button>

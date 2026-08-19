@@ -7,6 +7,7 @@ import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shar
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate, formatMoney } from "@/lib/format";
 
@@ -68,7 +69,7 @@ function CnDnList() {
         description="供应商开给我方的 AP 侧调整单据（贷项冲减应付 / 借项增加应付；APPLIED 才回写应付未结项）"
         headerActions={
           canCreate ? (
-            <Link href="/supplier-ap/credit-debit-notes/new" className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
+            <Link href="/supplier-ap/credit-debit-notes/new" className={BUTTON_PRIMARY_CLASS}>
               + 新建贷/借项
             </Link>
           ) : undefined
@@ -92,8 +93,8 @@ function CnDnList() {
         }
         toolbarActions={
           <>
-            <button type="button" onClick={applyFilter} className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">查询</button>
-            <button type="button" onClick={resetFilter} className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-slate-50">重置</button>
+            <button type="button" onClick={applyFilter} className={BUTTON_PRIMARY_CLASS}>查询</button>
+            <button type="button" onClick={resetFilter} className={BUTTON_SECONDARY_CLASS}>重置</button>
           </>
         }
         columns={[

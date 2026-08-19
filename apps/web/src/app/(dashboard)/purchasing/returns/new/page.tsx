@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 
 interface PurchaseOrderOption {
   id: string;
@@ -244,7 +245,7 @@ function PurchaseReturnCreateForm() {
           <button
             type="button"
             onClick={addLine}
-            className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+            className={BUTTON_PRIMARY_CLASS}
           >
             + 添加行
           </button>
