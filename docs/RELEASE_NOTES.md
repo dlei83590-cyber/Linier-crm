@@ -1,5 +1,40 @@
 # Release Notes
 
+## v0.8.0-alpha — Linier ERP 全模块打通 · 5C-2 · Read Models（2026-08-19 Release Candidate）
+
+> **Release 标题：** Linier ERP v0.8.0-alpha — Frontend 全模块打通 + 5C-2 AP 结算 + Read Models
+> **Release 摘要：** 在 v0.7.0-alpha 基础上：① 9 个待开发前端页面全部打通（Master Data 4 + System 3 CRUD + 走访/风险引导）+ 全 UI 中文化审计（角色/权限中文映射 + uscc GB 32100-2015 校验）；② AP Open Items 只读查询页（5C-1C1 会计投影）；③ **5C-2 Supplier CN/DN + Payment Allocation FINAL**（CTO 解锁 2026-08-19：Migration 0029/0030，AP 侧贷/借项与付款核销，Apply 同事务重算 ApOpenItem 投影，防超调/防超核销锁内重算 + maker-checker + 事件 v1.34）；④ Inventory Read Model FINAL（CTO #8845 解除）；⑤ 5C-2 会计单测（21 条不变量路径）。
+> **Release Gate：** 候选条件达成——5C-2 已合并 main（CI 全绿）+ 会计单测 `4fc7470`（Unit tests 通过）；发布基线 commit CI 全绿；生产 migration baseline 扩展为 0001–0030。证据：docs/reviews/ReleaseGate_v0.8.0_Acceptance.md
+> **Tag：** `v0.8.0-alpha`（annotated tag；GitHub Pre-release）
+> **版本治理：** 以 Git Tag 为发布事实源；`RELEASE_VERSION` manifest = v0.8.0-alpha；root package.json 不随本版修改。
+
+### Compatibility / Upgrade Guide
+
+- **Schema baseline**：Migration 0001–0030（0027 FROZEN；0028 FINAL 冻结；**0029/0030 = 5C-2 新增**，纯增量）。
+- **Database**：PostgreSQL 16（依赖 UNIQUE NULLS NOT DISTINCT、FOR UPDATE SKIP LOCKED）。
+- **Migration**：部署自动执行 `prisma migrate deploy`（Railway）；生产 baseline 升级为 `0030_supplier_payment_allocation`。
+- **Breaking Changes**：无破坏性变更（0001–0030 全部增量迁移）；5C-2 不可变会计事实延续（CN/DN APPLIED 后禁改、核销 reversal 追加）。
+- **Upgrade Guide**：v0.7.0-alpha → 直接部署新版本（0029/0030 自动应用，仅建新表/枚举，幂等）；升级后 /api/health/ready 返回 baseline=true 即验证成功。
+
+### 新增能力（业务视角）
+
+- **Frontend 全模块打通**：9 个待开发页面完成（business-partners / technical-standards / commercial-terms / document-sequences / users / departments / roles CRUD + project-visits/risks 引导）+ ap-open-items 只读查询；全 UI 中文（角色/权限模块/动作中文映射 labels.ts）
+- **5C-2 应付结算**：供应商贷项/借项（冲减/增加应付，APPLIED 同事务重算 AP Open Item 投影）+ 供应商付款核销（Created ≠ Applied，Apply 唯一回写结算投影，防超核销，reversal 纠错）——会计事件 v1.34
+- **Inventory Read Model（CTO #8845 解除）**：GET /api/stock-projections + /api/inventory-movements 只读 Query API + 前端两页
+- **会计单测**：5C-2 apply/reverse 21 条不变量路径（vitest，CI Unit tests 验证）
+
+### Known Limitations（2026-08-19）
+
+1. **GL 过账 / 总账 / 利润 / 现金流（Sprint 7）HOLD**：5C 已产出稳定会计事件（v1.34），GL 消费事件留待 Finance 阶段（前置：事件总线落地 + reconciliation 服务）
+2. **事件总线未落地**：5C-1/5C-2 事件经 AuditLog 留痕（Known Risk），outbox 模式待实现
+3. **ApOpenItem 投影 reconciliation 服务未实现**：openAmount 由 CN/DN apply 与 Payment apply 增量维护，全量重算/对账服务为后续 backlog
+4. **Reservation / Costing / FIFO / 库存价值 HOLD**：Stock Projection 仅表达已 FINAL quantity fact
+5. **BI / OA / Mobile 未开始**；Contract 模块未开始；Notification 真实发送后续
+6. **Project Lifecycle Contract Audit 待收口**：下一 Governance 项（FINAL/GAP/HOLD matrix）
+7. **Payment 整体冲销 / 红字付款、CN/DN 跨票 Consolidated 未实现**（5C-2 backlog，ADR-0030）
+
+---
+
 ## v0.7.0-alpha — Linier ERP Purchase · Inventory · AP Accounting & Frontend Operations（2026-08-18 Release Candidate）
 
 > **Release 标题：** Linier ERP v0.7.0-alpha — Purchase, Inventory & AP Accounting + Frontend Operations
