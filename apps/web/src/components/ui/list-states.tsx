@@ -7,7 +7,7 @@ import { describeStatus, type ApiClientError } from "@/lib/api-client";
 export function LoadingRow({ colSpan }: { colSpan: number }) {
   return (
     <tr>
-      <td colSpan={colSpan} className="px-4 py-10 text-center text-sm text-slate-400">
+      <td colSpan={colSpan} className="px-4 py-10 text-center text-sm text-ink-muted">
         加载中…
       </td>
     </tr>
@@ -17,7 +17,7 @@ export function LoadingRow({ colSpan }: { colSpan: number }) {
 export function EmptyRow({ colSpan, message = "暂无数据" }: { colSpan: number; message?: string }) {
   return (
     <tr>
-      <td colSpan={colSpan} className="px-4 py-10 text-center text-sm text-slate-400">
+      <td colSpan={colSpan} className="px-4 py-10 text-center text-sm text-ink-muted">
         {message}
       </td>
     </tr>
@@ -36,17 +36,17 @@ export function ErrorRow({
   return (
     <tr>
       <td colSpan={colSpan} className="px-4 py-10 text-center">
-        <p className="text-sm text-red-600">
+        <p className="text-sm text-status-danger-text">
           {describeStatus(error.status)}：{error.message}
           {error.code ? `（${error.code}）` : ""}
         </p>
         {error.requestId && (
-          <p className="mt-1 text-xs text-slate-400">requestId: {error.requestId}</p>
+          <p className="mt-1 text-xs text-ink-muted">requestId: {error.requestId}</p>
         )}
         <button
           type="button"
           onClick={onRetry}
-          className="mt-2 rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+          className="border-border text-ink-secondary mt-2 rounded-md border px-3 py-1.5 text-sm transition-colors hover:bg-slate-100"
         >
           重试
         </button>

@@ -84,7 +84,7 @@ export function EntityFormWorkspace({
               type="button"
               onClick={handleCancel}
               disabled={submitting}
-              className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {cancelLabel}
             </button>
@@ -103,13 +103,9 @@ export function EntityFormWorkspace({
         {isConflict && onReload ? (
           <div
             role="alert"
-            className="rounded-md border p-4"
-            style={{
-              backgroundColor: "#fffbeb",
-              borderColor: "#fde68a",
-            }}
+            className="rounded-md border border-status-warning-border bg-status-warning-bg p-4"
           >
-            <p className="text-sm font-medium" style={{ color: "#b45309" }}>
+            <p className="text-sm font-medium text-status-warning-text">
               该记录已被其他操作更新，请重新加载最新数据后再编辑。
             </p>
             <button

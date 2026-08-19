@@ -32,6 +32,7 @@
 - **Admin Shell**：品牌区渐变 Logo + 系统名双层、顶部栏用户区（头像首字母 + 邮箱 + 语义化退出按钮）、侧边栏域分组/活跃态/Hold 折叠组统一设计系统语义色（canvas/surface/ink/status/border + shadow-elevation-sm）、Footer 语义化
 - **Login 页**：背景品牌渐变 + 卡片 shadow-elevation-lg + 渐变品牌标识、输入框聚焦 ring + 语义占位色、错误提示 status-danger 语义、主按钮 elevation
 - **Dashboard**：四卡片统一 rounded-xl + shadow-elevation-sm 分层、标题层级（ink-primary semibold）、快捷操作/业务入口链接 hover 过渡 + 语义色、系统状态卡片
+- **共享组件语义化**：EntityListWorkspace（表头 bg-canvas + 行 hover 过渡 brand-50/40）、EntityFormWorkspace（409 冲突面板 status-warning 语义类 + 按钮过渡）、Pagination / ListStates（border/ink/status 语义色）
 
 ### 边界
 

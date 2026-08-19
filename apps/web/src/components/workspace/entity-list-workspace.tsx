@@ -73,7 +73,7 @@ export function EntityListWorkspace<T>({
       ) : null}
       <div className="overflow-x-auto">
         <table className="divide-border min-w-full divide-y text-sm">
-          <thead className="text-ink-secondary bg-slate-50 text-left text-xs font-medium">
+          <thead className="text-ink-secondary bg-canvas text-left text-xs font-medium">
             <tr>
               {columns.map((col) => (
                 <th
@@ -96,7 +96,7 @@ export function EntityListWorkspace<T>({
               <EmptyRow colSpan={columns.length} message={emptyMessage} />
             ) : (
               rows.map((row) => (
-                <tr key={rowKey(row)} className="hover:bg-slate-50/60">
+                <tr key={rowKey(row)} className="transition-colors hover:bg-brand-50/40">
                   {columns.map((col) => (
                     <td
                       key={col.key}

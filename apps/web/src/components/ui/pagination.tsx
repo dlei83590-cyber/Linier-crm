@@ -16,18 +16,18 @@ export function Pagination({
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3">
-      <p className="text-sm text-slate-500">共 {total} 条</p>
+    <div className="border-border bg-surface flex items-center justify-between border-t px-4 py-3">
+      <p className="text-sm text-ink-muted">共 {total} 条</p>
       <div className="flex items-center gap-2">
         <button
           type="button"
           disabled={page <= 1}
           onClick={() => onPageChange(page - 1)}
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+          className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
         >
           上一页
         </button>
-        <span className="text-sm text-slate-600">
+        <span className="text-sm text-ink-secondary">
           {page} / {totalPages}
         </span>
         <button
