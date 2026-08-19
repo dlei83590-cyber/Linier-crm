@@ -9,6 +9,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
+import { apiFetch } from "@/lib/api-client";
 import { formatDate, formatMoney } from "@/lib/format";
 
 interface PaymentRow {
