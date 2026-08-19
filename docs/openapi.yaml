@@ -13170,6 +13170,69 @@ paths:
           description: OK（返回 { id, status: APPLIED, openAmountsAfter: [{ supplierInvoiceId, openAmountAfter }] }）
         "409":
           $ref: "#/components/responses/Conflict"
+  /api/gl/accounts:
+    get:
+      tags: [GL]
+      summary: 会计科目表（只读主数据；Sprint 7，ADR-0033）
+      parameters:
+        - name: category
+          in: query
+          schema: { type: string, enum: [ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE] }
+      responses:
+        "200":
+          description: OK
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/gl/journal-entries:
+    get:
+      tags: [GL]
+      summary: 记账凭证分页列表（sourceType/sourceId/dateFrom/dateTo 过滤；gl:view）
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: sourceType
+          in: query
+          schema: { type: string, enum: [SupplierInvoicePosted, SupplierPaymentApplied, SupplierCreditDebitNoteApplied, SupplierPaymentReversed] }
+        - name: sourceId
+          in: query
+          schema: { type: string }
+        - name: dateFrom
+          in: query
+          schema: { type: string, format: date }
+        - name: dateTo
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: OK
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/gl/journal-entries/{id}:
+    get:
+      tags: [GL]
+      summary: 记账凭证详情（含行 + 科目；gl:view）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/supplier-payments:
     get:
       tags: [Supplier Payments]

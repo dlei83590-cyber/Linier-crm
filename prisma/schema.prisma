@@ -6091,3 +6091,84 @@ model ApOpenItem {
   @@index([supplierId])
   @@index([settlementStatus])
 }
+/// 会计科目（Sprint 7 GL 过账首块，Migration 0033；ADR-0033）
+/// 标准中国会计科目最小集（seed 初始化）；code 唯一；只读主数据（禁止业务侧 PATCH 科目余额/方向）
+enum GlAccountCategory {
+  ASSET // 资产
+  LIABILITY // 负债
+  EQUITY // 权益
+  REVENUE // 收入
+  EXPENSE // 费用
+}
+
+/// 科目余额方向（中国科目惯例：资产/费用 = 借方向；负债/权益/收入 = 贷方向）
+enum GlAccountDirection {
+  DEBIT
+  CREDIT
+}
+
+model GlAccount {
+  id        String   @id @default(cuid())
+  code      String   @unique // 科目编码（如 1002 银行存款 / 1403 原材料 / 2202 应付账款 / 222101 进项税 / 6111 采购调整）
+  name      String   // 科目名称（中文）
+  category  GlAccountCategory
+  direction GlAccountDirection
+  isActive  Boolean  @default(true)
+  remark    String?
+  createdById String?
+  updatedById String?
+  version   Int      @default(1)
+  deletedAt DateTime?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  journalEntryLines GlJournalEntryLine[]
+
+  @@index([category])
+  @@index([deletedAt])
+}
+
+/// 记账凭证头（Sprint 7 GL，Migration 0033；ADR-0033）
+/// POSTED 一次性终态不可变；sourceType+sourceId 幂等（防重复过账）；纠错 → 追加红字冲销凭证
+model GlJournalEntry {
+  id         String   @id @default(cuid())
+  voucherNo  String   @unique // 凭证号（DocumentSequence docType=JOURNAL 创建即取号 JRN-2026-xxxx；seed 已存在）
+  postingDate DateTime @db.Timestamptz(3) // 过账日期
+  status     String   @default("POSTED") // 首版仅 POSTED（终态不可变）；预留状态机
+  sourceType String   // 来源类型（SupplierInvoicePosted / SupplierPaymentApplied / SupplierCreditDebitNoteApplied / SupplierPaymentReversed）
+  sourceId   String   // 来源业务事实 id（发票 id / 核销行 id / CN-DN id）
+  summary    String?  // 摘要
+  createdById String? // 触发人（consumer 过账 = 触发 consume 的 actor；系统自动过账可空）
+  postedById  String?
+  postedAt    DateTime? @db.Timestamptz(3)
+  version    Int      @default(1)
+  deletedAt  DateTime?
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+
+  lines GlJournalEntryLine[]
+
+  @@unique([sourceType, sourceId]) // 幂等：同一来源只允许一张凭证（防重复过账）
+  @@index([postingDate])
+  @@index([sourceType])
+  @@index([deletedAt])
+}
+
+/// 记账凭证行（Sprint 7 GL，Migration 0033；ADR-0033）
+/// 每行恰一侧 > 0（debit 或 credit），另一侧为 0；Σdebit = Σcredit（服务端过账校验）
+model GlJournalEntryLine {
+  id        String   @id @default(cuid())
+  entryId   String
+  entry     GlJournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  accountId String
+  account   GlAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  debit     Decimal  @default(0) @db.Decimal(18, 2) // 借方金额（> 0 时 credit 必须为 0）
+  credit    Decimal  @default(0) @db.Decimal(18, 2) // 贷方金额（> 0 时 debit 必须为 0）
+  summary   String?  // 行摘要（科目说明）
+  sourceRef String?  // 来源引用（如发票行 id，便于 GL 追溯）
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([entryId])
+  @@index([accountId])
+}
+

@@ -150,6 +150,8 @@ const SEED_ACTION_MODULES = [
   // 5C-2：Supplier Payment + Allocation（与 shared PERMISSION_MODULES 保持一致，ADR-0028）
   "supplier-payment",
   "supplier-payment-allocation",
+  // Sprint 7 Finance 首块（ADR-0033）：GL 会计科目/记账凭证（与 shared PERMISSION_MODULES 保持一致）
+  "gl",
   // Sprint 3A：平台底座模块
   "workflow-definition",
   "workflow-step",
@@ -570,6 +572,16 @@ const SEED_DOCUMENT_SEQUENCES = [
   { code: "PJ", name: "项目", docType: "PROJECT", prefix: "PJ", nextNo: 1, padLength: 6 },
 ];
 
+/** Sprint 7 Finance 首块（CTO 解锁 2026-08-20，ADR-0033）：标准中国会计科目最小集（GL 过账映射依赖这些 code——fail closed） */
+const SEED_GL_ACCOUNTS = [
+  { code: "1001", name: "库存现金", category: "ASSET", direction: "DEBIT", remark: "现金" },
+  { code: "1002", name: "银行存款", category: "ASSET", direction: "DEBIT", remark: "GL_ACCOUNT_BANK" },
+  { code: "1403", name: "原材料", category: "ASSET", direction: "DEBIT", remark: "GL_ACCOUNT_PURCHASE" },
+  { code: "2202", name: "应付账款", category: "LIABILITY", direction: "CREDIT", remark: "GL_ACCOUNT_AP" },
+  { code: "222101", name: "应交税费-应交增值税-进项税额", category: "LIABILITY", direction: "CREDIT", remark: "GL_ACCOUNT_TAX_INPUT" },
+  { code: "6111", name: "采购调整", category: "EXPENSE", direction: "DEBIT", remark: "GL_ACCOUNT_ADJUST" },
+] as const;
+
 /** Sprint 3A：工作流定义示例（Workflow Foundation） */
 const SEED_WORKFLOW_DEFINITIONS = [
   {
@@ -960,6 +972,15 @@ async function main() {
       where: { code: t.code },
       update: {},
       create: t,
+    });
+  }
+
+  // Sprint 7 Finance（ADR-0033）：标准中国会计科目（幂等 upsert；GL 过账映射依赖这些 code）
+  for (const a of SEED_GL_ACCOUNTS) {
+    await prisma.glAccount.upsert({
+      where: { code: a.code },
+      update: {},
+      create: a,
     });
   }
 

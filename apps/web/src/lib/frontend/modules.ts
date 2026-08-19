@@ -651,6 +651,17 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     createPermission: actionPermission('supplier-payment', 'create'),
     order: 4,
   },
+  // gl：Sprint 7 Finance 首块（CTO 解锁 2026-08-20，ADR-0033）——/api/gl/journal-entries 只读（事件驱动自动过账；无手工过账 UI）
+  {
+    id: 'gl',
+    domain: 'supplier-ap',
+    label: '记账凭证（GL）',
+    route: '/finance/gl-journal-entries',
+    permission: actionPermission('gl', 'view'),
+    availability: 'ready',
+    capabilities: { contract: ['view'], ui: UI_LIST_DETAIL_ACTIONS },
+    order: 1,
+  },
 
   // ===== 基础资料（F2-2 Wave 1 已交付 → ready；契约缺失项保持 hold）=====
   // items / price-lists：contract CRUD FINAL；main 已有 list/detail/new/edit → ui CRUD 开放

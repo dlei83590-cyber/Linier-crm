@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { glPostFromEvent } from '@/lib/gl/posting';
 
 /**
  * 通用 Domain Event Consumer（CTO 建议：事件总线落地，GL 解锁前置）
@@ -21,6 +22,14 @@ export const DOMAIN_EVENT_RETRY_CAP_SECONDS = 300;
 
 /** 库存链事件白名单：这些事件由 inventory-ledger/consumer 消费，本 consumer 跳过 */
 const INVENTORY_CHAIN_EVENTS = new Set(['WarehouseReceiptPosted', 'PurchaseReturned', 'InventoryMovementCommitted']);
+
+/** GL 过账消费事件（Sprint 7 Finance 首块，ADR-0033）：消费 5C 会计事件 → 自动过账（同事务） */
+const GL_POSTED_EVENTS = new Set([
+  'SupplierInvoicePosted',
+  'SupplierPaymentApplied',
+  'SupplierCreditDebitNoteApplied',
+  'SupplierPaymentReversed',
+]);
 
 interface ClaimedOutboxRow {
   id: string;
@@ -61,6 +70,14 @@ export async function runDomainEventConsumer(): Promise<ConsumeDomainEventResult
     }
     try {
       await prisma.$transaction(async (tx) => {
+        // GL 过账 handler（Sprint 7，ADR-0033）：与 Outbox PROCESSED 同事务（handler 副作用 + PROCESSED 原子）
+        if (GL_POSTED_EVENTS.has(row.eventType)) {
+          const payload = (row.payload ?? {}) as Record<string, unknown>;
+          const r = await glPostFromEvent(tx, row.eventType, payload);
+          if (!r.ok && r.code !== 'UNSUPPORTED_EVENT') {
+            throw new Error('GL_POST_FAILED:' + r.code + ':' + r.message);
+          }
+        }
         await tx.outboxMessage.update({
           where: { id: row.id },
           data: { status: 'PROCESSED', processedAt: new Date(), lastError: null, lockedAt: null, lockedBy: null },

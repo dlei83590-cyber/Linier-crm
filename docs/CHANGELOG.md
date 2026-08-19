@@ -25,6 +25,24 @@
 ### 文档
 - ADR-0029（Pending Pages Completion 决策记录）、docs/frontend/contract-cards/pending-pages-completion-gate.md（Design/Scope Gate 文档）、OpenAPI +7 域 paths、Frontend Module Map / Page Route Map 解除 hold 标记、docs/qa/PendingPages_QA.md、docs/test-cases/MasterData_Admin_CRUD_API.md、ROADMAP v1.23、SPRINT_PLAN
 
+## [Unreleased] - Sprint 7 Finance 首块：GL 过账消费 5C 事件（2026-08-20，ADR-0033）
+
+### 新增
+
+- **Migration 0033**：GlAccount（会计科目）/ GlJournalEntry（凭证头，sourceType+sourceId @unique 幂等）/ GlJournalEntryLine（凭证行，借贷平衡）；JRN 取号复用 seed 序列
+- **lib/gl/posting.ts**：postGlEntry（借贷平衡 Σdebit=Σcredit / 每行恰一侧 / 科目存在 fail closed / 幂等跳过 / POSTED 终态不可变）+ glPostFromEvent（5C 事件 → 分录映射）
+- **consumer handler**：通用 Domain Event Consumer 注册 4 个事件（SupplierInvoicePosted / SupplierPaymentApplied / SupplierCreditDebitNoteApplied / SupplierPaymentReversed）→ 自动过账（handler + Outbox PROCESSED 同事务）
+- **查询 API**：GET /api/gl/accounts、GET /api/gl/journal-entries（分页/过滤）+ /:id（详情含行）
+- **前端**：/finance/gl-journal-entries 只读列表 + 详情页（gl:view 权限；无手工过账 UI——事件驱动）
+- **seed**：标准中国会计科目最小集（1001/1002/1403/2202/222101/6111）+ gl 模块注册
+- **单测**：postGlEntry 5 路径 + glPostFromEvent 6 路径（借贷平衡/幂等/事件映射）
+
+### 边界
+
+- 不做 GL 余额/试算平衡/利润表（后续 backlog）；GRIR 暂估/冲回不过账；无手工录入/审核流 UI；reports（BI）仍 HOLD
+
+---
+
 ## [Unreleased] - 5C-2 Supplier CN/DN 跨票 Consolidated 调整（2026-08-20）
 
 ### 新增

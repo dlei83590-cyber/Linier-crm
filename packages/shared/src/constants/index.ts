@@ -310,6 +310,8 @@ export const PERMISSION_MODULES = [
   "supplier-payment",
   // 5C-2：Payment Allocation 核销行（reversal→supplier-payment-allocation:edit）
   "supplier-payment-allocation",
+  // Sprint 7 Finance 首块（CTO 解锁 2026-08-20，ADR-0033）：GL 会计科目/记账凭证（view/create/edit/close——过账动作映射 create→gl:create；会计敏感仅 SUPER_ADMIN/ADMIN 静态授权，与 supplier-invoice 一致；MANAGER 无）
+  "gl",
 ] as const;
 
 /** 生成模块×动作权限码（如 "item:view"） */
