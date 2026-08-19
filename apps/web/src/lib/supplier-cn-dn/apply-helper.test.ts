@@ -143,7 +143,7 @@ describe("applySupplierCnDn — 跨票 Consolidated（Migration 0032）", () => 
   ];
 
   it("成功跨票 CREDIT：金额按行归属分摊（inv1: 500-60=440，inv2: 300-40=260）", async () => {
-    const tx = makeTx([[baseNote], [multiLinks], [multiLines], [multiOpenItems]]);
+    const tx = makeTx([[baseNote], multiLinks, multiLines, multiOpenItems]);
     const r = await applySupplierCnDn(tx, { cnDnId: "n1", version: 1, actorId: "user-b" });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
@@ -160,7 +160,7 @@ describe("applySupplierCnDn — 跨票 Consolidated（Migration 0032）", () => 
       { lineId: "sl1", amount: "60.0000", supplierInvoiceId: "inv1" },
       { lineId: "sl2", amount: "400.0000", supplierInvoiceId: "inv2" },
     ];
-    const tx = makeTx([[baseNote], [multiLinks], [badLines], [multiOpenItems]]);
+    const tx = makeTx([[baseNote], multiLinks, badLines, multiOpenItems]);
     const r = await applySupplierCnDn(tx, { cnDnId: "n1", version: 1, actorId: "user-b" });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.code).toBe("OVER_ADJUSTMENT");
@@ -173,21 +173,21 @@ describe("applySupplierCnDn — 跨票 Consolidated（Migration 0032）", () => 
       { lineId: "sl1", amount: "60.0000", supplierInvoiceId: "inv1" },
       { lineId: "sl9", amount: "40.0000", supplierInvoiceId: "inv9" }, // 不在关联集合
     ];
-    const tx = makeTx([[baseNote], [multiLinks], [badLines]]);
+    const tx = makeTx([[baseNote], multiLinks, badLines]);
     const r = await applySupplierCnDn(tx, { cnDnId: "n1", version: 1, actorId: "user-b" });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.code).toBe("LINE_INVOICE_MISMATCH");
   });
 
   it("跨票缺 Open Item（部分发票未过账）→ 409，不部分应用", async () => {
-    const tx = makeTx([[baseNote], [multiLinks], [multiLines], [multiOpenItems.slice(0, 1)]]);
+    const tx = makeTx([[baseNote], multiLinks, multiLines, multiOpenItems.slice(0, 1)]);
     const r = await applySupplierCnDn(tx, { cnDnId: "n1", version: 1, actorId: "user-b" });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.code).toBe("OPEN_ITEM_NOT_FOUND");
   });
 
   it("成功跨票 DEBIT：inv1: 500+60=560，inv2: 300+40=340", async () => {
-    const tx = makeTx([[{ ...baseNote, noteType: "DEBIT" }], [multiLinks], [multiLines], [multiOpenItems]]);
+    const tx = makeTx([[{ ...baseNote, noteType: "DEBIT" }], multiLinks, multiLines, multiOpenItems]);
     const r = await applySupplierCnDn(tx, { cnDnId: "n1", version: 1, actorId: "user-b" });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
