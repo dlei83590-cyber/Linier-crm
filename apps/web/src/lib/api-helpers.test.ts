@@ -14,11 +14,11 @@ function makeTx(rows: unknown[]) {
 }
 
 describe("assertProjectWritable — CLOSED 写门禁", () => {
-  it("项目不存在（FOR UPDATE 无行）→ 404", async () => {
+  it("项目不存在（FOR UPDATE 无行）→ 409（failConflict 固定 409；body code=NOT_FOUND 供客户端识别）", async () => {
     const tx = makeTx([]);
     const r = await assertProjectWritable(tx, "p-x");
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.response.status).toBe(404);
+    if (!r.ok) expect(r.response.status).toBe(409);
   });
 
   it("stage === CLOSED → 409 fail-closed（结项后禁止子资源写）", async () => {
