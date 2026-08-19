@@ -4,7 +4,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { actionPermission } from "@nilier-crm/shared";
+import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
+import { useSession } from "@/lib/session-context";
 import { AppPage, EntityFormWorkspace, StatusBadge, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { SELECT_CLASS } from "@/lib/ui-classes";
@@ -40,6 +41,9 @@ const STATUS_TONE_MAP: Record<string, "neutral" | "info" | "success" | "warning"
 const METHOD_LABELS: Record<string, string> = { BANK_TRANSFER: "银行转账", CHEQUE: "支票", CASH: "现金", CARD: "刷卡", OTHER: "其他" };
 
 function PaymentDetailView() {
+  const { state } = useSession();
+  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
+  const canEdit = hasPermission(roles, actionPermission("supplier-payment", "edit"));
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const id = params.id;
@@ -98,8 +102,8 @@ function PaymentDetailView() {
   if (loading) return (<AppPage><p className="px-4 py-6 text-sm text-ink-secondary">加载中…</p></AppPage>);
   if (loadError || !detail) return (<AppPage><ErrorPanel error={loadError ?? new ApiClientError(500, "加载失败", "LOAD_ERROR")} onRetry={load} /></AppPage>);
 
-  const canApply = !detail.voidedAt && detail.status !== "ALLOCATED";
-  const canVoid = !detail.voidedAt && detail.status === "UNALLOCATED";
+  const canApply = canEdit && !detail.voidedAt && detail.status !== "ALLOCATED";
+  const canVoid = canEdit && !detail.voidedAt && detail.status === "UNALLOCATED";
 
   return (
     <AppPage>
