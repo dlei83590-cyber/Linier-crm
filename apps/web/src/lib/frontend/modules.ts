@@ -659,7 +659,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/finance/gl-journal-entries',
     permission: actionPermission('gl', 'view'),
     availability: 'ready',
-    capabilities: { contract: ['view'], ui: UI_LIST_DETAIL_ACTIONS },
+    capabilities: { contract: CONTRACT_LIST_DETAIL, ui: UI_LIST_DETAIL_ACTIONS },
     order: 1,
   },
 

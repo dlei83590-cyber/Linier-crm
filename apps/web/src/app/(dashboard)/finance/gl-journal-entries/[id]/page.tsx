@@ -67,6 +67,8 @@ function GlEntryDetailView() {
         submitting={false}
         error={null}
         dirty={false}
+        saveLabel={undefined}
+        onSave={() => undefined}
         onCancel={() => router.push("/finance/gl-journal-entries")}
       >
         <section className="rounded-md border border-border p-4">
