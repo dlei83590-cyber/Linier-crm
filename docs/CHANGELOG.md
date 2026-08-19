@@ -25,6 +25,21 @@
 ### 文档
 - ADR-0029（Pending Pages Completion 决策记录）、docs/frontend/contract-cards/pending-pages-completion-gate.md（Design/Scope Gate 文档）、OpenAPI +7 域 paths、Frontend Module Map / Page Route Map 解除 hold 标记、docs/qa/PendingPages_QA.md、docs/test-cases/MasterData_Admin_CRUD_API.md、ROADMAP v1.23、SPRINT_PLAN
 
+## [Unreleased] - 成本核算第四步：多 COGS 科目映射（2026-08-20，ADR-0041）
+
+### 新增
+
+- **getCogsInventoryAccountCode**（lib/inventory-cost/moving-average.ts，纯函数）：按 itemType 映射 COGS 贷方科目——成品/半成品 → 1405 库存商品；原材料/外购件/辅料/消耗品/包装/工装/资产 → 1403（fail-safe 默认）
+- **ledger-command 接线**：COGS 分录前查 Item.itemType 选贷方科目（同事务；借方保持 6401）
+- **seed**：新增 1405 库存商品
+- **单测**：+3 路径（成品→1405/原材料类→1403/未知默认→1403）
+
+### 边界
+
+- 借方仍统一 6401（按业务类型多借方 COGS = 后续）；SERVICE 不出库无 COGS；资产出库特殊处理后续；零 Migration
+
+---
+
 ## [Unreleased] - 成本核算第三步：GL COGS 分录（2026-08-20，ADR-0040）
 
 ### 新增

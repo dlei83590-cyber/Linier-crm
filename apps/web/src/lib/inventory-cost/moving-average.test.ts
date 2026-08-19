@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { Prisma } from "@prisma/client";
-import { upsertInboundCost, applyOutboundCost } from "@/lib/inventory-cost/moving-average";
+import { upsertInboundCost, applyOutboundCost, getCogsInventoryAccountCode } from "@/lib/inventory-cost/moving-average";
 
 /**
  * 移动加权平均成本层单测（ADR-0038；D9 HOLD 解除）
@@ -158,6 +158,25 @@ describe("applyOutboundCost — 出库结转（ADR-0039）", () => {
     expect(r.skipped).toBe(true);
     expect(tx.inventoryCostBalance.update).not.toHaveBeenCalled();
   });
+
+describe("getCogsInventoryAccountCode — COGS 贷方科目映射（ADR-0041）", () => {
+  it("成品/半成品 → 1405 库存商品", () => {
+    expect(getCogsInventoryAccountCode("FINISHED_GOOD")).toBe("1405");
+    expect(getCogsInventoryAccountCode("SEMI_FINISHED")).toBe("1405");
+  });
+  it("原材料/外购件/辅料/消耗品/包装/工装 → 1403 原材料", () => {
+    expect(getCogsInventoryAccountCode("RAW_MATERIAL")).toBe("1403");
+    expect(getCogsInventoryAccountCode("PURCHASED_PART")).toBe("1403");
+    expect(getCogsInventoryAccountCode("ACCESSORY")).toBe("1403");
+    expect(getCogsInventoryAccountCode("CONSUMABLE")).toBe("1403");
+    expect(getCogsInventoryAccountCode("PACKAGING")).toBe("1403");
+    expect(getCogsInventoryAccountCode("TOOLING")).toBe("1403");
+  });
+  it("未知类型默认 → 1403", () => {
+    expect(getCogsInventoryAccountCode("UNKNOWN")).toBe("1403");
+  });
+});
+
 });
 
 });

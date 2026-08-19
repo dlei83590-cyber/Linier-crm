@@ -82,6 +82,32 @@ export async function applyOutboundCost(
   };
 }
 
+
+/**
+ * COGS 贷方库存科目映射（ADR-0041：多 COGS 科目——按物料类型，中国市场科目习惯）
+ * 借方统一 6401 主营业务成本；贷方按 itemType 选库存科目：
+ * - 成品/半成品 → 1405 库存商品
+ * - 原材料/外购件/辅料/消耗品/包装/工装 → 1403 原材料
+ * - 资产/服务 → 1403（保守默认；服务不出库，资产特殊处理后续）
+ */
+export function getCogsInventoryAccountCode(itemType: string): string {
+  switch (itemType) {
+    case 'FINISHED_GOOD':
+    case 'SEMI_FINISHED':
+      return '1405';
+    case 'RAW_MATERIAL':
+    case 'PURCHASED_PART':
+    case 'ACCESSORY':
+    case 'CONSUMABLE':
+    case 'PACKAGING':
+    case 'TOOLING':
+    case 'ASSET':
+    case 'SERVICE':
+    default:
+      return '1403';
+  }
+}
+
 export async function upsertInboundCost(
   tx: Prisma.TransactionClient,
   params: InboundCostParams,
