@@ -50,7 +50,6 @@ export async function GET(request: NextRequest) {
     _sum: { debit: true, credit: true },
   });
   const agg = new Map(rows.map((r) => [r.accountId, r._sum]));
-  const accountMap = new Map(accounts.map((a) => [a.id, a]));
 
   const result = computeTrialBalance(
     accounts.map((a) => {
