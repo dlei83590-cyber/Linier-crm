@@ -42,7 +42,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         where: { id },
         select: { code: true, noteType: true, supplierId: true, sourceSupplierInvoiceId: true, adjustmentTotal: true },
       });
-      noteInfo = n;
+      if (n) {
+        noteInfo = {
+          code: n.code,
+          noteType: n.noteType,
+          supplierId: n.supplierId,
+          sourceSupplierInvoiceId: n.sourceSupplierInvoiceId,
+          adjustmentTotal: n.adjustmentTotal.toString(),
+        };
+      }
       openAmountAfter = r.openAmountAfter;
       await writeAuditLog({
         actorId: user?.id,
