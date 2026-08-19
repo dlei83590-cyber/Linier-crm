@@ -16,8 +16,8 @@ const applySchema = z.object({
 
 interface ApplySuccess {
   ok: true;
-  openAmountAfter: string;
-  noteInfo: { code: string; noteType: string; supplierId: string; sourceSupplierInvoiceId: string; adjustmentTotal: string } | null;
+  openAmountsAfter: Array<{ supplierInvoiceId: string; openAmountAfter: string }>;
+  noteInfo: { code: string; noteType: string; supplierId: string; sourceSupplierInvoiceIds: string[]; adjustmentTotal: string } | null;
 }
 interface ApplyFailure {
   ok: false;
@@ -53,14 +53,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
       const n = await tx.supplierCreditDebitNote.findFirst({
         where: { id },
-        select: { code: true, noteType: true, supplierId: true, sourceSupplierInvoiceId: true, adjustmentTotal: true },
+        select: { code: true, noteType: true, supplierId: true, sourceSupplierInvoiceId: true, adjustmentTotal: true, invoices: { select: { supplierInvoiceId: true } } },
       });
+      const sourceSupplierInvoiceIds = n
+        ? [...new Set(n.invoices.length > 0 ? n.invoices.map((i) => i.supplierInvoiceId) : n.sourceSupplierInvoiceId ? [n.sourceSupplierInvoiceId] : [])]
+        : [];
       const noteInfo = n
         ? {
             code: n.code,
             noteType: n.noteType as string,
             supplierId: n.supplierId,
-            sourceSupplierInvoiceId: n.sourceSupplierInvoiceId,
+            sourceSupplierInvoiceIds,
             adjustmentTotal: n.adjustmentTotal.toString(),
           }
         : null;
@@ -73,9 +76,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             code: n.code,
             noteType: n.noteType as string,
             supplierId: n.supplierId,
-            sourceSupplierInvoiceId: n.sourceSupplierInvoiceId,
+            sourceSupplierInvoiceIds,
             adjustmentTotal: n.adjustmentTotal.toString(),
-            openAmountAfter: r.openAmountAfter,
+            openAmountsAfter: r.openAmountsAfter,
             appliedById: actorId,
             appliedAt: new Date().toISOString(),
           },
@@ -86,10 +89,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         action: 'supplier-credit-debit-note.apply',
         entityType: 'supplierCreditDebitNote',
         entityId: id,
-        afterData: { status: 'APPLIED', openAmountAfter: r.openAmountAfter },
+        afterData: { status: 'APPLIED', openAmountsAfter: r.openAmountsAfter },
         ...meta,
       });
-      return { ok: true as const, openAmountAfter: r.openAmountAfter, noteInfo };
+      return { ok: true as const, openAmountsAfter: r.openAmountsAfter, noteInfo };
     });
 
     if (!outcome.ok) {
@@ -100,7 +103,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         VERSION_CONFLICT: { code: ERROR_CODES.VERSION_CONFLICT, msg: '版本冲突，请刷新后重试', status: 409 },
         MAKER_CHECKER: { code: ERROR_CODES.CONFLICT, msg: '应用人不能是创建人（maker-checker）', status: 409 },
         OPEN_ITEM_NOT_FOUND: { code: ERROR_CODES.CONFLICT, msg: '目标 AP Open Item 不存在（发票未过账？）', status: 409 },
-        OVER_ADJUSTMENT: { code: ERROR_CODES.CONFLICT, msg: '累计调整后应付未结项为负（CREDIT 超冲减），拒绝应用', status: 409 },
+        OVER_ADJUSTMENT: { code: ERROR_CODES.CONFLICT, msg: '存在发票累计调整后应付未结项为负（CREDIT 超冲减），拒绝应用', status: 409 },
+        NO_LINES: { code: ERROR_CODES.CONFLICT, msg: '通知单无明细行，禁止应用', status: 409 },
+        LINE_INVOICE_MISMATCH: { code: ERROR_CODES.CONFLICT, msg: '明细行归属发票不在关联集合内，数据不一致', status: 409 },
       };
       const mapped = codeMap[outcome.code] ?? { code: ERROR_CODES.INTERNAL_ERROR, msg: '应用失败（事务已回滚）', status: 500 };
       return fail(mapped.code, mapped.msg, mapped.status);
@@ -116,9 +121,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           code: outcome.noteInfo.code,
           noteType: outcome.noteInfo.noteType,
           supplierId: outcome.noteInfo.supplierId,
-          sourceSupplierInvoiceId: outcome.noteInfo.sourceSupplierInvoiceId,
+          sourceSupplierInvoiceIds: outcome.noteInfo.sourceSupplierInvoiceIds,
           adjustmentTotal: outcome.noteInfo.adjustmentTotal,
-          openAmountAfter: outcome.openAmountAfter,
+          openAmountsAfter: outcome.openAmountsAfter,
           appliedById: actorId,
           appliedAt: new Date().toISOString(),
         },
@@ -126,7 +131,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       });
     }
 
-    return ok({ id, status: 'APPLIED', openAmountAfter: outcome.openAmountAfter });
+    return ok({ id, status: 'APPLIED', openAmountsAfter: outcome.openAmountsAfter });
   } catch (err) {
     console.error('[supplier-credit-debit-note.apply]', err);
     return fail(ERROR_CODES.INTERNAL_ERROR, '应用失败（事务已回滚，通知单保持原状态）', 500);

@@ -20,6 +20,7 @@ interface CnDnRow {
   createdAt: string;
   supplier?: { id: string; code: string; name: string } | null;
   sourceSupplierInvoice?: { invoiceNo: string; supplierInvoiceNo: string } | null;
+  invoices?: Array<{ supplierInvoice?: { invoiceNo: string; supplierInvoiceNo: string } | null }> | null;
 }
 
 const TYPE_LABELS: Record<string, string> = { CREDIT: "贷项（冲减应付）", DEBIT: "借项（增加应付）" };
@@ -99,7 +100,7 @@ function CnDnList() {
           { key: "code", header: "单据号", render: (row) => (<Link href={`/supplier-ap/credit-debit-notes/${row.id}`} className="font-medium text-brand-600 hover:underline">{row.code}</Link>) },
           { key: "noteType", header: "类型", render: (row) => TYPE_LABELS[row.noteType] ?? row.noteType },
           { key: "supplier", header: "供应商", render: (row) => row.supplier?.name ?? "—" },
-          { key: "invoiceNo", header: "来源发票", render: (row) => row.sourceSupplierInvoice?.invoiceNo ?? "—" },
+          { key: "invoiceNo", header: "来源发票", render: (row) => row.invoices && row.invoices.length > 0 ? row.invoices.map((i) => i.supplierInvoice?.invoiceNo ?? "—").join("、") : row.sourceSupplierInvoice?.invoiceNo ?? "—" },
           { key: "adjustmentTotal", header: "调整金额", render: (row) => formatMoney(row.adjustmentTotal, row.currency) },
           { key: "status", header: "状态", render: (row) => (<StatusBadge status={row.status} label={STATUS_LABELS[row.status] ?? row.status} toneMap={STATUS_TONE_MAP} />) },
           { key: "createdAt", header: "创建时间", render: (row) => formatDate(row.createdAt) },

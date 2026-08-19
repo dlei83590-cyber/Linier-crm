@@ -21,6 +21,7 @@ interface CnDnDetail {
   createdAt: string;
   supplier?: { id: string; code: string; name: string } | null;
   sourceSupplierInvoice?: { invoiceNo: string; documentStatus: string } | null;
+  invoices?: Array<{ supplierInvoice?: { invoiceNo: string; documentStatus: string } | null }> | null;
   lines: Array<{ id: string; lineNo: number; description: string; quantity: string; unitPrice: string; amount: string; item?: { id: string; code: string; name: string } | null }>;
 }
 
@@ -86,7 +87,7 @@ function CnDnDetailView() {
         <section className="rounded-md border border-border p-4">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <div><span className="text-sm text-ink-secondary">供应商</span><div className="text-sm font-medium">{detail.supplier?.name ?? "—"}</div></div>
-            <div><span className="text-sm text-ink-secondary">来源发票</span><div className="text-sm font-medium">{detail.sourceSupplierInvoice?.invoiceNo ?? "—"}</div></div>
+            <div><span className="text-sm text-ink-secondary">来源发票</span><div className="text-sm font-medium">{detail.invoices && detail.invoices.length > 0 ? detail.invoices.map((i) => i.supplierInvoice?.invoiceNo ?? "—").join("、") : detail.sourceSupplierInvoice?.invoiceNo ?? "—"}</div></div>
             <div><span className="text-sm text-ink-secondary">调整金额</span><div className="text-sm font-medium">{formatMoney(detail.adjustmentTotal, detail.currency)}</div></div>
             <div><span className="text-sm text-ink-secondary">币种</span><div className="text-sm font-medium">{detail.currency}</div></div>
             <div><span className="text-sm text-ink-secondary">状态</span><div><StatusBadge status={detail.status} label={STATUS_LABELS[detail.status] ?? detail.status} toneMap={STATUS_TONE_MAP} /></div></div>

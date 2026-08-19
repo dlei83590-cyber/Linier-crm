@@ -5749,7 +5749,8 @@ model SupplierInvoice {
   matchRuns SupplierInvoiceMatchRun[] @relation("SupplierInvoiceMatchRuns") // 反向：本发票的 MatchRun（immutable snapshot 集合）
   grirRecords GrirRecord[]
   apLiabilityFact ApLiabilityFact?
-  creditDebitNotes SupplierCreditDebitNote[] // 5C-2：供应商贷/借项（SupplierCreditDebitNote.sourceSupplierInvoiceId 方向）
+  creditDebitNotes SupplierCreditDebitNote[] // 5C-2：供应商贷/借项（SupplierCreditDebitNote.sourceSupplierInvoiceId 方向，单票兼容）
+  creditDebitNoteInvoices SupplierCreditDebitNoteInvoice[] // 5C-2 跨票：供应商贷/借项关联（M:N，SupplierCreditDebitNoteInvoice.supplierInvoiceId 方向）
 
   @@unique([supplierId, supplierInvoiceNo]) // 不变量②：供应商发票号唯一（组合，不全局误锁）
   @@index([invoiceNo])
@@ -5827,8 +5828,8 @@ model SupplierCreditDebitNote {
   id            String   @id @default(cuid())
   code          String   @unique // SCN-/SDN-2026-xxxx（DocumentSequence docType=SUPPLIER_CREDIT_NOTE/SUPPLIER_DEBIT_NOTE 创建即取号，缺失 fail closed）
   noteType      SupplierCnDnType
-  sourceSupplierInvoiceId String // 单票制：必填且唯一（跨票 Consolidated 延后，对齐 4E-3 CTO 拍板）
-  sourceSupplierInvoice SupplierInvoice @relation(fields: [sourceSupplierInvoiceId], references: [id], onDelete: Restrict)
+  sourceSupplierInvoiceId String? // 单票兼容（历史数据）；跨票 Consolidated 走 invoices 关联表（Migration 0032）
+  sourceSupplierInvoice SupplierInvoice? @relation(fields: [sourceSupplierInvoiceId], references: [id], onDelete: Restrict)
   supplierId    String // 继承 sourceInvoice.supplierId（硬规则）
   supplier      Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   currency      String   @default("CNY") // 继承 sourceInvoice.currency
@@ -5849,6 +5850,7 @@ model SupplierCreditDebitNote {
   updatedAt   DateTime @updatedAt @db.Timestamptz(3)
 
   lines SupplierCreditDebitNoteLine[]
+  invoices SupplierCreditDebitNoteInvoice[] // 5C-2 跨票：关联发票集合（M:N）
 
   @@index([supplierId])
   @@index([status])
@@ -5875,6 +5877,21 @@ model SupplierCreditDebitNoteLine {
 
   @@index([creditDebitNoteId])
   @@index([sourceSupplierInvoiceLineId])
+}
+
+/// 供应商贷/借项 ↔ 供应商发票 关联（5C-2 跨票 Consolidated 调整；Migration 0032）
+/// 一张 CN/DN 可调整多张 POSTED 发票（同供应商同币种硬规则）；金额按行归属分摊各发票 Open Item
+model SupplierCreditDebitNoteInvoice {
+  id           String   @id @default(cuid())
+  creditDebitNoteId String
+  creditDebitNote SupplierCreditDebitNote @relation(fields: [creditDebitNoteId], references: [id], onDelete: Cascade)
+  supplierInvoiceId String
+  supplierInvoice SupplierInvoice @relation(fields: [supplierInvoiceId], references: [id], onDelete: Restrict)
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([creditDebitNoteId, supplierInvoiceId])
+  @@index([creditDebitNoteId])
+  @@index([supplierInvoiceId])
 }
 /// 付款状态（5C-2 Settlement Fact 受控投影，事务更新禁止 PATCH——对齐 4E-2 ReceiptStatus）
 enum SupplierPaymentStatus {

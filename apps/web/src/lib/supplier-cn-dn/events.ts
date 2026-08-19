@@ -16,9 +16,11 @@ export interface SupplierCnDnEventPayload {
   code: string;
   noteType: string; // CREDIT | DEBIT
   supplierId: string;
-  sourceSupplierInvoiceId: string;
+  sourceSupplierInvoiceId?: string; // 单票兼容（历史数据；跨票用 sourceSupplierInvoiceIds）
+  sourceSupplierInvoiceIds?: string[]; // 跨票 Consolidated（Migration 0032）：关联发票集合
   adjustmentTotal: string; // Decimal 字符串（CREDIT 负向 / DEBIT 正向 signed）
-  openAmountAfter?: string; // ApOpenItem.openAmount 投影（apply 后）
+  openAmountAfter?: string; // ApOpenItem.openAmount 投影（apply 后，单票兼容）
+  openAmountsAfter?: Array<{ supplierInvoiceId: string; openAmountAfter: string }>; // 跨票：逐票投影
   appliedById?: string;
   appliedAt?: string; // ISO
   [key: string]: unknown;

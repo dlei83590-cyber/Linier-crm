@@ -33,15 +33,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (note.status !== 'DRAFT') throw new Error('INVALID_STATE');
       if (note.version !== version) throw new Error('VERSION_CONFLICT');
 
-      const sourceInvoice = await tx.supplierInvoice.findFirst({
-        where: { id: note.sourceSupplierInvoiceId, deletedAt: null },
-        select: { documentStatus: true },
+      // 有效关联发票集合（跨票 0032：优先关联表；防御退化单票）
+      const links = await tx.supplierCreditDebitNoteInvoice.findMany({
+        where: { creditDebitNoteId: id },
+        select: { supplierInvoiceId: true },
       });
-      if (!sourceInvoice || sourceInvoice.documentStatus !== 'POSTED') throw new Error('SOURCE_NOT_POSTED');
+      let invoiceIds = links.map((l) => l.supplierInvoiceId);
+      if (invoiceIds.length === 0 && note.sourceSupplierInvoiceId) invoiceIds = [note.sourceSupplierInvoiceId];
+      if (invoiceIds.length === 0) throw new Error('NO_INVOICES');
+
+      const postedCount = await tx.supplierInvoice.count({
+        where: { id: { in: invoiceIds }, documentStatus: 'POSTED', deletedAt: null },
+      });
+      if (postedCount !== invoiceIds.length) throw new Error('SOURCE_NOT_POSTED');
 
       const lineIds = note.lines.map((l) => l.sourceSupplierInvoiceLineId);
       const validLines = await tx.supplierInvoiceLine.count({
-        where: { id: { in: lineIds }, supplierInvoiceId: note.sourceSupplierInvoiceId, deletedAt: null },
+        where: { id: { in: lineIds }, supplierInvoiceId: { in: invoiceIds }, deletedAt: null },
       });
       if (validLines !== lineIds.length) throw new Error('LINE_NOT_IN_INVOICE');
       if (note.adjustmentTotal.lte(0)) throw new Error('ZERO_TOTAL');
@@ -68,7 +76,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (msg === 'INVALID_STATE') return failConflict(ERROR_CODES.CONFLICT, '仅 DRAFT 状态可提交');
     if (msg === 'VERSION_CONFLICT') return failConflict(ERROR_CODES.VERSION_CONFLICT, '版本冲突，请刷新后重试');
     if (msg === 'SOURCE_NOT_POSTED') return failConflict(ERROR_CODES.CONFLICT, '来源发票已非 POSTED，禁止提交');
-    if (msg === 'LINE_NOT_IN_INVOICE') return failValidation({ lines: '存在不属于该发票的明细行' });
+    if (msg === 'LINE_NOT_IN_INVOICE') return failValidation({ lines: '存在不属于任一关联发票的明细行' });
+    if (msg === 'NO_INVOICES') return failValidation({ sourceSupplierInvoiceIds: '通知单无关联发票，禁止提交' });
     if (msg === 'ZERO_TOTAL') return failValidation({ adjustmentTotal: '调整总额必须大于 0' });
     console.error('[supplier-credit-debit-note.submit]', err);
     return failConflict(ERROR_CODES.INTERNAL_ERROR, '提交失败（事务已回滚）');

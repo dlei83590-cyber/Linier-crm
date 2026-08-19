@@ -25,6 +25,24 @@
 ### 文档
 - ADR-0029（Pending Pages Completion 决策记录）、docs/frontend/contract-cards/pending-pages-completion-gate.md（Design/Scope Gate 文档）、OpenAPI +7 域 paths、Frontend Module Map / Page Route Map 解除 hold 标记、docs/qa/PendingPages_QA.md、docs/test-cases/MasterData_Admin_CRUD_API.md、ROADMAP v1.23、SPRINT_PLAN
 
+## [Unreleased] - 5C-2 Supplier CN/DN 跨票 Consolidated 调整（2026-08-20）
+
+### 新增
+
+- **Migration 0032**：新增 `SupplierCreditDebitNoteInvoice`（CN/DN ↔ SupplierInvoice M:N 关联表，@@unique(noteId, invoiceId)）；`SupplierCreditDebitNote.sourceSupplierInvoiceId` 改为可空（历史单票数据保留并回填关联表）
+- **创建/编辑 API**：接受 `sourceSupplierInvoiceIds[]`（全部 POSTED、同供应商同币种硬规则、行归属任一关联发票；旧 `sourceSupplierInvoiceId` 单票字段兼容归一化）
+- **APPLY 跨票**（apply-helper 重写）：调整金额按行归属分摊到各发票 Open Item；锁序 = 业务头 FOR UPDATE → collect 涉及发票 ids → dedupe → sort → Open Items ORDER BY id FOR UPDATE（与 Payment apply 一致）；逐票防超调（任一票 CREDIT 后 openAmount < 0 → 409 整体拒绝）；返回 `openAmountsAfter` 逐票投影
+- **submit**：行来源校验跨票（全部行 ∈ 任一关联 POSTED 发票）
+- **reconcile**：CN/DN 按行归属聚合（跨票分摊正确）
+- **事件 payload**：`SupplierCreditDebitNoteApplied` 载荷升级 `sourceSupplierInvoiceIds[]` + `openAmountsAfter[]`（单票兼容字段保留）
+- **前端**：新建页多选来源发票（同供应商提示）；详情/列表跨票展示；单测 +6 跨票路径
+
+### 边界
+
+- 不改已冻结 Migration 0027/0028/0029/0030/0031；不手改 openAmount（纠错追加反向 CN/DN）；GL 消费 5C 事件仍属 Finance 阶段
+
+---
+
 ---
 ## [Unreleased] - 5C-2 Payment 整体冲销（Red Reversal，2026-08-19）
 

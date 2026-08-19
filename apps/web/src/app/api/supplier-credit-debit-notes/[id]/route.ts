@@ -13,6 +13,7 @@ export const dynamic = 'force-dynamic';
 const cnDnUpdateSchema = z
   .object({
     reason: z.string().min(1).max(500).optional(),
+    sourceSupplierInvoiceIds: z.array(z.string().min(1)).min(1).optional(), // 跨票：DRAFT 可替换关联发票集合
     lines: z
       .array(
         z.object({
@@ -40,6 +41,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     include: {
       supplier: { select: { id: true, code: true, name: true } },
       sourceSupplierInvoice: { select: { id: true, invoiceNo: true, supplierInvoiceNo: true, documentStatus: true } },
+      invoices: { include: { supplierInvoice: { select: { id: true, invoiceNo: true, supplierInvoiceNo: true, documentStatus: true } } } },
       lines: { orderBy: { lineNo: 'asc' }, include: { item: { select: { id: true, code: true, name: true } } } },
     },
   });
@@ -66,11 +68,36 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if (existing.status !== 'DRAFT') throw new Error('INVALID_STATE');
       if (existing.version !== parsed.data.version) throw new Error('VERSION_CONFLICT');
 
+      // 有效关联发票集合：新集合（跨票替换）或现有关联（查询关联表；防御退化单票）
+      let invoiceIds: string[] | undefined;
+      if (parsed.data.sourceSupplierInvoiceIds) {
+        invoiceIds = [...new Set(parsed.data.sourceSupplierInvoiceIds)];
+        const invs = await tx.supplierInvoice.findMany({
+          where: { id: { in: invoiceIds }, deletedAt: null },
+          select: { id: true, documentStatus: true, supplierId: true, currency: true },
+        });
+        if (invs.length !== invoiceIds.length) throw new Error('SOURCE_INVOICE_NOT_FOUND');
+        for (const inv of invs) {
+          if (inv.documentStatus !== 'POSTED') throw new Error('SOURCE_INVOICE_NOT_POSTED');
+        }
+        const first = invs[0];
+        for (const inv of invs) {
+          if (inv.supplierId !== first.supplierId || inv.currency !== first.currency) throw new Error('INVOICE_MISMATCH');
+        }
+      } else {
+        const links = await tx.supplierCreditDebitNoteInvoice.findMany({
+          where: { creditDebitNoteId: id },
+          select: { supplierInvoiceId: true },
+        });
+        invoiceIds = links.length > 0 ? links.map((l) => l.supplierInvoiceId) : existing.sourceSupplierInvoiceId ? [existing.sourceSupplierInvoiceId] : undefined;
+      }
+
       let linesData: Array<{ sourceSupplierInvoiceLineId: string; itemId: string | null; description: string; quantity: Prisma.Decimal; unitPrice: Prisma.Decimal; taxRate: Prisma.Decimal; amount: Prisma.Decimal; lineNo: number }> | undefined;
       if (parsed.data.lines) {
+        if (!invoiceIds || invoiceIds.length === 0) throw new Error('NO_INVOICES');
         const lineIds = parsed.data.lines.map((l) => l.sourceSupplierInvoiceLineId);
         const sourceLines = await tx.supplierInvoiceLine.findMany({
-          where: { id: { in: lineIds }, supplierInvoiceId: existing.sourceSupplierInvoiceId, deletedAt: null },
+          where: { id: { in: lineIds }, supplierInvoiceId: { in: invoiceIds }, deletedAt: null },
           select: { id: true, itemId: true, unitPrice: true },
         });
         if (sourceLines.length !== lineIds.length) throw new Error('LINE_NOT_IN_INVOICE');
@@ -97,6 +124,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         where: { id },
         data: {
           ...(parsed.data.reason !== undefined ? { reason: parsed.data.reason } : {}),
+          ...(parsed.data.sourceSupplierInvoiceIds && invoiceIds
+            ? {
+                invoices: { deleteMany: {}, create: invoiceIds.map((invid) => ({ supplierInvoiceId: invid })) },
+                sourceSupplierInvoiceId: null,
+              }
+            : {}),
           ...(linesData ? { lines: { deleteMany: {}, create: linesData } } : {}),
           ...(linesData ? { adjustmentTotal: aggregateCnDnTotal(linesData) } : {}),
           version: { increment: 1 },
@@ -122,7 +155,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (msg === 'NOT_FOUND') return failNotFound(ERROR_CODES.NOT_FOUND, '供应商贷/借项通知单不存在');
     if (msg === 'INVALID_STATE') return failConflict(ERROR_CODES.CONFLICT, '仅 DRAFT 状态可编辑');
     if (msg === 'VERSION_CONFLICT') return failConflict(ERROR_CODES.VERSION_CONFLICT, '版本冲突，请刷新后重试');
-    if (msg === 'LINE_NOT_IN_INVOICE') return failValidation({ lines: '存在不属于该发票的明细行' });
+    if (msg === 'LINE_NOT_IN_INVOICE') return failValidation({ lines: '存在不属于任一关联发票的明细行' });
+    if (msg === 'SOURCE_INVOICE_NOT_FOUND') return failNotFound(ERROR_CODES.NOT_FOUND, '来源供应商发票不存在');
+    if (msg === 'SOURCE_INVOICE_NOT_POSTED') return failConflict(ERROR_CODES.CONFLICT, '仅 POSTED 供应商发票可关联');
+    if (msg === 'INVOICE_MISMATCH') return failValidation({ sourceSupplierInvoiceIds: '跨票调整要求全部发票同供应商同币种' });
+    if (msg === 'NO_INVOICES') return failValidation({ sourceSupplierInvoiceIds: '请先提供关联发票集合' });
     console.error('[supplier-credit-debit-note.update]', err);
     return failConflict(ERROR_CODES.INTERNAL_ERROR, '更新失败（事务已回滚）');
   }

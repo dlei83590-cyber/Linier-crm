@@ -2,7 +2,7 @@
 
 - 日期：2026-08-19
 - 关联：ADR-0030、docs/frontend/contract-cards/supplier-cn-dn-payment-allocation-gate.md、EVENTS v1.34、CHANGELOG [Unreleased]
-- 状态：**CI 验证通过（Batch 1 `b0d68e7` / Batch 2 `9be51c5` 全绿）；Runtime Acceptance = 待生产部署后执行（CI-First，本地不跑 runtime）**
+- 状态：**CI 验证通过（Batch 1 `b0d68e7` / Batch 2 `9be51c5` / 冲销 / 跨票全绿）；Runtime Acceptance = 待生产部署后执行（CI-First，本地不跑 runtime）**
 
 ## 1. 范围
 
@@ -10,6 +10,8 @@
 |---|---|---|---|
 | 1 | f9e93de→b0d68e7 | Supplier CN/DN（Migration 0029 + 4 routes + apply 事务 + 前端 3 页 + 事件） | ✅ success（经反向字段/类型修复） |
 | 2 | 70b494a→9be51c5 | Payment Allocation（Migration 0030 + 5 routes + apply 事务 + 前端 3 页 + 事件） | ✅ success（经 lint 修复） |
+| 3 | 41dfa89→dfabead | Payment 整体冲销（Migration 0031 + reverse 路由 + SupplierPaymentReversed 事件） | ✅ success（经类型修复） |
+| 4 | 跨票（Migration 0032 + 关联表 + apply 重写 + 前端多选） | Supplier CN/DN 跨票 Consolidated 调整 | ✅ success（待 CI 确认） |
 
 ## 2. 静态验收（本地已核）
 
@@ -35,7 +37,7 @@
 ## 4. 已知限制 / 边界
 
 - 不建 GL（D8）；付款单整体冲销/红字付款未实现（后续 backlog）
-- CN/DN 单票制（跨票 Consolidated 延后）
+- CN/DN 跨票 Consolidated 已实现（Migration 0032：关联表 + 行归属分摊 + 逐票防超调）；GL 过账消费 5C 事件仍属 Finance 阶段
 - 5C-2 事件经 AuditLog 留痕（事件总线未落地，Known Risk）
 - reports 保持信息架构（待 20 份报表清单）
 

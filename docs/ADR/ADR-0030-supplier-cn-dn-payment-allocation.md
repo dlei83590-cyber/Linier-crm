@@ -35,6 +35,6 @@ CTO 授权解锁 5C-2（Supplier Payment / AP Allocation / Supplier CN-DN）HOLD
 ## 后续（独立 backlog）
 
 - ~~Payment 整体冲销~~ ✅（2026-08-19 已实现：Migration 0031 + POST /:id/reverse + SupplierPaymentReversed 事件；核销反转 + 整体冲销均齐）
-- Supplier CN/DN 跨票 Consolidated 调整（当前单票制）
+- ~~Supplier CN/DN 跨票 Consolidated 调整~~ ✅（2026-08-20 已实现：Migration 0032 新增 `SupplierCreditDebitNoteInvoice` M:N 关联表；`sourceSupplierInvoiceId` 改可空兼容单票；创建/编辑接受 `sourceSupplierInvoiceIds[]`；apply 金额按行归属分摊各发票 Open Item + 逐票防超调；锁序 业务头→collect→dedupe→sort→openItems FOR UPDATE；reconcile 按行归属聚合；事件 payload `sourceSupplierInvoiceIds[]`）
 - GL 过账消费 5C 事件（Finance 阶段）
 - ADR-0028 CI 静态 Gate（独立 Governance backlog）

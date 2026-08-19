@@ -41,10 +41,13 @@ export async function GET(request: NextRequest) {
   const invoiceIds = [...new Set(openItems.map((oi) => oi.apLiabilityFact?.supplierInvoiceId).filter((x): x is string => Boolean(x)))];
   const openItemIds = openItems.map((oi) => oi.id);
 
-  // 已 APPLIED 的 CN/DN（signed：CREDIT 负向 / DEBIT 正向）
-  const cnDnNotes = await prisma.supplierCreditDebitNote.findMany({
-    where: { sourceSupplierInvoiceId: { in: invoiceIds }, status: 'APPLIED', deletedAt: null },
-    select: { sourceSupplierInvoiceId: true, noteType: true, adjustmentTotal: true },
+  // 已 APPLIED 的 CN/DN（signed：CREDIT 负向 / DEBIT 正向；跨票 0032 按行归属分摊到各发票）
+  const cnDnLines = await prisma.supplierCreditDebitNoteLine.findMany({
+    where: {
+      creditDebitNote: { status: 'APPLIED', deletedAt: null },
+      sourceSupplierInvoiceLine: { supplierInvoiceId: { in: invoiceIds } },
+    },
+    select: { amount: true, sourceSupplierInvoiceLine: { select: { supplierInvoiceId: true } }, creditDebitNote: { select: { noteType: true } } },
   });
   // 未反转的核销行
   const allocations = await prisma.supplierPaymentAllocation.findMany({
@@ -53,9 +56,10 @@ export async function GET(request: NextRequest) {
   });
 
   const cnDnByInvoice = new Map<string, Prisma.Decimal>();
-  for (const n of cnDnNotes) {
-    const signed = n.noteType === 'CREDIT' ? new Prisma.Decimal(n.adjustmentTotal).negated() : new Prisma.Decimal(n.adjustmentTotal);
-    cnDnByInvoice.set(n.sourceSupplierInvoiceId, (cnDnByInvoice.get(n.sourceSupplierInvoiceId) ?? new Prisma.Decimal(0)).add(signed));
+  for (const l of cnDnLines) {
+    const invoiceId = l.sourceSupplierInvoiceLine.supplierInvoiceId;
+    const signed = l.creditDebitNote.noteType === 'CREDIT' ? new Prisma.Decimal(l.amount).negated() : new Prisma.Decimal(l.amount);
+    cnDnByInvoice.set(invoiceId, (cnDnByInvoice.get(invoiceId) ?? new Prisma.Decimal(0)).add(signed));
   }
   const allocByOpenItem = new Map<string, Prisma.Decimal>();
   for (const a of allocations) {
