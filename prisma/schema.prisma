@@ -2873,6 +2873,7 @@ model Supplier {
   supplierInvoices SupplierInvoice[] // 5C-1：供应商发票（SupplierInvoice.supplierId 方向）
   apLiabilityFacts ApLiabilityFact[] // 5C-1：AP 应付债务事实（ApLiabilityFact.supplierId 方向）
   creditDebitNotes SupplierCreditDebitNote[] // 5C-2：供应商贷/借项（SupplierCreditDebitNote.supplierId 方向）
+  payments SupplierPayment[] // 5C-2：供应商付款（SupplierPayment.supplierId 方向）
   isActive      Boolean  @default(true)
   createdById   String?
   updatedById   String?
@@ -5875,6 +5876,69 @@ model SupplierCreditDebitNoteLine {
   @@index([creditDebitNoteId])
   @@index([sourceSupplierInvoiceLineId])
 }
+/// 付款状态（5C-2 Settlement Fact 受控投影，事务更新禁止 PATCH——对齐 4E-2 ReceiptStatus）
+enum SupplierPaymentStatus {
+  UNALLOCATED
+  PARTIALLY_ALLOCATED
+  ALLOCATED
+}
+
+/// 供应商付款单（5C-2，ADR-0027 D7：Payment 独立事实，Created ≠ Applied，Apply 唯一回写 Settlement Fact）
+model SupplierPayment {
+  id           String   @id @default(cuid())
+  code         String   @unique // PAY-2026-xxxx（DocumentSequence docType=PAYMENT_VOUCHER 创建即取号 fail closed）
+  supplierId   String
+  supplier     Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  currency     String   @default("CNY") // 同供应商同币种（核销目标硬规则）
+  amount       Decimal  @db.Decimal(18, 4) // 实付金额（付款事实）
+  allocatedAmount   Decimal @default(0) @db.Decimal(18, 4) // 受控投影 = Σ allocations（非反向核销）
+  unallocatedAmount Decimal @default(0) @db.Decimal(18, 4)
+  paymentDate  DateTime @db.Timestamptz(3)
+  paymentMethod PaymentMethod // 复用 4E-2 枚举
+  referenceNo  String? // 银行流水号/备注
+  status       SupplierPaymentStatus @default(UNALLOCATED) // 受控投影（事务更新，禁止 PATCH）
+  voidedAt     DateTime? @db.Timestamptz(3)
+  voidedById   String?
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  allocations SupplierPaymentAllocation[]
+
+  @@index([supplierId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+/// 付款核销行（5C-2 Settlement Fact；纠错 → 追加 reversal，不手改 openAmount——Blocking ③ 纪律延续）
+model SupplierPaymentAllocation {
+  id           String   @id @default(cuid())
+  paymentId    String
+  payment      SupplierPayment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  apOpenItemId String
+  apOpenItem   ApOpenItem @relation(fields: [apOpenItemId], references: [id], onDelete: Restrict)
+  allocatedAmount Decimal @db.Decimal(18, 4) // 本次核销金额
+  allocatedAt   DateTime @default(now()) @db.Timestamptz(3)
+  allocatedBy   String?
+  reversedAt    DateTime? @db.Timestamptz(3)
+  reversedBy    String?
+  reverseReason String?
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([paymentId])
+  @@index([apOpenItemId])
+  @@index([reversedAt])
+}
 /// 匹配 Run 头（immutable Match Snapshot——Blocking ②：自创建后禁止业务字段 UPDATE/DELETE；
 /// 审批事实引用此 Run（approvedMatchRunId/revision 存 SupplierInvoice），不 mutates MatchRun）
 model SupplierInvoiceMatchRun {
@@ -6001,6 +6065,7 @@ model ApOpenItem {
   version   Int      @default(1) // 投影刷新 CAS（reconciliation 服务端更新）
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  paymentAllocations SupplierPaymentAllocation[] // 5C-2：付款核销行（SupplierPaymentAllocation.apOpenItemId 方向）
 
   @@index([supplierId])
   @@index([settlementStatus])

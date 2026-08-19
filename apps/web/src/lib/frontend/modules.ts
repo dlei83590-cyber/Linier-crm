@@ -638,14 +638,17 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     createPermission: actionPermission('supplier-credit-debit-note', 'create'),
     order: 3,
   },
+  // payment-allocation：5C-2（CTO 解锁 2026-08-19）——/api/supplier-payments CRUD + apply/void + allocation reverse
   {
     id: 'payment-allocation',
     domain: 'supplier-ap',
     label: '付款核销',
     route: '/supplier-ap/payments',
-    permission: null,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
+    permission: actionPermission('supplier-payment', 'view'),
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CREATE_ACTIONS },
+    createRoute: '/supplier-ap/payments/new',
+    createPermission: actionPermission('supplier-payment', 'create'),
     order: 4,
   },
 

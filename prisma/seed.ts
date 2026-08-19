@@ -147,6 +147,9 @@ const SEED_ACTION_MODULES = [
   "ap-open-item",
   // 5C-2（CTO 解锁 2026-08-19）：Supplier CN/DN（与 shared PERMISSION_MODULES 保持一致，ADR-0028）
   "supplier-credit-debit-note",
+  // 5C-2：Supplier Payment + Allocation（与 shared PERMISSION_MODULES 保持一致，ADR-0028）
+  "supplier-payment",
+  "supplier-payment-allocation",
   // Sprint 3A：平台底座模块
   "workflow-definition",
   "workflow-step",

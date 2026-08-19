@@ -306,6 +306,10 @@ export const PERMISSION_MODULES = [
   "ap-open-item",
   // 5C-2（CTO 解锁 2026-08-19）：Supplier CN/DN（动作映射：create→supplier-credit-debit-note:create（创建即取号）；submit→:edit；apply→:edit（maker-checker 业务层强制，不新造 apply 权限）；cancel DRAFT→:close）
   "supplier-credit-debit-note",
+  // 5C-2：Supplier Payment（动作映射：create→supplier-payment:create（创建即取号）；apply→supplier-payment:edit；void→supplier-payment:close）
+  "supplier-payment",
+  // 5C-2：Payment Allocation 核销行（reversal→supplier-payment-allocation:edit）
+  "supplier-payment-allocation",
 ] as const;
 
 /** 生成模块×动作权限码（如 "item:view"） */
