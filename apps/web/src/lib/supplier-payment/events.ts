@@ -35,10 +35,20 @@ export async function writeSupplierPaymentAppliedEvent(
   });
 }
 
+export interface SupplierPaymentReversedEventPayload {
+  paymentId: string;
+  code: string;
+  supplierId: string;
+  reversedAllocations: number;
+  reversedById?: string;
+  reversedAt?: string; // ISO
+  [key: string]: unknown;
+}
+
 /** 事务内原子写 Outbox（SupplierPaymentReversed；幂等键 SupplierPaymentReversed|paymentId） */
 export async function writeSupplierPaymentReversedEvent(
   tx: Prisma.TransactionClient,
-  params: { paymentId: string; payload: SupplierPaymentEventPayload },
+  params: { paymentId: string; payload: SupplierPaymentReversedEventPayload },
 ) {
   return writeDomainEvent(tx, {
     eventType: 'SupplierPaymentReversed',
