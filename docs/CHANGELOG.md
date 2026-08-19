@@ -25,6 +25,23 @@
 ### 文档
 - ADR-0029（Pending Pages Completion 决策记录）、docs/frontend/contract-cards/pending-pages-completion-gate.md（Design/Scope Gate 文档）、OpenAPI +7 域 paths、Frontend Module Map / Page Route Map 解除 hold 标记、docs/qa/PendingPages_QA.md、docs/test-cases/MasterData_Admin_CRUD_API.md、ROADMAP v1.23、SPRINT_PLAN
 
+## [Unreleased] - GL 期初余额 + 期末结转（2026-08-20，ADR-0036）
+
+### 新增
+
+- **Migration 0035**：GlPeriodClose 表（periodKey @unique 防重复月结；journalEntryId 引用结转凭证）+ seed 4103 本年利润（EQUITY）
+- **lib/gl/period-close.ts**：closePeriod（聚合期间 REVENUE/EXPENSE 净额 → 结转凭证 sourceType=PERIOD_CLOSE/sourceId=periodKey → GlPeriodClose 同事务；借贷平衡断言；防重复/期间格式校验）+ computeBalancesWithOpening（期初=dateFrom 前派生累计）
+- **API**：POST /api/gl/month-end-close（period YYYY-MM；gl:create；返回 revenueNet/expenseNet/profit）+ GET /api/gl/period-closes（gl:view）
+- **余额 API 增强**：account-balances 增加 openingBalance（dateFrom 前累计）+ closingBalance（= 期初 + 期间净额）
+- **前端**：/finance/gl-period-close（期间选择 → 执行结转 + 已结转列表 + 结果展示）；modules.ts gl-period-close 注册
+- **单测**：+5 路径（结转分录借贷平衡/亏损/防重复/期间格式/无活动）+ 期初派生
+
+### 边界
+
+- 期初 = 凭证派生（不建期初投影表，延续 ADR-0034 原则）；撤销结转 = 手工冲销结转凭证（纠错纪律）；多币种折算仍后续
+
+---
+
 ## [Unreleased] - GL 手工凭证录入 + 审核流（2026-08-20，ADR-0035）
 
 ### 新增

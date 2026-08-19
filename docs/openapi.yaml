@@ -13276,6 +13276,41 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/gl/month-end-close:
+    post:
+      tags: [GL]
+      summary: 期末结转（收入/费用 → 本年利润；GlPeriodClose 防重复；gl:create；ADR-0036）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [period]
+              properties:
+                period: { type: string, example: "2026-08", description: YYYY-MM }
+      responses:
+        "200":
+          description: OK（{ periodKey, journalEntryId, voucherNo, revenueNet, expenseNet, profit }）
+        "400":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/gl/period-closes:
+    get:
+      tags: [GL]
+      summary: 已结转期间列表（gl:view；ADR-0036）
+      responses:
+        "200":
+          description: OK
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/gl/journal-entries/manual:
     post:
       tags: [GL]

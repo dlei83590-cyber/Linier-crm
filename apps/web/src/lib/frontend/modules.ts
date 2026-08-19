@@ -675,6 +675,17 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_LIST_DETAIL, ui: UI_LIST_DETAIL_ACTIONS },
     order: 2,
   },
+  // gl-period-close：Sprint 7 Finance（ADR-0036）——期末结转（收入/费用 → 本年利润；防重复月结）
+  {
+    id: 'gl-period-close',
+    domain: 'supplier-ap',
+    label: '期末结转',
+    route: '/finance/gl-period-close',
+    permission: actionPermission('gl', 'create'),
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_LIST_DETAIL, ui: UI_LIST_DETAIL_ACTIONS },
+    order: 3,
+  },
 
   // ===== 基础资料（F2-2 Wave 1 已交付 → ready；契约缺失项保持 hold）=====
   // items / price-lists：contract CRUD FINAL；main 已有 list/detail/new/edit → ui CRUD 开放

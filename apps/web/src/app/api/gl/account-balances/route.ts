@@ -49,21 +49,36 @@ export async function GET(request: NextRequest) {
   });
   const agg = new Map(rows.map((r) => [r.accountId, r._sum]));
 
+  // 期初余额（dateFrom 前累计；无 dateFrom = 0）——ADR-0036 派生
+  const openingRows = dateFrom
+    ? await prisma.glJournalEntryLine.groupBy({
+        by: ['accountId'],
+        where: { entry: { deletedAt: null, postingDate: { lt: new Date(dateFrom) } }, accountId: { in: accounts.map((a) => a.id) } },
+        _sum: { debit: true, credit: true },
+      })
+    : [];
+  const openingAgg = new Map(openingRows.map((r) => [r.accountId, r._sum]));
+
   return ok(
     accounts.map((a) => {
       const sum = agg.get(a.id);
       const debit = sum?.debit ?? new Prisma.Decimal(0);
       const credit = sum?.credit ?? new Prisma.Decimal(0);
-      const balance = a.direction === 'DEBIT' ? debit.minus(credit) : credit.minus(debit);
+      const open = openingAgg.get(a.id);
+      const openDebit = open?.debit ?? new Prisma.Decimal(0);
+      const openCredit = open?.credit ?? new Prisma.Decimal(0);
+      const opening = a.direction === 'DEBIT' ? openDebit.minus(openCredit) : openCredit.minus(openDebit);
+      const period = a.direction === 'DEBIT' ? debit.minus(credit) : credit.minus(debit);
       return {
         accountId: a.id,
         code: a.code,
         name: a.name,
         category: a.category,
         direction: a.direction,
+        openingBalance: opening.toFixed(2),
         periodDebit: debit.toFixed(2),
         periodCredit: credit.toFixed(2),
-        closingBalance: balance.toFixed(2),
+        closingBalance: opening.add(period).toFixed(2),
       };
     }),
   );

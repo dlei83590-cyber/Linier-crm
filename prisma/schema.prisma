@@ -6149,6 +6149,7 @@ model GlJournalEntry {
   updatedAt  DateTime @updatedAt @db.Timestamptz(3)
 
   lines GlJournalEntryLine[]
+  periodClose GlPeriodClose? // 期末结转记录（sourceType=PERIOD_CLOSE 凭证的结转引用，ADR-0036）
 
   @@unique([sourceType, sourceId]) // 幂等：同一来源只允许一张凭证（防重复过账）
   @@index([postingDate])
@@ -6172,5 +6173,19 @@ model GlJournalEntryLine {
 
   @@index([entryId])
   @@index([accountId])
+}
+
+/// 期末结转记录（Sprint 7 GL，Migration 0035；ADR-0036）
+/// periodKey @unique 防重复月结；journalEntryId 引用结转凭证（sourceType=PERIOD_CLOSE）
+model GlPeriodClose {
+  id        String   @id @default(cuid())
+  periodKey String   @unique // "YYYY-MM"（如 2026-08）
+  journalEntryId String @unique // 结转凭证（借 REVENUE / 借本年利润 贷 EXPENSE，本年利润=差额）
+  journalEntry GlJournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Restrict)
+  closedById String? // 执行人
+  closedAt   DateTime @default(now()) @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([periodKey])
 }
 
