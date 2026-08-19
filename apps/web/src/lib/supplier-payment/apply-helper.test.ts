@@ -125,14 +125,26 @@ describe("applySupplierPaymentAllocation — 会计不变量", () => {
     );
   });
 
-  it("成功全额核销：openAmount 归零；payment status ALLOCATED", async () => {
+  it("成功全额核销：openAmount 归零且付款单无余额 → payment status ALLOCATED", async () => {
+    const tx = makeTx([[{ ...basePayment, amount: "500.0000", unallocatedAmount: "500.0000" }], [baseOpenItem]]);
+    const r = await applySupplierPaymentAllocation(tx, { paymentId: "p1", apOpenItemId: "oi1", allocatedAmount: new Prisma.Decimal(500), actorId: "user-b" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.openAmountAfter).toBe("0.0000");
+    expect(r.unallocatedAmountAfter).toBe("0.0000");
+    expect(tx.supplierPayment.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "ALLOCATED" }) }),
+    );
+  });
+
+  it("核销使 openAmount 归零但付款单仍有余额 → status PARTIALLY_ALLOCATED（正确业务语义）", async () => {
     const tx = makeTx([[basePayment], [baseOpenItem]]);
     const r = await applySupplierPaymentAllocation(tx, { paymentId: "p1", apOpenItemId: "oi1", allocatedAmount: new Prisma.Decimal(500), actorId: "user-b" });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.openAmountAfter).toBe("0.0000");
     expect(tx.supplierPayment.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ status: "ALLOCATED" }) }),
+      expect.objectContaining({ data: expect.objectContaining({ status: "PARTIALLY_ALLOCATED" }) }),
     );
   });
 });
