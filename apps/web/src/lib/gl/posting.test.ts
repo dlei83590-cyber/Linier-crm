@@ -55,7 +55,7 @@ describe("postGlEntry — 过账服务不变量", () => {
     });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.voucherNo).toBe("JRN-000042");
+    expect(r.voucherNo).toBe("JRN000042");
     expect(tx.glJournalEntry.create).toHaveBeenCalledTimes(1);
   });
 
@@ -74,16 +74,16 @@ describe("postGlEntry — 过账服务不变量", () => {
     if (!r.ok) expect(r.code).toBe("GL_UNBALANCED");
   });
 
-  it("一行借贷两侧均 > 0 → GL_BOTH_SIDES", async () => {
+  it("一行借贷两侧均 > 0 → GL_BOTH_SIDES（抛错）", async () => {
     const tx = makeTx();
-    const r = await postGlEntry(tx, {
-      sourceType: "TEST",
-      sourceId: "s3",
-      postingDate: new Date(),
-      lines: [{ accountCode: "1002", debit: "50.00", credit: "50.00" }],
-    });
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.code).toBe("GL_BOTH_SIDES");
+    await expect(
+      postGlEntry(tx, {
+        sourceType: "TEST",
+        sourceId: "s3",
+        postingDate: new Date(),
+        lines: [{ accountCode: "1002", debit: "50.00", credit: "50.00" }],
+      }),
+    ).rejects.toThrow("GL_BOTH_SIDES");
   });
 
   it("科目缺失 → 抛错（fail closed）", async () => {
@@ -183,7 +183,7 @@ describe("glPostFromEvent — 5C 事件 → GL 分录映射（ADR-0033）", () =
     expect(r.ok).toBe(true);
     const created = (tx.glJournalEntry.create as any).mock.calls[0][0];
     const debit = created.data.lines.create.find((l: any) => l.accountId === "acct-1002");
-    expect(debit.debit.toString()).toBe("500.00"); // 300 + 200
+    expect(debit.debit.toFixed(2)).toBe("500.00"); // 300 + 200
   });
 
   it("未注册事件 → UNSUPPORTED_EVENT", async () => {
