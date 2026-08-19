@@ -96,8 +96,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   if (state.status !== "authenticated" || !state.user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50">
-        <p className="text-sm text-slate-400">加载中…</p>
+      <div className="flex min-h-screen items-center justify-center bg-canvas">
+        <p className="text-sm text-ink-muted">加载中…</p>
       </div>
     );
   }
@@ -110,10 +110,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       <Link
         key={item.id}
         href={item.route}
-        className={`flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium ${
+        className={`flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors ${
           active
-            ? "bg-brand-50 text-brand-700"
-            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+            ? "bg-brand-50 text-brand-700 shadow-elevation-sm"
+            : "text-ink-secondary hover:bg-slate-100 hover:text-ink-primary"
         }`}
       >
         <span>{item.label}</span>
@@ -134,7 +134,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <button
               type="button"
               onClick={() => toggleDomain(domain.id)}
-              className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-100"
+              className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-slate-100 hover:text-ink-primary"
             >
               <span>{domain.label}</span>
               <span className="text-xs text-slate-400">{domainExpanded ? "▾" : "▸"}</span>
@@ -151,7 +151,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                     <button
                       type="button"
                       onClick={() => toggleHold(domain.id)}
-                      className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-medium text-slate-400 hover:bg-slate-100"
+                      className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-medium text-ink-muted hover:bg-slate-100"
                     >
                       <span>规划中 · {hold.length}</span>
                       <span className="text-xs text-slate-300">{holdExpanded ? "▾" : "▸"}</span>
@@ -161,11 +161,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                         {hold.map((item) => (
                           <span
                             key={item.id}
-                            className="flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium text-slate-300"
+                            className="flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium text-ink-muted/70"
                             aria-disabled="true"
                           >
                             <span>{item.label}</span>
-                            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-400">
+                            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-ink-muted">
                               尚未开放
                             </span>
                           </span>
@@ -183,9 +183,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-canvas">
       {/* Top bar */}
-      <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-slate-200 bg-white px-4">
+      <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-border bg-surface px-4 shadow-elevation-sm">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -198,15 +198,24 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             </svg>
           </button>
           <div className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded bg-brand-600 text-sm font-semibold text-white">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white shadow-elevation-sm">
               利
             </span>
-            <span className="text-sm font-semibold text-slate-800">利尼尔 CRM 管理系统</span>
+            <div className="flex flex-col leading-tight">
+              <span className="text-sm font-semibold text-ink-primary">利尼尔 CRM 管理系统</span>
+              <span className="text-[10px] text-ink-muted">Linier ERP</span>
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <Link href="/profile" className="hidden text-sm text-slate-500 hover:text-slate-800 sm:block">
-            {user.email}
+          <Link
+            href="/profile"
+            className="hidden items-center gap-2 text-sm text-ink-secondary transition-colors hover:text-ink-primary sm:flex"
+          >
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-700">
+              {(user.name ?? user.email ?? "用").slice(0, 1).toUpperCase()}
+            </span>
+            <span className="max-w-[180px] truncate">{user.email}</span>
           </Link>
           <button
             type="button"
@@ -214,7 +223,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               logout();
               router.replace("/login");
             }}
-            className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100"
+            className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary transition-colors hover:bg-slate-100 hover:text-ink-primary"
           >
             退出
           </button>
@@ -223,7 +232,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
       <div className="mx-auto flex max-w-7xl">
         {/* Desktop sidebar：F2-5A 固定高度 + 内部独立滚动，Main Content 不受 Sidebar 高度影响 */}
-        <aside className="sticky top-14 hidden h-[calc(100vh-3.5rem)] w-56 shrink-0 overflow-y-auto border-r border-slate-200 bg-white md:block">
+        <aside className="sticky top-14 hidden h-[calc(100vh-3.5rem)] w-56 shrink-0 overflow-y-auto border-r border-border bg-surface md:block">
           {sidebar}
         </aside>
 
@@ -236,7 +245,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               className="absolute inset-0 bg-slate-900/30"
               onClick={() => setMenuOpen(false)}
             />
-            <aside className="absolute inset-y-0 left-0 w-56 overflow-y-auto bg-white shadow-lg">{sidebar}</aside>
+            <aside className="absolute inset-y-0 left-0 w-56 overflow-y-auto bg-surface shadow-elevation-lg">{sidebar}</aside>
           </div>
         )}
 
@@ -244,9 +253,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Footer — 发布版本 = ERP Release SSOT（RELEASE_VERSION manifest）；Web package version 不再展示为“系统版本” */}
-      <footer className="border-t border-slate-200 bg-white px-4 py-3 text-center text-xs text-slate-400">
+      <footer className="border-t border-border bg-surface px-4 py-3 text-center text-xs text-ink-muted">
         <p>{APP_NAME} · {process.env.NEXT_PUBLIC_RELEASE_VERSION ?? "-"}</p>
-        <p className="mt-0.5">
+        <p className="mt-0.5 text-ink-muted/80">
           Build: {process.env.NEXT_PUBLIC_BUILD_ID ?? "-"} · Git Commit: {process.env.NEXT_PUBLIC_GIT_SHA ?? "-"} ·
           Deployment: {process.env.NEXT_PUBLIC_DEPLOYMENT_ENV ?? "-"}
         </p>

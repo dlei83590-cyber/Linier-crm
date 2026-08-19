@@ -53,19 +53,19 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 via-canvas to-slate-100 px-4">
+      <div className="w-full max-w-sm rounded-xl border border-border bg-surface p-8 shadow-elevation-lg">
         <div className="mb-6 text-center">
-          <span className="mx-auto flex h-10 w-10 items-center justify-center rounded bg-brand-600 text-lg font-semibold text-white">
+          <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-xl font-bold text-white shadow-elevation-md">
             利
           </span>
-          <h1 className="mt-3 text-lg font-semibold text-slate-800">利尼尔 CRM 管理系统</h1>
-          <p className="mt-1 text-xs text-slate-400">Linier CRM Management System</p>
+          <h1 className="mt-4 text-xl font-semibold text-ink-primary">利尼尔 CRM 管理系统</h1>
+          <p className="mt-1 text-xs text-ink-muted">Linier CRM Management System</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="email" className="mb-1 block text-sm font-medium text-slate-700">
+            <label htmlFor="email" className="mb-1 block text-sm font-medium text-ink-secondary">
               邮箱
             </label>
             <input
@@ -75,13 +75,13 @@ export default function LoginPage() {
               autoComplete="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink-primary placeholder:text-ink-muted transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="mb-1 block text-sm font-medium text-slate-700">
+            <label htmlFor="password" className="mb-1 block text-sm font-medium text-ink-secondary">
               密码
             </label>
             <input
@@ -91,13 +91,13 @@ export default function LoginPage() {
               autoComplete="current-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink-primary placeholder:text-ink-muted transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               placeholder="请输入密码"
             />
           </div>
 
           {error && (
-            <div role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">
+            <div role="alert" className="rounded-md border border-status-danger-border bg-status-danger-bg px-3 py-2 text-sm text-status-danger-text">
               {error}
             </div>
           )}
@@ -105,14 +105,14 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white shadow-elevation-sm transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? "登录中…" : "登录"}
           </button>
         </form>
 
         {process.env.NODE_ENV === "development" && (
-          <p className="mt-4 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
+          <p className="mt-4 rounded-md border border-status-warning-border bg-status-warning-bg px-3 py-2 text-xs text-status-warning-text">
             开发环境测试账号请参考仓库 .env.example（SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD）
           </p>
         )}

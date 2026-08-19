@@ -90,49 +90,49 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       {/* ① 今日工作 */}
-      <section className="rounded-lg border border-slate-200 bg-white p-5">
-        <h1 className="text-xl font-semibold text-slate-800">Dashboard</h1>
-        <p className="mt-1 text-sm text-slate-500">
+      <section className="rounded-xl border border-border bg-surface p-6 shadow-elevation-sm">
+        <h1 className="text-xl font-semibold text-ink-primary">Dashboard</h1>
+        <p className="mt-1 text-sm text-ink-secondary">
           欢迎回来，{greeting}。{today ? `今天是 ${today}。` : ""}
         </p>
       </section>
 
       {/* ② 快捷操作 */}
-      <section className="rounded-lg border border-slate-200 bg-white p-5">
-        <h2 className="text-sm font-medium text-slate-700">快捷操作</h2>
+      <section className="rounded-xl border border-border bg-surface p-6 shadow-elevation-sm">
+        <h2 className="text-sm font-semibold text-ink-primary">快捷操作</h2>
         {quickActions.length > 0 ? (
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {quickActions.map((m) => (
               <Link
                 key={m.id}
                 href={m.createRoute!}
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
+                className="rounded-md border border-border px-3 py-2 text-sm font-medium text-ink-secondary transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
               >
                 新建{m.label}
               </Link>
             ))}
           </div>
         ) : (
-          <p className="mt-2 text-sm text-slate-500">
+          <p className="mt-2 text-sm text-ink-muted">
             暂无已开放的快捷操作。模块开放创建能力后会自动出现在这里。
           </p>
         )}
       </section>
 
       {/* ③ 业务入口 */}
-      <section className="rounded-lg border border-slate-200 bg-white p-5">
-        <h2 className="text-sm font-medium text-slate-700">业务入口</h2>
+      <section className="rounded-xl border border-border bg-surface p-6 shadow-elevation-sm">
+        <h2 className="text-sm font-semibold text-ink-primary">业务入口</h2>
         {entryGroups.length > 0 ? (
           <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2">
             {entryGroups.map(({ domain, ready }) => (
-              <div key={domain.id} className="rounded-lg border border-slate-100 bg-slate-50/60 p-4">
-                <h3 className="text-sm font-semibold text-slate-600">{domain.label}</h3>
+              <div key={domain.id} className="rounded-lg border border-border bg-canvas/60 p-4">
+                <h3 className="text-sm font-semibold text-ink-secondary">{domain.label}</h3>
                 <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {ready.map((m) => (
                     <Link
                       key={m.id}
                       href={m.route}
-                      className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
+                      className="rounded-md border border-border bg-surface px-3 py-2 text-sm font-medium text-ink-secondary transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
                     >
                       {m.label}
                     </Link>
@@ -142,23 +142,23 @@ export default function DashboardPage() {
             ))}
           </div>
         ) : (
-          <p className="mt-2 text-sm text-slate-500">暂无已开放的模块。</p>
+          <p className="mt-2 text-sm text-ink-muted">暂无已开放的模块。</p>
         )}
       </section>
 
       {/* ④ 系统状态 */}
-      <section className="rounded-lg border border-slate-200 bg-white p-5">
-        <h2 className="text-sm font-medium text-slate-700">系统状态</h2>
-        <div className="mt-3 flex flex-wrap items-center gap-6">
+      <section className="rounded-xl border border-border bg-surface p-6 shadow-elevation-sm">
+        <h2 className="text-sm font-semibold text-ink-primary">系统状态</h2>
+        <div className="mt-3 flex flex-wrap items-center gap-8">
           <div>
-            <p className="text-xs text-slate-400">发布版本</p>
-            <p className="mt-1 text-lg font-medium text-slate-800">
+            <p className="text-xs text-ink-muted">发布版本</p>
+            <p className="mt-1 text-lg font-semibold text-ink-primary">
               {process.env.NEXT_PUBLIC_RELEASE_VERSION ?? "-"}
             </p>
           </div>
           <div>
-            <p className="text-xs text-slate-400">运行状态</p>
-            <p className="mt-1 flex items-center gap-2 text-lg font-medium text-slate-800">
+            <p className="text-xs text-ink-muted">运行状态</p>
+            <p className="mt-1 flex items-center gap-2 text-lg font-semibold text-ink-primary">
               <span
                 className={`inline-block h-2.5 w-2.5 rounded-full ${
                   health === "ok"

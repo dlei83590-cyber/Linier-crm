@@ -25,6 +25,20 @@
 ### 文档
 - ADR-0029（Pending Pages Completion 决策记录）、docs/frontend/contract-cards/pending-pages-completion-gate.md（Design/Scope Gate 文档）、OpenAPI +7 域 paths、Frontend Module Map / Page Route Map 解除 hold 标记、docs/qa/PendingPages_QA.md、docs/test-cases/MasterData_Admin_CRUD_API.md、ROADMAP v1.23、SPRINT_PLAN
 
+## [Unreleased] - UI 美化与优化（2026-08-20，消费 F2-1 Design System）
+
+### 新增
+
+- **Admin Shell**：品牌区渐变 Logo + 系统名双层、顶部栏用户区（头像首字母 + 邮箱 + 语义化退出按钮）、侧边栏域分组/活跃态/Hold 折叠组统一设计系统语义色（canvas/surface/ink/status/border + shadow-elevation-sm）、Footer 语义化
+- **Login 页**：背景品牌渐变 + 卡片 shadow-elevation-lg + 渐变品牌标识、输入框聚焦 ring + 语义占位色、错误提示 status-danger 语义、主按钮 elevation
+- **Dashboard**：四卡片统一 rounded-xl + shadow-elevation-sm 分层、标题层级（ink-primary semibold）、快捷操作/业务入口链接 hover 过渡 + 语义色、系统状态卡片
+
+### 边界
+
+- 纯 className/样式改动，零逻辑变更、零 API/Migration 变更；存量业务页复用 AppPage/PageHeader/StatusBadge 不受影响
+
+---
+
 ## [Unreleased] - 成本核算第四步：多 COGS 科目映射（2026-08-20，ADR-0041）
 
 ### 新增
