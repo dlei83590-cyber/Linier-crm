@@ -27,7 +27,6 @@ import {
   ProjectSubresourceDialog,
 } from "@/components/workspace";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
-import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
 import { formatDate } from "@/lib/format";
 import {
   StakeholderFields,
@@ -3324,7 +3323,7 @@ function ProjectDetailPage() {
                       type="button"
                       onClick={reloadTransition}
                       disabled={transitionDialog.saving}
-                      className="mt-2 rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      className={"mt-2 " + BUTTON_PRIMARY_CLASS}
                     >
                       重新加载
                     </button>
