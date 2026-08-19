@@ -80,7 +80,7 @@ Sprint 6B CLOSED 后，采购库存链（PO → PurchaseReceipt → Inspection �
 
 ### D9：明确排除（CTO #8777 HOLD 延续）
 
-- **Costing / FIFO / Moving Average / Cost Layer / Valuation / Landed Cost**：发票金额是财务事实，不是成本事实；成本在采购+库存+AP 链闭合后再排优先级
+- **Costing / FIFO / Moving Average / Cost Layer / Valuation / Landed Cost**：发票金额是财务事实，不是成本事实；成本在采购+库存+AP 链闭合后再排优先级。**（2026-08-20 CTO 授权解除首块：ADR-0038 移动加权平均成本层已实现；出库结转/COGS/FIFO/Cost Layer/Landed Cost 仍后续）**
 - **Reservation / ReservedQty / AvailableQty**：继续 HOLD
 - **Manufacturing / MRP**：继续 HOLD
 - **不触碰 InventoryMovement / StockProjection**（6A SSOT 红线继承；5C 只读库存事实做数量匹配）

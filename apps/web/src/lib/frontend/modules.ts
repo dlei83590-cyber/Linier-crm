@@ -675,6 +675,17 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_LIST_DETAIL, ui: UI_LIST_DETAIL_ACTIONS },
     order: 2,
   },
+  // inventory-costs：成本核算（CTO 授权解除 D9 HOLD 2026-08-20，ADR-0038）——移动加权平均成本只读
+  {
+    id: 'inventory-costs',
+    domain: 'inventory',
+    label: '库存成本（移动平均）',
+    route: '/inventory/costs',
+    permission: actionPermission('inventory-cost', 'view'),
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_LIST },
+    order: 6,
+  },
   // gl-period-close：Sprint 7 Finance（ADR-0036）——期末结转（收入/费用 → 本年利润；防重复月结）
   {
     id: 'gl-period-close',

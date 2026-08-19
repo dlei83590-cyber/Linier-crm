@@ -13,6 +13,7 @@ import {
 import { publishWarehouseReceiptEvent } from '@/lib/warehouse-receipt/events';
 import { createGrirAccrualsForWhrPost } from '@/lib/supplier-invoice/grir-helpers';
 import { writeGrirAccruedEvent } from '@/lib/supplier-invoice/events';
+import { upsertInboundCost } from '@/lib/inventory-cost/moving-average';
 import {
   InventoryOutboxError,
   expandSourceLineAtoms,
@@ -215,6 +216,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           accruedAt: postedAt.toISOString(),
         },
       });
+
+      // ⑤d 移动平均成本层更新（D9 HOLD 解除，ADR-0038）：WHR POSTED 同事务按行更新 item 级移动平均（幂等 sourceKey）
+      const lineItemMap = new Map(lines.map((l) => [l.id, l.itemId]));
+      for (const r of accruedRows) {
+        const whrLineId = r.warehouseReceiptLineId;
+        const itemId = whrLineId ? lineItemMap.get(whrLineId) : undefined;
+        if (!itemId) continue;
+        const costResult = await upsertInboundCost(tx, {
+          itemId,
+          quantity: r.quantity,
+          baseAmount: r.baseAmount,
+          sourceKey: 'COST:' + r.sourceKey,
+          actorId,
+        });
+        if (!costResult.ok) throw new Error('COST_UPDATE_FAILED:' + costResult.code);
+      }
 
       return {
         ok: true as const,

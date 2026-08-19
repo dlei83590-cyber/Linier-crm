@@ -25,6 +25,23 @@
 ### 文档
 - ADR-0029（Pending Pages Completion 决策记录）、docs/frontend/contract-cards/pending-pages-completion-gate.md（Design/Scope Gate 文档）、OpenAPI +7 域 paths、Frontend Module Map / Page Route Map 解除 hold 标记、docs/qa/PendingPages_QA.md、docs/test-cases/MasterData_Admin_CRUD_API.md、ROADMAP v1.23、SPRINT_PLAN
 
+## [Unreleased] - 成本核算首块：移动加权平均成本层（2026-08-20，ADR-0038，D9 HOLD 解除）
+
+### 新增
+
+- **Migration 0036**：InventoryCostBalance（itemId @unique：onHandQty/totalCost/avgUnitCost，item 级移动平均）+ InventoryCostSource（sourceKey @unique 防重复累计）+ Item 反向关系
+- **lib/inventory-cost/moving-average.ts**：upsertInboundCost（首笔 avg=base/qty；移动平均 avg'=(total+base)/(onHand+qty)，Decimal 4dp；幂等 sourceKey 跳过；数量/金额校验）
+- **WHR POST 事务接线**：GRIR ACCRUAL 后按行更新成本层（同事务，未税采购成本口径 P9；fail closed）
+- **查询 API**：GET /api/inventory-costs（分页 + itemId/itemCode 过滤；inventory-cost:view 仅 SUPER_ADMIN/ADMIN——成本敏感）
+- **前端**：/inventory/costs 只读列表页（物料/平均成本/总成本/在库数量）；modules.ts inventory-costs 注册
+- **单测**：+5 路径（首笔/移动平均/幂等/数量校验/金额校验）
+
+### 边界
+
+- **出库结转/COGS 未实现**（需 Movement OUT 消费 + GL COGS 分录，独立 Gate）；FIFO/Cost Layer/Landed Cost/仓库维度成本 = 后续 backlog；6A Movement/StockProjection 零改动（成本层独立，红线延续）
+
+---
+
 ## [Unreleased] - GL 期间解锁/重开（2026-08-20，ADR-0037）
 
 ### 新增

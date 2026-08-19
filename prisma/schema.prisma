@@ -446,6 +446,7 @@ model Item {
   adjustmentLines InventoryAdjustmentLine[] // 6B：调整行（InventoryAdjustmentLine.item 方向）
   conversions InventoryConversion[] // 6B：转换单（InventoryConversion.item 方向）
   supplierInvoiceLines SupplierInvoiceLine[] // 5C-1：供应商发票行（SupplierInvoiceLine.item 方向）
+  costBalance InventoryCostBalance? // 成本核算（ADR-0038）：移动加权平均成本层（InventoryCostBalance.item 方向）
   createdAt     DateTime        @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime        @updatedAt @db.Timestamptz(3)
 
@@ -6173,6 +6174,37 @@ model GlJournalEntryLine {
 
   @@index([entryId])
   @@index([accountId])
+}
+
+/// 库存成本余额（移动加权平均；D9 HOLD 解除，Migration 0036，ADR-0038）
+/// item 级移动平均成本层：avg' = (totalCost + baseAmount) / (onHandQty + qty)；成本层独立，不写 Movement/StockProjection（6A 红线）
+model InventoryCostBalance {
+  id        String   @id @default(cuid())
+  itemId    String   @unique
+  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  onHandQty Decimal  @default(0) @db.Decimal(18, 4) // 在库数量（成本层镜像，跟随入库更新）
+  totalCost Decimal  @default(0) @db.Decimal(18, 4) // 库存总成本（未税采购成本口径）
+  avgUnitCost Decimal @default(0) @db.Decimal(18, 4) // 移动加权平均单位成本
+  version   Int      @default(1) // CAS 乐观锁
+  createdById String?
+  updatedById String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([itemId])
+}
+
+/// 库存成本幂等源（ADR-0038）：sourceKey @unique 防重复累计成本（与 GRIR ACCRUAL 同事务）
+model InventoryCostSource {
+  id        String   @id @default(cuid())
+  sourceKey String   @unique // COST:WAREHOUSE_RECEIPT_LINE:{lineId}
+  itemId    String
+  quantity  Decimal  @db.Decimal(18, 4)
+  baseAmount Decimal @db.Decimal(18, 4)
+  createdById String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([itemId])
 }
 
 /// 期末结转记录（Sprint 7 GL，Migration 0035；ADR-0036）

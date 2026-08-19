@@ -150,6 +150,8 @@ const SEED_ACTION_MODULES = [
   // 5C-2：Supplier Payment + Allocation（与 shared PERMISSION_MODULES 保持一致，ADR-0028）
   "supplier-payment",
   "supplier-payment-allocation",
+  // 成本核算（ADR-0038）：inventory-cost（与 shared PERMISSION_MODULES 保持一致）
+  "inventory-cost",
   // Sprint 7 Finance 首块（ADR-0033）：GL 会计科目/记账凭证（与 shared PERMISSION_MODULES 保持一致）
   "gl",
   // Sprint 3A：平台底座模块

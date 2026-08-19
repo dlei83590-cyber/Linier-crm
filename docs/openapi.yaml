@@ -13170,6 +13170,30 @@ paths:
           description: OK（返回 { id, status: APPLIED, openAmountsAfter: [{ supplierInvoiceId, openAmountAfter }] }）
         "409":
           $ref: "#/components/responses/Conflict"
+  /api/inventory-costs:
+    get:
+      tags: [Inventory Costing]
+      summary: 库存成本（移动加权平均）只读列表（ADR-0038；inventory-cost:view 仅 SUPER_ADMIN/ADMIN）
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: itemId
+          in: query
+          schema: { type: string }
+        - name: itemCode
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/gl/trial-balance:
     get:
       tags: [GL]
