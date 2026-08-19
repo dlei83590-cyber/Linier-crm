@@ -8,7 +8,7 @@ import { Prisma } from '@prisma/client';
  */
 
 export type GlPostResult =
-  | { ok: true; entryId: string; voucherNo: string; idempotent: boolean }
+  | { ok: true; entryId: string; voucherNo: string | null; idempotent: boolean }
   | { ok: false; code: string; message: string; httpStatus: number };
 
 export interface GlLineInput {
