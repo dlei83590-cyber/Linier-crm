@@ -21,7 +21,7 @@ interface ReceiptRow {
   id: string;
   code: string;
   status: string;
-  createdAt: string;
+  receivedAt?: string | null;
   purchaseOrder?: { code: string | null } | null;
   supplier?: { name: string | null } | null;
   warehouse?: { name: string | null } | null;
@@ -165,9 +165,9 @@ function ReceiptList() {
             render: (row) => String(row._count?.lines ?? 0),
           },
           {
-            key: "createdAt",
-            header: "创建时间",
-            render: (row) => formatDate(row.createdAt),
+            key: "receivedAt",
+            header: "收货日期",
+            render: (row) => formatDate(row.receivedAt),
           },
         ]}
         rows={items}

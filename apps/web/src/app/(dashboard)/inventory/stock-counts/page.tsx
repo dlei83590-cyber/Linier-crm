@@ -21,7 +21,7 @@ interface StockCountRow {
   id: string;
   countNo: string;
   status: string;
-  createdAt: string;
+  completedAt?: string | null;
   countedBy?: { name: string | null } | null;
   _count?: { lines: number };
 }
@@ -155,9 +155,9 @@ function StockCountList() {
             render: (row) => String(row._count?.lines ?? 0),
           },
           {
-            key: "createdAt",
-            header: "创建时间",
-            render: (row) => formatDate(row.createdAt),
+            key: "completedAt",
+            header: "完成日期",
+            render: (row) => formatDate(row.completedAt),
           },
         ]}
         rows={items}

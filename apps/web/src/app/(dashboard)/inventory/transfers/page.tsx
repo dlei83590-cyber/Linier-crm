@@ -21,7 +21,7 @@ interface TransferRow {
   id: string;
   transferNo: string;
   status: string;
-  createdAt: string;
+  executedAt?: string | null;
   sourceWarehouse?: { name: string | null } | null;
   destinationWarehouse?: { name: string | null } | null;
   _count?: { lines: number };
@@ -161,9 +161,9 @@ function TransferList() {
             render: (row) => String(row._count?.lines ?? 0),
           },
           {
-            key: "createdAt",
-            header: "创建时间",
-            render: (row) => formatDate(row.createdAt),
+            key: "executedAt",
+            header: "执行日期",
+            render: (row) => formatDate(row.executedAt),
           },
         ]}
         rows={items}

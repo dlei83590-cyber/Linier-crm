@@ -21,7 +21,7 @@ interface RequisitionRow {
   id: string;
   code: string;
   status: string;
-  createdAt: string;
+  needDate?: string | null;
   requester?: { name: string | null } | null;
   department?: { name: string | null } | null;
   _count?: { lines: number };
@@ -161,9 +161,9 @@ function RequisitionList() {
             render: (row) => String(row._count?.lines ?? 0),
           },
           {
-            key: "createdAt",
-            header: "创建时间",
-            render: (row) => formatDate(row.createdAt),
+            key: "needDate",
+            header: "期望需求日期",
+            render: (row) => formatDate(row.needDate),
           },
         ]}
         rows={items}
