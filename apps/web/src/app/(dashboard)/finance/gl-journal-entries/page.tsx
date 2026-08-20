@@ -9,6 +9,7 @@ import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspac
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate, formatMoney } from "@/lib/format";
+import { VOUCHER_TYPE_LABELS } from "@/lib/vat-labels";
 
 interface GlEntryRow {
   id: string;
@@ -21,6 +22,8 @@ interface GlEntryRow {
   totalDebit: string;
   totalCredit: string;
   lineCount: number;
+  voucherType?: string | null;
+  attachmentCount?: number | null;
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -70,6 +73,15 @@ function GlEntryList() {
         columns={[
           { key: "voucherNo", header: "凭证号", render: (row) => (<Link href={`/finance/gl-journal-entries/${row.id}`} className="font-medium text-brand-600 hover:underline">{row.voucherNo ?? "（未取号）"}</Link>) },
           { key: "postingDate", header: "过账日期", render: (row) => formatDate(row.postingDate) },
+          {
+            key: "voucherType",
+            header: "凭证字",
+            render: (row) => (
+              <span className="rounded bg-canvas px-1.5 py-0.5 text-xs text-ink-primary">
+                {VOUCHER_TYPE_LABELS[row.voucherType ?? "GENERAL"] ?? row.voucherType ?? "记"}
+              </span>
+            ),
+          },
           { key: "sourceType", header: "来源", render: (row) => SOURCE_LABELS[row.sourceType] ?? row.sourceType },
           { key: "summary", header: "摘要", render: (row) => row.summary ?? "—" },
           { key: "totalDebit", header: "借方合计", render: (row) => formatMoney(row.totalDebit, "CNY") },
