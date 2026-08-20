@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateUscc, validateTaxInvoiceFields, normalizeUscc } from '@/lib/tax-invoice';
+import { validateUscc, validateTaxInvoiceFields } from '@/lib/tax-invoice';
 
 /**
  * Sprint 7 VAT 发票管理（ADR-0043）校验单测
