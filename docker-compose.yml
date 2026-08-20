@@ -11,6 +11,7 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
+      - TZ=Asia/Shanghai # 中国部署适配（ADR-0048）：业务日/日志时区（数据存储仍 UTC）
       - DATABASE_URL=${DATABASE_URL}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - NEXTAUTH_URL=${NEXTAUTH_URL}
@@ -30,6 +31,7 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-nilier}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-nilier_secret}
       - POSTGRES_DB=${POSTGRES_DB:-nilier_crm}
+      - TZ=Asia/Shanghai # 中国部署适配（ADR-0048）：DB 连接会话时区（存储仍 timestamptz UTC）
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
