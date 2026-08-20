@@ -7,6 +7,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityFormWorkspace } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 import { VOUCHER_TYPE_OPTIONS } from "@/lib/vat-labels";
 
@@ -17,6 +18,7 @@ const inputClass = INPUT_CLASS;
 
 function ManualEntryForm() {
   const router = useRouter();
+  const toast = useToast();
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
   const [accountsLoaded, setAccountsLoaded] = useState(false);
   const [postingDate, setPostingDate] = useState(new Date().toISOString().slice(0, 10));
@@ -77,8 +79,12 @@ function ManualEntryForm() {
         lines: validLines.map((l) => ({ accountCode: l.accountCode, debit: Number(l.debit) ? String(Number(l.debit).toFixed(2)) : undefined, credit: Number(l.credit) ? String(Number(l.credit).toFixed(2)) : undefined, summary: l.summary || undefined })),
       }),
     })
-      .then((body) => router.push(`/finance/gl-journal-entries/${body.data.id}`))
+      .then((body) => {
+        toast.success("凭证已创建（草稿）");
+        router.push(`/finance/gl-journal-entries/${body.data.id}`);
+      })
       .catch((err: unknown) => {
+        toast.error("创建失败", err instanceof ApiClientError ? err.message : "网络错误");
         setError(err instanceof ApiClientError ? err : new ApiClientError(0, "网络错误", "NETWORK_ERROR"));
         setSubmitting(false);
       });

@@ -18,6 +18,8 @@ import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
+import { PageLoading } from "@/components/ui/skeleton";
 import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
 import { useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
@@ -91,6 +93,7 @@ function SupplierInvoiceDetailPage() {
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiClientError | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const toast = useToast();
 
   const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
   const canEdit = hasPermission(roles, actionPermission("supplier-invoice", "edit"));
@@ -135,7 +138,10 @@ function SupplierInvoiceDetailPage() {
         body: JSON.stringify({ version: detail.version }),
       });
       await refreshDetail();
+      const ACTION_LABEL: Record<ConfirmAction, string> = { submit: "提交", match: "三单匹配", post: "过账（AP 落账）" };
+      toast.success(`${ACTION_LABEL[action]}成功`);
     } catch (err: unknown) {
+      toast.error("操作失败", err instanceof ApiClientError ? err.message : "网络错误");
       setActionError(
         err instanceof ApiClientError ? err : new ApiClientError(0, "操作失败", "NETWORK_ERROR"),
       );
@@ -147,7 +153,9 @@ function SupplierInvoiceDetailPage() {
   if (loading) {
     return (
       <AppPage>
-        <div className="border-border bg-surface rounded-lg border p-6 text-sm text-ink-muted">加载中…</div>
+        <div className="border-border bg-surface overflow-hidden rounded-lg border">
+          <PageLoading rows={5} />
+        </div>
       </AppPage>
     );
   }
