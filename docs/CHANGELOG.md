@@ -2,6 +2,17 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 认证存储升级（2026-08-20，ADR-0045）
+
+### 新增（httpOnly Cookie + SameSite=Lax，消除 localStorage JWT 的 XSS 窃取向量）
+
+- **登录 Set-Cookie**：`linier_session`（httpOnly/SameSite=Lax/Secure(生产)/7d）
+- **双来源认证**：authenticate() Bearer → cookie 回退（旧会话不中断）
+- **登出端点**：POST /api/auth/logout（httpOnly cookie 服务端清除）
+- **前端去 localStorage**：apiFetch 去 Bearer（同源 cookie 自动携带）；SessionProvider refresh/logout 改造；setAuthToken no-op / getAuthToken null
+
+---
+
 ## [Unreleased] - Sprint 7 会计期间体系（2026-08-20，ADR-0044，Migration 0038）
 
 ### 新增（会计期间表/过账期间校验/凭证字+附件/编号按月重排/GL dateTo 时区修复）

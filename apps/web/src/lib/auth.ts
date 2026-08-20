@@ -6,6 +6,10 @@ const secret = new TextEncoder().encode(process.env.NEXTAUTH_SECRET ?? "");
 const ALG = "HS256";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
+// 会话 cookie（ADR-0045：httpOnly + SameSite=Lax，消除 localStorage JWT 的 XSS 窃取向量；Lax 阻断跨站 POST 的 CSRF）
+export const SESSION_COOKIE_NAME = "linier_session";
+export const SESSION_COOKIE_MAX_AGE_SECONDS = SESSION_MAX_AGE_SECONDS;
+
 export interface SessionClaims {
   sub: string;
   email: string;

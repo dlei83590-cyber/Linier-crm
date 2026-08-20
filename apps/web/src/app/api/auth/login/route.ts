@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { verifyPassword, signSessionToken } from "@/lib/auth";
+import { verifyPassword, signSessionToken, SESSION_COOKIE_NAME, SESSION_COOKIE_MAX_AGE_SECONDS } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
   const roles = user.roles.map((membership) => membership.role.code);
   const token = await signSessionToken({ sub: user.id, email: user.email, roles });
 
-  return NextResponse.json({
+  const res = NextResponse.json({
     success: true,
     data: {
       token,
@@ -66,4 +66,13 @@ export async function POST(request: NextRequest) {
       },
     },
   });
+  // ADR-0045：httpOnly SameSite=Lax 会话 cookie（前端不再存 localStorage；Lax 阻断跨站 POST CSRF）
+  res.cookies.set(SESSION_COOKIE_NAME, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: SESSION_COOKIE_MAX_AGE_SECONDS,
+  });
+  return res;
 }
