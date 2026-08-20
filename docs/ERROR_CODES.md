@@ -1,138 +1,260 @@
 # ERROR_CODES 错误码注册表
 
-- 版本：v1.1
-- 日期：2026-08-12
-- 维护者：CIO（JINZA）｜审核：CTO
-- 关联：[API_GUIDELINES.md](./API_GUIDELINES.md) ｜ `apps/web/src/lib/api/errors.ts`（ERROR_CODES 常量）
-
-> **规则**：所有 API 错误码必须在此注册，禁止散落魔法字符串。
-> 编码规则：`{DOMAIN}_{SEQ}`（如 AUTH_001），全局唯一，新增需追加并保持向后兼容。
-> 前端按 code 国际化；日志按 code 统计；Sprint 4 前完成全局 Error Code Registry 落地。
-
-## 1. 通用（COMMON）
+> **本文件由 `scripts/gen-error-codes.mjs` 自动生成（SSOT = `apps/web/src/lib/api/errors.ts`），禁止手工编辑。**
+> 修改错误码后运行 `node scripts/gen-error-codes.mjs` 重新生成；CI Gate 校验文档与代码同步。
 
 | code | HTTP | 说明 |
 | --- | --- | --- |
-| COMMON_001 | 400 | 请求参数校验失败（Zod） |
-| COMMON_002 | 401 | 未认证（缺少/无效令牌） |
-| COMMON_003 | 403 | 无权限 |
-| COMMON_004 | 404 | 资源不存在 |
-| COMMON_005 | 409 | 资源冲突（重复/状态不允许） |
-| COMMON_006 | 409 | 乐观锁版本冲突（VERSION_CONFLICT） |
-| COMMON_007 | 500 | 服务器内部错误 |
-| COMMON_008 | 429 | 请求过于频繁（限流） |
+| VALIDATION_ERROR | - | VALIDATION_ERROR |
+| AUTHENTICATION_ERROR | - | AUTHENTICATION_ERROR |
+| FORBIDDEN | - | 无权限或被禁止 |
+| NOT_FOUND | - | 不存在或已删除 |
+| CONFLICT | - | CONFLICT |
+| VERSION_CONFLICT | - | VERSION_CONFLICT |
+| INTERNAL_ERROR | - | INTERNAL_ERROR |
+| WORKFLOW_DEFINITION_NOT_FOUND | - | 不存在或已删除 |
+| WORKFLOW_DEFINITION_CODE_EXISTS | - | 编码已存在 |
+| WORKFLOW_DEFINITION_PUBLISHED | - | WORKFLOW_DEFINITION_PUBLISHED |
+| WORKFLOW_DEFINITION_ARCHIVED | - | WORKFLOW_DEFINITION_ARCHIVED |
+| WORKFLOW_DEFINITION_NO_STEPS | - | WORKFLOW_DEFINITION_NO_STEPS |
+| WORKFLOW_INSTANCE_NOT_FOUND | - | 不存在或已删除 |
+| WORKFLOW_INSTANCE_EXISTS | - | WORKFLOW_INSTANCE_EXISTS |
+| WORKFLOW_INSTANCE_CLOSED | - | WORKFLOW_INSTANCE_CLOSED |
+| WORKFLOW_INSTANCE_NOT_RUNNING | - | WORKFLOW_INSTANCE_NOT_RUNNING |
+| WORKFLOW_ACTION_INVALID | - | 非法值 |
+| WORKFLOW_ACTION_FORBIDDEN | - | 无权限或被禁止 |
+| WORKFLOW_STEP_NOT_FOUND | - | 不存在或已删除 |
+| WORKFLOW_TARGET_REQUIRED | - | 必填/前置条件缺失 |
+| APPROVER_GROUP_NOT_FOUND | - | 不存在或已删除 |
+| APPROVER_GROUP_CODE_EXISTS | - | 编码已存在 |
+| DICTIONARY_TYPE_NOT_FOUND | - | 不存在或已删除 |
+| DICTIONARY_TYPE_CODE_EXISTS | - | 编码已存在 |
+| DICTIONARY_ITEM_NOT_FOUND | - | 不存在或已删除 |
+| DICTIONARY_ITEM_CODE_EXISTS | - | 编码已存在 |
+| SETTING_NOT_FOUND | - | 不存在或已删除 |
+| SETTING_KEY_EXISTS | - | SETTING_KEY_EXISTS |
+| NOTIFICATION_TEMPLATE_NOT_FOUND | - | 不存在或已删除 |
+| NOTIFICATION_TEMPLATE_CODE_EXISTS | - | 编码已存在 |
+| QUOTATION_NOT_FOUND | - | 不存在或已删除 |
+| QUOTATION_NOT_EDITABLE | - | QUOTATION_NOT_EDITABLE |
+| QUOTATION_NO_LINES | - | 缺少有效行 |
+| QUOTATION_EXPIRED | - | QUOTATION_EXPIRED |
+| QUOTATION_ALREADY_CONVERTED | - | QUOTATION_ALREADY_CONVERTED |
+| QUOTATION_INVALID_STATE | - | 状态不允许该操作 |
+| QUOTATION_LINE_NOT_FOUND | - | 不存在或已删除 |
+| QUOTATION_PRICE_FAILED | - | QUOTATION_PRICE_FAILED |
+| QUOTATION_WORKFLOW_FAILED | - | 工作流处理失败 |
+| QUOTATION_APPROVAL_POLICY_NOT_FOUND | - | 不存在或已删除 |
+| QUOTATION_OVERRIDE_PRICE_FORBIDDEN | - | 无权限或被禁止 |
+| SALES_ORDER_NOT_FOUND | - | 不存在或已删除 |
+| SALES_ORDER_NOT_EDITABLE | - | SALES_ORDER_NOT_EDITABLE |
+| SALES_ORDER_INVALID_STATE | - | 状态不允许该操作 |
+| SALES_ORDER_LINE_NOT_FOUND | - | 不存在或已删除 |
+| SALES_ORDER_PRICE_FORBIDDEN | - | 无权限或被禁止 |
+| SALES_ORDER_PRICE_FAILED | - | SALES_ORDER_PRICE_FAILED |
+| SALES_ORDER_WORKFLOW_FAILED | - | 工作流处理失败 |
+| DELIVERY_NOT_FOUND | - | 不存在或已删除 |
+| DELIVERY_INVALID_STATE | - | 状态不允许该操作 |
+| DELIVERY_LINE_NOT_FOUND | - | 不存在或已删除 |
+| DELIVERY_QUANTITY_EXCEEDED | - | 超出允许范围 |
+| DELIVERY_SOURCE_LINE_INVALID | - | 非法值 |
+| SALES_ORDER_NOT_DELIVERABLE | - | SALES_ORDER_NOT_DELIVERABLE |
+| INVOICE_NOT_FOUND | - | 不存在或已删除 |
+| INVOICE_INVALID_STATE | - | 状态不允许该操作 |
+| INVOICE_LINE_NOT_FOUND | - | 不存在或已删除 |
+| INVOICE_QUANTITY_EXCEEDED | - | 超出允许范围 |
+| INVOICE_SOURCE_NOT_COMPATIBLE | - | INVOICE_SOURCE_NOT_COMPATIBLE |
+| INVOICE_WORKFLOW_FAILED | - | 工作流处理失败 |
+| ACCOUNTS_RECEIVABLE_NOT_FOUND | - | 不存在或已删除 |
+| RECEIPT_NOT_FOUND | - | 不存在或已删除 |
+| RECEIPT_CUSTOMER_NOT_FOUND | - | 不存在或已删除 |
+| RECEIPT_CUSTOMER_MISMATCH | - | 不匹配（一致性校验失败） |
+| RECEIPT_CURRENCY_MISMATCH | - | 不匹配（一致性校验失败） |
+| RECEIPT_UNALLOCATED_EXCEEDED | - | 超出允许范围 |
+| RECEIPT_ALLOCATION_EXCEEDED | - | 超出允许范围 |
+| RECEIPT_VOID_FORBIDDEN | - | 无权限或被禁止 |
+| RECEIPT_ALLOCATION_NOT_FOUND | - | 不存在或已删除 |
+| RECEIPT_ALLOCATION_REVERSED | - | RECEIPT_ALLOCATION_REVERSED |
+| WRITE_OFF_NOT_FOUND | - | 不存在或已删除 |
+| WRITE_OFF_EXCEEDED | - | 超出允许范围 |
+| WRITE_OFF_INVALID_STATE | - | 状态不允许该操作 |
+| WRITE_OFF_ALREADY_APPLIED | - | 已应用，禁止重复（幂等） |
+| WRITE_OFF_WORKFLOW_FAILED | - | 工作流处理失败 |
+| WRITE_OFF_AMOUNT_EXCEEDED | - | 超出允许范围 |
+| WRITE_OFF_APPROVAL_REQUIRED | - | 必填/前置条件缺失 |
+| WRITE_OFF_SOURCE_NOT_COMPATIBLE | - | WRITE_OFF_SOURCE_NOT_COMPATIBLE |
+| CN_DN_NOT_FOUND | - | 不存在或已删除 |
+| CN_DN_SOURCE_INVOICE_INVALID | - | 非法值 |
+| CN_DN_SOURCE_LINE_INVALID | - | 非法值 |
+| CN_DN_SOURCE_NOT_COMPATIBLE | - | CN_DN_SOURCE_NOT_COMPATIBLE |
+| CN_DN_INVALID_STATE | - | 状态不允许该操作 |
+| CN_DN_QUANTITY_EXCEEDED | - | 超出允许范围 |
+| CN_DN_AMOUNT_EXCEEDED | - | 超出允许范围 |
+| CN_DN_WORKFLOW_FAILED | - | 工作流处理失败 |
+| CN_DN_ALREADY_APPLIED | - | 已应用，禁止重复（幂等） |
+| CN_DN_APPROVAL_REQUIRED | - | 必填/前置条件缺失 |
+| RECEIPT_AR_NEGATIVE_BALANCE | - | 负余额（Customer Credit 门禁） |
+| WRITE_OFF_AR_NEGATIVE_BALANCE | - | 负余额（Customer Credit 门禁） |
+| PURCHASE_REQUISITION_NOT_FOUND | - | 不存在或已删除 |
+| PURCHASE_REQUISITION_INVALID_STATE | - | 状态不允许该操作 |
+| PURCHASE_REQUISITION_NO_LINES | - | 缺少有效行 |
+| PURCHASE_REQUISITION_QUANTITY_INVALID | - | 非法值 |
+| PURCHASE_REQUISITION_ITEM_NOT_FOUND | - | 不存在或已删除 |
+| PURCHASE_REQUISITION_UOM_NOT_FOUND | - | 不存在或已删除 |
+| PURCHASE_REQUISITION_APPROVAL_POLICY_NOT_FOUND | - | 不存在或已删除 |
+| PURCHASE_REQUISITION_WORKFLOW_FAILED | - | 工作流处理失败 |
+| PURCHASE_ORDER_NOT_FOUND | - | 不存在或已删除 |
+| PURCHASE_ORDER_INVALID_STATE | - | 状态不允许该操作 |
+| PURCHASE_ORDER_NO_LINES | - | 缺少有效行 |
+| PURCHASE_ORDER_QUANTITY_INVALID | - | 非法值 |
+| PURCHASE_ORDER_SUPPLIER_NOT_FOUND | - | 不存在或已删除 |
+| PURCHASE_ORDER_ITEM_NOT_FOUND | - | 不存在或已删除 |
+| PURCHASE_ORDER_UOM_NOT_FOUND | - | 不存在或已删除 |
+| PURCHASE_ORDER_PRICE_NOT_FOUND | - | 不存在或已删除 |
+| PURCHASE_ORDER_PRICE_REASON_REQUIRED | - | 必填/前置条件缺失 |
+| PURCHASE_ORDER_REQUISITION_NOT_APPROVED | - | 未审批通过 |
+| PURCHASE_ORDER_REQUISITION_ALREADY_CONVERTED | - | PURCHASE_ORDER_REQUISITION_ALREADY_CONVERTED |
+| PURCHASE_ORDER_SOURCE_LINE_REQUIRED | - | 必填/前置条件缺失 |
+| PURCHASE_ORDER_SOURCE_LINE_INVALID | - | 非法值 |
+| PURCHASE_ORDER_SOURCE_LINE_FORBIDDEN | - | 无权限或被禁止 |
+| PURCHASE_ORDER_APPROVAL_POLICY_NOT_FOUND | - | 不存在或已删除 |
+| PURCHASE_ORDER_NOT_APPROVED | - | Confirm 前置：仅 APPROVED 可 Confirm |
+| PURCHASE_ORDER_ALREADY_CONFIRMED | - | 已确认，禁止重复 |
+| PURCHASE_ORDER_APPROVAL_REQUIRED | - | 命中审批策略但未 APPROVED 时禁止 Confirm |
+| PURCHASE_ORDER_CANCEL_FORBIDDEN | - | CONFIRMED+ 禁止 Cancel（CTO Phase 4B） |
+| PURCHASE_ORDER_WORKFLOW_FAILED | - | 工作流处理失败 |
+| PURCHASE_RECEIPT_NOT_FOUND | - | 不存在或已删除 |
+| PURCHASE_RECEIPT_INVALID_STATE | - | 非 DRAFT 操作（PATCH/Receive/Cancel） |
+| PURCHASE_RECEIPT_NO_LINES | - | 缺少有效行 |
+| PURCHASE_RECEIPT_QUANTITY_INVALID | - | quantity <= 0 或 0 <= rejectedOnReceiptQty <= quantity 违反 |
+| PURCHASE_RECEIPT_LINE_NOT_FOUND | - | 不存在或已删除 |
+| PURCHASE_RECEIPT_LINE_PO_MISMATCH | - | 规则②：行必须属于同一 PO |
+| PURCHASE_RECEIPT_WAREHOUSE_REQUIRED | - | 规则③：WAREHOUSE 行必须有有效 warehouseId |
+| PURCHASE_RECEIPT_WAREHOUSE_INVALID | - | 非法值 |
+| PURCHASE_RECEIPT_DUPLICATE_PO_LINE | - | B②：同一 Receipt 内一个 PO Line 只能出现一次 |
+| PURCHASE_RECEIPT_OVER_RECEIPT | - | 规则⑤：超收超容差 ceiling（System Default 0%） |
+| PURCHASE_RECEIPT_ALREADY_RECEIVED | - | 规则①：RECEIVED PO 禁普通新增收货 |
+| PURCHASE_RECEIPT_CANCEL_FORBIDDEN | - | 已 RECEIVED 禁止 Cancel |
+| PURCHASE_RECEIPT_PO_NOT_FOUND | - | 不存在或已删除 |
+| PURCHASE_RECEIPT_PO_STATE_FORBIDDEN | - | 规则①：PO 状态不允许收货（仅 CONFIRMED/PARTIALLY_RECEIVED） |
+| INSPECTION_NOT_FOUND | - | 不存在或已删除 |
+| INSPECTION_INVALID_STATE | - | 非 PENDING 操作（PATCH/complete 仅 PENDING） |
+| INSPECTION_ALREADY_EXISTS | - | 同一 PurchaseReceiptLine 已存在有效 Inspection（一次检验即最终结果） |
+| INSPECTION_LINE_NOT_FOUND | - | PurchaseReceiptLine 不存在或已删除 |
+| INSPECTION_LINE_NOT_RECEIVED | 704 | 来源必须是已 RECEIVED 的 PurchaseReceiptLine（CTO #7045） |
+| INSPECTION_QUANTITY_INVALID | - | 数量非法：qualifiedQty/rejectedQty < 0、或 qualifiedQty + rejectedQty ≠ inspectableQty（=） |
+| INSPECTION_NO_INSPECTABLE_QTY | - | inspectableQty = quantity - rejectedOnReceiptQty <= 0（无对象可检） |
+| WAREHOUSE_RECEIPT_NOT_FOUND | - | 不存在或已删除 |
+| WAREHOUSE_RECEIPT_INVALID_STATE | - | 非 DRAFT 操作（PATCH/Post）；或已 CANCELLED |
+| WAREHOUSE_RECEIPT_ALREADY_POSTED | - | 幂等：已 POSTED 禁止重复 Post |
+| WAREHOUSE_RECEIPT_NO_LINES | - | 缺少有效行 |
+| WAREHOUSE_RECEIPT_DUPLICATE_LINE | - | 同一入库单内一个收货行只能出现一次 |
+| WAREHOUSE_RECEIPT_LINE_NOT_FOUND | - | PurchaseReceiptLine 不存在或已删除 |
+| WAREHOUSE_RECEIPT_LINE_MISMATCH | - | 行不属于该收货单（PO） |
+| WAREHOUSE_RECEIPT_INSPECTION_NOT_FOUND | - | Inspection 不存在或已删除 |
+| WAREHOUSE_RECEIPT_INSPECTION_NOT_COMPLETED | - | 来源 Inspection 必须已完成（result ≠ PENDING） |
+| WAREHOUSE_RECEIPT_INSPECTION_NO_QUALIFIED | - | qualifiedQty <= 0（无可入库合格数量） |
+| WAREHOUSE_RECEIPT_INSPECTION_MISMATCH | - | Inspection 不属于同一收货行（组合 FK 语义） |
+| WAREHOUSE_RECEIPT_QUANTITY_INVALID | - | quantity <= 0 或超过可入库余额 |
+| WAREHOUSE_RECEIPT_OVER_INSPECTION_BALANCE | - | 累计入库超过 Inspection 可入库余额（qualifiedQty - 已占用） |
+| WAREHOUSE_RECEIPT_WAREHOUSE_INVALID | - | 仓库不存在或已停用 |
+| WAREHOUSE_RECEIPT_LOCATION_INVALID | - | 库位不存在、停用或不属于该仓库 |
+| WAREHOUSE_RECEIPT_DIRECT_PROJECT_FORBIDDEN | - | DIRECT_PROJECT（直送）禁入库（P4） |
+| PURCHASE_RETURN_NOT_FOUND | - | 不存在或已删除 |
+| PURCHASE_RETURN_INVALID_STATE | - | 非 DRAFT 操作（PATCH/Return）；或已 CANCELLED |
+| PURCHASE_RETURN_ALREADY_RETURNED | - | 幂等：已 RETURNED 禁止重复 Return |
+| PURCHASE_RETURN_NO_LINES | - | 缺少有效行 |
+| PURCHASE_RETURN_DUPLICATE_LINE | - | 同一退货单内一个来源只能出现一次（防并发超退） |
+| PURCHASE_RETURN_SOURCE_INVALID | - | 来源不存在或已删除 |
+| PURCHASE_RETURN_SOURCE_MISMATCH | - | sourceRefType 与 FK 不匹配 / 来源不属于该 PO |
+| PURCHASE_RETURN_SOURCE_NOT_RETURNABLE | 721 | WAREHOUSE_RECEIPT_LINE 来源必须来自 POSTED 入库事实（CTO #7219） |
+| PURCHASE_RETURN_QUANTITY_INVALID | - | quantity <= 0 |
+| PURCHASE_RETURN_OVER_SOURCE_BALANCE | - | 退货数量超过来源可退余额（累计 RETURNED 防并发超退） |
+| INVENTORY_DIMENSION_INCOMPLETE | 409 | 库存触发点 canonical dimensions 不完整（itemId/warehouseId/quantity）——poison Outbox 防线，409 |
+| INVENTORY_SERIAL_QTY_MISMATCH | 409 | serial-managed：serialNos.length != quantity（数量守恒），409 |
+| INVENTORY_SERIAL_DUPLICATE | 409 | serialNos 内重复 serial，409 |
+| INVENTORY_SERIAL_REQUIRED | 409 | serial-managed 已入库退货必须显式提交本次退货 serialNos（禁 fallback 全来源），409 |
+| INVENTORY_SERIAL_SOURCE_MISMATCH | 757 | 非 serial-managed 来源禁止提交 serialNos（来源无 serial → 只能 BULK OUT；审计事实一致性，CTO #7574），409 |
+| INVENTORY_OUTBOX_PAYLOAD_INVALID | 409 | Outbox payload 缺失/类型错误（永久失败 → DEAD_LETTER），409 |
+| INVENTORY_SOURCE_NOT_FOUND | 409 | resolve source：来源单据不存在或状态不符（永久失败 → DEAD_LETTER），409 |
+| INVENTORY_INSUFFICIENT_STOCK | 409 | OUT 余额不足（业务失败 → retry 退避 → 超阈值 DEAD_LETTER；Movement 不写/Projection 不变/Outbox 不误标 PROCESSED），409 |
+| INVENTORY_TRANSFER_NOT_FOUND | 404 | 调拨单不存在或已删除，404 |
+| INVENTORY_TRANSFER_INVALID_STATE | 409 | 非 DRAFT 操作（PATCH）/ 非 APPROVED 执行 / 已 CANCELLED，409 |
+| INVENTORY_TRANSFER_ALREADY_EXECUTED | 409 | 幂等：已 EXECUTED 禁止重复 Execute，409 |
+| INVENTORY_TRANSFER_NO_LINES | 400 | 至少一条有效行，400 |
+| INVENTORY_TRANSFER_DUPLICATE_LINE | 400 | 同一调拨单内 itemId+batchNo+serialNos 组合重复，400 |
+| INVENTORY_TRANSFER_WAREHOUSE_INVALID | 400 | 仓库不存在或已停用，400 |
+| INVENTORY_TRANSFER_LOCATION_INVALID | 400 | 库位不存在、停用或不属于对应仓库（组合 FK），400 |
+| INVENTORY_TRANSFER_SELF_TRANSFER | 409 | 源=目标维度（同仓同库位）自调拨拒绝，409 |
+| INVENTORY_TRANSFER_QUANTITY_INVALID | 400 | quantity <= 0，400 |
+| INVENTORY_TRANSFER_SERIAL_QTY_MISMATCH | 400 | serial-managed：serialNos.length != quantity（数量守恒），400 |
+| INVENTORY_TRANSFER_SERIAL_DUPLICATE | 400 | serialNos 内重复 serial，400 |
+| INVENTORY_TRANSFER_ITEM_INVALID | 400 | item 不存在或已停用，400 |
+| INVENTORY_TRANSFER_APPROVAL_REQUIRED | 409 | Execute 前必须 APPROVED（审批未完成），409 |
+| INVENTORY_TRANSFER_SEQUENCE_MISSING | - | 编号序列缺失（部署配置错误，fail closed） |
+| STOCK_COUNT_NOT_FOUND | 404 | 盘点单不存在或已删除，404 |
+| STOCK_COUNT_INVALID_STATE | 409 | 非 DRAFT/COUNTING 操作（PATCH/lines/complete/cancel），409 |
+| STOCK_COUNT_NO_LINES | 400 | 至少一条有效盘点行，400 |
+| STOCK_COUNT_DUPLICATE_LINE | 400 | 同一盘点单内五维（warehouse/location/item/batch/serial）重复，400 |
+| STOCK_COUNT_QUANTITY_INVALID | 400 | countedQty < 0，400 |
+| STOCK_COUNT_WAREHOUSE_INVALID | 400 | 仓库不存在或已停用，400 |
+| STOCK_COUNT_LOCATION_INVALID | 400 | 库位不存在、停用或不属于对应仓库（组合 FK），400 |
+| STOCK_COUNT_ITEM_INVALID | 400 | item 不存在或已停用，400 |
+| STOCK_COUNT_ALREADY_COMPLETED | 409 | 幂等：已 COMPLETED/ADJUSTED 禁止重复 complete，409 |
+| STOCK_COUNT_SNAPSHOT_MISSING | 400 | 盘点行 bookQtyAtCount 未生成（未走快照录入），400 |
+| STOCK_COUNT_SEQUENCE_MISSING | 500 | CNT DocumentSequence 缺失 = 部署配置错误（fail closed，禁 fallback），500 |
+| INVENTORY_ADJUSTMENT_NOT_FOUND | 404 | 调整单不存在或已删除，404 |
+| INVENTORY_ADJUSTMENT_INVALID_STATE | 409 | 非 DRAFT 操作（PATCH）/ 非 APPROVED 执行（apply）/ 已 CANCELLED，409 |
+| INVENTORY_ADJUSTMENT_ALREADY_APPLIED | 409 | 幂等：已 APPLIED 禁止重复 apply，409 |
+| INVENTORY_ADJUSTMENT_NO_LINES | 400 | 至少一条有效行，400 |
+| INVENTORY_ADJUSTMENT_DUPLICATE_LINE | 400 | 同一调整单内五维重复，400 |
+| INVENTORY_ADJUSTMENT_QUANTITY_INVALID | 400 | quantity <= 0，400 |
+| INVENTORY_ADJUSTMENT_WAREHOUSE_INVALID | 400 | 仓库不存在或已停用，400 |
+| INVENTORY_ADJUSTMENT_LOCATION_INVALID | 400 | 库位不存在、停用或不属于对应仓库（组合 FK），400 |
+| INVENTORY_ADJUSTMENT_ITEM_INVALID | 400 | item 不存在或已停用，400 |
+| INVENTORY_ADJUSTMENT_MAKER_CHECKER | 409 | maker-checker：创建人与批准/Apply 人不得相同（P9 Final + DB CHECK 兜底），409 |
+| INVENTORY_ADJUSTMENT_APPROVAL_REQUIRED | 409 | Apply 前必须 APPROVED（审批未完成），409 |
+| INVENTORY_ADJUSTMENT_SOURCE_COUNT_INVALID | 400 | Minor Hardening ②：非空 sourceStockCountLineId 必须属于 sourceStockCountId 指向的盘点单（跨单引用拒绝），400 |
+| INVENTORY_ADJUSTMENT_SEQUENCE_MISSING | 500 | ADJ DocumentSequence 缺失 = 部署配置错误（fail closed，禁 fallback），500 |
+| INVENTORY_CONVERSION_NOT_FOUND | 404 | 转换单不存在或已删除，404 |
+| INVENTORY_CONVERSION_INVALID_STATE | 409 | 非 DRAFT 操作（PATCH）/ 非 SUBMITTED 执行（execute）/ 已 CANCELLED，409 |
+| INVENTORY_CONVERSION_ALREADY_EXECUTED | 409 | 幂等：已 EXECUTED 禁止重复 execute，409 |
+| INVENTORY_CONVERSION_NO_LINES | 400 | 至少一条有效行，400 |
+| INVENTORY_CONVERSION_LINE_ROLE_REQUIRED | 400 | 必须恰好 1 CONSUME + 1 PRODUCE（Blocking ③：UNIQUE(headerId, lineRole)），400 |
+| INVENTORY_CONVERSION_DUPLICATE_LINE | 400 | 同一转换单内 lineRole 重复（UNIQUE 冲突），400 |
+| INVENTORY_CONVERSION_ITEM_INVALID | 400 | item 不存在或已停用，400 |
+| INVENTORY_CONVERSION_BASE_UOM_INVALID | 400 | baseUomId != 该 Item 的 inventory/stock UOM（P11 Final Gate，不允许任意 UOM 冒充库存基准），400 |
+| INVENTORY_CONVERSION_UOM_INVALID | 400 | 行 uomId 不存在或停用，400 |
+| INVENTORY_CONVERSION_RATE_INVALID | 400 | uomToBaseRate <= 0（DB CHECK + service），400 |
+| INVENTORY_CONVERSION_BASE_QTY_MISMATCH | 400 | CONSUME.baseQuantity != PRODUCE.baseQuantity（守恒破坏，P11），400 |
+| INVENTORY_CONVERSION_BASE_QTY_INVALID | 400 | Execute 重验：行 stored baseQuantity != ROUND_HALF_UP(quantity × uomToBaseRate, 4)（canonical 不符，CTO Conversion Review Blocking ①），400 |
+| INVENTORY_CONVERSION_BATCH_MISMATCH | 400 | batch 精确继承：CONSUME batch != PRODUCE batch（P5 Final，首版不拆批不换批），400 |
+| INVENTORY_CONVERSION_SAME_ITEM_REQUIRED | 400 | 首版 same item（Repack/UOM Conversion；禁止 BOM/组装/拆解/多物料），400 |
+| INVENTORY_CONVERSION_SERIAL_NOT_SUPPORTED | 400 | serial 不允许重新生成（P5 Final：serial 场景后续阶段），400 |
+| INVENTORY_CONVERSION_WAREHOUSE_INVALID | 400 | 仓库不存在或已停用，400 |
+| INVENTORY_CONVERSION_LOCATION_INVALID | 400 | 库位不存在、停用或不属于对应仓库（组合 FK），400 |
+| INVENTORY_CONVERSION_SEQUENCE_MISSING | 500 | CVT DocumentSequence 缺失 = 部署配置错误（fail closed，禁 fallback），500 |
+| SUPPLIER_INVOICE_NOT_FOUND | 404 | 供应商发票不存在或已删除，404 |
+| SUPPLIER_INVOICE_INVALID_STATE | 409 | 非 DRAFT 操作（PATCH）/ 非 DRAFT 提交（submit）/ 已取消，409 |
+| SUPPLIER_INVOICE_ALREADY_SUBMITTED | 409 | 幂等：已 SUBMITTED 禁止重复 submit，409 |
+| SUPPLIER_INVOICE_NO_LINES | 400 | 至少一条有效行，400 |
+| SUPPLIER_INVOICE_DUPLICATE_LINE | 400 | 同一发票内 PO Line 重复（同一双溯源行只能开一次票），400 |
+| SUPPLIER_INVOICE_SUPPLIER_INVALID | 400 | 供应商不存在或已停用，400 |
+| SUPPLIER_INVOICE_DUPLICATE_NUMBER | 409 | supplierId + supplierInvoiceNo 组合重复（不变量②），409 |
+| SUPPLIER_INVOICE_WHR_NOT_POSTED | 400 | RECEIPT_BASED 三重 Gate：WHR header 必须 POSTED（红线 1），400 |
+| SUPPLIER_INVOICE_SOURCE_CHAIN_MISMATCH | 400 | WHR Line ↔ PO Line ↔ Item ↔ Supplier 来源链不一致（红线 1），400 |
+| SUPPLIER_INVOICE_ITEM_INVALID | 400 | item 不存在或已停用，400 |
+| SUPPLIER_INVOICE_QUANTITY_INVALID | 400 | 开票数量 <= 0 或超过已入库数量，400 |
+| SUPPLIER_INVOICE_CUMULATIVE_QTY_EXCEEDED | 916 | 累计开票数量守恒：本次 + 其他非 CANCELLED 发票行占用 > WHR 已入库数量（Blocking ① CTO #9161），400 |
+| SUPPLIER_INVOICE_RATE_INVALID | 400 | taxRate 不合法，400 |
+| SUPPLIER_INVOICE_SEQUENCE_MISSING | 500 | SINV DocumentSequence 缺失 = 部署配置错误（fail closed，禁 fallback），500 |
+| SUPPLIER_INVOICE_MATCH_NOT_MATCHABLE | 924 | 仅 SUBMITTED/MATCHED 可 Match；APPROVED/POSTED/CANCELLED 禁直接 re-match（#9247），409 |
+| SUPPLIER_INVOICE_MATCH_STALE_APPROVAL | 924 | Workflow 审批引用的 run/revision != 当前 currentMatchRun——re-match 后旧审批不得批准新 snapshot（#9247），409 |
+| SUPPLIER_INVOICE_MATCH_NO_LINES | 400 | Match 时发票无有效行，400 |
+| SUPPLIER_INVOICE_NOT_APPROVED | 409 | 仅 APPROVED 可 POST（APPROVED ≠ POSTED），409 |
+| SUPPLIER_INVOICE_ALREADY_POSTED | 409 | 幂等：已 POSTED 重复 POST，409（不会重复生成 Liability/Consume） |
+| SUPPLIER_INVOICE_APPROVAL_SNAPSHOT_INVALID | 967 | approvedMatchRunId/approvedMatchRevision 缺失或与审批 immutable snapshot 不一致（#9678 不变量①），409 |
+| SUPPLIER_INVOICE_MAKER_CHECKER | 967 | maker-checker：Poster 不得 = Creator / Approval actor（#9678），409 |
+| SUPPLIER_INVOICE_GRIR_INSUFFICIENT | 967 | remaining GRIR 不足全额 consume（#9678 不变量③：禁止 partial POST，fail closed），409 |
 
-## 2. 认证授权（AUTH）
-
-| code | HTTP | 说明 |
-| --- | --- | --- |
-| AUTH_001 | 401 | 邮箱或密码错误 |
-| AUTH_002 | 401 | 账号已停用 |
-| AUTH_003 | 401 | 令牌过期 |
-| AUTH_004 | 401 | 令牌无效 |
-| AUTH_005 | 403 | 角色无权访问该资源 |
-
-## 3. 主数据（ITEM / PARTNER / PRICE）
-
-| code | HTTP | 说明 |
-| --- | --- | --- |
-| ITEM_001 | 404 | 物料不存在 |
-| ITEM_002 | 409 | 物料编码已存在 |
-| ITEM_003 | 409 | 物料状态不允许该操作 |
-| PARTNER_001 | 404 | 往来单位不存在 |
-| PARTNER_002 | 409 | 统一社会信用代码已存在 |
-| PARTNER_003 | 409 | 往来单位被业务单据引用，禁止删除 |
-| PRICE_001 | 404 | 价格表不存在 |
-| PRICE_002 | 409 | 价格表编码已存在 |
-| PRICE_003 | 409 | 价格行物料+价格类型重复 |
-
-## 4. 项目领域（PROJECT）
-
-| code | HTTP | 说明 |
-| --- | --- | --- |
-| PROJECT_001 | 404 | 项目/机会不存在 |
-| PROJECT_002 | 409 | 机会编号已存在 |
-| PROJECT_003 | 409 | 项目已结项，禁止修改 |
-| PROJECT_004 | 409 | 机会已关联项目，禁止重复建档 |
-
-## 5. 工作流（WORKFLOW）
-
-| code | HTTP | 说明 |
-| --- | --- | --- |
-| WORKFLOW_001 | 404 | 工作流定义不存在 |
-| WORKFLOW_002 | 409 | 工作流编码已存在 |
-| WORKFLOW_003 | 409 | 已发布/归档，禁止修改关键结构 |
-| WORKFLOW_004 | 409 | 工作流至少需要一个步骤才能发布 |
-| WORKFLOW_005 | 404 | 审批实例不存在 |
-| WORKFLOW_006 | 409 | 该业务单据已存在审批实例 |
-| WORKFLOW_007 | 409 | 审批已结束，仅可评论 |
-| WORKFLOW_008 | 400 | 无效的工作流动作 |
-| WORKFLOW_009 | 403 | 无当前步骤待办权限 |
-| WORKFLOW_010 | 403 | 仅发起人可撤销 |
-| WORKFLOW_011 | 400 | 转交/委托必须指定目标用户 |
-
-## 6. 平台配置（SETTING / DICT / NOTIFY / APPROVER）
-
-| code | HTTP | 说明 |
-| --- | --- | --- |
-| SETTING_001 | 404 | 设置项不存在 |
-| SETTING_002 | 409 | 设置键已存在 |
-| DICT_001 | 404 | 字典类型不存在 |
-| DICT_002 | 409 | 字典类型编码已存在 |
-| DICT_003 | 404 | 字典项不存在 |
-| DICT_004 | 409 | 字典项编码已存在 |
-| NOTIFY_001 | 404 | 通知模板不存在 |
-| NOTIFY_002 | 409 | 通知模板编码已存在 |
-| APPROVER_001 | 404 | 审批组不存在 |
-| APPROVER_002 | 409 | 审批组编码已存在 |
-
-## 7. 平台能力（MENU / DASHBOARD / FILE / AUDIT）
-
-| code | HTTP | 说明 |
-| --- | --- | --- |
-| MENU_001 | 404 | 菜单/菜单组不存在 |
-| MENU_002 | 409 | 菜单编码已存在 |
-| MENU_003 | 409 | 父菜单不能是自身 |
-| DASHBOARD_001 | 404 | Dashboard 组件（widget/layout/kpi/chart）不存在 |
-| DASHBOARD_002 | 409 | Dashboard 组件编码已存在 |
-| FILE_001 | 404 | 文件/文件夹/版本不存在 |
-| FILE_002 | 409 | 文件编码已存在 |
-| FILE_003 | 409 | 文件已挂载到同一业务单据 |
-| FILE_004 | 413 | 文件超过大小限制 |
-| AUDIT_001 | 403 | 无审计日志查看权限（仅 SUPER_ADMIN/ADMIN） |
-
-## 8. 采购供应链（SUPPLIER_INVOICE）——Sprint 5C-1C Supplier Invoice POST / GRIR CONSUME / AP Liability-OpenItem
-
-> 注册范围：POST 端点（`/api/supplier-invoices/{id}/post`）实际使用码（CTO #9678 六条不变量 + #9757/#9781 精确更新 + 2026-08-12 B1/P2002 收紧）。
-> 命名与 `apps/web/src/lib/api/errors.ts` ERROR_CODES 常量一致（描述性名，非旧式 `{DOMAIN}_{SEQ}`）。
-> P2002 分类：Phase B 内唯一约束冲突仅在确认 Invoice=POSTED 时返回 ALREADY_POSTED；否则为 invariant conflict（500）——不伪装成已过账。
-
-| code | HTTP | 说明 |
-| --- | --- | --- |
-| SUPPLIER_INVOICE_NOT_FOUND | 404 | 供应商发票不存在 |
-| SUPPLIER_INVOICE_NO_LINES | 400 | 发票至少需要一条有效行 |
-| SUPPLIER_INVOICE_WHR_NOT_POSTED | 400 | 入库行所属 WHR 必须已 POSTED（来源事实重验） |
-| SUPPLIER_INVOICE_SOURCE_CHAIN_MISMATCH | 400 | WHR Line ↔ PO Line ↔ Item ↔ Supplier 来源链不一致 |
-| SUPPLIER_INVOICE_ITEM_INVALID | 400 | 物料不存在/已停用（来源事实重验） |
-| SUPPLIER_INVOICE_QUANTITY_INVALID | 400 | 开票数量必须 > 0 且 ≤ 已入库数量 |
-| SUPPLIER_INVOICE_CUMULATIVE_QTY_EXCEEDED | 400 | 累计开票数量超过已入库数量（含其他发票占用） |
-| SUPPLIER_INVOICE_NOT_APPROVED | 409 | 仅 APPROVED 状态可过账（APPROVED ≠ POSTED） |
-| SUPPLIER_INVOICE_ALREADY_POSTED | 409 | 仅确认 Invoice=POSTED 时返回：幂等拒绝，不重复生成 Liability/Consume |
-| SUPPLIER_INVOICE_APPROVAL_SNAPSHOT_INVALID | 409 | 审批快照引用（approvedMatchRunId/Revision）缺失或与审批 immutable snapshot 不一致 |
-| SUPPLIER_INVOICE_MAKER_CHECKER | 409 | maker-checker：过账人不得 = 创建人/审批人 |
-| SUPPLIER_INVOICE_GRIR_INSUFFICIENT | 409 | 剩余 GRIR 不足以全额消耗（禁止 partial POST，fail closed） |
-| VERSION_CONFLICT | 409 | POST 终态 CAS 失败（事务回滚，Invoice 保持 APPROVED；B1 throw 映射） |
-
-## 9. 注册规则
-
-1. 新错误码：`{DOMAIN}_{三位序号}`，追加到对应域表格
-2. 同步更新 `apps/web/src/lib/api/errors.ts` 的 `ERROR_CODES` 常量
-3. 前端国际化文件按 code 提供文案（预留 i18n 目录）
-4. 删除/修改已发布错误码属于 Breaking Change，必须走版本升级（ADR）
-
-## 10. 变更记录
-
-| 日期 | 版本 | 说明 |
-| --- | --- | --- |
-| 2026-08-12 | v1.1 | 新增「采购供应链（SUPPLIER_INVOICE）」段（Sprint 5C-1C POST 端点实际使用码 + B1/P2002 分类语义） |
-| 2026-08-05 | v1.0 | 初始注册（通用/认证/主数据/项目/工作流/平台配置/平台能力） |
+> 合计：**251 个错误码**（自动统计）
