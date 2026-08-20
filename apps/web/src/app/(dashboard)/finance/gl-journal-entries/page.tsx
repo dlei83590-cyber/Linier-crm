@@ -53,6 +53,7 @@ function GlEntryList() {
       <EntityListWorkspace<GlEntryRow>
         title="记账凭证"
         description="GL 过账消费 5C 会计事件自动生成（借贷平衡、幂等、POSTED 终态不可变）；无手工录入"
+        emptyMessage="暂无 GL 凭证——发票/付款/调整过账后自动生成"
         filters={
           <>
             <select value={sourceTypeInput} onChange={(e) => setSourceTypeInput(e.target.value)} className={SELECT_CLASS}>
