@@ -15,13 +15,13 @@ export const TOKEN_KEY = "linier_crm_token";
 export const AUTH_UNAUTHORIZED_EVENT = "auth:unauthorized";
 
 export function getAuthToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(TOKEN_KEY);
+  // ADR-0045：会话来源 = httpOnly cookie（服务器在登录时设置）；localStorage 不再存储 JWT
+  return null;
 }
 
 export function setAuthToken(token: string): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(TOKEN_KEY, token);
+  // ADR-0045：no-op——httpOnly cookie 由服务端设置，前端不再写 localStorage（消除 XSS 窃取向量）
+  void token;
 }
 
 export function clearAuthToken(): void {

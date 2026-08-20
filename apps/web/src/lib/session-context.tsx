@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { AUTH_UNAUTHORIZED_EVENT, TOKEN_KEY, clearAuthToken, getAuthToken } from "@/lib/auth-token";
+import { AUTH_UNAUTHORIZED_EVENT, TOKEN_KEY, clearAuthToken } from "@/lib/auth-token";
 
 // 兼容既有导入方（login 等）：TOKEN_KEY 单一来源 = lib/auth-token
 export { TOKEN_KEY };
@@ -32,15 +32,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<SessionState>({ status: "loading", user: null });
 
   const refresh = useCallback(async () => {
-    const token = getAuthToken();
-    if (!token) {
-      setState({ status: "unauthenticated", user: null });
-      return;
-    }
+    // ADR-0045：httpOnly 会话 cookie 由浏览器自动携带（同源 /api/auth/me），不再手动附加 Bearer
     try {
-      const res = await fetch("/api/auth/me", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch("/api/auth/me", { credentials: "same-origin" });
       const body = (await res.json().catch(() => null)) as {
         success?: boolean;
         data?: SessionUser;
@@ -73,6 +67,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
+    // ADR-0045：httpOnly cookie 必须服务端清除（POST /api/auth/logout）；localStorage 遗留一并清理
+    void fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).catch(() => undefined);
     clearAuthToken();
     setState({ status: "unauthenticated", user: null });
   }, []);
