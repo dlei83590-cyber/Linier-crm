@@ -1,6 +1,21 @@
-﻿# CHANGELOG
+# CHANGELOG
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
+
+## [Unreleased] - 增值税/会计期间前端接线（2026-08-20，ADR-0043/0044，PR #98-#101）
+
+### 新增（Design Gate §5 前端清单 F1-F4 全部落地）
+
+- **F1 销售发票 VAT**（#98）：列表 VAT 徽标列 + 详情页 VAT 项（类型/代码/号码/9% 税率）+ 自定义开票对话框（invoiceType 默认专票 ORDINARY_VAT、税务号码数字过滤、红字引用 redInvoiceRefId）
+- **F2 供应商发票 VAT**（#99）：后端接收（create/PATCH/POST 校验）+ 前端类型选择（专票/普票/数电/出口/其他）+ 税务代码/号码录入与展示
+- **F3 往来单位开票资料**（#101）：编辑页「开票资料」Section（开票抬头/税号/纳税人类型/注册地址/注册电话/开户银行/银行账号）+ 税号实时校验（GB 32100-2015）+ GET include invoiceInfoRecord 回显
+- **F4 GL 凭证字 + 附件**（#100）：列表凭证字徽标列 + 详情凭证字/附件张数展示 + 新建表单凭证字选择（记/收/付/转）与附件张数录入
+
+### Known Risk
+
+- 前端运行时（登录会话、开票对话框、GL 新建表单）需人工登录验证，无 E2E
+
+---
 
 ## [Unreleased] - 中国部署适配（2026-08-20，ADR-0048）
 

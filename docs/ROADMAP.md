@@ -1,6 +1,6 @@
-﻿# 产品路线图（ROADMAP）
+# 产品路线图（ROADMAP）
 
-- 版本：v1.26
+- 版本：v1.34
 - 日期：2026-08-20
 - 维护者：CIO（JINZA）｜审核：CTO
 - 状态说明：✅ 已完成 ｜ 🔄 进行中 ｜ ⬜ 未开始
@@ -283,6 +283,7 @@
 ## 15. 变更记录
 
 | 日期       | 变更       | 说明                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| 2026-08-20 | 更新 v1.34 | **增值税/会计期间前端接线 ✅（Design Gate §5 清单 F1-F4，PR #98-#101）**：F1 销售发票 VAT（列表徽标列/详情 VAT 项/自定义开票对话框，发票类型默认专票 + 税务号码数字过滤 + 红字引用）｜F2 供应商发票 VAT（后端接收 + 前端类型选择/号码录入展示）｜F3 往来单位开票资料编辑 Section（taxInvoiceInfo 回显 + uscc GB 32100 实时校验 + 纳税人类型下拉）｜F4 GL 凭证字徽标列 + 详情/新建表单凭证字与附件张数（ADR-0044 前端落地）；零 Schema/Migration；Known Risk：前端运行时需人工登录验证（无 E2E） |
 | 2026-08-20 | 更新 v1.33 | **中国部署适配 ✅（CTO backlog F，ADR-0048）**：.npmrc registry=npmmirror（NPM_CONFIG_REGISTRY 可覆盖）+ docker-compose TZ=Asia/Shanghai（app/postgres，存储仍 UTC）+ README 部署说明（Docker 加速器 / PG ≥16 依赖）；npm registry 镜像修复大陆 CI/Docker 慢/超时 |
 | 2026-08-20 | 更新 v1.32 | **材料成本差异 ✅（CTO backlog E，ADR-0047）**：SupplierInvoicePosted GL 修正——1403=ΣGRIR CONSUME baseAmount（暂估入账）+ 差额入 1404 材料成本差异（借/贷按符号）；seed +1404；无暂估回退原路径；单测（暂估 90 vs 净额 100 → 1403=90+1404=10）；修复存货成本与 AP 口径漂移（中国审计 P1）；差异月末分摊 = backlog |
 | 2026-08-20 | 更新 v1.31 | **中国结算方式扩展 ✅（CTO backlog D，ADR-0046，Migration 0039）**：PaymentMethod + 银行承兑汇票/商业承兑汇票/电汇（ALTER TYPE ADD VALUE）；zod + 前端 4 页标签与选项；GL 映射不变（新 3 项→1002）；票据背书/贴现、结算条款结构化 = backlog |
