@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server';
 import type { AcceptanceResult } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { casUpdate } from '@/lib/api/cas';
 import {
   authenticate,
   requirePermission,
@@ -69,31 +70,30 @@ export async function PATCH(
       where: { id: aid, projectId: id, deletedAt: null },
     });
     if (!existing) return { error: failNotFound(ERROR_CODES.NOT_FOUND, '验收项不存在') };
-    if (existing.version !== version) {
-      return { error: failConflict(ERROR_CODES.VERSION_CONFLICT, '版本冲突，请刷新后重试') };
-    }
 
-    const updated = await tx.projectAcceptance.update({
-      where: { id: aid },
-      data: {
-        ...updates,
-        result: updates.result as AcceptanceResult | undefined,
-        expectedDate:
-          updates.expectedDate === undefined
-            ? undefined
-            : updates.expectedDate === null
-              ? null
-              : new Date(updates.expectedDate),
-        actualDate:
-          updates.actualDate === undefined
-            ? undefined
-            : updates.actualDate === null
-              ? null
-              : new Date(updates.actualDate),
-        version: { increment: 1 },
-        updatedById: user!.id,
-      },
+
+    // A4-CAS：原子乐观锁（消除 read-check-update TOCTOU）
+    const cas = await casUpdate(tx, "projectAcceptance", aid, version, {
+      ...updates,
+      result: updates.result as AcceptanceResult | undefined,
+      expectedDate:
+        updates.expectedDate === undefined
+          ? undefined
+          : updates.expectedDate === null
+            ? null
+            : new Date(updates.expectedDate),
+      actualDate:
+        updates.actualDate === undefined
+          ? undefined
+          : updates.actualDate === null
+            ? null
+            : new Date(updates.actualDate),
+      updatedById: user!.id,
     });
+    if (cas.outcome === "NOT_FOUND") return { error: failNotFound(ERROR_CODES.NOT_FOUND, '验收项不存在') };
+    if (cas.outcome === "CONFLICT") return { error: failConflict(ERROR_CODES.VERSION_CONFLICT, '版本冲突，请刷新后重试') };
+    const updated = await tx.projectAcceptance.findFirst({ where: { id: aid, deletedAt: null } });
+    if (!updated) return { error: failNotFound(ERROR_CODES.NOT_FOUND, '验收项不存在') };
     return { existing, updated };
   });
   if ('error' in txResult) return txResult.error;

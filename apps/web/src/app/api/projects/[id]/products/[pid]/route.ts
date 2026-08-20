@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { casUpdate } from "@/lib/api/cas";
 import { authenticate, requirePermission, requestMeta, writeAuditLog, assertProjectWritable } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
@@ -56,19 +57,21 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const { version, ...updates } = parsed.data;
     const existing = await tx.projectProduct.findFirst({ where: { id: pid, projectId: id, deletedAt: null } });
     if (!existing) return { error: failNotFound(ERROR_CODES.NOT_FOUND, "项目产品不存在") };
-    if (existing.version !== version) {
-      return { error: failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试") };
-    }
 
   if (updates.priceSnapshotId) {
       const snapshot = await tx.quotationPriceSnapshot.findFirst({ where: { id: updates.priceSnapshotId } });
     if (!snapshot) return { error: failConflict(ERROR_CODES.NOT_FOUND, "价格快照不存在") };
   }
 
-  const updated = await tx.projectProduct.update({
-    where: { id: pid },
-    data: { ...updates, version: { increment: 1 }, updatedById: user!.id },
+  // A4-CAS：原子乐观锁（消除 read-check-update TOCTOU）
+  const cas = await casUpdate(tx, "projectProduct", pid, version, {
+    ...updates,
+    updatedById: user!.id,
   });
+  if (cas.outcome === "NOT_FOUND") return { error: failNotFound(ERROR_CODES.NOT_FOUND, "项目产品不存在") };
+  if (cas.outcome === "CONFLICT") return { error: failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试") };
+  const updated = await tx.projectProduct.findFirst({ where: { id: pid, deletedAt: null } });
+  if (!updated) return { error: failNotFound(ERROR_CODES.NOT_FOUND, "项目产品不存在") };
     return { updated, existing };
   });
   if ("error" in txResult) return txResult.error;

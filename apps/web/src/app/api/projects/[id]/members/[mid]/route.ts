@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { casUpdate } from "@/lib/api/cas";
 import { authenticate, requirePermission, requestMeta, writeAuditLog, assertProjectWritable } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
@@ -52,20 +53,18 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const { version, ...updates } = parsed.data;
     const existing = await tx.projectMember.findFirst({ where: { id: mid, projectId: id, deletedAt: null } });
     if (!existing) return { error: failNotFound(ERROR_CODES.NOT_FOUND, "成员不存在") };
-    if (existing.version !== version) {
-      return { error: failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试") };
-    }
 
-  const updated = await tx.projectMember.update({
-    where: { id: mid },
-    data: {
-      ...updates,
+  // A4-CAS：原子乐观锁（消除 read-check-update TOCTOU）
+  const cas = await casUpdate(tx, "projectMember", mid, version, {
+    ...updates,
       joinedAt: updates.joinedAt === undefined ? undefined : updates.joinedAt === null ? null : new Date(updates.joinedAt),
       leftAt: updates.leftAt === undefined ? undefined : updates.leftAt === null ? null : new Date(updates.leftAt),
-      version: { increment: 1 },
-      updatedById: user!.id,
-    },
+    updatedById: user!.id,
   });
+  if (cas.outcome === "NOT_FOUND") return { error: failNotFound(ERROR_CODES.NOT_FOUND, "成员不存在") };
+  if (cas.outcome === "CONFLICT") return { error: failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试") };
+  const updated = await tx.projectMember.findFirst({ where: { id: mid, deletedAt: null } });
+  if (!updated) return { error: failNotFound(ERROR_CODES.NOT_FOUND, "成员不存在") };
     return { updated, existing };
   });
   if ("error" in txResult) return txResult.error;

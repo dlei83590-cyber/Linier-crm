@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import type { VisitType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { casUpdate } from "@/lib/api/cas";
 import { authenticate, requirePermission, requestMeta, writeAuditLog, assertProjectWritable } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
@@ -55,21 +56,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const { version, ...updates } = parsed.data;
     const existing = await tx.projectVisit.findFirst({ where: { id: vid, projectId: id, deletedAt: null } });
     if (!existing) return { error: failNotFound(ERROR_CODES.NOT_FOUND, "走访记录不存在") };
-    if (existing.version !== version) {
-      return { error: failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试") };
-    }
 
-  const updated = await tx.projectVisit.update({
-    where: { id: vid },
-    data: {
-      ...updates,
+  // A4-CAS：原子乐观锁（消除 read-check-update TOCTOU）
+  const cas = await casUpdate(tx, "projectVisit", vid, version, {
+    ...updates,
       visitType: updates.visitType as VisitType | undefined,
       visitedAt: updates.visitedAt === undefined ? undefined : new Date(updates.visitedAt),
       reminderAt: updates.reminderAt === undefined ? undefined : updates.reminderAt === null ? null : new Date(updates.reminderAt),
-      version: { increment: 1 },
-      updatedById: user!.id,
-    },
+    updatedById: user!.id,
   });
+  if (cas.outcome === "NOT_FOUND") return { error: failNotFound(ERROR_CODES.NOT_FOUND, "走访记录不存在") };
+  if (cas.outcome === "CONFLICT") return { error: failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试") };
+  const updated = await tx.projectVisit.findFirst({ where: { id: vid, deletedAt: null } });
+  if (!updated) return { error: failNotFound(ERROR_CODES.NOT_FOUND, "走访记录不存在") };
     return { updated, existing };
   });
   if ("error" in txResult) return txResult.error;
