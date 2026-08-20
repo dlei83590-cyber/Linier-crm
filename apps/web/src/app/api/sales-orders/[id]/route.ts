@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { casUpdate } from "@/lib/api/cas";
 import type { SalesOrder } from "@prisma/client";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound, fail } from "@/lib/api/response";
@@ -64,10 +65,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if ((EDITABLE_STATUSES as readonly string[]).includes(salesOrder.status) === false) {
     return failConflict(ERROR_CODES.SALES_ORDER_NOT_EDITABLE, "仅 DRAFT 状态可编辑（CONFIRMED 后需走 amendment 流程）");
   }
-  if (salesOrder.version !== version) {
-    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  }
-
   // 关键商业字段变更判定（CTO Final Review 阻断项②：付款条件/交货条件等变化 → 触发重新审批）
   const keyCommercialChanged =
     (fields.paymentTerm !== undefined && fields.paymentTerm !== salesOrder.paymentTerm) ||
@@ -78,22 +75,22 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   let updated: SalesOrder;
   try {
-    // 单事务：更新头 + Revision + 审批触发（CTO Final Review 阻断项②/非阻断建议：
+    // 单事务：CAS 更新头 + Revision + 审批触发（CTO Final Review 阻断项②/非阻断建议：
     // 商业修改与审批状态切换统一事务，命中策略失败整体回滚显式报错，禁止"改成功但没进审批"）
     updated = await prisma.$transaction(async (tx) => {
-      const saved = await tx.salesOrder.update({
-        where: { id },
-        data: {
-          ...(fields.requestedDeliveryDate !== undefined
-            ? { requestedDeliveryDate: fields.requestedDeliveryDate ? new Date(fields.requestedDeliveryDate) : null }
-            : {}),
-          ...(fields.paymentTerm !== undefined ? { paymentTerm: fields.paymentTerm } : {}),
-          ...(fields.incoterm !== undefined ? { incoterm: fields.incoterm } : {}),
-          ...(fields.remark !== undefined ? { remark: fields.remark } : {}),
-          version: { increment: 1 },
-          updatedById: user!.id,
-        },
+      // A4-CAS：原子乐观锁置于事务首部（消除 read-check-update TOCTOU）
+      const cas = await casUpdate(tx, "salesOrder", id, version, {
+        ...(fields.requestedDeliveryDate !== undefined
+          ? { requestedDeliveryDate: fields.requestedDeliveryDate ? new Date(fields.requestedDeliveryDate) : null }
+          : {}),
+        ...(fields.paymentTerm !== undefined ? { paymentTerm: fields.paymentTerm } : {}),
+        ...(fields.incoterm !== undefined ? { incoterm: fields.incoterm } : {}),
+        ...(fields.remark !== undefined ? { remark: fields.remark } : {}),
+        updatedById: user!.id,
       });
+      if (cas.outcome !== "OK") throw new Error(cas.outcome === "NOT_FOUND" ? "SALES_ORDER_NOT_FOUND" : "SALES_ORDER_VERSION_CONFLICT");
+      const saved = await tx.salesOrder.findFirst({ where: { id, deletedAt: null } });
+      if (!saved) throw new Error("SALES_ORDER_NOT_FOUND");
       // 商业条件变更 → 系统生成 Revision（不允许自由编辑 Revision）
       await createSalesOrderRevision(tx, id, changeReason ?? "更新销售订单头", { salesOrder: saved }, user?.id);
       // 审批触发（同一事务内，传 tx）：无实例创建 / RUNNING 保持 / 终态复用重新 SUBMIT；命中策略失败 → 抛错 → 整体回滚
@@ -109,6 +106,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   } catch (e) {
     if (e instanceof Error && e.message === "WORKFLOW_DEFINITION_NOT_FOUND") {
       return fail(ERROR_CODES.SALES_ORDER_WORKFLOW_FAILED, "审批流程定义不存在或未发布（SALES_ORDER_APPROVAL），订单变更已回滚", 409);
+    }
+    if (e instanceof Error && e.message === "SALES_ORDER_NOT_FOUND") {
+      return failNotFound(ERROR_CODES.SALES_ORDER_NOT_FOUND, "销售订单不存在");
+    }
+    if (e instanceof Error && e.message === "SALES_ORDER_VERSION_CONFLICT") {
+      return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
     }
     throw e;
   }

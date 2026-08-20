@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { casUpdate } from "@/lib/api/cas";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
@@ -59,26 +60,26 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if ((EDITABLE_STATUSES as readonly string[]).includes(quotation.status) === false) {
     return failConflict(ERROR_CODES.QUOTATION_NOT_EDITABLE, "仅 DRAFT/REJECTED 状态可编辑");
   }
-  if (quotation.version !== version) {
-    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  }
 
-  const updated = await prisma.$transaction(async (tx) => {
-    const saved = await tx.quotation.update({
-      where: { id },
-      data: {
-        ...(fields.validFrom !== undefined ? { validFrom: fields.validFrom ? new Date(fields.validFrom) : null } : {}),
-        ...(fields.validUntil !== undefined ? { validUntil: fields.validUntil ? new Date(fields.validUntil) : null } : {}),
-        ...(fields.taxProfileId !== undefined ? { taxProfileId: fields.taxProfileId } : {}),
-        ...(fields.remark !== undefined ? { remark: fields.remark } : {}),
-        version: { increment: 1 },
-        updatedById: user!.id,
-      },
+  // A4-CAS：原子乐观锁置于事务首部（消除 read-check-update TOCTOU）
+  const result = await prisma.$transaction(async (tx) => {
+    const cas = await casUpdate(tx, "quotation", id, version, {
+      ...(fields.validFrom !== undefined ? { validFrom: fields.validFrom ? new Date(fields.validFrom) : null } : {}),
+      ...(fields.validUntil !== undefined ? { validUntil: fields.validUntil ? new Date(fields.validUntil) : null } : {}),
+      ...(fields.taxProfileId !== undefined ? { taxProfileId: fields.taxProfileId } : {}),
+      ...(fields.remark !== undefined ? { remark: fields.remark } : {}),
+      updatedById: user!.id,
     });
+    if (cas.outcome !== "OK") return cas;
+    const saved = await tx.quotation.findFirst({ where: { id, deletedAt: null } });
+    if (!saved) return { outcome: "NOT_FOUND" as const };
     // 商业内容变更 → 系统生成 Revision（不允许自由编辑 Revision）
     await createQuotationRevision(tx, id, changeReason ?? "更新报价单头", { quotation: saved }, user?.id);
-    return saved;
+    return { outcome: "OK" as const, quotation: saved };
   });
+  if (result.outcome === "NOT_FOUND") return failNotFound(ERROR_CODES.QUOTATION_NOT_FOUND, "报价单不存在");
+  if (result.outcome === "CONFLICT") return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
+  const updated = result.quotation;
 
   await publishQuotationEvent({
     eventType: "QuotationUpdated",

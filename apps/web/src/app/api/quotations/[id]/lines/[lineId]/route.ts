@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { casUpdate } from "@/lib/api/cas";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound, fail } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
@@ -38,9 +39,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   const line = await prisma.quotationLine.findFirst({ where: { id: lineId, quotationId: id, deletedAt: null } });
   if (!line) return failNotFound(ERROR_CODES.QUOTATION_LINE_NOT_FOUND, "报价行不存在");
-  if (line.version !== version) {
-    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  }
 
   const nextQuantity = quantity !== undefined ? new Prisma.Decimal(quantity) : line.quantity;
   const nextUomId = fields.uomId !== undefined ? fields.uomId : line.uomId;
@@ -69,26 +67,24 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   // ② 单事务：更新行（业务字段 + 定价回写）→ 重算头合计 → Revision（原子，任一步失败整体回滚）
   const saved = await prisma.$transaction(async (tx) => {
-    await tx.quotationLine.update({
-      where: { id: lineId },
-      data: {
-        ...(fields.description !== undefined ? { description: fields.description } : {}),
-        ...(fields.uomId !== undefined ? { uomId: fields.uomId } : {}),
-        ...(fields.lineNo !== undefined ? { lineNo: fields.lineNo } : {}),
-        ...(quantity !== undefined ? { quantity: nextQuantity } : {}),
-        ...(pricingResult
-          ? {
-              priceSnapshotId: pricingResult.priceSnapshotId,
-              unitPrice: pricingResult.unitPrice,
-              lineAmount: pricingResult.lineAmount,
-              taxAmount: pricingResult.taxAmount,
-              totalAmount: pricingResult.totalAmount,
-            }
-          : {}),
-        version: { increment: 1 },
-        updatedById: user!.id,
-      },
+    // A4-CAS：原子乐观锁置于事务首部（消除 read-check-update TOCTOU）
+    const cas = await casUpdate(tx, "quotationLine", lineId, version, {
+      ...(fields.description !== undefined ? { description: fields.description } : {}),
+      ...(fields.uomId !== undefined ? { uomId: fields.uomId } : {}),
+      ...(fields.lineNo !== undefined ? { lineNo: fields.lineNo } : {}),
+      ...(quantity !== undefined ? { quantity: nextQuantity } : {}),
+      ...(pricingResult
+        ? {
+            priceSnapshotId: pricingResult.priceSnapshotId,
+            unitPrice: pricingResult.unitPrice,
+            lineAmount: pricingResult.lineAmount,
+            taxAmount: pricingResult.taxAmount,
+            totalAmount: pricingResult.totalAmount,
+          }
+        : {}),
+      updatedById: user!.id,
     });
+    if (cas.outcome !== "OK") return { error: cas.outcome as "CONFLICT" | "NOT_FOUND" };
     const lines = await tx.quotationLine.findMany({ where: { quotationId: id, deletedAt: null }, orderBy: { lineNo: "asc" } });
     await recalcQuotationTotals(tx, id, lines);
     const q = await tx.quotation.findFirst({ where: { id } });
@@ -96,6 +92,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const l = await tx.quotationLine.findFirst({ where: { id: lineId } });
     return { quotation: q, line: l };
   });
+
+  if ("error" in saved) {
+    return saved.error === "NOT_FOUND"
+      ? failNotFound(ERROR_CODES.QUOTATION_LINE_NOT_FOUND, "报价行不存在")
+      : failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
+  }
 
   await publishQuotationEvent({
     eventType: "QuotationUpdated",
