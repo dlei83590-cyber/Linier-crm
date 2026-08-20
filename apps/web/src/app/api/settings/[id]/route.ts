@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { casUpdate } from "@/lib/api/cas";
 import { authenticate, requirePermission, clientIp, writeAuditLog } from "@/lib/api-helpers";
 import { ok, fail, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
@@ -73,24 +74,25 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   const { version, ...updates } = parsed.data;
   const model = modelFor(scope) as typeof prisma.systemSetting;
+  // A4-CAS：模型名与 scope 一一对应（SYSTEM/TENANT/USER）
+  const modelName = `${scope.toLowerCase()}Setting`;
 
   const existing = await model.findFirst({ where: { id, deletedAt: null } });
   if (!existing) return failNotFound(ERROR_CODES.SETTING_NOT_FOUND, "设置项不存在");
-  if (existing.version !== version) {
-    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  }
 
-  const updated = await model.update({
-    where: { id },
-    data: {
-      ...(updates.value !== undefined ? { value: updates.value } : {}),
-      ...(updates.dataType !== undefined ? { dataType: updates.dataType } : {}),
-      ...(updates.encrypted !== undefined ? { encrypted: updates.encrypted } : {}),
-      ...(updates.description !== undefined ? { description: updates.description } : {}),
-      version: { increment: 1 },
-      updatedById: user.id,
-    },
+  // A4-CAS：原子乐观锁（消除 read-check-update TOCTOU）
+  const cas = await casUpdate(prisma, modelName, id, version, {
+    ...(updates.value !== undefined ? { value: updates.value } : {}),
+    ...(updates.dataType !== undefined ? { dataType: updates.dataType } : {}),
+    ...(updates.encrypted !== undefined ? { encrypted: updates.encrypted } : {}),
+    ...(updates.description !== undefined ? { description: updates.description } : {}),
+    updatedById: user.id,
   });
+  if (cas.outcome === "NOT_FOUND") return failNotFound(ERROR_CODES.SETTING_NOT_FOUND, "设置项不存在");
+  if (cas.outcome === "CONFLICT") return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
+
+  const updated = await model.findFirst({ where: { id, deletedAt: null } });
+  if (!updated) return failNotFound(ERROR_CODES.SETTING_NOT_FOUND, "设置项不存在");
 
   await writeAuditLog({
     actorId: user.id,
