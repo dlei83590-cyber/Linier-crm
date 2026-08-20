@@ -1,6 +1,22 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Prisma } from "@prisma/client";
-import { assertProjectWritable } from "@/lib/api-helpers";
+import { NextRequest } from "next/server";
+import { assertProjectWritable, authenticate } from "@/lib/api-helpers";
+
+const authMocks = vi.hoisted(() => ({
+  verifySessionToken: vi.fn(),
+}));
+
+vi.mock("@/lib/auth", () => ({
+  verifySessionToken: authMocks.verifySessionToken,
+  SESSION_COOKIE_NAME: "linier_session",
+}));
+
+const prismaMock = vi.hoisted(() => ({
+  user: { findUnique: vi.fn() },
+}));
+
+vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 
 /**
  * Project Lifecycle 契约单测（CTO P2 G-1）：assertProjectWritable — CLOSED 写门禁（B2-0/L1-A）
@@ -37,5 +53,61 @@ describe("assertProjectWritable — CLOSED 写门禁", () => {
     expect(r.project.stage).toBe("MASS_SUPPLY");
     expect(r.project.version).toBe(7);
     expect(tx.$queryRaw).toHaveBeenCalled();
+  });
+});
+describe("authenticate — ADR-0045 双来源认证（Bearer → httpOnly cookie 回退）", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    authMocks.verifySessionToken.mockResolvedValue({ sub: "u1", email: "a@b.c", roles: ["SUPER_ADMIN"] });
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: "u1",
+      email: "a@b.c",
+      name: "Admin",
+      isActive: true,
+      roles: [{ role: { code: "SUPER_ADMIN" } }],
+    });
+  });
+
+  it("Bearer 请求 → 返回用户（API 客户端/遗留路径）", async () => {
+    const req = new NextRequest("http://localhost/api/auth/me", {
+      headers: { authorization: "Bearer tok" },
+    });
+    const u = await authenticate(req);
+    expect(u).not.toBeNull();
+    expect(u?.email).toBe("a@b.c");
+    expect(u?.name).toBe("Admin");
+    expect(authMocks.verifySessionToken).toHaveBeenCalledWith("tok");
+  });
+
+  it("仅 cookie（无 Bearer）→ 返回用户（登录后 SessionProvider.refresh 场景，修复卡登录页）", async () => {
+    const req = new NextRequest("http://localhost/api/auth/me", {
+      headers: { cookie: "linier_session=cookie-tok" },
+    });
+    const u = await authenticate(req);
+    expect(u).not.toBeNull();
+    expect(u?.email).toBe("a@b.c");
+    expect(authMocks.verifySessionToken).toHaveBeenCalledWith("cookie-tok");
+  });
+
+  it("无任何凭据 → null（不调用 verifySessionToken）", async () => {
+    const req = new NextRequest("http://localhost/api/auth/me");
+    expect(await authenticate(req)).toBeNull();
+    expect(authMocks.verifySessionToken).not.toHaveBeenCalled();
+  });
+
+  it("token 校验失败（过期/篡改）→ null", async () => {
+    authMocks.verifySessionToken.mockRejectedValue(new Error("bad token"));
+    const req = new NextRequest("http://localhost/api/auth/me", {
+      headers: { cookie: "linier_session=bad" },
+    });
+    expect(await authenticate(req)).toBeNull();
+  });
+
+  it("用户不存在或停用 → null", async () => {
+    prismaMock.user.findUnique.mockResolvedValue(null);
+    const req = new NextRequest("http://localhost/api/auth/me", {
+      headers: { cookie: "linier_session=tok" },
+    });
+    expect(await authenticate(req)).toBeNull();
   });
 });
