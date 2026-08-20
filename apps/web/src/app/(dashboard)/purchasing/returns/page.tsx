@@ -21,7 +21,7 @@ interface ReturnRow {
   id: string;
   code: string;
   status: string;
-  createdAt: string;
+  returnedAt?: string | null;
   purchaseOrder?: { code: string | null } | null;
   supplier?: { name: string | null } | null;
   _count?: { lines: number };
@@ -159,9 +159,9 @@ function ReturnList() {
             render: (row) => String(row._count?.lines ?? 0),
           },
           {
-            key: "createdAt",
-            header: "创建时间",
-            render: (row) => formatDate(row.createdAt),
+            key: "returnedAt",
+            header: "退货日期",
+            render: (row) => formatDate(row.returnedAt),
           },
         ]}
         rows={items}

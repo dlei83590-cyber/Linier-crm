@@ -22,7 +22,7 @@ interface AdjustmentRow {
   adjustmentNo: string;
   status: string;
   reasonCode: string;
-  createdAt: string;
+  appliedAt?: string | null;
   sourceStockCount?: { countNo: string | null } | null;
   _count?: { lines: number };
 }
@@ -157,9 +157,9 @@ function AdjustmentList() {
             render: (row) => String(row._count?.lines ?? 0),
           },
           {
-            key: "createdAt",
-            header: "创建时间",
-            render: (row) => formatDate(row.createdAt),
+            key: "appliedAt",
+            header: "应用日期",
+            render: (row) => formatDate(row.appliedAt),
           },
         ]}
         rows={items}

@@ -21,7 +21,7 @@ interface OrderRow {
   id: string;
   code: string;
   status: string;
-  createdAt: string;
+  orderDate?: string | null;
   supplier?: { name: string | null } | null;
   requisition?: { code: string | null } | null;
   _count?: { lines: number };
@@ -171,9 +171,9 @@ function OrderList() {
             render: (row) => String(row._count?.lines ?? 0),
           },
           {
-            key: "createdAt",
-            header: "创建时间",
-            render: (row) => formatDate(row.createdAt),
+            key: "orderDate",
+            header: "下单日期",
+            render: (row) => formatDate(row.orderDate),
           },
         ]}
         rows={items}

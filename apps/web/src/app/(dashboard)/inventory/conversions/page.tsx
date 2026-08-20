@@ -21,7 +21,7 @@ interface ConversionRow {
   id: string;
   conversionNo: string;
   status: string;
-  createdAt: string;
+  executedAt?: string | null;
   item?: { code: string | null; name: string | null } | null;
   baseUom?: { symbol: string | null } | null;
   _count?: { lines: number };
@@ -161,9 +161,9 @@ function ConversionList() {
             render: (row) => String(row._count?.lines ?? 0),
           },
           {
-            key: "createdAt",
-            header: "创建时间",
-            render: (row) => formatDate(row.createdAt),
+            key: "executedAt",
+            header: "执行日期",
+            render: (row) => formatDate(row.executedAt),
           },
         ]}
         rows={items}

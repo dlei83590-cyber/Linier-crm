@@ -21,7 +21,7 @@ interface WarehouseReceiptRow {
   id: string;
   code: string;
   status: string;
-  createdAt: string;
+  postedAt?: string | null;
   purchaseReceipt?: { code: string | null } | null;
   warehouse?: { name: string | null } | null;
   location?: { name: string | null } | null;
@@ -165,9 +165,9 @@ function WarehouseReceiptList() {
             render: (row) => String(row._count?.lines ?? 0),
           },
           {
-            key: "createdAt",
-            header: "创建时间",
-            render: (row) => formatDate(row.createdAt),
+            key: "postedAt",
+            header: "过账日期",
+            render: (row) => formatDate(row.postedAt),
           },
         ]}
         rows={items}
