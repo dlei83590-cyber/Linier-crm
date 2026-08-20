@@ -63,12 +63,12 @@
 
 ## 3. 当前阶段边界
 
-（依据 CTO Directive 2026-08-12 Post-6B 双轨执行 Gate、2026-08-13 CI-First Enforcement 与 **2026-08-18 双轨收口治理**；ROADMAP v1.21 更新后本节同步。）
+（依据 CTO Directive 2026-08-12 Post-6B 双轨执行 Gate、2026-08-13 CI-First Enforcement、2026-08-18 双轨收口治理与 **2026-08-20 Sprint 7 Finance + v0.9.0 发布**；ROADMAP v1.26 更新后本节同步。）
 
 - **Sprint 5C-1（Supplier Invoice / Immutable 3-Way Match / GRIR / AP Liability / AP Open Item）— CLOSED / Accounting Baseline（PR #23 已合并 main `5a8dcae`）**：5C-1A Foundation（SINV 创建即取号 / RECEIPT_BASED 三重来源链 Gate / DRAFT→SUBMITTED）→ 5C-1B Match（immutable MatchRun + Workflow Approval Reference）→ 5C-1C0 Readiness + Migration 0028（GRIR Historical Backfill）→ 5C-1C1 POST（GRIR CONSUME + AP Liability + AP Open Item 同事务）；**生产 migration baseline = 0028**。
-- **5C-2（Supplier Payment / AP Allocation / Payment Reversal / Supplier CN/DN / AP Write-Off / GL Posting）— HOLD**（前端 Supplier CN/DN 权限置 null，不伪造权限）。
+- **5C-2（Supplier CN/DN / Payment Allocation / Payment Reversal / 跨票 Consolidated）— ✅ FINAL（CTO 2026-08-19 解锁，ADR-0030，Migration 0029-0032）**：AP 侧贷/借项与付款核销、Apply 同事务重算 ApOpenItem 投影、防超调/防超核销锁内重算、maker-checker、Payment 整体冲销（红字）、CN/DN 跨票逐票归属分摊。
 - **Track A Frontend Operations — CLOSED（PR #24 + F2-0~F2-6B + B2-0~B2-2B 全部合入 main）**：10 模块 List Workspace → IA v2 / UI 底座 / Master Data / PO-Receipt-WHR / CRM-Project Workspace / Dashboard v2 / Sales source-driven actions / Purchasing+Inventory Tier2/3 actions / **Supplier Invoice 前端（list/detail/create + submit/match/post）**；B2-2A/B2-2B **31/31 Runtime Acceptance ACCEPTED**（docs/qa/B2-2_Runtime_QA.md）。
-- **Project Lifecycle（Acceptance / Transition / Close / Attachments）— L0-L2-B1 已合并 main（PR #77-#83）**：CLOSED gate 以 stage 为 authoritative、closure 不可删除、allowedTransitions Read Contract 投影、Transition action；下一项 = **Project Lifecycle Contract Audit 收口（FINAL/GAP/HOLD matrix）**。
+- **Project Lifecycle（Acceptance / Transition / Close / Attachments）— L0-L2-B1 已合并 main（PR #77-#83）**：CLOSED gate 以 stage 为 authoritative、closure 不可删除、allowedTransitions Read Contract 投影、Transition action；**Project Lifecycle Contract Audit 收口 ✅（2026-08-19，docs/reviews/ProjectLifecycle_Contract_Audit.md，L0-L2-B1 契约点全 FINAL）**。
 - **Frontend Auth Transport Contract Repair — CLOSED（PR #34）**：统一认证传输 `apiFetch` + Bearer（same-origin `/api/*` 自动附加 + 401 统一收敛）已合入。
 - **Master-Data Read API（P0）— CLOSED（PR #33）**：`GET /api/warehouses`、`/api/warehouse-locations`、`/api/unit-of-measures` 只读端点 + `warehouse`/`warehouse-location` RBAC registry 注册。
 - **Frontend Release Metadata + Dashboard Stale Cleanup（P0.5）— CLOSED（PR #35）**：version SSOT = root `package.json`；build-time 注入 `APP_VERSION/GIT_SHA/BUILD_ID/DEPLOYMENT_ENV`（生产来源 = 构建平台变量 Railway/GitHub，不依赖 .git）；Footer + Dashboard System Overview 只消费构建注入值；Dashboard 不再声称未经证的运行状态。
@@ -78,9 +78,13 @@
 - **并发锁序（Blocking Gate）**：collect IDs → deduplicate → sort → `SELECT ... ORDER BY id FOR UPDATE`；POST 与 Return REVERSAL 必须使用完全一致锁序。
 - **Migration 0027 = FROZEN BASELINE**，禁止修改；**Migration 0028（GRIR Historical Backfill）= FINAL 已冻结**（PR #23 已通过 Final Gate）。
 - **Inventory Read Model（P1）— ✅ FINAL（2026-08-18）**：`GET /api/stock-projections` / `GET /api/inventory-movements`（+ `/{id}`）只读 Query API 已发布（权限 `stock-projection:view` / `inventory-movement:view`，shared PERMISSION_MODULES + seed 同步注册，ADR-0028）；前端 `/inventory/stock-projection` 与 `/inventory/ledger` 已接线（CTO #8845 Blocking 解除）。**红线保持**：余额唯一权威 = StockProjection SSOT；禁止前端自拼余额、SUM Movement 当权威余额、客户端重建 StockProjection；不引入 reservedQty/availableQty/unitCost/FIFO（§16）。
-- **HOLD（解除需 CTO 单独指令）**：Reservation / AvailableQty / FIFO / Moving Average / Inventory Costing / General Ledger / Financial Statements / BI / OA / Mobile。
+- **Sprint 7 Finance（GL）— 部分落地（CTO 2026-08-20 解锁，ADR-0033~0037，Migration 0033-0035）**：GL 过账消费 5C/GRIR/销售侧事件、余额/试算平衡/利润表实时聚合（ADR-0034）、手工凭证+审核流 maker-checker（ADR-0035）、期初余额+期末结转+期间重开（ADR-0036/0037）；**单币种 CNY 决策（多币种折算不实施）**；生产 migration baseline 延伸至 0036。
+- **库存成本核算（ADR-0038~0041，Migration 0036）— ✅**：移动加权平均（item 级）、出库结转、GL COGS 过账（借 6401 贷 1403/1405）、多 COGS 科目映射（按 itemType）。
+- **销售侧 GL 记账闭环（ADR-0042，EVENTS v1.40）— ✅（2026-08-20）**：Invoice ISSUE 收入确认（借 1122 应收 / 贷 6001 收入 + 贷 22210102 销项税）、收款核销入账（借 1002 银行（CASH→1001）/ 贷 1122）、核销反转红字；销售侧事件 Outbox 化；利润表失真修复。
+- **v0.9.0-alpha 已发布（2026-08-20，Release Gate APPROVED）**：GL 全链 + 成本 + 销售侧 GL + UI 统一基线。
+- **HOLD（解除需 CTO 单独指令）**：Reservation / AvailableQty / FIFO / 分仓分批成本 / 生产成本归集 / BI / OA / Mobile（Inventory Costing 基础已落地，深化项仍 HOLD）。
 - **UI 状态机红线**：APPROVED ≠ CONFIRMED、CREATED ≠ POSTED、APPROVED ≠ APPLIED、COMPLETED ≠ ADJUSTED、DRAFT ≠ SUBMITTED；前端按钮显隐只能消费后端状态契约。
-- 下一阶段开发必须先进行 **Design / Scope Gate**，再进入 Schema/API 实现；下一 Governance 项 = **Project Lifecycle Contract Audit 收口 + v0.7.0-alpha Release Gate**（schema/migration/API/frontend baseline + known limitations + HOLD 清单）。
+- 下一阶段开发必须先进行 **Design / Scope Gate**，再进入 Schema/API 实现；下一 Governance 项 = **main 分支保护（已启用 2026-08-20：require PR + CI checks）+ 错误码注册表自动化 + 增值税发票管理字段 / 会计期间体系 Design Gate**。
 
 ## 4. 每个任务的执行循环
 

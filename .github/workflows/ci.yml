@@ -32,6 +32,8 @@ jobs:
         run: pnpm lint
       - name: RBAC Catalog Static Gate (ADR-0028)
         run: node scripts/check-rbac-catalog.mjs
+      - name: Error Codes Catalog Gate (SSOT=errors.ts)
+        run: node scripts/gen-error-codes.mjs --check
       - name: Generate Prisma Client
         run: pnpm db:generate
       - name: Type check
