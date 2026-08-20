@@ -2,6 +2,20 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - A-4 原子乐观锁批量落地（2026-08-20，PR #116-#121，一次合并）
+
+### 新增（30 个 PATCH/事务路由 CAS 化，消除 read-check-update TOCTOU）
+
+- **批次 1-6 共 30 路由**：customers（头/地址/联系人）、files、deliveries（头/行）、approver-groups、suppliers（头/银行账户/地址/联系人）、menus、menu-groups、settings（动态模型）、workflows/definitions、items 供应商关联、quotations（头/行）、sales-orders（头/行）、invoices、projects 子资源 11 个（tasks/milestones/risks/visits/members/budgets/expenses/products/progress/stakeholders/acceptance）
+- **模式**：简单型 `casUpdate(prisma,...)`；事务型 CAS 置事务首部（casUpdate 支持 TransactionClient）；哨兵/抛出映射 404/409；行删除竞态区分；嵌套子资源保留归属校验；审计 beforeData 保持 prefetch
+- **核实跳过**：purchase-*、warehouse-receipts、stock-counts、inspections（已内建原子 CAS）；inventory-*/动作路由、supplier-invoices、stock-counts cancel/complete（FOR UPDATE 行锁 + 锁内复检）
+
+### Known Risk
+
+- 版本冲突/并发语义需人工接口验证，无 E2E
+
+---
+
 ## [Unreleased] - Sprint8 UI 现代化 U4-U7（2026-08-20，PR #111-#114，一次合并）
 
 ### 新增（命令面板 / 密度切换 / 列排序 / 数字滚动）
