@@ -6,6 +6,7 @@ import { ok, fail, failValidation } from '@/lib/api/response';
 import { ERROR_CODES, type ErrorCode } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
 import { supplierInvoicePostSchema } from '@/lib/api/schemas';
+import { validateTaxInvoiceFields } from '@/lib/tax-invoice';
 import {
   postSupplierInvoice,
   SupplierInvoicePostVersionConflictError,
@@ -49,6 +50,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { version } = parsed.data;
   const meta = requestMeta(request);
   const actorId = user!.id;
+
+  // VAT 要素校验（ADR-0043，I4/I7）：POSTED 必填类型 + 税务号码格式（fail fast）
+  const vatInvoice = await prisma.supplierInvoice.findFirst({
+    where: { id, deletedAt: null },
+    select: { invoiceType: true, taxInvoiceCode: true, taxInvoiceNo: true },
+  });
+  if (vatInvoice) {
+    const vat = validateTaxInvoiceFields(vatInvoice.invoiceType, vatInvoice.taxInvoiceCode, vatInvoice.taxInvoiceNo);
+    if (!vat.ok) {
+      if (vat.code === 'INVOICE_TYPE_REQUIRED') {
+        return fail(ERROR_CODES.INVOICE_TYPE_REQUIRED, '过账时必须指定进项发票类型（专票/普票/数电票）', 409);
+      }
+      return fail(ERROR_CODES.TAX_INVOICE_CODE_INVALID, vat.message, 400);
+    }
+  }
 
   let result;
   try {

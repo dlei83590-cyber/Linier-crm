@@ -14,7 +14,8 @@ import Link from "next/link";
 import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
-import { CARD_CLASS } from "@/lib/ui-classes";
+import { CARD_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
+import { INVOICE_TYPE_OPTIONS, validateIssueVatFields } from "@/lib/vat-labels";
 
 interface SupplierOption { id: string; code: string | null; name: string | null }
 
@@ -47,6 +48,10 @@ function SupplierInvoiceCreateForm() {
   const [exchangeRate, setExchangeRate] = useState("1");
   const [paymentDueDate, setPaymentDueDate] = useState("");
   const [remark, setRemark] = useState("");
+  // VAT 要素（ADR-0043）：进项发票类型（默认普票）+ 税务号码
+  const [invoiceType, setInvoiceType] = useState("ORDINARY_VAT");
+  const [taxInvoiceCode, setTaxInvoiceCode] = useState("");
+  const [taxInvoiceNo, setTaxInvoiceNo] = useState("");
   const [lines, setLines] = useState<LineForm[]>([{ ...EMPTY_LINE }]);
   const [dirty, setDirty] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -99,6 +104,8 @@ function SupplierInvoiceCreateForm() {
     if (!supplierInvoiceNo.trim()) errs.supplierInvoiceNo = "请填写供应商发票号";
     if (!invoiceDate) errs.invoiceDate = "请选择开票日期";
     if (!receivedDate) errs.receivedDate = "请选择收到日期";
+    const vatErr = validateIssueVatFields(invoiceType, taxInvoiceCode, taxInvoiceNo);
+    if (vatErr) errs.vat = vatErr;
     lines.forEach((l, i) => {
       if (!l.purchaseOrderLineId.trim()) errs[`lines.${i}.po`] = "缺 PO 行 ID";
       if (!l.warehouseReceiptLineId.trim()) errs[`lines.${i}.whr`] = "缺入库行 ID";
@@ -123,6 +130,9 @@ function SupplierInvoiceCreateForm() {
         exchangeRate: Number(exchangeRate) || 1,
         ...(paymentDueDate ? { paymentDueDate } : {}),
         ...(remark.trim() ? { remark: remark.trim() } : {}),
+        ...(invoiceType ? { invoiceType } : {}),
+        ...(taxInvoiceCode.trim() ? { taxInvoiceCode: taxInvoiceCode.trim() } : {}),
+        ...(taxInvoiceNo.trim() ? { taxInvoiceNo: taxInvoiceNo.trim() } : {}),
         lines: lines.map((l) => ({
           purchaseOrderLineId: l.purchaseOrderLineId.trim(),
           warehouseReceiptLineId: l.warehouseReceiptLineId.trim(),
@@ -218,6 +228,48 @@ function SupplierInvoiceCreateForm() {
             />
             {fieldErrors.receivedDate && <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.receivedDate}</p>}
           </div>
+          <div>
+            <label className="block text-xs text-ink-secondary">进项发票类型 *</label>
+            <select
+              value={invoiceType}
+              onChange={(e) => { setInvoiceType(e.target.value); setTaxInvoiceCode(""); setTaxInvoiceNo(""); markDirty(); }}
+              className={SELECT_CLASS + " mt-1 w-full"}
+            >
+              {INVOICE_TYPE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            <p className="text-ink-muted mt-0.5 text-xs">
+              {invoiceType === "ELECTRONIC_VAT" ? "数电票：20 位号码，无代码" : "专票/普票：12 位代码 + 8 位号码"}
+            </p>
+            {fieldErrors.vat && <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.vat}</p>}
+          </div>
+          {invoiceType !== "EXPORT" && invoiceType !== "OTHER" && (
+            <>
+              {invoiceType !== "ELECTRONIC_VAT" && (
+                <div>
+                  <label className="block text-xs text-ink-secondary">发票代码（12 位）</label>
+                  <input
+                    value={taxInvoiceCode}
+                    onChange={(e) => { setTaxInvoiceCode(e.target.value.replace(/\D/g, "")); markDirty(); }}
+                    maxLength={12}
+                    placeholder="12 位数字"
+                    className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+                  />
+                </div>
+              )}
+              <div>
+                <label className="block text-xs text-ink-secondary">发票号码（{invoiceType === "ELECTRONIC_VAT" ? "20 位" : "8 位"}）</label>
+                <input
+                  value={taxInvoiceNo}
+                  onChange={(e) => { setTaxInvoiceNo(e.target.value.replace(/\D/g, "")); markDirty(); }}
+                  maxLength={invoiceType === "ELECTRONIC_VAT" ? 20 : 8}
+                  placeholder={invoiceType === "ELECTRONIC_VAT" ? "20 位数字" : "8 位数字"}
+                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+                />
+              </div>
+            </>
+          )}
           <div>
             <label className="block text-xs text-ink-secondary">币种</label>
             <input value={currency} onChange={(e) => { setCurrency(e.target.value); markDirty(); }} maxLength={10} className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none" />
