@@ -33,6 +33,19 @@ interface QuotationRow {
 
 const STATUS_OPTIONS = ["DRAFT", "SUBMITTED", "APPROVED", "SENT", "ACCEPTED", "REJECTED", "CANCELLED", "CONVERTED"] as const;
 
+/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: "草稿",
+  SUBMITTED: "已提交",
+  APPROVED: "已批准",
+  SENT: "已发送",
+  ACCEPTED: "客户已接受",
+  REJECTED: "已拒绝",
+  CANCELLED: "已取消",
+  CONVERTED: "已转订单",
+  EXPIRED: "已过期",
+};
+
 const TONE_MAP: Record<string, StatusTone> = {
   DRAFT: "neutral",
   SUBMITTED: "info",
@@ -78,6 +91,7 @@ function QuotationList() {
       <EntityListWorkspace<QuotationRow>
         title="报价单"
         description="销售报价单列表"
+        emptyMessage="暂无报价单——点击「+ 新建报价单」创建第一张报价单"
         headerActions={
           canCreate ? (
             <Link
@@ -107,7 +121,7 @@ function QuotationList() {
               <option value="">全部状态</option>
               {STATUS_OPTIONS.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {STATUS_LABELS[s] ?? s}
                 </option>
               ))}
             </select>
@@ -148,7 +162,11 @@ function QuotationList() {
             key: "status",
             header: "状态",
             render: (row) => (
-              <StatusBadge status={row.effectiveStatus ?? row.status} toneMap={TONE_MAP} />
+              <StatusBadge
+                status={row.effectiveStatus ?? row.status}
+                label={STATUS_LABELS[row.effectiveStatus ?? row.status] ?? row.effectiveStatus ?? row.status}
+                toneMap={TONE_MAP}
+              />
             ),
           },
           {
@@ -169,6 +187,7 @@ function QuotationList() {
           {
             key: "totalAmount",
             header: "含税合计",
+            align: "right",
             render: (row) => formatMoney(row.totalAmount, row.currency),
           },
           {
