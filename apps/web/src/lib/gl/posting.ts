@@ -116,17 +116,33 @@ export async function glPostFromEvent(
       const net = String(payload.netAmount ?? '0');
       const inputVat = String(payload.inputVatAmount ?? '0');
       const nonRecoverable = String(payload.nonRecoverableTaxAmount ?? '0');
-      const purchase = new Prisma.Decimal(net).add(new Prisma.Decimal(nonRecoverable)).toFixed(2);
+      const purchase = new Prisma.Decimal(net).add(new Prisma.Decimal(nonRecoverable));
+      // 材料成本差异（ADR-0047，中国审计 P1）：Σ 已消耗暂估（GRIR CONSUME baseAmount）vs 发票净额（含不可抵扣税）
+      // 存货成本按暂估入账（1403 = accrualBase），差额入 1404 材料成本差异——修正"存货成本与 AP 口径漂移"
+      const accrualRows = await tx.grirRecord.findMany({
+        where: { supplierInvoiceId: String(payload.invoiceId), grirType: 'CONSUME' },
+        select: { baseAmount: true },
+      });
+      const accrualBase = accrualRows.reduce((acc, r) => acc.add(r.baseAmount), new Prisma.Decimal(0));
+      const variance = purchase.minus(accrualBase);
+      const lines: GlLineInput[] = [
+        { accountCode: '1403', debit: accrualBase.gt(0) ? accrualBase.toFixed(2) : purchase.toFixed(2), credit: '0', summary: '采购成本（暂估入账，含不可抵扣税）', sourceRef: String(payload.invoiceId) },
+        { accountCode: '222101', debit: inputVat, credit: '0', summary: '进项税额', sourceRef: String(payload.invoiceId) },
+        { accountCode: '2202', debit: '0', credit: gross, summary: '应付账款', sourceRef: String(payload.invoiceId) },
+      ];
+      if (accrualBase.gt(0) && variance.abs().gte(new Prisma.Decimal('0.01'))) {
+        if (variance.gt(0)) {
+          lines.push({ accountCode: '1404', debit: variance.toFixed(2), credit: '0', summary: '材料成本差异（发票价>暂估价）', sourceRef: String(payload.invoiceId) });
+        } else {
+          lines.push({ accountCode: '1404', debit: '0', credit: variance.abs().toFixed(2), summary: '材料成本差异（发票价<暂估价）', sourceRef: String(payload.invoiceId) });
+        }
+      }
       return postGlEntry(tx, {
         sourceType: 'SupplierInvoicePosted',
         sourceId: String(payload.invoiceId),
         postingDate: payload.postedAt ? new Date(String(payload.postedAt)) : new Date(),
         summary: '供应商发票过账：' + String(payload.invoiceNo ?? ''),
-        lines: [
-          { accountCode: '1403', debit: purchase, credit: '0', summary: '采购成本（含不可抵扣税）', sourceRef: String(payload.invoiceId) },
-          { accountCode: '222101', debit: inputVat, credit: '0', summary: '进项税额', sourceRef: String(payload.invoiceId) },
-          { accountCode: '2202', debit: '0', credit: gross, summary: '应付账款', sourceRef: String(payload.invoiceId) },
-        ],
+        lines,
         actorId: payload.postedById ? String(payload.postedById) : null,
       });
     }

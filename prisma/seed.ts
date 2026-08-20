@@ -580,6 +580,7 @@ const SEED_GL_ACCOUNTS = [
   { code: "1002", name: "银行存款", category: "ASSET", direction: "DEBIT", remark: "GL_ACCOUNT_BANK" },
   { code: "1122", name: "应收账款", category: "ASSET", direction: "DEBIT", remark: "GL_ACCOUNT_AR（销售发票 ISSUE 借，ADR-0042）" },
   { code: "1403", name: "原材料", category: "ASSET", direction: "DEBIT", remark: "GL_ACCOUNT_PURCHASE" },
+  { code: "1404", name: "材料成本差异", category: "ASSET", direction: "DEBIT", remark: "GL_ACCOUNT_PRICE_VARIANCE（发票净额 vs 暂估价差，ADR-0047）" },
   { code: "1405", name: "库存商品", category: "ASSET", direction: "DEBIT", remark: "GL_ACCOUNT_FINISHED_GOODS（成品/半成品 COGS 贷方，ADR-0041）" },
   { code: "2202", name: "应付账款", category: "LIABILITY", direction: "CREDIT", remark: "GL_ACCOUNT_AP" },
   { code: "2203", name: "应付账款-暂估（GRIR）", category: "LIABILITY", direction: "CREDIT", remark: "GL_ACCOUNT_AP_ESTIMATE" },

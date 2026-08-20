@@ -1,4 +1,4 @@
-# 产品路线图（ROADMAP）
+﻿# 产品路线图（ROADMAP）
 
 - 版本：v1.26
 - 日期：2026-08-20
@@ -283,6 +283,7 @@
 ## 15. 变更记录
 
 | 日期       | 变更       | 说明                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| 2026-08-20 | 更新 v1.32 | **材料成本差异 ✅（CTO backlog E，ADR-0047）**：SupplierInvoicePosted GL 修正——1403=ΣGRIR CONSUME baseAmount（暂估入账）+ 差额入 1404 材料成本差异（借/贷按符号）；seed +1404；无暂估回退原路径；单测（暂估 90 vs 净额 100 → 1403=90+1404=10）；修复存货成本与 AP 口径漂移（中国审计 P1）；差异月末分摊 = backlog |
 | 2026-08-20 | 更新 v1.31 | **中国结算方式扩展 ✅（CTO backlog D，ADR-0046，Migration 0039）**：PaymentMethod + 银行承兑汇票/商业承兑汇票/电汇（ALTER TYPE ADD VALUE）；zod + 前端 4 页标签与选项；GL 映射不变（新 3 项→1002）；票据背书/贴现、结算条款结构化 = backlog |
 | 2026-08-20 | 更新 v1.30 | **认证存储升级 ✅（CTO backlog C，ADR-0045）**：httpOnly SameSite=Lax 会话 cookie（登录 Set-Cookie / 登出端点 / authenticate 双来源 Bearer+cookie 回退）；前端 apiFetch 去 localStorage Bearer（同源 cookie 自动携带）、SessionProvider refresh/logout 改造、setAuthToken no-op；CSRF 由 SameSite=Lax 阻断（完整 CSRF token 双提交为 backlog）；代码审计 P1（XSS 窃取会话）修复 |
 | 2026-08-20 | 更新 v1.29 | **会计期间体系 ✅（CTO 按序实现 ④，ADR-0044，Migration 0038）**：AccountingPeriod 期间表（YYYYMM + OPEN/CLOSED/LOCKED，与 GlPeriodClose 共存同事务联动）+ 过账期间校验 fail-closed（GL_PERIOD_CLOSED/FUTURE/NOT_FOUND/LOCKED）+ 凭证字 记/收/付/转 + 附件张数 + 编号按月重排（记202608-0001，FOR UPDATE 原子）+ GL 列表 dateTo Asia/Shanghai 时区修复（代码审计 P1）+ backfill 脚本（部署期幂等）+ 错误码 8 个（ERROR_CODES 自动生成 269 码）+ 单测 19 用例；前端凭证字徽标后续批次 |
