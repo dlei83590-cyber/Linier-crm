@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 import { Prisma } from '@prisma/client';
 
-const mockPrisma = { $transaction: vi.fn() };
+const { mockPrisma } = vi.hoisted(() => ({ mockPrisma: { $transaction: vi.fn() } }));
 vi.mock('@/lib/prisma', () => ({ prisma: mockPrisma }));
 vi.mock('@/lib/api-helpers', () => ({
   authenticate: vi.fn().mockResolvedValue({ id: 'u-approver', email: 'a@b.c', roles: ['SUPER_ADMIN'] }),

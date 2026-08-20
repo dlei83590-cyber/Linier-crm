@@ -3,9 +3,7 @@ import { NextRequest } from 'next/server';
 import { Prisma } from '@prisma/client';
 
 // mock 全局依赖（route 级测试：mock prisma + api-helpers，验证 HTTP → handler 全链）
-const mockPrisma = {
-  $transaction: vi.fn(),
-};
+const { mockPrisma } = vi.hoisted(() => ({ mockPrisma: { $transaction: vi.fn() } }));
 vi.mock('@/lib/prisma', () => ({ prisma: mockPrisma }));
 vi.mock('@/lib/api-helpers', () => ({
   authenticate: vi.fn().mockResolvedValue({ id: 'u1', email: 'a@b.c', roles: ['SUPER_ADMIN'] }),
