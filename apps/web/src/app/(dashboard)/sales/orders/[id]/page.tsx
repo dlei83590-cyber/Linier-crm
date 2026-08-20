@@ -34,13 +34,25 @@ const TONE_MAP: Record<string, StatusTone> = {
   CANCELLED: "danger",
 };
 
+/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: "草稿",
+  CONFIRMED: "已确认",
+  PARTIALLY_DELIVERED: "部分交付",
+  DELIVERED: "已交付",
+  COMPLETED: "已完成",
+  CANCELLED: "已取消",
+};
+
 interface SalesOrderLine {
   id: string;
   lineNo: number;
   description?: string | null;
   quantity: string;
+  deliveredQty?: string;
   remainingQty?: string;
   unitPrice: string;
+  totalAmount?: string;
   item?: { id: string; code: string | null; name: string | null; model?: string | null } | null;
 }
 
@@ -55,6 +67,9 @@ interface SalesOrderDetail {
   code: string;
   status: string;
   orderDate: string;
+  requestedDeliveryDate?: string | null;
+  paymentTerm?: string | null;
+  incoterm?: string | null;
   currency: string;
   totalAmount: string;
   remark?: string | null;
@@ -251,7 +266,7 @@ function SalesOrderDetailPage() {
         title={`销售订单详情 — ${detail.code}`}
         backHref="/sales/orders"
         status={detail.status}
-        statusLabel={detail.status}
+        statusLabel={STATUS_LABELS[detail.status] ?? detail.status}
         statusTone={TONE_MAP[detail.status] ?? "neutral"}
         actions={
           <>
@@ -316,7 +331,18 @@ function SalesOrderDetailPage() {
               }
             />
             <InfoItem label="下单日期" value={formatDate(detail.orderDate)} />
+            <InfoItem
+              label="期望交期"
+              value={
+                detail.requestedDeliveryDate ? formatDate(detail.requestedDeliveryDate) : "—"
+              }
+            />
             <InfoItem label="币种" value={detail.currency} />
+            <InfoItem
+              label="付款条件"
+              value={detail.paymentTerm ? detail.paymentTerm : "—"}
+            />
+            <InfoItem label="贸易术语" value={detail.incoterm ? detail.incoterm : "—"} />
             <InfoItem label="含税合计" value={formatMoney(detail.totalAmount, detail.currency)} />
             <InfoItem label="备注" value={detail.remark} />
             <InfoItem label="创建时间" value={formatDate(detail.createdAt)} />
@@ -334,10 +360,11 @@ function SalesOrderDetailPage() {
                   <th className="px-3 py-2 font-medium">行号</th>
                   <th className="px-3 py-2 font-medium">物料</th>
                   <th className="px-3 py-2 font-medium">描述</th>
-                  <th className="px-3 py-2 font-medium">数量</th>
-                  <th className="px-3 py-2 font-medium">剩余可交付</th>
-                  <th className="px-3 py-2 font-medium">单价</th>
-                  <th className="px-3 py-2 font-medium">金额</th>
+                  <th className="px-3 py-2 text-right font-medium">数量</th>
+                  <th className="px-3 py-2 text-right font-medium">已交付</th>
+                  <th className="px-3 py-2 text-right font-medium">剩余可交付</th>
+                  <th className="px-3 py-2 text-right font-medium">单价</th>
+                  <th className="px-3 py-2 text-right font-medium">金额</th>
                 </tr>
               </thead>
               <tbody className="divide-border divide-y">
@@ -348,24 +375,26 @@ function SalesOrderDetailPage() {
                       {line.item ? `${line.item.code ?? ""} ${line.item.name ?? ""}`.trim() : "—"}
                     </td>
                     <td className="px-3 py-2 text-ink-secondary">{line.description}</td>
-                    <td className="px-3 py-2 text-ink-primary">{line.quantity}</td>
-                    <td className="px-3 py-2 text-ink-primary">
+                    <td className="px-3 py-2 text-right tabular-nums text-ink-primary">
+                      {line.quantity}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-ink-primary">
+                      {line.deliveredQty ?? "0"}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-ink-primary">
                       {line.remainingQty ?? line.quantity}
                     </td>
-                    <td className="px-3 py-2 text-ink-secondary">
+                    <td className="px-3 py-2 text-right tabular-nums text-ink-secondary">
                       {formatMoney(line.unitPrice, detail.currency)}
                     </td>
-                    <td className="px-3 py-2 text-ink-primary">
-                      {formatMoney(
-                        String(Number(line.quantity) * Number(line.unitPrice || 0)),
-                        detail.currency,
-                      )}
+                    <td className="px-3 py-2 text-right tabular-nums text-ink-primary">
+                      {formatMoney(line.totalAmount ?? "0", detail.currency)}
                     </td>
                   </tr>
                 ))}
                 {(detail.lines ?? []).length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-3 py-8 text-center text-sm text-ink-muted">
+                    <td colSpan={8} className="px-3 py-8 text-center text-sm text-ink-muted">
                       暂无明细行
                     </td>
                   </tr>
