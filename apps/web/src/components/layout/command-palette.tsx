@@ -11,12 +11,12 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { FrontendModule, ModuleDomain } from "@/lib/frontend/modules";
+import type { FrontendModule, ModuleDomainDef } from "@/lib/frontend/modules";
 import { MODULE_ACCENT_MAP } from "@/components/design-system";
 import { domainClass } from "@/components/design-system/domain-class";
 
 export interface PaletteGroup {
-  domain: ModuleDomain;
+  domain: ModuleDomainDef;
   ready: FrontendModule[];
   preview: FrontendModule[];
   hold: FrontendModule[];
