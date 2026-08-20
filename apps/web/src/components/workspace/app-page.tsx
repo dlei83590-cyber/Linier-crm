@@ -7,6 +7,7 @@
  * 业务页面一律以 <AppPage> 作为最外层容器，禁止自造页面级容器。
  */
 import { FORM_DENSITY, type Density } from '@/components/design-system';
+import { useTableDensity } from "@/lib/table-density-context";
 
 export type AppPageMaxWidth = '4xl' | '6xl' | '7xl' | 'full';
 
@@ -32,7 +33,10 @@ export function AppPage({
   density = 'default',
   className = '',
 }: AppPageProps) {
-  const form = FORM_DENSITY[density];
+  // U5：全局密度（组件自身 density prop 优先于 DensityContext）
+  const { density: ctxDensity } = useTableDensity();
+  const effectiveDensity = density ?? ctxDensity;
+  const form = FORM_DENSITY[effectiveDensity];
   return (
     <div className={`bg-canvas min-h-full ${className}`}>
       <div
