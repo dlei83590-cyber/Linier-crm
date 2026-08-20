@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { verifySessionToken } from "@/lib/auth";
+import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth";
 import { hasPermission, type PermissionCode, type RoleCode } from "@nilier-crm/shared";
 import { failConflict } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
@@ -9,6 +9,7 @@ import { ERROR_CODES } from "@/lib/api/errors";
 export interface SessionUser {
   id: string;
   email: string;
+  name: string | null;
   roles: string[];
 }
 
@@ -18,8 +19,14 @@ function bearerToken(request: NextRequest): string | null {
   return header.slice("Bearer ".length);
 }
 
+/**
+ * ADR-0045 双来源认证：Bearer（遗留/API 客户端）→ httpOnly 会话 cookie（浏览器）回退。
+ * 浏览器 same-origin 请求由 fetch 默认携带 linier_session cookie，前端不再附加 Bearer
+ * （apiFetch/session-context 均只带 cookie）；此处必须认 cookie，否则登录后全部接口 401。
+ */
 export async function authenticate(request: NextRequest): Promise<SessionUser | null> {
-  const token = bearerToken(request);
+  const token =
+    bearerToken(request) ?? request.cookies.get(SESSION_COOKIE_NAME)?.value ?? null;
   if (!token) return null;
 
   let payload: Awaited<ReturnType<typeof verifySessionToken>>;
@@ -41,6 +48,7 @@ export async function authenticate(request: NextRequest): Promise<SessionUser | 
   return {
     id: user.id,
     email: user.email,
+    name: user.name,
     roles: user.roles.map((m) => m.role.code),
   };
 }
