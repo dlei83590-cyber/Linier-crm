@@ -33,12 +33,26 @@ const TONE_MAP: Record<string, StatusTone> = {
   EXPIRED: "warning",
 };
 
+/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: "草稿",
+  SUBMITTED: "已提交",
+  APPROVED: "已批准",
+  SENT: "已发送",
+  ACCEPTED: "客户已接受",
+  REJECTED: "已拒绝",
+  CANCELLED: "已取消",
+  CONVERTED: "已转订单",
+  EXPIRED: "已过期",
+};
+
 interface QuotationLine {
   id: string;
   lineNo: number;
   description: string;
   quantity: string;
   unitPrice: string;
+  totalAmount?: string;
   item?: { id: string; code: string | null; name: string | null; model?: string | null } | null;
 }
 
@@ -50,6 +64,8 @@ interface QuotationDetail {
   quoteDate: string;
   validUntil?: string | null;
   currency: string;
+  subtotal?: string;
+  taxAmount?: string;
   totalAmount: string;
   remark?: string | null;
   customer?: { id: string; code: string | null; name: string | null } | null;
@@ -164,7 +180,7 @@ function QuotationDetailPage() {
         title={`报价单详情 — ${detail.code}`}
         backHref="/sales/quotations"
         status={detail.effectiveStatus ?? detail.status}
-        statusLabel={detail.effectiveStatus ?? detail.status}
+        statusLabel={STATUS_LABELS[detail.effectiveStatus ?? detail.status] ?? detail.effectiveStatus ?? detail.status}
         statusTone={TONE_MAP[detail.effectiveStatus ?? detail.status] ?? "neutral"}
         actions={
           (canEdit && (detail.status === "DRAFT" || detail.status === "REJECTED")) ||
@@ -198,6 +214,8 @@ function QuotationDetailPage() {
             <InfoItem label="报价日期" value={formatDate(detail.quoteDate)} />
             <InfoItem label="有效期至" value={formatDate(detail.validUntil)} />
             <InfoItem label="币种" value={detail.currency} />
+            <InfoItem label="未税合计" value={formatMoney(detail.subtotal ?? "0", detail.currency)} />
+            <InfoItem label="税额" value={formatMoney(detail.taxAmount ?? "0", detail.currency)} />
             <InfoItem label="含税合计" value={formatMoney(detail.totalAmount, detail.currency)} />
             <InfoItem label="备注" value={detail.remark} />
             <InfoItem label="创建时间" value={formatDate(detail.createdAt)} />
@@ -215,9 +233,9 @@ function QuotationDetailPage() {
                   <th className="px-3 py-2 font-medium">行号</th>
                   <th className="px-3 py-2 font-medium">物料</th>
                   <th className="px-3 py-2 font-medium">描述</th>
-                  <th className="px-3 py-2 font-medium">数量</th>
-                  <th className="px-3 py-2 font-medium">单价</th>
-                  <th className="px-3 py-2 font-medium">金额</th>
+                  <th className="px-3 py-2 text-right font-medium">数量</th>
+                  <th className="px-3 py-2 text-right font-medium">单价</th>
+                  <th className="px-3 py-2 text-right font-medium">金额</th>
                 </tr>
               </thead>
               <tbody className="divide-border divide-y">
@@ -228,15 +246,14 @@ function QuotationDetailPage() {
                       {line.item ? `${line.item.code ?? ""} ${line.item.name ?? ""}`.trim() : "—"}
                     </td>
                     <td className="px-3 py-2 text-ink-secondary">{line.description}</td>
-                    <td className="px-3 py-2 text-ink-primary">{line.quantity}</td>
-                    <td className="px-3 py-2 text-ink-secondary">
+                    <td className="px-3 py-2 text-right tabular-nums text-ink-primary">
+                      {line.quantity}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-ink-secondary">
                       {formatMoney(line.unitPrice, detail.currency)}
                     </td>
-                    <td className="px-3 py-2 text-ink-primary">
-                      {formatMoney(
-                        String(Number(line.quantity) * Number(line.unitPrice || 0)),
-                        detail.currency,
-                      )}
+                    <td className="px-3 py-2 text-right tabular-nums text-ink-primary">
+                      {formatMoney(line.totalAmount ?? "0", detail.currency)}
                     </td>
                   </tr>
                 ))}

@@ -32,6 +32,19 @@ import { formatMoney } from "@/lib/format";
 
 const EDITABLE_STATUSES = ["DRAFT", "REJECTED"] as const;
 
+/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: "草稿",
+  SUBMITTED: "已提交",
+  APPROVED: "已批准",
+  SENT: "已发送",
+  ACCEPTED: "客户已接受",
+  REJECTED: "已拒绝",
+  CANCELLED: "已取消",
+  CONVERTED: "已转订单",
+  EXPIRED: "已过期",
+};
+
 interface ItemOption {
   id: string;
   code: string | null;
@@ -417,7 +430,7 @@ function QuotationEditForm() {
         </div>
         <div className="p-6">
           <p className="text-sm text-status-warning-text">
-            仅 DRAFT / REJECTED 状态可编辑（当前 {detail.status}）——已提交/已接受/已转换的报价单不可修改。
+            仅 草稿 / 已拒绝 状态可编辑（当前 {STATUS_LABELS[detail.status] ?? detail.status}）——已提交/已接受/已转换的报价单不可修改。
           </p>
         </div>
       </div>
@@ -430,7 +443,7 @@ function QuotationEditForm() {
         <h1 className="text-lg font-semibold text-ink-primary">
           编辑报价单 — {detail?.code}
           <span className="ml-2 text-xs font-normal text-ink-muted">
-            {detail?.status}（v{detail?.version}）
+            {STATUS_LABELS[detail?.status ?? ""] ?? detail?.status}（v{detail?.version}）
           </span>
         </h1>
         <div className="flex items-center gap-2">
