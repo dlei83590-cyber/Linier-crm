@@ -14,6 +14,7 @@ import Link from "next/link";
 import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
 import { CARD_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { INVOICE_TYPE_OPTIONS, validateIssueVatFields } from "@/lib/vat-labels";
 
@@ -39,6 +40,7 @@ const EMPTY_LINE: LineForm = {
 
 function SupplierInvoiceCreateForm() {
   const router = useRouter();
+  const toast = useToast();
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [supplierId, setSupplierId] = useState("");
   const [supplierInvoiceNo, setSupplierInvoiceNo] = useState("");
@@ -148,6 +150,7 @@ function SupplierInvoiceCreateForm() {
         body: JSON.stringify(payload),
       });
       setDirty(false);
+      toast.success("供应商发票已创建");
       router.push(`/supplier-invoices/${body.data.invoice.id}`);
     } catch (err: unknown) {
       setError(

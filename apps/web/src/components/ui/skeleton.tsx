@@ -7,6 +7,17 @@ export function Skeleton({ className = "" }: { className?: string }) {
 }
 
 /** 行内按钮 loading 转圈（Sprint8 U2.4） */
+/** 页面级加载骨架（表单/详情页 loading 分支统一复用，替换「加载中…」文本） */
+export function PageLoading({ rows = 4 }: { rows?: number }) {
+  return (
+    <div className="space-y-3 p-4">
+      {Array.from({ length: rows }).map((_, i) => (
+        <Skeleton key={i} className="h-9 w-full" />
+      ))}
+    </div>
+  );
+}
+
 export function Spinner({ className = "" }: { className?: string }) {
   return (
     <svg

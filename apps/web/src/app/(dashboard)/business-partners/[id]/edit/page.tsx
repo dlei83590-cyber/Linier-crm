@@ -13,6 +13,8 @@ import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 import { validateUscc } from "@/lib/tax-invoice";
+import { useToast } from "@/components/ui/toast";
+import { PageLoading } from "@/components/ui/skeleton";
 
 interface BusinessPartnerDetail {
   id: string;
@@ -72,6 +74,7 @@ function BusinessPartnerEditForm() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const id = params.id;
+  const toast = useToast();
 
   const [code, setCode] = useState("");
   const [mnemonic, setMnemonic] = useState("");
@@ -215,8 +218,12 @@ function BusinessPartnerEditForm() {
       method: "PATCH",
       body: JSON.stringify(payload),
     })
-      .then(() => router.push("/business-partners"))
+      .then(() => {
+        toast.success("往来单位已保存");
+        router.push("/business-partners");
+      })
       .catch((err: unknown) => {
+        toast.error("保存失败", err instanceof ApiClientError ? err.message : "网络错误");
         setError(err instanceof ApiClientError ? err : new ApiClientError(0, "网络错误", "NETWORK_ERROR"));
         setSubmitting(false);
       });
@@ -225,7 +232,7 @@ function BusinessPartnerEditForm() {
   if (loading) {
     return (
       <EntityFormWorkspace title="编辑往来单位" backHref="/business-partners" mode="edit" submitting={false} onSave={handleSave} onCancel={() => router.push("/business-partners")}>
-        <p className="px-4 py-6 text-sm text-ink-secondary">加载中…</p>
+        <PageLoading rows={4} />
       </EntityFormWorkspace>
     );
   }

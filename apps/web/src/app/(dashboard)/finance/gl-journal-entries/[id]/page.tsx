@@ -7,6 +7,8 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityFormWorkspace, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
+import { PageLoading } from "@/components/ui/skeleton";
 import { formatDate, formatMoney } from "@/lib/format";
 import { VOUCHER_TYPE_LABELS } from "@/lib/vat-labels";
 
@@ -44,6 +46,7 @@ const STATUS_LABELS: Record<string, string> = { DRAFT: "草稿", SUBMITTED: "已
 function GlEntryDetailView() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
+  const toast = useToast();
   const id = params.id;
   const [detail, setDetail] = useState<GlEntryDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -69,14 +72,19 @@ function GlEntryDetailView() {
       method: "POST",
       body: JSON.stringify({ version: detail.version }),
     })
-      .then(() => load())
+      .then(() => {
+        const ACTION_LABEL: Record<string, string> = { submit: "提交", approve: "批准", post: "过账", reject: "驳回" };
+        toast.success(`${ACTION_LABEL[action] ?? action}成功`);
+        load();
+      })
       .catch((err: unknown) => {
+        toast.error("操作失败", err instanceof ApiClientError ? err.message : "网络错误");
         setActionError(err instanceof ApiClientError ? err : new ApiClientError(0, "网络错误", "NETWORK_ERROR"));
         setActing(false);
       });
   };
 
-  if (loading) return (<AppPage><p className="px-4 py-6 text-sm text-ink-secondary">加载中…</p></AppPage>);
+  if (loading) return (<AppPage><div className="border-border bg-surface overflow-hidden rounded-lg border"><PageLoading rows={5} /></div></AppPage>);
   if (loadError || !detail) return (<AppPage><ErrorPanel error={loadError ?? new ApiClientError(500, "加载失败", "LOAD_ERROR")} onRetry={load} /></AppPage>);
 
   return (

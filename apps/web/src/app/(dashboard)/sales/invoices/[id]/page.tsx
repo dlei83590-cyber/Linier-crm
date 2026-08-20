@@ -19,6 +19,8 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
+import { useToast } from "@/components/ui/toast";
+import { PageLoading } from "@/components/ui/skeleton";
 import { useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
 import {
@@ -102,6 +104,7 @@ function InvoiceDetailPage() {
     redInvoiceRefId: "",
   });
   const [issueVatError, setIssueVatError] = useState<string | null>(null);
+  const toast = useToast();
 
   const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
   const canApprove = hasPermission(roles, actionPermission("invoice", "approve"));
@@ -169,7 +172,9 @@ function InvoiceDetailPage() {
         });
       }
       await loadDetail();
+      toast.success(action === "issue" ? "开票成功" : "发票已取消");
     } catch (err: unknown) {
+      toast.error("操作失败", err instanceof ApiClientError ? err.message : "网络错误");
       setActionError(
         err instanceof ApiClientError ? err : new ApiClientError(0, "操作失败", "NETWORK_ERROR"),
       );
@@ -181,8 +186,8 @@ function InvoiceDetailPage() {
   if (loading) {
     return (
       <AppPage>
-        <div className="border-border bg-surface rounded-lg border p-6 text-sm text-ink-muted">
-          加载中…
+        <div className="border-border bg-surface overflow-hidden rounded-lg border">
+          <PageLoading rows={5} />
         </div>
       </AppPage>
     );
