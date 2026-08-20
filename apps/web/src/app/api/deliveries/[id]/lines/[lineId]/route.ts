@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { casUpdate } from "@/lib/api/cas";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound, fail } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
@@ -41,9 +42,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   const line = await prisma.deliveryLine.findFirst({ where: { id: lineId, deliveryId: id, deletedAt: null } });
   if (!line) return failNotFound(ERROR_CODES.DELIVERY_LINE_NOT_FOUND, "交付行不存在");
-  if (line.version !== version) {
-    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  }
 
   const nextQuantity = quantity !== undefined ? new Prisma.Decimal(quantity) : line.quantity;
   // 行编辑涉及数量 → 必须能溯源到销售订单行做防超交校验（SalesOrderLine 软删后 SetNull → 禁止改量）
@@ -79,18 +77,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         );
       }
 
-      // ③ 更新行（sourceSalesOrderLineId 溯源永不清除；deliveredQty/orderedQty 只读投影不动）
-      const updated = await tx.deliveryLine.update({
-        where: { id: lineId },
-        data: {
-          ...(fields.description !== undefined ? { description: fields.description } : {}),
-          ...(fields.uomId !== undefined ? { uomId: fields.uomId } : {}),
-          ...(fields.lineNo !== undefined ? { lineNo: fields.lineNo } : {}),
-          ...(quantity !== undefined ? { quantity: nextQuantity } : {}),
-          version: { increment: 1 },
-          updatedById: user!.id,
-        },
+      // ③ 更新行（A4-CAS：原子乐观锁；sourceSalesOrderLineId 溯源永不清除；deliveredQty/orderedQty 只读投影不动）
+      const cas = await casUpdate(tx, "deliveryLine", lineId, version, {
+        ...(fields.description !== undefined ? { description: fields.description } : {}),
+        ...(fields.uomId !== undefined ? { uomId: fields.uomId } : {}),
+        ...(fields.lineNo !== undefined ? { lineNo: fields.lineNo } : {}),
+        ...(quantity !== undefined ? { quantity: nextQuantity } : {}),
+        updatedById: user!.id,
       });
+      if (cas.outcome !== "OK") {
+        throw new Error(cas.outcome === "NOT_FOUND" ? "DELIVERY_LINE_NOT_FOUND" : "DELIVERY_LINE_VERSION_CONFLICT");
+      }
+      const updated = await tx.deliveryLine.findFirst({ where: { id: lineId, deletedAt: null } });
+      if (!updated) throw new Error("DELIVERY_LINE_NOT_FOUND");
 
       // ④ 生成 DeliveryRevision
       await createDeliveryRevision(tx, id, changeReason ?? "更新交付行", { delivery, line: updated }, user?.id);
@@ -106,6 +105,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         ERROR_CODES.DELIVERY_QUANTITY_EXCEEDED,
         `交付数量超过可交付量（请求 ${detail.requested}，availableQty ${detail.availableQty}），禁止超交`,
       );
+    }
+    if (e instanceof Error && e.message === "DELIVERY_LINE_NOT_FOUND") {
+      return failNotFound(ERROR_CODES.DELIVERY_LINE_NOT_FOUND, "交付行不存在");
+    }
+    if (e instanceof Error && e.message === "DELIVERY_LINE_VERSION_CONFLICT") {
+      return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
     }
     throw e;
   }
