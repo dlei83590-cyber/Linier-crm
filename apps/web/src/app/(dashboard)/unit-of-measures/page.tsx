@@ -69,6 +69,7 @@ function UomList() {
       <EntityListWorkspace<UomRow>
         title="计量单位"
         description="计量单位主数据（只读：后端当前仅开放列表契约）"
+        emptyMessage="暂无计量单位"
         filters={
           <>
             <input

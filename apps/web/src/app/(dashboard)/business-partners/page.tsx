@@ -89,6 +89,7 @@ function BusinessPartnerList() {
       <EntityListWorkspace<BusinessPartnerRow>
         title="往来单位"
         description="客户/供应商/客户兼供应商统一管理，含统一社会信用代码、开票与结算信息"
+        emptyMessage="暂无往来单位——点击「+ 新建往来单位」创建第一个客户/供应商"
         headerActions={
           canCreate ? (
             <Link

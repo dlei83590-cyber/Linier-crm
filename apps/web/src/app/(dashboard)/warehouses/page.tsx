@@ -65,6 +65,7 @@ function WarehouseList() {
       <EntityListWorkspace<WarehouseRow>
         title="仓库"
         description="仓库主数据（只读：后端当前仅开放列表契约；库位从仓库行进入）"
+        emptyMessage="暂无仓库"
         filters={
           <>
             <input

@@ -64,6 +64,7 @@ function LocationListInner() {
             ? "库位列表（已按所属仓库过滤，来自仓库详情入口）"
             : "库位主数据（只读：后端当前仅开放列表契约）"
         }
+        emptyMessage="暂无库位"
         filters={
           <>
             <input
