@@ -155,6 +155,7 @@ function SupplierInvoiceList() {
           {
             key: "invoiceNo",
             header: "发票号",
+            sortable: true,
             render: (row) => (
               <Link
                 href={`/supplier-invoices/${row.id}`}
@@ -172,6 +173,7 @@ function SupplierInvoiceList() {
           {
             key: "documentStatus",
             header: "单据状态",
+            sortable: true,
             render: (row) => <StatusBadge status={row.documentStatus} toneMap={TONE_MAP} />,
           },
           {
@@ -182,12 +184,14 @@ function SupplierInvoiceList() {
           {
             key: "invoiceDate",
             header: "开票日期",
+            sortable: true,
             render: (row) => formatDate(row.invoiceDate),
           },
           {
             key: "grossAmount",
             header: "价税合计",
             align: "right",
+            sortable: true,
             render: (row) => formatMoney(row.grossAmount, row.currency),
           },
           {

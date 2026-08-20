@@ -121,6 +121,7 @@ function InvoiceList() {
           {
             key: "code",
             header: "单号",
+            sortable: true,
             render: (row) =>
               row.code ? (
                 <Link
@@ -141,6 +142,7 @@ function InvoiceList() {
           {
             key: "status",
             header: "状态",
+            sortable: true,
             render: (row) => <StatusBadge status={row.status} toneMap={TONE_MAP} />,
           },
           {
@@ -185,18 +187,21 @@ function InvoiceList() {
           {
             key: "invoiceDate",
             header: "开票日期",
+            sortable: true,
             render: (row) => formatDate(row.invoiceDate),
           },
           {
             key: "invoiceTotal",
             header: "含税合计",
             align: "right",
+            sortable: true,
             render: (row) => formatMoney(row.invoiceTotal, row.currency),
           },
           {
             key: "balanceAmount",
             header: "应收余额",
             align: "right",
+            sortable: true,
             render: (row) => formatMoney(row.balanceAmount, row.currency),
           },
         ]}
