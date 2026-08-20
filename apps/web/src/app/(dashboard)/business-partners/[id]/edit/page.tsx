@@ -12,6 +12,7 @@ import { AppPage, EntityFormWorkspace } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
+import { validateUscc } from "@/lib/tax-invoice";
 
 interface BusinessPartnerDetail {
   id: string;
@@ -37,6 +38,16 @@ interface BusinessPartnerDetail {
   website: string | null;
   isActive: boolean;
   version: number;
+  invoiceInfoRecord?: {
+    id: string;
+    title: string | null;
+    uscc: string | null;
+    taxpayerType: string | null;
+    registeredAddress: string | null;
+    registeredPhone: string | null;
+    bankName: string | null;
+    bankAccountNo: string | null;
+  } | null;
 }
 
 const TYPE_OPTIONS = [
@@ -67,6 +78,14 @@ function BusinessPartnerEditForm() {
   const [name, setName] = useState("");
   const [type, setType] = useState("SUPPLIER");
   const [uscc, setUscc] = useState("");
+  // 开票资料（ADR-0043，F3）：结构化 taxInvoiceInfo
+  const [invTitle, setInvTitle] = useState("");
+  const [invUscc, setInvUscc] = useState("");
+  const [invTaxpayerType, setInvTaxpayerType] = useState("GENERAL_VAT_PAYER");
+  const [invRegAddress, setInvRegAddress] = useState("");
+  const [invRegPhone, setInvRegPhone] = useState("");
+  const [invBankName, setInvBankName] = useState("");
+  const [invBankAccount, setInvBankAccount] = useState("");
   const [taxpayerType, setTaxpayerType] = useState("");
   const [legalRepresentative, setLegalRepresentative] = useState("");
   const [region, setRegion] = useState("");
@@ -119,6 +138,14 @@ function BusinessPartnerEditForm() {
         setWebsite(d.website ?? "");
         setIsActive(d.isActive);
         setVersion(d.version);
+        // 开票资料（ADR-0043，F3）
+        setInvTitle(d.invoiceInfoRecord?.title ?? "");
+        setInvUscc(d.invoiceInfoRecord?.uscc ?? "");
+        setInvTaxpayerType(d.invoiceInfoRecord?.taxpayerType ?? "GENERAL_VAT_PAYER");
+        setInvRegAddress(d.invoiceInfoRecord?.registeredAddress ?? "");
+        setInvRegPhone(d.invoiceInfoRecord?.registeredPhone ?? "");
+        setInvBankName(d.invoiceInfoRecord?.bankName ?? "");
+        setInvBankAccount(d.invoiceInfoRecord?.bankAccountNo ?? "");
         setDirty(false);
         setLoading(false);
       })
@@ -137,6 +164,11 @@ function BusinessPartnerEditForm() {
     if (submitting) return;
     if (!name.trim()) {
       setError(new ApiClientError(400, "名称为必填项", "VALIDATION"));
+      return;
+    }
+    // 开票资料 uscc 校验（ADR-0043，I1：GB 32100-2015）
+    if (invTitle.trim() && invUscc.trim() && !validateUscc(invUscc)) {
+      setError(new ApiClientError(400, "统一社会信用代码非法（GB 32100-2015，18 位含校验码）", "USCC_INVALID"));
       return;
     }
     setSubmitting(true);
@@ -164,6 +196,20 @@ function BusinessPartnerEditForm() {
       employeeCount: employeeCount ? Number(employeeCount) : null,
       website: website.trim() || null,
       isActive,
+      // 开票资料（ADR-0043，F3；仅当填写抬头时提交）
+      ...(invTitle.trim()
+        ? {
+            taxInvoiceInfo: {
+              title: invTitle.trim(),
+              uscc: invUscc.trim(),
+              taxpayerType: invTaxpayerType as "GENERAL_VAT_PAYER" | "SMALL_SCALE",
+              registeredAddress: invRegAddress.trim() || null,
+              registeredPhone: invRegPhone.trim() || null,
+              bankName: invBankName.trim() || null,
+              bankAccountNo: invBankAccount.trim() || null,
+            },
+          }
+        : {}),
     };
     apiFetch<{ id: string }>(`/api/business-partners/${id}`, {
       method: "PATCH",
@@ -285,6 +331,35 @@ function BusinessPartnerEditForm() {
         </FormField>
         <FormField label="官网">
           <input value={website} onChange={(e) => setWebsite(e.target.value)} className={inputClass} />
+        </FormField>
+      </Section>
+      <Section title="开票资料">
+        <FormField label="开票抬头">
+          <input value={invTitle} onChange={(e) => setInvTitle(e.target.value)} className={inputClass} placeholder="填写后保存将创建开票资料" />
+        </FormField>
+        <FormField label="开票税号">
+          <input value={invUscc} onChange={(e) => setInvUscc(e.target.value)} className={inputClass} placeholder="18 位统一社会信用代码（GB 32100-2015）" />
+          {invUscc.trim() && !validateUscc(invUscc) && (
+            <p className="mt-1 text-xs text-red-500">统一社会信用代码格式不正确（GB 32100-2015）</p>
+          )}
+        </FormField>
+        <FormField label="纳税人类型">
+          <select value={invTaxpayerType} onChange={(e) => setInvTaxpayerType(e.target.value)} className={inputClass}>
+            <option value="GENERAL_VAT_PAYER">一般纳税人</option>
+            <option value="SMALL_SCALE">小规模纳税人</option>
+          </select>
+        </FormField>
+        <FormField label="注册地址">
+          <input value={invRegAddress} onChange={(e) => setInvRegAddress(e.target.value)} className={inputClass} />
+        </FormField>
+        <FormField label="注册电话">
+          <input value={invRegPhone} onChange={(e) => setInvRegPhone(e.target.value)} className={inputClass} />
+        </FormField>
+        <FormField label="开户银行">
+          <input value={invBankName} onChange={(e) => setInvBankName(e.target.value)} className={inputClass} />
+        </FormField>
+        <FormField label="银行账号">
+          <input value={invBankAccount} onChange={(e) => setInvBankAccount(e.target.value)} className={inputClass} />
         </FormField>
       </Section>
     </EntityFormWorkspace>

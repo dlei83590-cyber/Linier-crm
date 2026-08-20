@@ -74,6 +74,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     where: { id, deletedAt: null },
     include: {
       roles: { where: { deletedAt: null }, orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] },
+      invoiceInfoRecord: true, // 开票资料（ADR-0043；F3 前端接线）
     },
   });
   if (!partner) return failNotFound(ERROR_CODES.NOT_FOUND, "往来单位不存在");
