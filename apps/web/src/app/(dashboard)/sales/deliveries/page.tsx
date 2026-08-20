@@ -29,6 +29,16 @@ interface DeliveryRow {
 
 const STATUS_OPTIONS = ["DRAFT", "READY", "DISPATCHED", "DELIVERED", "COMPLETED", "CANCELLED"] as const;
 
+/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: "草稿",
+  READY: "待发运",
+  DISPATCHED: "已发运",
+  DELIVERED: "已送达",
+  COMPLETED: "已完成",
+  CANCELLED: "已取消",
+};
+
 const TONE_MAP: Record<string, StatusTone> = {
   DRAFT: "neutral",
   READY: "info",
@@ -66,6 +76,7 @@ function DeliveryList() {
       <EntityListWorkspace<DeliveryRow>
         title="送货单"
         description="送货单列表（唯一创建入口：销售订单）"
+        emptyMessage="暂无送货单——送货单由销售订单创建（订单详情 → 创建送货单）"
         filters={
           <>
             <input
@@ -85,7 +96,7 @@ function DeliveryList() {
               <option value="">全部状态</option>
               {STATUS_OPTIONS.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {STATUS_LABELS[s] ?? s}
                 </option>
               ))}
             </select>
@@ -125,7 +136,13 @@ function DeliveryList() {
           {
             key: "status",
             header: "状态",
-            render: (row) => <StatusBadge status={row.status} toneMap={TONE_MAP} />,
+            render: (row) => (
+              <StatusBadge
+                status={row.status}
+                label={STATUS_LABELS[row.status] ?? row.status}
+                toneMap={TONE_MAP}
+              />
+            ),
           },
           {
             key: "customer",

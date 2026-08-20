@@ -34,6 +34,16 @@ const TONE_MAP: Record<string, StatusTone> = {
   CANCELLED: "danger",
 };
 
+/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: "草稿",
+  READY: "待发运",
+  DISPATCHED: "已发运",
+  DELIVERED: "已送达",
+  COMPLETED: "已完成",
+  CANCELLED: "已取消",
+};
+
 interface DeliveryLine {
   id: string;
   lineNo: number;
@@ -303,7 +313,7 @@ function DeliveryDetailPage() {
         title={`送货单详情 — ${detail.code}`}
         backHref="/sales/deliveries"
         status={detail.status}
-        statusLabel={detail.status}
+        statusLabel={STATUS_LABELS[detail.status] ?? detail.status}
         statusTone={TONE_MAP[detail.status] ?? "neutral"}
         actions={
           <>
@@ -410,8 +420,8 @@ function DeliveryDetailPage() {
                 <tr>
                   <th className="px-3 py-2 font-medium">行号</th>
                   <th className="px-3 py-2 font-medium">物料</th>
-                  <th className="px-3 py-2 font-medium">数量</th>
-                  <th className="px-3 py-2 font-medium">剩余可开票</th>
+                  <th className="px-3 py-2 text-right font-medium">数量</th>
+                  <th className="px-3 py-2 text-right font-medium">剩余可开票</th>
                   <th className="px-3 py-2 font-medium">单位</th>
                   <th className="px-3 py-2 font-medium">来源订单行</th>
                 </tr>
@@ -423,8 +433,10 @@ function DeliveryDetailPage() {
                     <td className="px-3 py-2 text-ink-primary">
                       {line.item ? `${line.item.code ?? ""} ${line.item.name ?? ""}`.trim() : "—"}
                     </td>
-                    <td className="px-3 py-2 text-ink-primary">{line.quantity}</td>
-                    <td className="px-3 py-2 text-ink-primary">
+                    <td className="px-3 py-2 text-right tabular-nums text-ink-primary">
+                      {line.quantity}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-ink-primary">
                       {line.remainingInvoiceQty ?? line.quantity}
                     </td>
                     <td className="px-3 py-2 text-ink-secondary">{line.uom?.name ?? "—"}</td>

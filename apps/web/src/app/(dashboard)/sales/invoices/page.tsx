@@ -38,6 +38,15 @@ interface InvoiceRow {
 
 const STATUS_OPTIONS = ["DRAFT", "ISSUED", "PARTIALLY_PAID", "PAID", "CANCELLED"] as const;
 
+/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: "草稿",
+  ISSUED: "已开票",
+  PARTIALLY_PAID: "部分收款",
+  PAID: "已收款",
+  CANCELLED: "已取消",
+};
+
 const TONE_MAP: Record<string, StatusTone> = {
   DRAFT: "neutral",
   ISSUED: "info",
@@ -74,6 +83,7 @@ function InvoiceList() {
       <EntityListWorkspace<InvoiceRow>
         title="销售发票"
         description="销售发票列表（唯一创建入口：送货单）"
+        emptyMessage="暂无销售发票——发票由送货单创建（送货单详情 → 创建发票）"
         filters={
           <>
             <input
@@ -93,7 +103,7 @@ function InvoiceList() {
               <option value="">全部状态</option>
               {STATUS_OPTIONS.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {STATUS_LABELS[s] ?? s}
                 </option>
               ))}
             </select>
@@ -143,7 +153,13 @@ function InvoiceList() {
             key: "status",
             header: "状态",
             sortable: true,
-            render: (row) => <StatusBadge status={row.status} toneMap={TONE_MAP} />,
+            render: (row) => (
+              <StatusBadge
+                status={row.status}
+                label={STATUS_LABELS[row.status] ?? row.status}
+                toneMap={TONE_MAP}
+              />
+            ),
           },
           {
             key: "invoiceType",
