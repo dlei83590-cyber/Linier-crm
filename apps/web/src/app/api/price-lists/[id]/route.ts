@@ -5,6 +5,7 @@ import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/l
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
+import { casUpdate } from "@/lib/api/cas";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -67,13 +68,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const { version, ...updates } = parsed.data;
   const existing = await prisma.priceList.findFirst({ where: { id, deletedAt: null } });
   if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "价目表不存在");
-  if (existing.version !== version) {
-    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  }
+  
 
-  const updated = await prisma.priceList.update({
-    where: { id },
-    data: {
+  const cas = await casUpdate(prisma, 'priceList', id, version, {
       ...updates,
       priceType: updates.priceType as PriceType | undefined,
       status: updates.status as PriceListStatus | undefined,
@@ -81,10 +78,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       policyType: updates.policyType as never,
       effectiveFrom: updates.effectiveFrom === undefined ? undefined : updates.effectiveFrom === null ? null : new Date(updates.effectiveFrom),
       effectiveTo: updates.effectiveTo === undefined ? undefined : updates.effectiveTo === null ? null : new Date(updates.effectiveTo),
-      version: { increment: 1 },
       updatedById: user!.id,
-    },
-  });
+    
+});
+  if (cas.outcome === 'NOT_FOUND') return failNotFound(ERROR_CODES.NOT_FOUND, "价目表不存在");
+  if (cas.outcome === 'CONFLICT') return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
+  const updated = await prisma.priceList.findFirst({ where: { id, deletedAt: null } });
+  if (!updated) return failNotFound(ERROR_CODES.NOT_FOUND, "价目表不存在");
 
   await writeAuditLog({
     actorId: user?.id,
