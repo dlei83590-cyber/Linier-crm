@@ -1,6 +1,6 @@
 # 产品路线图（ROADMAP）
 
-- 版本：v1.38
+- 版本：v1.39
 - 日期：2026-08-20
 - 维护者：CIO（JINZA）｜审核：CTO
 - 状态说明：✅ 已完成 ｜ 🔄 进行中 ｜ ⬜ 未开始
@@ -283,6 +283,7 @@
 ## 15. 变更记录
 
 | 日期       | 变更       | 说明                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| 2026-08-20 | 更新 v1.39 | **U8 响应式满屏布局 + 手风琴导航 ✅（PR #123）**：去固定 7xl 居中 → 平铺满屏自适应（AdminShell 主布局 + AppPage 默认 full）；侧栏 xl:w-64；域展开互斥手风琴（点击其它域自动收起）；页面栅格巡检确认已响应式；零业务逻辑变更、零新依赖；Known Risk：满屏/手风琴交互需人工登录验证（无 E2E） |
 | 2026-08-20 | 更新 v1.38 | **A-4 原子乐观锁批量落地 ✅（PR #116-#121 一次合并）**：30 个 PATCH/事务路由 CAS 化（customers/files/deliveries/approver-groups/suppliers/menus/menu-groups/settings/workflows/items/quotations/sales-orders/invoices/projects 子资源 11 个）——casUpdate 置事务首部/简单型直调，404/409 哨兵映射，行删除竞态区分；核实跳过已内建 CAS（purchase-*/warehouse-receipts/stock-counts/inspections）与 FOR UPDATE 动作路由；消除 read-check-update TOCTOU（审计 P1）；零 Schema/新依赖；Known Risk：并发语义需人工接口验证（无 E2E） |
 | 2026-08-20 | 更新 v1.37 | **Sprint8 UI 现代化 U4-U7 ✅（PR #111-#114 一次性合并）**：命令面板 Ctrl+K（全局模块搜索，Linear/Notion 式）；全局密度切换（DensityContext + 顶栏按钮，localStorage 记忆）；表格列排序（客户端，表头点击循环，aria-sort；服务端排序 backlog）；路由过渡 fade-up + 利润表数字滚动（AnimatedNumber）；域色类抽公共模块；零业务逻辑变更、零新依赖；Known Risk：运行时交互需人工登录验证（无 E2E） |
 | 2026-08-20 | 更新 v1.36 | **Sprint8 UI 现代化 U3 ✅（PR #108-#109）**：表格/列表现代化——EntityListWorkspace 金额列右对齐+tabular-nums（ListColumn.align）、行操作列 hover 浮现（rowActions）、表头 sticky 强化、density prop、分页样式统一，销售发票/供应商发票/GL 凭证金额列接线；微动效——页面切换淡入（main key=pathname）、ConfirmActionDialog backdrop fade+scale 进场+确认按钮 spinner、StatusBadge 语义色圆点+进行中状态脉冲；零业务逻辑变更、零新依赖；Known Risk：运行时交互需人工登录验证（无 E2E） |
