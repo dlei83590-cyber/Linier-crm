@@ -14,6 +14,16 @@ export const INVOICE_TYPE_LABELS: Record<string, string> = {
 
 export const INVOICE_TYPE_OPTIONS = Object.entries(INVOICE_TYPE_LABELS).map(([value, label]) => ({ value, label }));
 
+/** 凭证字（ADR-0044） */
+export const VOUCHER_TYPE_LABELS: Record<string, string> = {
+  GENERAL: "记",
+  RECEIPT: "收",
+  PAYMENT: "付",
+  TRANSFER: "转",
+};
+
+export const VOUCHER_TYPE_OPTIONS = Object.entries(VOUCHER_TYPE_LABELS).map(([value, label]) => ({ value, label }));
+
 /** 税务发票号码展示（12 位代码-8 位号码 / 数电 20 位） */
 export function formatTaxInvoiceNumber(code?: string | null, no?: string | null): string {
   if (!no) return "—";
