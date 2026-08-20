@@ -538,7 +538,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        <main className="min-w-0 flex-1 p-4 md:p-6">{children}</main>
+        {/* U3.2 页面切换淡入：pathname 变化时重挂载 + fade-in（search param 变化不重挂载） */}
+        <main key={pathname} className="animate-fade-in min-w-0 flex-1 p-4 md:p-6">{children}</main>
       </div>
 
       {/* Footer — 发布版本 = ERP Release SSOT（RELEASE_VERSION manifest）；Web package version 不再展示为“系统版本” */}

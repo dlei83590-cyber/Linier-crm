@@ -39,16 +39,29 @@ interface StatusBadgeProps {
   tone?: StatusTone;
   /** 模块级状态→tone 映射扩展 */
   toneMap?: Record<string, StatusTone>;
+  /** 隐藏状态圆点（默认显示） */
+  hideDot?: boolean;
 }
 
-export function StatusBadge({ status, label, tone, toneMap }: StatusBadgeProps) {
+/** 进行中状态：圆点脉冲（Sprint8 U3.2 徽章动效） */
+const PULSE_STATUSES = new Set(['PENDING', 'SUBMITTED', 'COUNTING', 'PARTIALLY_RECEIVED', 'PARTIAL']);
+
+export function StatusBadge({ status, label, tone, toneMap, hideDot = false }: StatusBadgeProps) {
   const resolved: StatusTone = tone ?? toneMap?.[status] ?? DEFAULT_TONE_MAP[status] ?? 'neutral';
   const c = STATUS_COLORS[resolved];
+  const pulsing = PULSE_STATUSES.has(status);
   return (
     <span
-      className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium"
+      className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium"
       style={{ backgroundColor: c.bg, color: c.text, borderColor: c.border }}
     >
+      {!hideDot && (
+        <span
+          className={`h-1.5 w-1.5 shrink-0 rounded-full ${pulsing ? "animate-pulse" : ""}`}
+          style={{ backgroundColor: c.text }}
+          aria-hidden="true"
+        />
+      )}
       {label ?? status}
     </span>
   );
