@@ -108,6 +108,7 @@ function OpportunityList() {
       <EntityListWorkspace<OpportunityRow>
         title="项目机会"
         description="线索 → 准入 → 方案 → 报价阶段商机管理"
+        emptyMessage="暂无商机——点击「+ 新建商机」创建第一个商机"
         headerActions={
           canCreate ? (
             <Link
