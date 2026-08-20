@@ -13,7 +13,7 @@
  * 前端不自行发明业务错误码；后端 error.code 原样保留。
  */
 
-import { getAuthToken, notifyUnauthorized } from "@/lib/auth-token";
+import { notifyUnauthorized } from "@/lib/auth-token";
 
 export class ApiClientError extends Error {
   readonly status: number;
@@ -81,13 +81,11 @@ export async function apiFetch<T>(
   input: string | URL,
   init?: RequestInit,
 ): Promise<ApiSuccessEnvelope<T>> {
+  // ADR-0045：httpOnly 会话 cookie 由浏览器随 same-origin 请求自动携带（fetch 默认 credentials='same-origin'）
+  // 前端不再从 localStorage 读取/附加 Bearer（消除 XSS 窃取 JWT 的向量）
   const headers = new Headers(init?.headers);
-  const token = getAuthToken();
-  if (token && isSameOriginApiRequest(input) && !headers.has("Authorization")) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
 
-  const res = await fetch(input, { ...init, headers });
+  const res = await fetch(input, { ...init, headers, credentials: "same-origin" });
 
   if (res.status === 401) {
     notifyUnauthorized();
