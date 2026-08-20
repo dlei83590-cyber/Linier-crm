@@ -4,6 +4,7 @@ import { authenticate, requirePermission, requestMeta, writeAuditLog } from '@/l
 import { ok, failNotFound, failValidation, failConflict } from '@/lib/api/response';
 import { ERROR_CODES } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
+import { casUpdate } from '@/lib/api/cas';
 import { z } from 'zod';
 import { validateGlLines } from '@/lib/gl/entry-helpers';
 
@@ -67,23 +68,25 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if (!existing) throw new Error('NOT_FOUND');
       if (existing.sourceType !== 'MANUAL') throw new Error('NOT_MANUAL');
       if (existing.status !== 'DRAFT' && existing.status !== 'REJECTED') throw new Error('INVALID_STATE');
-      if (existing.version !== parsed.data.version) throw new Error('VERSION_CONFLICT');
 
       let linesData;
       if (parsed.data.lines) {
         linesData = await validateGlLines(tx, parsed.data.lines);
       }
 
-      const result = await tx.glJournalEntry.update({
-        where: { id },
-        data: {
-          ...(parsed.data.postingDate ? { postingDate: new Date(parsed.data.postingDate) } : {}),
-          ...(parsed.data.summary !== undefined ? { summary: parsed.data.summary } : {}),
-          ...(linesData ? { lines: { deleteMany: {}, create: linesData } } : {}),
-          version: { increment: 1 },
-        },
+      // 原子乐观锁（审计 P1：updateMany where {id,version} + count 判定）
+      const cas = await casUpdate(tx, 'glJournalEntry', id, parsed.data.version, {
+        ...(parsed.data.postingDate ? { postingDate: new Date(parsed.data.postingDate) } : {}),
+        ...(parsed.data.summary !== undefined ? { summary: parsed.data.summary } : {}),
+        ...(linesData ? { lines: { deleteMany: {}, create: linesData } } : {}),
+      });
+      if (cas.outcome === 'NOT_FOUND') throw new Error('NOT_FOUND');
+      if (cas.outcome === 'CONFLICT') throw new Error('VERSION_CONFLICT');
+      const result = await tx.glJournalEntry.findFirst({
+        where: { id, deletedAt: null },
         include: { lines: true },
       });
+      if (!result) throw new Error('NOT_FOUND');
       await writeAuditLog({
         actorId: user?.id,
         action: 'gl.journal-entry.update',
