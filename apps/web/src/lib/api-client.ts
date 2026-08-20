@@ -62,13 +62,6 @@ interface ApiFailureShape {
   error?: { code?: string; message?: string; details?: { requestId?: string } };
 }
 
-/** 判断是否 same-origin /api/* 请求（仅这类请求统一附加 Bearer token） */
-function isSameOriginApiRequest(input: string | URL): boolean {
-  if (typeof window === "undefined") return false;
-  const url = typeof input === "string" ? new URL(input, window.location.origin) : input;
-  return url.origin === window.location.origin && url.pathname.startsWith("/api/");
-}
-
 /**
  * 统一 fetch 包装：
  * - 非 2xx 或 success=false → throw ApiClientError（status/code/message 全保留）
