@@ -38,8 +38,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
-  // F2-5A：默认只展开当前域；expanded 记录用户额外展开的域
-  const [expanded, setExpanded] = useState<ReadonlySet<ModuleDomain>>(new Set());
+  // F2-5A：默认只展开当前域；U8 手风琴——同时只展开一个域（点击其它域自动收起）
+  const [expandedDomain, setExpandedDomain] = useState<ModuleDomain | null>(null);
   // F2-5A：域内 hold 折叠组（默认折叠）
   const [holdOpen, setHoldOpen] = useState<ReadonlySet<ModuleDomain>>(new Set());
   // U1.1：侧栏折叠（桌面）
@@ -169,16 +169,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       .slice(0, 12);
   }, [searchQuery, visibleGroups]);
 
-  // 域展开：当前域始终展开；其他域默认折叠，用户点击加入 expanded
+  // 域展开（U8 手风琴）：当前域始终展开；用户点击域互斥展开
+  // U8 手风琴：当前域始终展开；用户点击域 = 互斥展开（点已展开域则收起，其它域自动收起）
   const isDomainExpanded = (domainId: ModuleDomain): boolean =>
-    domainId === currentDomain || expanded.has(domainId);
+    domainId === currentDomain || expandedDomain === domainId;
   const toggleDomain = (domainId: ModuleDomain) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(domainId)) next.delete(domainId);
-      else next.add(domainId);
-      return next;
-    });
+    setExpandedDomain((prev) => (prev === domainId ? null : domainId));
   };
 
   // 域内 hold 折叠组
@@ -530,11 +526,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <div className="mx-auto flex max-w-7xl">
+      {/* U8：响应式满屏（不再固定 7xl 居中，随设备宽度平铺） */}
+      <div className="flex w-full">
         {/* Desktop sidebar：F2-5A 固定高度 + 内部独立滚动；U1.1 折叠轨道 */}
         <aside
           className={`sticky top-14 hidden h-[calc(100vh-3.5rem)] shrink-0 overflow-y-auto border-r border-border bg-surface transition-[width] duration-200 md:block ${
-            collapsed ? "w-16" : "w-56"
+            collapsed ? "w-16" : "w-56 xl:w-64"
           }`}
         >
           {sidebar}
