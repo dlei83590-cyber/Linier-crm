@@ -1,5 +1,44 @@
 # Release Notes
 
+## v0.9.0-alpha — Linier ERP Sprint 7 Finance（GL 总账 + 库存成本 + 销售侧 GL）+ UI 统一（2026-08-20 Release Candidate）
+
+> **Release 标题：** Linier ERP v0.9.0-alpha — Finance GL 全链 · 成本核算 · 销售侧记账 · UI 统一
+> **Release 摘要：** 在 v0.8.0-alpha 基础上（56 commits）：① **Sprint 7 Finance 首块 GL 全链**（ADR-0033~0037：过账消费 5C/GRIR 事件、余额/试算平衡/利润表实时聚合、手工凭证+审核流 maker-checker、期初余额+月结、期间重开；Migration 0033-0035；**单币种 CNY 决策**——系统仅中国市场，多币种折算不实施）；② **库存成本核算**（ADR-0038~0041：移动加权平均、出库结转、GL COGS 过账、多 COGS 科目映射；Migration 0036）；③ **5C-2 收尾**（Payment 整体冲销 Migration 0031、CN/DN 跨票 Consolidated Migration 0032）；④ **UI 统一批次 1-8**（Design System 语义化 token / FormField / 共享类 / CARD_CLASS / 权限门控修正 / finance 域归类）；⑤ **销售侧 GL 记账闭环**（ADR-0042，EVENTS v1.40：Invoice ISSUE 收入确认借1122贷6001+销项税 / 收款核销入账 / 核销反转红字，**修复利润表失真**——中国环境审计 P0）；⑥ **CTO 仓库巡检与治理**（分支整理 62 删除、v0.8.0 发布文档补全、env SSOT 收敛）。
+> **Release Gate：** 候选条件达成——main HEAD `7d3d8b7` CI 全绿（run #548：Quality Gates / Build / Secret Scanning 全 success）+ 单测覆盖（GL/costing/SalesGL 不变量）+ 11 份 QA 证据（Sprint7_GL_QA 系列 5 份、Costing_*_QA 4 份、UI_Unification_QA、Sprint7_SalesGL_QA）。证据：docs/reviews/ReleaseGate_v0.9.0_Acceptance.md
+> **Tag：** `v0.9.0-alpha`（annotated tag；GitHub Pre-release）
+> **版本治理：** 以 Git Tag 为发布事实源；`RELEASE_VERSION` manifest = v0.9.0-alpha；root package.json 不随本版修改。
+
+### Compatibility / Upgrade Guide
+
+- **Schema baseline**：Migration 0001–0036（0027 FROZEN；0028 FINAL 冻结；0029-0032 = 5C-2 增量；**0033-0035 = GL（GlAccount/GlJournalEntry/GlJournalEntryLine/GlPeriodClose）**；**0036 = 库存成本（InventoryCostBalance/InventoryCostSource）**），全部纯增量。
+- **Database**：PostgreSQL 16（依赖 UNIQUE NULLS NOT DISTINCT、FOR UPDATE SKIP LOCKED）。
+- **Migration**：部署自动执行 `prisma migrate deploy`；生产 baseline 升级为 `0036_inventory_cost_balance`。
+- **Breaking Changes**：无破坏性变更（0001–0036 全部增量迁移）；不可变会计事实纪律延续（GRIR/凭证/核销追加式纠错）。**单币种 CNY**：多币种折算不实施（CTO 2026-08-20 决策）。
+- **Upgrade Guide**：v0.8.0-alpha → 直接部署新版本（0031-0036 自动应用）；升级后需重跑 seed 补 3 个科目（1122 应收账款 / 6001 主营业务收入 / 22210102 销项税额，ADR-0042）；/api/health/ready 返回 baseline=true 即验证成功。
+
+### 新增能力（业务视角）
+
+- **GL 总账（Sprint 7 Finance 首块）**：自动过账（采购/5C/GRIR/销售侧事件驱动）+ 余额/试算平衡/利润表实时聚合 + 手工凭证录入与审核流（maker-checker，DRAFT→SUBMITTED→APPROVED→POSTED）+ 期初余额与期末结转（本年利润 4103）+ 期间重开（红字冲销）
+- **库存成本核算**：移动加权平均（item 级）+ 出库结转 + GL COGS 过账（借 6401 贷 1403/1405，按 itemType 映射多科目）
+- **5C-2 收尾**：付款整体冲销（红字恢复应付）、供应商 CN/DN 跨票 Consolidated（逐票归属分摊）
+- **销售侧 GL 记账闭环**：发票开票即确认收入（应收/收入/销项税），收款核销入账（银行/现金），核销反转红字——利润表/试算平衡完整反映销售侧
+- **UI 统一**：Design System 语义化 token（canvas/surface/ink/status/border + elevation）、FormField 组件、共享类单一来源（INPUT/BUTTON/CARD/SELECT）、业务页权限门控按 RBAC 修正、GL 模块归入 finance 域
+- **治理**：远程分支 62 删除（归档 archive/feature-frontend-tier1-batch3）、v0.8.0 发布正文补全、.env.example SSOT 收敛
+
+### Known Limitations（2026-08-20）
+
+1. **销售侧 CN/DN（4E-3）与坏账核销（WriteOff）GL 为 backlog**（ADR-0042 后续：收入调整 / 信用减值损失）
+2. **增值税发票管理字段缺失**（发票类型专票/普票/数电票、发票代码/号码、红字发票——中国环境审计 P1，独立 Design Gate）
+3. **会计期间表缺失**：凭证号 JRN 全局连续不按月重排；无业务日期/记账日期分离（P1，独立 Gate）
+4. **应收应付期初余额**为 backlog（老账迁移刚需）
+5. **收款仅区分 CASH→1001 / 其余→1002**；承兑票据/电汇分科目 backlog
+6. **Reservation / FIFO / 分仓分批成本 / 生产成本归集 HOLD**（ADR-0038 边界）；BI / OA / Mobile / Contract 模块未开始
+7. **ERROR_CODES.md 文档-代码漂移**（251 描述性码 vs 文档 60 旧式码，代码审计 P1，待自动注册表）；CRUD 乐观锁原子化（updateMany CAS）待落地（P1 代码债）
+8. **事件总线 reconciliation**：ApOpenItem/库存投影对账服务未实现（增量维护，全量重算 backlog）
+9. **main 分支保护未启用**（CI GREEN 靠自律；建议 require PR + checks，待 CTO 拍板）
+
+---
+
 ## v0.8.0-alpha — Linier ERP 全模块打通 · 5C-2 · Read Models（2026-08-19 Release Candidate）
 
 > **Release 标题：** Linier ERP v0.8.0-alpha — Frontend 全模块打通 + 5C-2 AP 结算 + Read Models
