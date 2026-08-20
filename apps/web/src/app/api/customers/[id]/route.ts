@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { casUpdate } from "@/lib/api/cas";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
@@ -63,19 +64,27 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   const existing = await prisma.customer.findFirst({ where: { id, deletedAt: null } });
   if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "客户不存在");
-  if (existing.version !== version) {
+
+  // A4-CAS：原子乐观锁（消除 read-check-update TOCTOU）
+  const cas = await casUpdate(prisma, "customer", id, version, {
+    ...updates,
+    foundedDate:
+      updates.foundedDate === undefined
+        ? undefined
+        : updates.foundedDate === null
+          ? null
+          : new Date(updates.foundedDate),
+    updatedById: user!.id,
+  });
+  if (cas.outcome === "CONFLICT") {
     return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
   }
+  if (cas.outcome === "NOT_FOUND") {
+    return failNotFound(ERROR_CODES.NOT_FOUND, "客户不存在");
+  }
 
-  const updated = await prisma.customer.update({
-    where: { id },
-    data: {
-      ...updates,
-      foundedDate: updates.foundedDate === undefined ? undefined : updates.foundedDate === null ? null : new Date(updates.foundedDate),
-      version: { increment: 1 },
-      updatedById: user!.id,
-    },
-  });
+  const updated = await prisma.customer.findFirst({ where: { id, deletedAt: null } });
+  if (!updated) return failNotFound(ERROR_CODES.NOT_FOUND, "客户不存在");
 
   await writeAuditLog({
     actorId: user?.id,

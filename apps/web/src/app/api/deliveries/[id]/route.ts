@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { casUpdate } from "@/lib/api/cas";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
@@ -65,28 +66,28 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if ((EDITABLE_STATUSES as readonly string[]).includes(delivery.status) === false) {
     return failConflict(ERROR_CODES.DELIVERY_INVALID_STATE, "仅 DRAFT 状态可编辑（READY 后行冻结，错误需取消后新建）");
   }
-  if (delivery.version !== version) {
-    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  }
 
-  const updated = await prisma.$transaction(async (tx) => {
-    const saved = await tx.delivery.update({
-      where: { id },
-      data: {
-        ...(fields.deliveryDate !== undefined ? { deliveryDate: new Date(fields.deliveryDate) } : {}),
-        ...(fields.expectedArrivalDate !== undefined
-          ? { expectedArrivalDate: fields.expectedArrivalDate ? new Date(fields.expectedArrivalDate) : null }
-          : {}),
-        ...(fields.carrier !== undefined ? { carrier: fields.carrier } : {}),
-        ...(fields.trackingNo !== undefined ? { trackingNo: fields.trackingNo } : {}),
-        ...(fields.remark !== undefined ? { remark: fields.remark } : {}),
-        version: { increment: 1 },
-        updatedById: user!.id,
-      },
+  // A4-CAS：原子乐观锁置于事务首部（消除 read-check-update TOCTOU）
+  const result = await prisma.$transaction(async (tx) => {
+    const cas = await casUpdate(tx, "delivery", id, version, {
+      ...(fields.deliveryDate !== undefined ? { deliveryDate: new Date(fields.deliveryDate) } : {}),
+      ...(fields.expectedArrivalDate !== undefined
+        ? { expectedArrivalDate: fields.expectedArrivalDate ? new Date(fields.expectedArrivalDate) : null }
+        : {}),
+      ...(fields.carrier !== undefined ? { carrier: fields.carrier } : {}),
+      ...(fields.trackingNo !== undefined ? { trackingNo: fields.trackingNo } : {}),
+      ...(fields.remark !== undefined ? { remark: fields.remark } : {}),
+      updatedById: user!.id,
     });
+    if (cas.outcome !== "OK") return cas;
+    const saved = await tx.delivery.findFirst({ where: { id, deletedAt: null } });
+    if (!saved) return { outcome: "NOT_FOUND" as const };
     await createDeliveryRevision(tx, id, changeReason ?? "更新交付单头", { delivery: saved }, user?.id);
-    return saved;
+    return { outcome: "OK" as const, delivery: saved };
   });
+  if (result.outcome === "NOT_FOUND") return failNotFound(ERROR_CODES.DELIVERY_NOT_FOUND, "交付单不存在");
+  if (result.outcome === "CONFLICT") return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
+  const updated = result.delivery;
 
   await publishDeliveryEvent({
     eventType: "DeliveryUpdated",

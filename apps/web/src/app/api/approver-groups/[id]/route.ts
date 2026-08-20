@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { casUpdate } from "@/lib/api/cas";
 import { authenticate, requirePermission, clientIp, writeAuditLog } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
@@ -43,36 +44,41 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (!existing) {
     return failNotFound(ERROR_CODES.APPROVER_GROUP_NOT_FOUND, "审批组不存在");
   }
-  if (existing.version !== version) {
-    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  }
 
-  const updated = await prisma.$transaction(async (tx) => {
+  // A4-CAS：原子乐观锁置于事务首部（头部字段 CAS；成员替换紧随其后，不再二次 bump version）
+  const result = await prisma.$transaction(async (tx) => {
+    const cas = await casUpdate(tx, "approverGroup", id, version, {
+      ...(updates.name !== undefined ? { name: updates.name } : {}),
+      ...(updates.description !== undefined ? { description: updates.description } : {}),
+      ...(updates.code !== undefined ? { code: updates.code } : {}),
+      updatedById: user!.id,
+    });
+    if (cas.outcome !== "OK") return cas;
     const g = await tx.approverGroup.update({
       where: { id },
-      data: {
-        ...(updates.name !== undefined ? { name: updates.name } : {}),
-        ...(updates.description !== undefined ? { description: updates.description } : {}),
-        ...(updates.code !== undefined ? { code: updates.code } : {}),
-        version: { increment: 1 },
-        updatedById: user!.id,
-        ...(memberUserIds
-          ? {
-              members: {
-                deleteMany: {},
-                create: memberUserIds.map((userId) => ({
-                  userId,
-                  createdById: user!.id,
-                  updatedById: user!.id,
-                })),
-              },
-            }
-          : {}),
-      },
+      data: memberUserIds
+        ? {
+            members: {
+              deleteMany: {},
+              create: memberUserIds.map((userId) => ({
+                userId,
+                createdById: user!.id,
+                updatedById: user!.id,
+              })),
+            },
+          }
+        : {},
       include: { members: { where: { deletedAt: null } } },
     });
-    return g;
+    return { outcome: "OK" as const, group: g };
   });
+  if (result.outcome === "NOT_FOUND") {
+    return failNotFound(ERROR_CODES.APPROVER_GROUP_NOT_FOUND, "审批组不存在");
+  }
+  if (result.outcome === "CONFLICT") {
+    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
+  }
+  const updated = result.group;
 
   await writeAuditLog({
     actorId: user?.id,
