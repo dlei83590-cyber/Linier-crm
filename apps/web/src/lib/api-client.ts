@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Track A Frontend Iteration 1 — Frontend Error Contract（CTO Scale-Out Gate Required Hardening）
  *
  * 统一 API 响应/错误规范化：
@@ -61,7 +61,6 @@ interface ApiFailureShape {
   success?: boolean;
   error?: { code?: string; message?: string; details?: { requestId?: string } };
 }
-
 
 /**
  * 统一 fetch 包装：
