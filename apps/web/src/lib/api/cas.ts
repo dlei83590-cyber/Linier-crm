@@ -6,6 +6,8 @@
  * 用法：const cas = await casUpdate(prisma, 'invoice', id, version, { ...fields, updatedById });
  */
 
+import { Prisma, PrismaClient } from '@prisma/client';
+
 interface CasDelegate {
   updateMany(args: { where: Record<string, unknown>; data: Record<string, unknown> }): Promise<{ count: number }>;
   findFirst(args: { where: Record<string, unknown>; select?: Record<string, unknown> }): Promise<Record<string, unknown> | null>;
@@ -14,7 +16,7 @@ interface CasDelegate {
 export type CasResult = { outcome: 'OK' } | { outcome: 'NOT_FOUND' } | { outcome: 'CONFLICT' };
 
 export async function casUpdate(
-  client: { [model: string]: CasDelegate },
+  client: Prisma.TransactionClient | PrismaClient,
   model: string,
   id: string,
   version: number,
