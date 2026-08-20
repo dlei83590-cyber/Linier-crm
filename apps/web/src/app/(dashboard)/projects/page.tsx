@@ -125,6 +125,7 @@ function ProjectList() {
       <EntityListWorkspace<ProjectRow>
         title="项目管理"
         description="试样 / 测试 / 小批量 / 批量供货阶段项目"
+        emptyMessage="暂无项目——点击「+ 新建项目」创建第一个项目"
         headerActions={
           canCreate ? (
             <Link
