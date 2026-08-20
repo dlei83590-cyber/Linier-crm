@@ -64,7 +64,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 
   // A4-CAS：原子乐观锁置于事务首部（头部字段 CAS；steps 整体替换紧随其后，不再二次 bump version）
-  const result = await prisma.$transaction(async (tx) => {
+  const txResult = await prisma.$transaction(async (tx) => {
     const cas = await casUpdate(tx, "workflowDefinition", id, version, {
       ...(updates.name !== undefined ? { name: updates.name } : {}),
       ...(updates.description !== undefined ? { description: updates.description } : {}),
@@ -109,13 +109,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     });
     return { outcome: "OK" as const, wf };
   });
-  if (result.outcome === "NOT_FOUND") {
+  if (txResult.outcome === "NOT_FOUND") {
     return failNotFound(ERROR_CODES.WORKFLOW_DEFINITION_NOT_FOUND, "工作流定义不存在");
   }
-  if (result.outcome === "CONFLICT") {
+  if (txResult.outcome === "CONFLICT") {
     return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
   }
-  const updated = result.wf;
+  const updated = txResult.wf;
 
   const result = await loadDefinition(updated.id);
 
