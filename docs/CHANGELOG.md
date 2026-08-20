@@ -2,6 +2,19 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Sprint8 UI 现代化 U3（2026-08-20，PR #108-#109）
+
+### 新增（表格现代化 + 微动效）
+
+- **U3.1 表格/列表现代化**（#108）：EntityListWorkspace 升级——金额/数量列右对齐 + tabular-nums（ListColumn.align）、行操作列 hover 平滑浮现（rowActions）、表头 sticky + font-semibold 强化、density（compact）prop；Pagination 上一页/下一页样式统一；销售发票/供应商发票/GL 凭证列表金额列右对齐接线
+- **U3.2 微动效**（#109）：页面切换淡入（AdminShell main key=pathname + fade-in）；ConfirmActionDialog backdrop fade + 卡片 scale/translateY 进场 + backdrop blur + 确认按钮内联 spinner；StatusBadge 统一语义色状态圆点，进行中状态（PENDING/SUBMITTED/COUNTING/部分收货/部分合格）圆点脉冲，新增 hideDot prop
+
+### Known Risk
+
+- 表格悬浮浮现/页面淡入/徽章脉冲需人工登录验证，无 E2E
+
+---
+
 ## [Unreleased] - Sprint8 UI 现代化（2026-08-20，PR #103-#105）
 
 ### 新增（高饱和彩色仪表盘风 + 全局反馈系统 + 壳层交互）

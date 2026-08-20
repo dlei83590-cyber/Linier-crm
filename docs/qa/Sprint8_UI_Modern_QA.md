@@ -1,7 +1,7 @@
 # Sprint8 UI 现代化 QA（PR #103-#105）
 
 - **日期：** 2026-08-20
-- **范围：** 高饱和彩色仪表盘风（10 域色板）+ 壳层交互（侧栏折叠/域色指示/抽屉动画/顶栏搜索）+ 全局反馈系统（Toast/骨架屏/空态/按钮 loading）+ 财务流程 Toast 接线
+- **范围：** 高饱和彩色仪表盘风（10 域色板）+ 壳层交互（侧栏折叠/域色指示/抽屉动画/顶栏搜索）+ 全局反馈系统（Toast/骨架屏/空态/按钮 loading）+ 财务流程 Toast 接线 + **U3 表格现代化与微动效（PR #108-#109）**
 - **验证策略：** CI-First——Quality Gates（lint/type-check/unit）+ Build + Secret Scanning 全绿合入；运行时交互人工登录验证
 
 ## 静态验收清单
@@ -21,7 +21,18 @@
 | S1 | 零业务逻辑变更；零新依赖 | ✅ |
 | S2 | 域色板 tokens.ts（MODULE_ACCENTS）与 tailwind domain-* 一致 | ✅ |
 
+## U3 补充验收（PR #108-#109）
+
+| # | 检查项 | 结果 |
+| --- | --- | --- |
+| U3.1a | 金额列右对齐 + tabular-nums（销售发票/供应商发票/GL 凭证） | ✅ |
+| U3.1b | rowActions hover 浮现操作列（组件能力） | ✅ |
+| U3.1c | 表头 sticky + font-semibold 强化；Pagination 样式统一 | ✅ |
+| U3.2a | 页面切换淡入（main key=pathname） | ✅ |
+| U3.2b | ConfirmActionDialog backdrop fade + 卡片进场 + 确认按钮 spinner | ✅ |
+| U3.2c | StatusBadge 语义色圆点 + 进行中状态脉冲 | ✅ |
+
 ## Known Risk
 
-1. 折叠动画/搜索下拉/抽屉动效/Toast 时序/骨架屏渲染需人工登录验证（无 E2E）。
+1. 折叠动画/搜索下拉/抽屉动效/Toast 时序/骨架屏渲染/表格悬浮/页面淡入/徽章脉冲需人工登录验证（无 E2E）。
 2. 未实现项（Design Gate §7）：深色模式、命令面板 Ctrl+K、表格列排序/批量选择/密度切换、页面级路由过渡、数字滚动——backlog。
