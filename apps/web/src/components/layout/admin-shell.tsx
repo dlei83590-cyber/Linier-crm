@@ -11,6 +11,7 @@ import {
   type ModuleDomain,
 } from "@/lib/frontend/modules";
 import { MODULE_ACCENT_MAP } from "@/components/design-system";
+import { Skeleton } from "@/components/ui/skeleton";
 
 /**
  * Admin Shell — F2-0（IA v2）+ F2-5A（Navigation Reset）+ Sprint8 U1 高饱和彩色仪表盘壳层交互
@@ -199,7 +200,16 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   if (state.status !== "authenticated" || !state.user) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-canvas">
-        <p className="text-sm text-ink-muted">加载中…</p>
+        <div className="w-64 space-y-3">
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-8 w-8 rounded-lg" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-3 w-1/2" />
+            </div>
+          </div>
+          {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-9 w-full" />)}
+        </div>
       </div>
     );
   }

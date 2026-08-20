@@ -17,6 +17,7 @@ import type { ApiClientError } from "@/lib/api-client";
 import { isVersionConflict } from "@/lib/api-client";
 import { useDirtyStateGuard } from "@/lib/use-dirty-state-guard";
 import { PageHeader } from "./page-header";
+import { Spinner } from "@/components/ui/skeleton";
 import { ErrorPanel } from "./error-panel";
 
 interface EntityFormWorkspaceProps {
@@ -94,7 +95,14 @@ export function EntityFormWorkspace({
               disabled={submitting}
               className="bg-brand-600 hover:bg-brand-700 rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {submitting ? "提交中…" : saveText}
+              {submitting ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <Spinner />
+                  提交中…
+                </span>
+              ) : (
+                saveText
+              )}
             </button>
           </div>
         }

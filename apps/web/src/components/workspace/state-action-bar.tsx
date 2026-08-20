@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { StatusBadge } from './status-badge';
 import { ConfirmActionDialog } from './confirm-action-dialog';
 import type { StatusTone } from '@/components/design-system';
+import { Spinner } from '@/components/ui/skeleton';
 
 export type StateActionTone = 'primary' | 'secondary' | 'danger';
 
@@ -80,7 +81,14 @@ export function StateActionBar({
             title={action.disabled ? action.disabledReason : undefined}
             className={`rounded-md px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 ${TONE_CLASS[tone]}`}
           >
-            {busyKey === action.key ? '处理中…' : action.label}
+            {busyKey === action.key ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Spinner />
+                处理中…
+              </span>
+            ) : (
+              action.label
+            )}
           </button>
         );
       })}
