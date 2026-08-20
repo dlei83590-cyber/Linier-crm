@@ -1,10 +1,11 @@
-import { NextRequest } from "next/server";
+﻿import { NextRequest } from "next/server";
 import type { PartnerRoleType, PriceSource } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
+import { casUpdate } from "@/lib/api/cas";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -61,22 +62,22 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const { version, ...updates } = parsed.data;
   const existing = await prisma.partnerPrice.findFirst({ where: { id, deletedAt: null } });
   if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "专属价不存在");
-  if (existing.version !== version) {
-    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  }
+  
 
-  const updated = await prisma.partnerPrice.update({
-    where: { id },
-    data: {
+  const cas = await casUpdate(prisma, 'partnerPrice', id, version, {
       ...updates,
       partnerRoleType: updates.partnerRoleType as PartnerRoleType | undefined,
       priceSource: updates.priceSource as PriceSource | undefined,
       effectiveFrom: updates.effectiveFrom === undefined ? undefined : updates.effectiveFrom === null ? null : new Date(updates.effectiveFrom),
       effectiveTo: updates.effectiveTo === undefined ? undefined : updates.effectiveTo === null ? null : new Date(updates.effectiveTo),
-      version: { increment: 1 },
+
       updatedById: user!.id,
-    },
-  });
+    
+});
+  if (cas.outcome === 'NOT_FOUND') return failNotFound(ERROR_CODES.NOT_FOUND, "专属价不存在");
+  if (cas.outcome === 'CONFLICT') return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
+  const updated = await prisma.partnerPrice.findFirst({ where: { id, deletedAt: null } });
+  if (!updated) return failNotFound(ERROR_CODES.NOT_FOUND, "专属价不存在");
 
   await writeAuditLog({
     actorId: user?.id,

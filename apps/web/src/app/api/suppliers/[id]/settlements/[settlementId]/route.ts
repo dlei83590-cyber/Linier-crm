@@ -1,9 +1,10 @@
-import { NextRequest } from "next/server";
+﻿import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
+import { casUpdate } from "@/lib/api/cas";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -39,14 +40,14 @@ export async function PATCH(
     where: { id: settlementId, supplierId: id, deletedAt: null },
   });
   if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "结算条款不存在");
-  if (existing.version !== version) {
-    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  }
+  
 
-  const updated = await prisma.supplierSettlement.update({
-    where: { id: settlementId },
-    data: { ...updates, version: { increment: 1 }, updatedById: user!.id },
-  });
+  const cas = await casUpdate(prisma, 'supplierSettlement', id, version, { ...updates, version: { increment: 1 }, updatedById: user!.id 
+});
+  if (cas.outcome === 'NOT_FOUND') return failNotFound(ERROR_CODES.NOT_FOUND, "结算条款不存在");
+  if (cas.outcome === 'CONFLICT') return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
+  const updated = await prisma.supplierSettlement.findFirst({ where: { id, deletedAt: null } });
+  if (!updated) return failNotFound(ERROR_CODES.NOT_FOUND, "结算条款不存在");
 
   await writeAuditLog({
     actorId: user?.id,
