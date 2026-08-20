@@ -35,6 +35,15 @@ interface SupplierInvoiceRow {
 
 const STATUS_OPTIONS = ["DRAFT", "SUBMITTED", "MATCHED", "APPROVED", "POSTED"] as const;
 
+/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: "草稿",
+  SUBMITTED: "已提交",
+  MATCHED: "已匹配",
+  APPROVED: "已批准",
+  POSTED: "已过账",
+};
+
 const TONE_MAP: Record<string, StatusTone> = {
   DRAFT: "neutral",
   SUBMITTED: "info",
@@ -92,6 +101,7 @@ function SupplierInvoiceList() {
       <EntityListWorkspace<SupplierInvoiceRow>
         title="供应商发票"
         description="供应商发票（RECEIPT_BASED 三重匹配 + AP 应付）"
+        emptyMessage="暂无供应商发票——点击「+ 新建供应商发票」创建第一张发票"
         headerActions={
           canCreate ? (
             <Link
@@ -127,7 +137,7 @@ function SupplierInvoiceList() {
               <option value="">全部状态</option>
               {STATUS_OPTIONS.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {STATUS_LABELS[s] ?? s}
                 </option>
               ))}
             </select>
@@ -174,7 +184,13 @@ function SupplierInvoiceList() {
             key: "documentStatus",
             header: "单据状态",
             sortable: true,
-            render: (row) => <StatusBadge status={row.documentStatus} toneMap={TONE_MAP} />,
+            render: (row) => (
+              <StatusBadge
+                status={row.documentStatus}
+                label={STATUS_LABELS[row.documentStatus] ?? row.documentStatus}
+                toneMap={TONE_MAP}
+              />
+            ),
           },
           {
             key: "supplier",

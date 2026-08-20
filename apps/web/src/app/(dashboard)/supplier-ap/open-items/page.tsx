@@ -141,6 +141,7 @@ function ApOpenItemList() {
           { key: "currency", header: "币种", render: (row) => row.currency ?? "CNY" },
           {
             key: "openAmount",
+            align: "right",
             header: "未结金额",
             render: (row) => formatMoney(row.openAmount, row.currency),
           },
