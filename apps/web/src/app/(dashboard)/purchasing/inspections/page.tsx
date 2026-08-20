@@ -23,7 +23,7 @@ interface InspectionRow {
   result: string;
   qualifiedQty: string;
   rejectedQty: string;
-  createdAt: string;
+  inspectedAt?: string | null;
   inspectedBy?: { name: string | null } | null;
   purchaseReceiptLine?: {
     lineNo: number;
@@ -173,9 +173,9 @@ function InspectionList() {
             render: (row) => row.inspectedBy?.name ?? "—",
           },
           {
-            key: "createdAt",
-            header: "创建时间",
-            render: (row) => formatDate(row.createdAt),
+            key: "inspectedAt",
+            header: "质检时间",
+            render: (row) => formatDate(row.inspectedAt),
           },
         ]}
         rows={items}

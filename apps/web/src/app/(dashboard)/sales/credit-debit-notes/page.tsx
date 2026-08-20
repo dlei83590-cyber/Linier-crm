@@ -343,8 +343,8 @@ function CnDnList() {
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-ink-muted">创建时间</p>
-                        <p className="text-ink-primary mt-0.5">{formatDate(row.createdAt)}</p>
+                        <p className="text-xs text-ink-muted">应用日期</p>
+                        <p className="text-ink-primary mt-0.5">{formatDate(row.appliedAt)}</p>
                       </div>
                       <div className="col-span-2 md:col-span-4">
                         <p className="text-xs text-ink-muted">原因</p>
