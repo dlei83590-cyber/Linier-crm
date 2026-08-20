@@ -79,6 +79,7 @@ function UserList() {
       <EntityListWorkspace<UserRow>
         title="用户管理"
         description="管理平台用户账号、启用状态与部门归属"
+        emptyMessage="暂无用户——点击「+ 新建用户」创建第一个账号"
         headerActions={
           canCreate ? (
             <Link

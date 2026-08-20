@@ -55,6 +55,7 @@ function DepartmentList() {
       <EntityListWorkspace<DepartmentRow>
         title="部门管理"
         description="维护组织架构与部门层级关系"
+        emptyMessage="暂无部门——点击「+ 新建部门」创建第一个部门"
         headerActions={
           canCreate ? (
             <Link

@@ -54,6 +54,7 @@ function CommercialTermList() {
       <EntityListWorkspace<CommercialTermRow>
         title="商业条款"
         description="维护 EXW/FOB/CIF 等贸易术语与结算条款"
+        emptyMessage="暂无贸易术语"
         headerActions={
           canCreate ? (
             <Link

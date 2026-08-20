@@ -34,6 +34,13 @@ const RESULT_TONE: Record<string, StatusTone> = {
   PARTIAL: "warning",
 };
 
+/** 操作结果中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
+const RESULT_LABELS: Record<string, string> = {
+  SUCCESS: "成功",
+  FAILURE: "失败",
+  PARTIAL: "部分成功",
+};
+
 const RESULT_OPTIONS = ["SUCCESS", "FAILURE", "PARTIAL"] as const;
 
 function AuditLogList() {
@@ -145,7 +152,9 @@ function AuditLogList() {
           {
             key: "result",
             header: "结果",
-            render: (row) => <StatusBadge status={row.result} toneMap={RESULT_TONE} />,
+            render: (row) => (
+              <StatusBadge status={row.result} label={RESULT_LABELS[row.result] ?? row.result} toneMap={RESULT_TONE} />
+            ),
           },
           {
             key: "actor",
