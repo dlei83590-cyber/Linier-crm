@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { casUpdate } from "@/lib/api/cas";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
 import { ok, fail, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
@@ -76,9 +77,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if ((EDITABLE_STATUSES as readonly string[]).includes(invoice.status) === false) {
     return failConflict(ERROR_CODES.INVOICE_INVALID_STATE, `仅 DRAFT 状态可编辑（当前 ${invoice.status}）`);
   }
-  if (invoice.version !== version) {
-    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  }
 
   // 关键财务字段变更判定（CTO Phase 4 指令：paymentTerm/dueDate 变更 → 触发重新审批；remark 不触发）
   const keyFinancialChanged =
@@ -91,16 +89,18 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   try {
     // 单事务：更新头 + Revision + 审批触发（财务修改与审批状态切换统一事务，命中策略失败整体回滚显式报错）
     updated = await prisma.$transaction(async (tx) => {
-      const saved = await tx.invoice.update({
-        where: { id },
-        data: {
-          ...(fields.remark !== undefined ? { remark: fields.remark } : {}),
-          ...(fields.dueDate !== undefined ? { dueDate: fields.dueDate ? new Date(fields.dueDate) : null } : {}),
-          ...(fields.paymentTerm !== undefined ? { paymentTerm: fields.paymentTerm } : {}),
-          version: { increment: 1 },
-          updatedById: user!.id,
-        },
+      // A4-CAS：原子乐观锁置于事务首部（消除 read-check-update TOCTOU）
+      const cas = await casUpdate(tx, "invoice", id, version, {
+        ...(fields.remark !== undefined ? { remark: fields.remark } : {}),
+        ...(fields.dueDate !== undefined ? { dueDate: fields.dueDate ? new Date(fields.dueDate) : null } : {}),
+        ...(fields.paymentTerm !== undefined ? { paymentTerm: fields.paymentTerm } : {}),
+        updatedById: user!.id,
       });
+      if (cas.outcome !== "OK") {
+        throw new Error(cas.outcome === "NOT_FOUND" ? "INVOICE_NOT_FOUND" : "INVOICE_VERSION_CONFLICT");
+      }
+      const saved = await tx.invoice.findFirst({ where: { id, deletedAt: null } });
+      if (!saved) throw new Error("INVOICE_NOT_FOUND");
       // 非财务编辑 → 系统生成 Revision（不允许自由编辑 Revision）
       await createInvoiceRevision(tx, id, changeReason ?? "更新发票头", { invoice: saved }, user?.id);
       // 财务条件变更 → 审批触发（同一事务，传 tx）：无实例创建 / RUNNING 保持 / 终态复用重新 SUBMIT
@@ -110,6 +110,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   } catch (e) {
     if (e instanceof Error && e.message === "WORKFLOW_DEFINITION_NOT_FOUND") {
       return fail(ERROR_CODES.INVOICE_WORKFLOW_FAILED, "审批流程定义不存在或未发布（INVOICE_APPROVAL），发票变更已回滚", 409);
+    }
+    if (e instanceof Error && e.message === "INVOICE_NOT_FOUND") {
+      return failNotFound(ERROR_CODES.INVOICE_NOT_FOUND, "发票不存在");
+    }
+    if (e instanceof Error && e.message === "INVOICE_VERSION_CONFLICT") {
+      return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
     }
     throw e;
   }
