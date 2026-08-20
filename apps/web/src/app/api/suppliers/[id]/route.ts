@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { casUpdate } from "@/lib/api/cas";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
@@ -60,9 +61,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   const existing = await prisma.supplier.findFirst({ where: { id, deletedAt: null } });
   if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "供应商不存在");
-  if (existing.version !== version) {
-    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  }
 
   if (updates.partnerId && updates.partnerId !== existing.partnerId) {
     const partner = await prisma.businessPartner.findFirst({ where: { id: updates.partnerId, deletedAt: null } });
@@ -72,7 +70,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
   }
 
-  const updated = await prisma.$transaction(async (tx) => {
+  // A4-CAS：原子乐观锁置于事务首部（消除 read-check-update TOCTOU）
+  const result = await prisma.$transaction(async (tx) => {
+    const cas = await casUpdate(tx, "supplier", id, version, {
+      ...updates,
+      updatedById: user!.id,
+    });
+    if (cas.outcome !== "OK") return cas;
     if (updates.partnerId && updates.partnerId !== existing.partnerId) {
       await tx.businessPartnerRole.upsert({
         where: { partnerId_roleType: { partnerId: updates.partnerId!, roleType: "SUPPLIER" } },
@@ -80,16 +84,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         create: { partnerId: updates.partnerId!, roleType: "SUPPLIER", createdById: user!.id, updatedById: user!.id },
       });
     }
-    return tx.supplier.update({
-      where: { id },
-      data: {
-        ...updates,
-        minOrderQty: updates.minOrderQty === undefined ? undefined : updates.minOrderQty,
-        version: { increment: 1 },
-        updatedById: user!.id,
-      },
-    });
+    const saved = await tx.supplier.findFirst({ where: { id, deletedAt: null } });
+    if (!saved) return { outcome: "NOT_FOUND" as const };
+    return { outcome: "OK" as const, supplier: saved };
   });
+  if (result.outcome === "NOT_FOUND") return failNotFound(ERROR_CODES.NOT_FOUND, "供应商不存在");
+  if (result.outcome === "CONFLICT") return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
+  const updated = result.supplier;
 
   await writeAuditLog({
     actorId: user?.id,
