@@ -266,5 +266,13 @@
 | RED_INVOICE_OVERFLOW | 409 | 红字累计超冲：Σ｜红字｜ > ｜原票｜（R4，锁内校验），409 |
 | PARTNER_LINK_REQUIRED | 409 | 开票客户必须关联 BusinessPartner（I10，fail closed），409 |
 | PARTNER_INVOICE_INFO_MISSING | 409 | 开票资料缺失（title+uscc 必填）（I10，fail closed），409 |
+| GL_PERIOD_NOT_FOUND | 409 | 会计期间不存在（未 backfill 初始化）（INV1），409 |
+| GL_PERIOD_CLOSED | 409 | 期间已结转（CLOSED），禁止过账（INV1），409 |
+| GL_PERIOD_LOCKED | 409 | 期间已锁定（LOCKED），禁止过账/结转/重开（INV1），409 |
+| GL_PERIOD_FUTURE | 409 | 禁止未来期间过账（INV1），409 |
+| GL_PERIOD_ALREADY_CLOSED | 409 | 期间已结转，禁止重复结转（INV8），409 |
+| GL_PERIOD_INVALID | 400 | 期间格式非法（须 YYYY-MM），400 |
+| GL_VOUCHER_TYPE_INVALID | 400 | 凭证字非法（记/收/付/转），400 |
+| GL_ATTACHMENT_COUNT_INVALID | 999 | 附件张数非法（0-999），400 |
 
-> 合计：**261 个错误码**（自动统计）
+> 合计：**269 个错误码**（自动统计）

@@ -1,4 +1,6 @@
 import { Prisma } from '@prisma/client';
+import { assertPeriodOpen, periodKeyOf } from '@/lib/gl/period';
+import { nextVoucherNo } from '@/lib/gl/voucher-number';
 
 /**
  * Sprint 7 Finance 首块（CTO 解锁 2026-08-20，ADR-0033）：GL 过账服务
@@ -28,18 +30,7 @@ export interface GlPostParams {
   actorId?: string | null;
 }
 
-/** DocumentSequence 原子取号（docType=JOURNAL，seed 已存在 JRN-2026-xxxx） */
-async function nextGlVoucherNo(tx: Prisma.TransactionClient): Promise<string> {
-  const seq = await tx.documentSequence.findFirst({
-    where: { docType: 'JOURNAL' as never, isActive: true, deletedAt: null },
-  });
-  if (!seq) throw new Error('JOURNAL_SEQUENCE_MISSING');
-  const updated = await tx.documentSequence.update({
-    where: { id: seq.id },
-    data: { nextNo: { increment: 1 } },
-  });
-  return `${seq.prefix}${String(updated.nextNo - 1).padStart(seq.padLength, '0')}`;
-}
+// 取号引擎已迁移至 lib/gl/voucher-number.ts（ADR-0044：按 (期间, 凭证字) 连续编号）
 
 /** 科目 code → id（fail closed：科目缺失即拒绝过账，不静默降级） */
 async function resolveAccountId(tx: Prisma.TransactionClient, code: string): Promise<string> {
@@ -58,6 +49,9 @@ export async function postGlEntry(tx: Prisma.TransactionClient, params: GlPostPa
     select: { id: true, voucherNo: true },
   });
   if (existing) return { ok: true, entryId: existing.id, voucherNo: existing.voucherNo, idempotent: true };
+
+  // 期间校验（ADR-0044，INV1）：fail closed；系统凭证（PERIOD_CLOSE/PERIOD_CLOSE_REVERSAL）豁免（INV6）
+  await assertPeriodOpen(tx, params.postingDate, params.sourceType);
 
   const rows = await Promise.all(
     params.lines.map(async (l) => {
@@ -78,12 +72,16 @@ export async function postGlEntry(tx: Prisma.TransactionClient, params: GlPostPa
     return { ok: false, code: 'GL_UNBALANCED', message: '借贷不平衡（借方 ' + totalDebit.toFixed(2) + ' ≠ 贷方 ' + totalCredit.toFixed(2) + '），拒绝过账', httpStatus: 409 };
   }
 
-  const voucherNo = await nextGlVoucherNo(tx);
+  // 凭证号按 (期间, 凭证字) 连续（ADR-0044：自动过账 = 记；格式 记YYYYMM-0001）
+  const periodKey = periodKeyOf(params.postingDate);
+  const voucherNo = await nextVoucherNo(tx, { periodKey, voucherType: 'GENERAL' });
   const entry = await tx.glJournalEntry.create({
     data: {
       voucherNo,
       postingDate: params.postingDate,
       status: 'POSTED',
+      voucherType: 'GENERAL',
+      attachmentCount: 0,
       sourceType: params.sourceType,
       sourceId: params.sourceId,
       summary: params.summary,

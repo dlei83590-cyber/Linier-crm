@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { authenticate, requirePermission } from '@/lib/api-helpers';
 import { ok, parsePagination } from '@/lib/api/response';
 import { requestLog } from '@/lib/api/logger';
+import { businessDayStart, businessDayEnd } from '@/lib/gl/period';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,8 +29,9 @@ export async function GET(request: NextRequest) {
     ...(dateFrom || dateTo
       ? {
           postingDate: {
-            ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-            ...(dateTo ? { lte: new Date(dateTo + 'T23:59:59.999Z') } : {}),
+            // Asia/Shanghai 业务日边界（ADR-0044，修复 dateTo UTC 日边界 bug）
+            ...(dateFrom ? { gte: businessDayStart(dateFrom) } : {}),
+            ...(dateTo ? { lte: businessDayEnd(dateTo) } : {}),
           },
         }
       : {}),
