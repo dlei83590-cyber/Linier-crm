@@ -340,7 +340,7 @@ function AdjustmentCreateForm() {
             disabled={submitting}
             className="bg-brand-600 hover:bg-brand-700 rounded-md px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {submitting ? "提交中…" : "创建（DRAFT）"}
+            {submitting ? "提交中…" : "创建（草稿）"}
           </button>
           {dirty && <span className="text-xs text-status-warning-text">有未保存的更改</span>}
         </div>
