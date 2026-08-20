@@ -8,6 +8,7 @@
  * - loading / error / empty 三态内置（ErrorRow 消费结构化 ApiClientError）
  * - 复用既有 components/ui 的 Pagination / list-states，保证与存量页面观感一致
  */
+import { useMemo, useState } from 'react';
 import type { ApiClientError } from '@/lib/api-client';
 import { Pagination } from '@/components/ui/pagination';
 import { LoadingRow, EmptyRow, ErrorRow } from '@/components/ui/list-states';
@@ -21,6 +22,8 @@ export interface ListColumn<T> {
   width?: string;
   /** 对齐：right 用于金额/数量列（右对齐 + tabular-nums，财务读数规范） */
   align?: "left" | "right";
+  /** 可排序（客户端，仅当前页；服务端排序 backlog）——点击表头循环 升序→降序→清除 */
+  sortable?: boolean;
   /** 单元格渲染；缺省输出 row[key] 原始值 */
   render?: (row: T) => React.ReactNode;
 }
@@ -77,6 +80,37 @@ export function EntityListWorkspace<T>({
   // U5：全局密度（组件自身 density prop 优先于 DensityContext）
   const { density: ctxDensity } = useTableDensity();
   const effectiveDensity = density ?? ctxDensity;
+
+  // U6：列排序（客户端，仅当前页数据；服务端排序 backlog）
+  const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
+
+  const sortedRows = useMemo(() => {
+    if (!sort) return rows;
+    const arr = [...rows];
+    arr.sort((a, b) => {
+      const av = (a as Record<string, unknown>)[sort.key];
+      const bv = (b as Record<string, unknown>)[sort.key];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      const an = typeof av === "number" ? av : Number(av);
+      const bn = typeof bv === "number" ? bv : Number(bv);
+      if (!Number.isNaN(an) && !Number.isNaN(bn)) {
+        return sort.dir === "asc" ? an - bn : bn - an;
+      }
+      const cmp = String(av).localeCompare(String(bv), "zh-CN");
+      return sort.dir === "asc" ? cmp : -cmp;
+    });
+    return arr;
+  }, [rows, sort]);
+
+  const toggleSort = (key: string) => {
+    setSort((prev) => {
+      if (!prev || prev.key !== key) return { key, dir: "asc" };
+      if (prev.dir === "asc") return { key, dir: "desc" };
+      return null;
+    });
+  };
   return (
     <div className="border-border bg-surface shadow-elevation-sm overflow-hidden rounded-lg border">
       <PageHeader title={title} description={description} actions={headerActions} />
@@ -87,16 +121,30 @@ export function EntityListWorkspace<T>({
         <table className="divide-border min-w-full divide-y text-sm">
           <thead className="text-ink-secondary bg-canvas sticky top-0 z-10 text-left text-xs font-medium">
             <tr>
-              {columns.map((col) => (
-                <th
-                  key={col.key}
-                  scope="col"
-                  className={`px-4 py-3 font-semibold ${col.align === "right" ? "text-right" : "text-left"}`}
-                  style={col.width ? { width: col.width } : undefined}
-                >
-                  {col.header}
-                </th>
-              ))}
+              {columns.map((col) => {
+                const activeSort = sort !== null && sort.key === col.key;
+                return (
+                  <th
+                    key={col.key}
+                    scope="col"
+                    aria-sort={activeSort ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
+                    onClick={col.sortable ? () => toggleSort(col.key) : undefined}
+                    className={`px-4 py-3 font-semibold ${col.align === "right" ? "text-right" : "text-left"} ${
+                      col.sortable ? "cursor-pointer select-none transition-colors hover:bg-slate-100" : ""
+                    }`}
+                    style={col.width ? { width: col.width } : undefined}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {col.header}
+                      {col.sortable && (
+                        <span className={`text-xs ${activeSort ? "text-brand-600" : "text-ink-muted/60"}`} aria-hidden="true">
+                          {activeSort ? (sort.dir === "asc" ? "▲" : "▼") : "↕"}
+                        </span>
+                      )}
+                    </span>
+                  </th>
+                );
+              })}
               {rowActions ? <th scope="col" className="px-4 py-3 text-right font-semibold">操作</th> : null}
             </tr>
           </thead>
@@ -108,7 +156,7 @@ export function EntityListWorkspace<T>({
             ) : rows.length === 0 ? (
               <EmptyRow colSpan={columns.length + (rowActions ? 1 : 0)} message={emptyMessage} />
             ) : (
-              rows.map((row) => (
+              sortedRows.map((row) => (
                 <tr
                   key={rowKey(row)}
                   className="group transition-colors hover:bg-brand-50/40"
