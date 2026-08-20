@@ -270,6 +270,7 @@ function CnDnList() {
           {
             key: "adjustmentTotal",
             header: "调整金额",
+            align: "right",
             render: (row) => formatMoney(row.adjustmentTotal, row.currency),
           },
           {

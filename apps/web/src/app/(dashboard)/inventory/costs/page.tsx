@@ -55,8 +55,8 @@ function InventoryCostList() {
           { key: "itemName", header: "物料名称", render: (row) => row.itemName ?? "—" },
           { key: "itemModel", header: "型号", render: (row) => row.itemModel ?? "—" },
           { key: "onHandQty", header: "在库数量", render: (row) => row.onHandQty },
-          { key: "avgUnitCost", header: "平均成本", render: (row) => formatMoney(row.avgUnitCost, "CNY") },
-          { key: "totalCost", header: "库存总成本", render: (row) => formatMoney(row.totalCost, "CNY") },
+          { key: "avgUnitCost", header: "平均成本", align: "right", render: (row) => formatMoney(row.avgUnitCost, "CNY") },
+          { key: "totalCost", header: "库存总成本", align: "right", render: (row) => formatMoney(row.totalCost, "CNY") },
         ]}
         rows={items}
         rowKey={(row) => row.id}
