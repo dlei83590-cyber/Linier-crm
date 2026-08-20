@@ -117,3 +117,45 @@ export const BREAKPOINTS = {
 /** 标准输入/选择控件外观（对齐 FORM_DENSITY.default） */
 export const CONTROL_CLASS =
   'w-full rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-ink-primary placeholder:text-ink-muted focus:border-brand-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-ink-muted';
+// ===== Module Accent（Sprint8 UI Modern — 10 业务域高饱和色板，单一事实来源：tailwind domain-* 类）=====
+export interface ModuleAccent {
+  id: string;
+  label: string;
+  /** 主色（600 档，用于指示条/文字/色点） */
+  color: string;
+  /** 浅底（50 档，用于激活底色/图标底） */
+  soft: string;
+  /** 深色（700 档，用于 hover/强调） */
+  strong: string;
+}
+
+export const MODULE_ACCENTS: ReadonlyArray<ModuleAccent> = [
+  { id: 'workbench', label: '工作台', color: '#2563eb', soft: '#eff6ff', strong: '#1d4ed8' },
+  { id: 'customer-project', label: '客户与项目', color: '#7c3aed', soft: '#f5f3ff', strong: '#6d28d9' },
+  { id: 'sales', label: '销售管理', color: '#059669', soft: '#ecfdf5', strong: '#047857' },
+  { id: 'purchasing', label: '采购管理', color: '#ea580c', soft: '#fff7ed', strong: '#c2410c' },
+  { id: 'inventory', label: '库存管理', color: '#0891b2', soft: '#ecfeff', strong: '#0e7490' },
+  { id: 'supplier-ap', label: '采购财务', color: '#d97706', soft: '#fffbeb', strong: '#b45309' },
+  { id: 'finance', label: '财务总账', color: '#e11d48', soft: '#fff1f2', strong: '#be123c' },
+  { id: 'master-data', label: '基础资料', color: '#0284c7', soft: '#f0f9ff', strong: '#0369a1' },
+  { id: 'system', label: '系统管理', color: '#475569', soft: '#f8fafc', strong: '#334155' },
+  { id: 'reports', label: '分析与报表', color: '#c026d3', soft: '#fdf4ff', strong: '#a21caf' },
+];
+
+export const MODULE_ACCENT_MAP: Readonly<Record<string, ModuleAccent>> = MODULE_ACCENTS.reduce(
+  (acc, a) => {
+    acc[a.id] = a;
+    return acc;
+  },
+  {} as Record<string, ModuleAccent>,
+);
+
+// ===== Motion（Sprint8 UI Modern — 动效令牌）=====
+export const MOTION = {
+  duration: { fast: '150ms', base: '200ms', slow: '300ms' } as const,
+  easing: {
+    standard: 'cubic-bezier(0.4, 0, 0.2, 1)',
+    in: 'cubic-bezier(0.4, 0, 1, 1)',
+    out: 'cubic-bezier(0, 0, 0.2, 1)',
+  } as const,
+} as const;

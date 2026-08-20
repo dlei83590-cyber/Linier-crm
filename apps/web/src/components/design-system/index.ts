@@ -16,6 +16,9 @@ export {
   TABLE_DENSITY,
   BREAKPOINTS,
   CONTROL_CLASS,
+  MODULE_ACCENTS,
+  MODULE_ACCENT_MAP,
+  MOTION,
 } from './tokens';
 
-export type { StatusTone, Density } from './tokens';
+export type { StatusTone, Density, ModuleAccent } from './tokens';

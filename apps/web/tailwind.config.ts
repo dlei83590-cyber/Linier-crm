@@ -33,6 +33,19 @@ const config: Config = {
           warning: { bg: '#fffbeb', text: '#b45309', border: '#fde68a' },
           danger: { bg: '#fef2f2', text: '#b91c1c', border: '#fecaca' },
         },
+        // Sprint8 UI Modern — 10 业务域高饱和色板（单一事实来源：design-system/tokens.ts MODULE_ACCENTS）
+        domain: {
+          workbench: { 50: '#eff6ff', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8' },
+          'customer-project': { 50: '#f5f3ff', 500: '#8b5cf6', 600: '#7c3aed', 700: '#6d28d9' },
+          sales: { 50: '#ecfdf5', 500: '#10b981', 600: '#059669', 700: '#047857' },
+          purchasing: { 50: '#fff7ed', 500: '#f97316', 600: '#ea580c', 700: '#c2410c' },
+          inventory: { 50: '#ecfeff', 500: '#06b6d4', 600: '#0891b2', 700: '#0e7490' },
+          'supplier-ap': { 50: '#fffbeb', 500: '#f59e0b', 600: '#d97706', 700: '#b45309' },
+          finance: { 50: '#fff1f2', 500: '#f43f5e', 600: '#e11d48', 700: '#be123c' },
+          'master-data': { 50: '#f0f9ff', 500: '#0ea5e9', 600: '#0284c7', 700: '#0369a1' },
+          system: { 50: '#f8fafc', 500: '#64748b', 600: '#475569', 700: '#334155' },
+          reports: { 50: '#fdf4ff', 500: '#d946ef', 600: '#c026d3', 700: '#a21caf' },
+        },
       },
       boxShadow: {
         'elevation-sm': '0 1px 2px 0 rgb(15 23 42 / 0.05)',
