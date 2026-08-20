@@ -312,6 +312,18 @@ export const ERROR_CODES = {
   SUPPLIER_INVOICE_APPROVAL_SNAPSHOT_INVALID: 'SUPPLIER_INVOICE_APPROVAL_SNAPSHOT_INVALID', // approvedMatchRunId/approvedMatchRevision 缺失或与审批 immutable snapshot 不一致（#9678 不变量①），409
   SUPPLIER_INVOICE_MAKER_CHECKER: 'SUPPLIER_INVOICE_MAKER_CHECKER', // maker-checker：Poster 不得 = Creator / Approval actor（#9678），409
   SUPPLIER_INVOICE_GRIR_INSUFFICIENT: 'SUPPLIER_INVOICE_GRIR_INSUFFICIENT', // remaining GRIR 不足全额 consume（#9678 不变量③：禁止 partial POST，fail closed），409
+
+  // Sprint 7 VAT 发票管理（ADR-0043：发票类型/税务号码/红字/开票资料）
+  INVOICE_TYPE_REQUIRED: 'INVOICE_TYPE_REQUIRED', // ISSUE/POSTED 时发票类型必填（I4，fail closed），409
+  TAX_INVOICE_CODE_INVALID: 'TAX_INVOICE_CODE_INVALID', // 税务发票代码格式非法（专/普 12 位；数电票必须为空）（I7），400
+  TAX_INVOICE_NO_INVALID: 'TAX_INVOICE_NO_INVALID', // 税务发票号码格式非法（专/普 8 位；数电 20 位）（I7），400
+  TAX_INVOICE_NO_DUPLICATE: 'TAX_INVOICE_NO_DUPLICATE', // 税务发票号码组合唯一冲突（I2），409
+  USCC_INVALID: 'USCC_INVALID', // 统一社会信用代码非法（GB 32100-2015 18 位校验码）（I1），400
+  RED_INVOICE_REF_IMMUTABLE: 'RED_INVOICE_REF_IMMUTABLE', // 红字引用/税务字段不可变（ISSUE/POSTED 后冻结）（I3），409
+  RED_INVOICE_REF_STATUS_INVALID: 'RED_INVOICE_REF_STATUS_INVALID', // 红字引用原票必须为终态蓝票，禁链式引用（R2/R6），409
+  RED_INVOICE_OVERFLOW: 'RED_INVOICE_OVERFLOW', // 红字累计超冲：Σ|红字| > |原票|（R4，锁内校验），409
+  PARTNER_LINK_REQUIRED: 'PARTNER_LINK_REQUIRED', // 开票客户必须关联 BusinessPartner（I10，fail closed），409
+  PARTNER_INVOICE_INFO_MISSING: 'PARTNER_INVOICE_INFO_MISSING', // 开票资料缺失（title+uscc 必填）（I10，fail closed），409
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

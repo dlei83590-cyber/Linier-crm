@@ -357,9 +357,14 @@ export const invoiceCreateSchema = z.object({
   changeReason: z.string().max(500).optional(),
 });
 
-/** issue：DRAFT → ISSUED（DocumentSequence 原子取号；编号延后生成；并发 issue 第二个请求 409 不消耗编号） */
+/** issue：DRAFT → ISSUED（DocumentSequence 原子取号；编号延后生成；并发 issue 第二个请求 409 不消耗编号）
+ * VAT 要素（ADR-0043）：invoiceType 必填（I4）；taxInvoiceCode/No 按类型校验（I7）；redInvoiceRefId 触发红字（R2/R4） */
 export const invoiceIssueSchema = z.object({
   changeReason: z.string().max(500).optional(),
+  invoiceType: z.enum(["SPECIAL_VAT", "ORDINARY_VAT", "ELECTRONIC_VAT", "EXPORT", "OTHER"]).optional(),
+  taxInvoiceCode: z.string().max(20).nullable().optional(),
+  taxInvoiceNo: z.string().max(20).nullable().optional(),
+  redInvoiceRefId: z.string().min(1).max(64).nullable().optional(),
 });
 
 /** cancel：仅 DRAFT → CANCELLED（释放 DeliveryLine 已占用的开票数量投影） */

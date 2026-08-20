@@ -2,13 +2,14 @@ import type { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
-import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
+import { ok, fail, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { invoiceIssueSchema } from "@/lib/api/schemas";
 import { nextInvoiceCode, createInvoiceSnapshot, latestInvoiceRevisionNo } from "@/lib/invoice/helpers";
 import { publishInvoiceEvent } from "@/lib/invoice/events";
 import { writeDomainEvent } from "@/lib/domain-events/writer";
+import { validateTaxInvoiceFields, normalizeTaxInvoiceNumber } from "@/lib/tax-invoice";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { id } = await params;
   const parsed = invoiceIssueSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
-  const { changeReason } = parsed.data;
+  const { changeReason, invoiceType, taxInvoiceCode, taxInvoiceNo, redInvoiceRefId } = parsed.data;
   const meta = requestMeta(request);
 
   const result = await prisma.$transaction(async (tx) => {
@@ -67,15 +68,65 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // ── 5. code = null（DRAFT 不占号；若已有 code 说明已 ISSUED） ───────────
     if (invoice.code !== null) return { error: "ALREADY_ISSUED" as const };
 
+    // ── 5b. VAT 校验（ADR-0043）：类型必填（I4）+ 号码格式（I7）+ 开票资料（I10）+ 红字（R2/R4/R6） ──
+    const vat = validateTaxInvoiceFields(invoiceType, taxInvoiceCode, taxInvoiceNo);
+    if (!vat.ok) return { error: vat.code as "INVOICE_TYPE_REQUIRED" | "TAX_INVOICE_CODE_INVALID" | "TAX_INVOICE_NO_INVALID", message: vat.message };
+    const normTaxCode = taxInvoiceCode ? normalizeTaxInvoiceNumber(taxInvoiceCode) : null;
+    const normTaxNo = taxInvoiceNo ? normalizeTaxInvoiceNumber(taxInvoiceNo) : null;
+    // I10：开票客户必须关联 BusinessPartner 且已维护开票资料（title+uscc 必填，fail closed）
+    const customer = await tx.customer.findFirst({ where: { id: invoice.customerId, deletedAt: null } });
+    if (!customer?.partnerId) return { error: "PARTNER_LINK_REQUIRED" as const };
+    const invInfo = await tx.businessPartnerInvoiceInfo.findFirst({ where: { partnerId: customer.partnerId, deletedAt: null } });
+    if (!invInfo || !invInfo.title || !invInfo.uscc) return { error: "PARTNER_INVOICE_INFO_MISSING" as const };
+    // 红字（R3 服务端取反 / R4 防超冲 / R2+R6 引用终态蓝票禁链式）
+    let redLetter = false;
+    let redRefId: string | null = null;
+    let issueSubtotal = invoice.subtotal;
+    let issueTax = invoice.taxAmount;
+    let issueTotal = invoice.invoiceTotal;
+    if (redInvoiceRefId) {
+      const origLocked = await tx.$queryRaw<Array<{ id: string }>>(
+        Prisma.sql`SELECT "id" FROM "Invoice" WHERE "id" = ${redInvoiceRefId} AND "deletedAt" IS NULL FOR UPDATE`,
+      );
+      if (origLocked.length === 0) return { error: "RED_INVOICE_REF_STATUS_INVALID" as const };
+      const original = await tx.invoice.findFirst({ where: { id: redInvoiceRefId, deletedAt: null } });
+      if (!original || original.redLetter || original.status !== "ISSUED") {
+        return { error: "RED_INVOICE_REF_STATUS_INVALID" as const }; // R2：终态蓝票；R6：禁红字冲红字
+      }
+      // R4：Σ|红字金额| ≤ |原票金额|（锁内累计，并发安全）
+      const reds = await tx.invoice.findMany({
+        where: { redInvoiceRefId, deletedAt: null, redLetter: true },
+        select: { invoiceTotal: true },
+      });
+      const sumRed = reds.reduce((acc, r) => acc.add(r.invoiceTotal.abs()), new Prisma.Decimal(0));
+      if (sumRed.add(original.invoiceTotal.abs()).gt(original.invoiceTotal.abs())) {
+        return { error: "RED_INVOICE_OVERFLOW" as const, originalTotal: original.invoiceTotal.toString() };
+      }
+      redLetter = true;
+      redRefId = redInvoiceRefId;
+      // R3：红字金额 = 服务端对原票金额取反（禁止客户端正数伪装）
+      issueSubtotal = original.subtotal.negated();
+      issueTax = original.taxAmount.negated();
+      issueTotal = original.invoiceTotal.negated();
+    }
+
     // ── 6. DocumentSequence(INVOICE) 原子取号（编号延后生成，DRAFT 不消耗） ──
     const code = await nextInvoiceCode(tx);
 
-    // ── 7. status = ISSUED + code 回写 ──────────────────────────────────────
+    // ── 7. status = ISSUED + code + VAT 要素回写（I3：ISSUE 后冻结；红字金额服务端取反） ──
     const updated = await tx.invoice.update({
       where: { id },
       data: {
         code,
         status: "ISSUED",
+        invoiceType,
+        taxInvoiceCode: normTaxCode,
+        taxInvoiceNo: normTaxNo,
+        redLetter,
+        redInvoiceRefId: redRefId,
+        ...(redLetter
+          ? { subtotal: issueSubtotal, taxAmount: issueTax, invoiceTotal: issueTotal }
+          : {}),
         updatedById: user!.id,
         version: { increment: 1 },
       },
@@ -103,6 +154,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         currency: updated.currency,
         taxProfileId: updated.taxProfileId,
         paymentTerm: updated.paymentTerm,
+        invoiceType,
+        taxInvoiceCode: normTaxCode,
+        taxInvoiceNo: normTaxNo,
+        redLetter,
+        redInvoiceRefId: redRefId,
         subtotal: updated.subtotal.toString(),
         taxAmount: updated.taxAmount.toString(),
         invoiceTotal: updated.invoiceTotal.toString(),
@@ -128,27 +184,38 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         sstNo: null, // SST 注册号（TaxProfile 无此字段，待配置来源）
         currencyRate: null, // 汇率快照（待币种汇率配置；4E 前可扩展）
         exchangeRate: firstPs?.exchangeRate ?? null,
+        invoiceType,
+        taxInvoiceCode: normTaxCode,
+        taxInvoiceNo: normTaxNo,
       },
     );
 
-    // ── 8b. InvoiceIssued Outbox（业务事务内原子写；GL consumer → 收入确认凭证，ADR-0042） ──
-    await writeDomainEvent(tx, {
-      eventType: "InvoiceIssued",
-      aggregateType: "Invoice",
-      aggregateId: id,
-      payload: {
-        invoiceId: id,
-        invoiceCode: code,
-        customerId: updated.customerId,
-        currency: updated.currency,
-        subtotal: updated.subtotal.toString(),
-        taxAmount: updated.taxAmount.toString(),
-        invoiceTotal: updated.invoiceTotal.toString(),
-        issuedAt: issuedAt.toISOString(),
-        issuedById: user?.id ?? null,
-      },
-      idempotencyKey: "InvoiceIssued|" + id,
-    });
+    // ── 8b. InvoiceIssued Outbox（业务事务内原子写；GL consumer → 收入确认凭证，ADR-0042）
+    // 红字发票（负数金额）跳过 GL 过账——GL 借贷行拒绝负数（GL_NEGATIVE_AMOUNT），红字 GL 记账 = ADR-0043 backlog
+    if (!redLetter) {
+      await writeDomainEvent(tx, {
+        eventType: "InvoiceIssued",
+        aggregateType: "Invoice",
+        aggregateId: id,
+        payload: {
+          invoiceId: id,
+          invoiceCode: code,
+          customerId: updated.customerId,
+          currency: updated.currency,
+          subtotal: updated.subtotal.toString(),
+          taxAmount: updated.taxAmount.toString(),
+          invoiceTotal: updated.invoiceTotal.toString(),
+          invoiceType,
+          taxInvoiceCode: normTaxCode,
+          taxInvoiceNo: normTaxNo,
+          redLetter,
+          redInvoiceRefId: redRefId,
+          issuedAt: issuedAt.toISOString(),
+          issuedById: user?.id ?? null,
+        },
+        idempotencyKey: "InvoiceIssued|" + id,
+      });
+    }
 
     return { invoice: updated, code, issuedAt };
   });
@@ -173,6 +240,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           ERROR_CODES.INVOICE_INVALID_STATE,
           `发票审批未完成（当前 approvalStatus=${result.approvalStatus}），仅 APPROVED 允许开票；请先完成审批或修改后重新提交`,
         );
+      case "INVOICE_TYPE_REQUIRED":
+        return failConflict(ERROR_CODES.INVOICE_TYPE_REQUIRED, "开票时必须指定发票类型（专票/普票/数电票/出口/其他）");
+      case "TAX_INVOICE_CODE_INVALID":
+        return fail(ERROR_CODES.TAX_INVOICE_CODE_INVALID, "税务发票代码格式非法", 400, { taxInvoiceCode });
+      case "TAX_INVOICE_NO_INVALID":
+        return fail(ERROR_CODES.TAX_INVOICE_NO_INVALID, "税务发票号码格式非法", 400, { taxInvoiceNo });
+      case "PARTNER_LINK_REQUIRED":
+        return failConflict(ERROR_CODES.PARTNER_LINK_REQUIRED, "开票客户必须关联 BusinessPartner（统一往来单位），请先在主档建立关联");
+      case "PARTNER_INVOICE_INFO_MISSING":
+        return failConflict(ERROR_CODES.PARTNER_INVOICE_INFO_MISSING, "开票资料缺失：客户关联的往来单位需维护发票抬头与统一社会信用代码（BusinessPartnerInvoiceInfo）");
+      case "RED_INVOICE_REF_STATUS_INVALID":
+        return failConflict(ERROR_CODES.RED_INVOICE_REF_STATUS_INVALID, "红字引用无效：被冲销发票必须为已开票（ISSUED）的蓝字发票，且禁止红字冲红字");
+      case "RED_INVOICE_OVERFLOW":
+        return failConflict(ERROR_CODES.RED_INVOICE_OVERFLOW, `红字累计超冲：Σ|红字金额| 不得超过原票金额（原票 ${result.originalTotal}）`);
     }
   }
 
