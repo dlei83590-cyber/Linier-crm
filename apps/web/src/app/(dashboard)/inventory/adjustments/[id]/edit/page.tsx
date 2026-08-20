@@ -123,7 +123,7 @@ function AdjustmentEditForm() {
           <Link href={`/inventory/adjustments/${id}`} className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas">返回详情</Link>
         </div>
         <div className="p-6">
-          <p className="text-sm text-status-warning-text">仅 DRAFT 状态可编辑（当前 {detail.status}）。</p>
+          <p className="text-sm text-status-warning-text">仅草稿状态可编辑（当前 {detail.status}）。</p>
         </div>
       </div>
     );
