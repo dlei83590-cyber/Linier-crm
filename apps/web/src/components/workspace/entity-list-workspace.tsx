@@ -13,6 +13,7 @@ import type { ApiClientError } from '@/lib/api-client';
 import { Pagination } from '@/components/ui/pagination';
 import { LoadingRow, EmptyRow, ErrorRow } from '@/components/ui/list-states';
 import { PageHeader } from './page-header';
+import { useTableDensity } from "@/lib/table-density-context";
 import { PageToolbar } from './page-toolbar';
 
 export interface ListColumn<T> {
@@ -76,6 +77,10 @@ export function EntityListWorkspace<T>({
   density = "default",
   footer,
 }: EntityListWorkspaceProps<T>) {
+  // U5：全局密度（组件自身 density prop 优先于 DensityContext）
+  const { density: ctxDensity } = useTableDensity();
+  const effectiveDensity = density ?? ctxDensity;
+
   // U6：列排序（客户端，仅当前页数据；服务端排序 backlog）
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
 
@@ -106,7 +111,6 @@ export function EntityListWorkspace<T>({
       return null;
     });
   };
-
   return (
     <div className="border-border bg-surface shadow-elevation-sm overflow-hidden rounded-lg border">
       <PageHeader title={title} description={description} actions={headerActions} />
@@ -162,7 +166,7 @@ export function EntityListWorkspace<T>({
                       key={col.key}
                       className={`whitespace-nowrap px-4 text-ink-primary ${
                         col.align === "right" ? "text-right tabular-nums" : "text-left"
-                      } ${density === "compact" ? "py-2 text-[13px]" : "py-3 text-sm"}`}
+                      } ${effectiveDensity === "compact" ? "py-2 text-[13px]" : "py-3 text-sm"}`}
                     >
                       {col.render
                         ? col.render(row)
