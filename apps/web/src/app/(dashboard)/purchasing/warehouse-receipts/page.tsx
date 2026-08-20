@@ -30,6 +30,13 @@ interface WarehouseReceiptRow {
 
 const STATUS_OPTIONS = ["DRAFT", "POSTED", "CANCELLED"] as const;
 
+/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: "草稿",
+  POSTED: "已过账",
+  CANCELLED: "已取消",
+};
+
 function WarehouseReceiptList() {
   const { state } = useSession();
   const canCreate =
@@ -63,6 +70,7 @@ function WarehouseReceiptList() {
       <EntityListWorkspace<WarehouseReceiptRow>
         title="仓库收货"
         description="仓库收货/入库工作台"
+        emptyMessage="暂无仓库收货单——点击「+ 新建仓库收货单」创建第一张入库单"
         headerActions={
           canCreate ? (
             <Link
@@ -92,7 +100,7 @@ function WarehouseReceiptList() {
               <option value="">全部状态</option>
               {STATUS_OPTIONS.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {STATUS_LABELS[s] ?? s}
                 </option>
               ))}
             </select>
@@ -132,7 +140,9 @@ function WarehouseReceiptList() {
           {
             key: "status",
             header: "状态",
-            render: (row) => <StatusBadge status={row.status} />,
+            render: (row) => (
+              <StatusBadge status={row.status} label={STATUS_LABELS[row.status] ?? row.status} />
+            ),
           },
           {
             key: "purchaseReceipt",

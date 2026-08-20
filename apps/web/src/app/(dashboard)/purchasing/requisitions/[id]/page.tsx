@@ -18,6 +18,15 @@ import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
 import { formatDate } from "@/lib/format";
 
+/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: "草稿",
+  SUBMITTED: "已提交",
+  APPROVED: "已批准",
+  CONVERTED: "已转采购订单",
+  CANCELLED: "已取消",
+};
+
 interface RequisitionDetail {
   id: string;
   code: string;
@@ -198,6 +207,7 @@ function RequisitionDetailPage() {
         title={`采购申请详情 — ${detail.code}`}
         backHref="/purchasing/requisitions"
         status={detail.status}
+        statusLabel={STATUS_LABELS[detail.status] ?? detail.status}
         actions={
           <>
             {detail.status === "DRAFT" && canEdit && (
