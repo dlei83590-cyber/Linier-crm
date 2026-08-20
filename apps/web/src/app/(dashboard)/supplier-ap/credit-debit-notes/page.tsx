@@ -18,7 +18,7 @@ interface CnDnRow {
   currency: string;
   adjustmentTotal: string;
   status: string;
-  createdAt: string;
+  appliedAt?: string | null;
   supplier?: { id: string; code: string; name: string } | null;
   sourceSupplierInvoice?: { invoiceNo: string; supplierInvoiceNo: string } | null;
   invoices?: Array<{ supplierInvoice?: { invoiceNo: string; supplierInvoiceNo: string } | null }> | null;
@@ -105,7 +105,7 @@ function CnDnList() {
           { key: "invoiceNo", header: "来源发票", render: (row) => row.invoices && row.invoices.length > 0 ? row.invoices.map((i) => i.supplierInvoice?.invoiceNo ?? "—").join("、") : row.sourceSupplierInvoice?.invoiceNo ?? "—" },
           { key: "adjustmentTotal", header: "调整金额", align: "right", render: (row) => formatMoney(row.adjustmentTotal, row.currency) },
           { key: "status", header: "状态", render: (row) => (<StatusBadge status={row.status} label={STATUS_LABELS[row.status] ?? row.status} toneMap={STATUS_TONE_MAP} />) },
-          { key: "createdAt", header: "创建时间", render: (row) => formatDate(row.createdAt) },
+          { key: "appliedAt", header: "应用日期", render: (row) => formatDate(row.appliedAt) },
         ]}
         rows={items}
         rowKey={(row) => row.id}
