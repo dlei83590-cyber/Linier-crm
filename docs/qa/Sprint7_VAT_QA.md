@@ -1,7 +1,7 @@
 # Sprint7 VAT 发票管理 QA（ADR-0043）
 
 - **日期：** 2026-08-20
-- **范围：** 发票类型/税务号码/红字/开票资料/uscc 校验/9% 税率档（后端切片；前端后续批次）
+- **范围：** 发票类型/税务号码/红字/开票资料/uscc 校验/9% 税率档（后端切片 + 前端接线 F1-F3：销售发票 VAT 详情/开票对话框、供应商发票 VAT 录入展示、往来单位开票资料编辑 Section；PR #98/#99/#101）
 - **验证策略：** CI-First——单测由 CI Unit tests 验证；Migration 0037 由 CI Prisma generate + 部署核验
 
 ## 静态验收清单
@@ -28,7 +28,7 @@
 
 ## 已知限制
 
-1. 前端（开票表单/主档开票资料 Tab/详情红字链）为后续批次（Design Gate §5 清单）。
+1. Design Gate §5 前端清单 F1-F3 已落地（PR #98/#99/#101）；**Known Risk：前端运行时需人工登录验证（无 E2E）**；红字开票选择器（前端 picker）仍为后续批次。
 2. 红字发票 GL 记账为 backlog（负数金额与 postGlEntry 冲突，B3）。
 3. 税控/数电直连、红字开票申请流程、发票类型→GL 科目映射为 backlog（B1-B13）。
 4. 存量 BusinessPartner.invoiceInfo Json 保留兼容（B10 清理）。
