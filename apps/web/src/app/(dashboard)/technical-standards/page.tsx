@@ -54,6 +54,7 @@ function TechnicalStandardList() {
       <EntityListWorkspace<TechnicalStandardRow>
         title="技术标准"
         description="维护行业/企业技术标准，供物料引用"
+        emptyMessage="暂无技术标准"
         headerActions={
           canCreate ? (
             <Link

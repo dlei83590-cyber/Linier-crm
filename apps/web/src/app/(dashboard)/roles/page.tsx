@@ -53,6 +53,7 @@ function RoleList() {
       <EntityListWorkspace<RoleRow>
         title="角色权限"
         description="维护角色定义与权限映射关系"
+        emptyMessage="暂无角色——点击「+ 新建角色」创建第一个角色"
         headerActions={
           canCreate ? (
             <Link

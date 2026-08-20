@@ -145,7 +145,9 @@ function AuditLogList() {
           {
             key: "result",
             header: "结果",
-            render: (row) => <StatusBadge status={row.result} toneMap={RESULT_TONE} />,
+            render: (row) => (
+              <StatusBadge status={row.result} label={RESULT_LABELS[row.result] ?? row.result} toneMap={RESULT_TONE} />
+            ),
           },
           {
             key: "actor",
