@@ -42,6 +42,13 @@ const PRICE_TYPE_OPTIONS = [
 
 const STATUS_OPTIONS = ["DRAFT", "PUBLISHED", "ARCHIVED"] as const;
 
+/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: "草稿",
+  PUBLISHED: "已发布",
+  ARCHIVED: "已归档",
+};
+
 const PRICE_TYPE_LABELS: Record<string, string> = {
   PURCHASE: "采购",
   SALES: "销售",
@@ -105,6 +112,7 @@ function PriceListPage() {
       <EntityListWorkspace<PriceListRow>
         title="价格表"
         description="统一价格主数据（采购/销售/VIP/代理/工程/战略等价格类型）"
+        emptyMessage="暂无价格表——点击「+ 新建价格表」创建第一张价格表"
         headerActions={
           canCreate ? (
             <Link
@@ -143,7 +151,7 @@ function PriceListPage() {
               <option value="">全部状态</option>
               {STATUS_OPTIONS.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {STATUS_LABELS[s] ?? s}
                 </option>
               ))}
             </select>
@@ -202,7 +210,7 @@ function PriceListPage() {
             key: "status",
             header: "状态",
             render: (row) =>
-              row.status ? <StatusBadge status={row.status} toneMap={STATUS_TONE_MAP} /> : "—",
+              row.status ? <StatusBadge status={row.status} label={STATUS_LABELS[row.status] ?? row.status} toneMap={STATUS_TONE_MAP} /> : "—",
           },
           {
             key: "policy",

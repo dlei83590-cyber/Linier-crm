@@ -44,6 +44,14 @@ const ITEM_TYPE_OPTIONS = [
 
 const STATUS_OPTIONS = ["ACTIVE", "INACTIVE", "LOCKED", "ARCHIVED"] as const;
 
+/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
+const STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "启用",
+  INACTIVE: "停用",
+  LOCKED: "锁定",
+  ARCHIVED: "已归档",
+};
+
 const ITEM_TYPE_LABELS: Record<string, string> = {
   FINISHED_GOOD: "成品",
   RAW_MATERIAL: "原材料",
@@ -109,6 +117,7 @@ function ItemList() {
       <EntityListWorkspace<ItemRow>
         title="物料管理"
         description="统一物料主数据（成品/原材料/配件/外购件/服务/包装物）"
+        emptyMessage="暂无物料——点击「+ 新建物料」创建第一个物料"
         headerActions={
           canCreate ? (
             <Link
@@ -159,7 +168,7 @@ function ItemList() {
               <option value="">全部状态</option>
               {STATUS_OPTIONS.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {STATUS_LABELS[s] ?? s}
                 </option>
               ))}
             </select>
@@ -204,7 +213,7 @@ function ItemList() {
             header: "状态",
             render: (row) =>
               row.status ? (
-                <StatusBadge status={row.status} toneMap={ITEM_TONE_MAP} />
+                <StatusBadge status={row.status} label={STATUS_LABELS[row.status] ?? row.status} toneMap={ITEM_TONE_MAP} />
               ) : (
                 "—"
               ),
