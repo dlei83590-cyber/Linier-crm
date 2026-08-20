@@ -5,7 +5,6 @@ import { ok, failNotFound, failValidation, failConflict } from '@/lib/api/respon
 import { ERROR_CODES } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
 import { z } from 'zod';
-import type { Prisma } from '@prisma/client';
 import { assertGlLinesBalanced } from '@/lib/gl/entry-helpers';
 import { assertPeriodOpen, periodKeyOf } from '@/lib/gl/period';
 import { nextVoucherNo } from '@/lib/gl/voucher-number';
