@@ -1053,6 +1053,10 @@ export const supplierInvoiceCreateSchema = z.object({
   exchangeRate: z.coerce.number().positive().default(1), // 创建时快照 FX（P2 Final）
   paymentDueDate: z.string().optional(), // 账期（可空）
   remark: z.string().max(500).optional(),
+  // VAT 要素（ADR-0043）：DRAFT 可空；POSTED 必填（I4）+ 号码格式（I7）
+  invoiceType: z.enum(["SPECIAL_VAT", "ORDINARY_VAT", "ELECTRONIC_VAT", "EXPORT", "OTHER"]).optional(),
+  taxInvoiceCode: z.string().max(20).nullable().optional(),
+  taxInvoiceNo: z.string().max(20).nullable().optional(),
   lines: z.array(supplierInvoiceLineSchema).min(1, '至少一条有效行'),
 });
 
@@ -1063,6 +1067,10 @@ export const supplierInvoiceUpdateSchema = z.object({
   receivedDate: z.string().optional(),
   paymentDueDate: z.string().nullable().optional(),
   remark: z.string().max(500).nullable().optional(),
+  // VAT 要素（ADR-0043）：DRAFT 可编辑；POSTED 后冻结
+  invoiceType: z.enum(["SPECIAL_VAT", "ORDINARY_VAT", "ELECTRONIC_VAT", "EXPORT", "OTHER"]).optional(),
+  taxInvoiceCode: z.string().max(20).nullable().optional(),
+  taxInvoiceNo: z.string().max(20).nullable().optional(),
   lines: z.array(supplierInvoiceLineSchema).min(1).optional(),
 });
 
