@@ -14,6 +14,7 @@ import { MODULE_ACCENT_MAP } from "@/components/design-system";
 import { domainClass } from "@/components/design-system/domain-class";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CommandPalette } from "./command-palette";
+import { useTableDensity } from "@/lib/table-density-context";
 
 /**
  * Admin Shell — F2-0（IA v2）+ F2-5A（Navigation Reset）+ Sprint8 U1 高饱和彩色仪表盘壳层交互
@@ -53,6 +54,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   // U4：命令面板（Ctrl+K / ⌘K）
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // U5：全局密度切换
+  const { density, setDensity } = useTableDensity();
 
   useEffect(() => {
     if (state.status === "unauthenticated") {
@@ -483,6 +486,17 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               {currentModule.module.label}
             </span>
           )}
+          <button
+            type="button"
+            onClick={() => setDensity(density === "compact" ? "default" : "compact")}
+            title={density === "compact" ? "切换为标准密度" : "切换为紧凑密度"}
+            className="hidden items-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs text-ink-muted transition-colors hover:bg-slate-100 hover:text-ink-primary md:flex"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h7" />
+            </svg>
+            <span>{density === "compact" ? "标准" : "紧凑"}</span>
+          </button>
           <button
             type="button"
             onClick={() => setPaletteOpen(true)}

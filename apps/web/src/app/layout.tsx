@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/toast";
+import { DensityProvider } from "@/lib/table-density-context";
 
 export const metadata: Metadata = {
   title: "Linier CRM Management System",
@@ -15,7 +16,9 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body className="min-h-screen antialiased">
-        <ToastProvider>{children}</ToastProvider>
+        <DensityProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </DensityProvider>
       </body>
     </html>
   );
