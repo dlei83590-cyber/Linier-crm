@@ -2,6 +2,18 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Business UX Rationalization / 业务页面合理性整改（2026-08-21，CIO）
+
+### 新增（规范归档 + Batch 1：Sales Order 页面整改）
+
+- **规范归档**：`docs/BUSINESS_UX_RATIONALIZATION.md`（主提示词 + 单页面执行提示词——业务合理性优先，禁止字段搬运；页面审计 → 状态机驱动 → 列表/详情/表单标准 → 跨字段逻辑 → 错误信息业务化 → PR 验收模板）
+- **ROADMAP v1.40 / SPRINT_PLAN**：阶段命名「Business UX Rationalization / 业务页面合理性整改」，与 Sprint 8 UI Modernization 区分（前者解决好用/业务对，后者解决好看）；整改优先级 P0 销售链 → P0 采购链 → P0 财务 → P1 主数据/库存 → P2 Project
+- **Batch 1（Sales Order 列表/详情/编辑三页）**：列表页——状态筛选中文化（草稿/已确认/部分交付/已交付/已完成/已取消，value 保留真实 enum）、状态徽章中文标签、含税合计列右对齐（align=right）、空态提示下一步（SO 唯一入口 = 报价单 Convert）；详情页——状态中文标签、摘要补期望交期/未税合计/税额（业务关键日期与金额分层）、明细行补已交付列（已交/未交履约投影）、行金额改服务端 `line.totalAmount` 投影（不再前端 quantity×unitPrice 自行计算，避免忽略税额）、数字列右对齐 tabular-nums；编辑页保持（DRAFT-only + changed-only PATCH + CAS 已合规，零改动）
+- **Business Rules Preserved**：零后端契约变更、零 Schema/Migration、零新依赖；状态机按钮显示逻辑（DRAFT 可编辑/确认/取消，CONFIRMED/PARTIALLY_DELIVERED 可创建送货）不变
+- **Known Risk**：运行时交互需人工登录验证（无 E2E）
+
+---
+
 ## [Unreleased] - U8 响应式满屏布局 + 手风琴导航（2026-08-20，PR #123）
 
 ### 新增（去固定宽度，平铺满屏自适应）

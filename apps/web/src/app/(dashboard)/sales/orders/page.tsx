@@ -32,6 +32,16 @@ interface SalesOrderRow {
 
 const STATUS_OPTIONS = ["DRAFT", "CONFIRMED", "PARTIALLY_DELIVERED", "DELIVERED", "COMPLETED", "CANCELLED"] as const;
 
+/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: "草稿",
+  CONFIRMED: "已确认",
+  PARTIALLY_DELIVERED: "部分交付",
+  DELIVERED: "已交付",
+  COMPLETED: "已完成",
+  CANCELLED: "已取消",
+};
+
 const TONE_MAP: Record<string, StatusTone> = {
   DRAFT: "neutral",
   CONFIRMED: "success",
@@ -85,6 +95,7 @@ function SalesOrderList() {
       <EntityListWorkspace<SalesOrderRow>
         title="销售订单"
         description="销售订单列表（唯一创建入口：报价单 Convert）"
+        emptyMessage="暂无销售订单——销售订单由报价单 Convert 创建，请先在报价单详情页执行 Convert"
         filters={
           <>
             <input
@@ -110,7 +121,7 @@ function SalesOrderList() {
               <option value="">全部状态</option>
               {STATUS_OPTIONS.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {STATUS_LABELS[s] ?? s}
                 </option>
               ))}
             </select>
@@ -150,7 +161,13 @@ function SalesOrderList() {
           {
             key: "status",
             header: "状态",
-            render: (row) => <StatusBadge status={row.status} toneMap={TONE_MAP} />,
+            render: (row) => (
+              <StatusBadge
+                status={row.status}
+                label={STATUS_LABELS[row.status] ?? row.status}
+                toneMap={TONE_MAP}
+              />
+            ),
           },
           {
             key: "customer",
@@ -180,6 +197,7 @@ function SalesOrderList() {
           {
             key: "totalAmount",
             header: "含税合计",
+            align: "right",
             render: (row) => formatMoney(row.totalAmount, row.currency),
           },
           {

@@ -59,6 +59,13 @@ Minor changes identified during acceptance are incorporated into the next planni
 | Sprint 5 | ✅ FINAL | Purchase（5A PR/PO、5B Goods Receipt & Inbound、**5C-1 Supplier Invoice / 3-Way Match / GRIR / AP——PR #23 已合并 main `5a8dcae`**；5C-2 Payment/Allocation HOLD） |
 | Sprint 6 | ✅ FINAL | Inventory（6A Ledger Foundation、6B Operations 四块 Vertical Slice；Reservation/Costing HOLD） |
 
+## 当前阶段（2026-08-21，Business UX Rationalization / 业务页面合理性整改）
+
+- **阶段命名（CIO 2026-08-21，规范见 docs/BUSINESS_UX_RATIONALIZATION.md）**：本轮统一称 **Business UX Rationalization / 业务页面合理性整改**，与 Sprint 8 UI Modernization（好看/交互现代）区分——本轮解决「好用、业务对」。页面层从「字段搬运优先」切换到「业务合理性优先」。
+- **整改流程**：每个页面先业务审计（角色/页面类型/字段审计/业务排序/自动带出/状态矩阵）再改代码；每次 1-3 个强关联页面；lint → type-check → unit → build → Runtime Acceptance（最终验证事实以 GitHub CI 为准，CI-First 不变）。
+- **整改优先级**：P0 销售链（Quotation→SO→Delivery→Invoice→AR/Receipt）→ P0 采购链 → P0 财务 → P1 主数据/库存 → P2 Project；BI/OA/Mobile 不抢占。
+- **Batch 1（进行中）**：Sales Order 列表/详情/编辑三页整改。
+
 ## 当前阶段（2026-08-18，Post-6B 双轨收口）
 
 - **代码事实基线**：main HEAD `5f5d1fa`（437 commits），CI 全绿（Quality Gates / Build / Secret Scanning），生产已部署（2026-08-18T12:26Z，migration baseline 0028）。
