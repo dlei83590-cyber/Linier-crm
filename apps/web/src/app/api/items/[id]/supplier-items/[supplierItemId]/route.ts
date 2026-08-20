@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { casUpdate } from "@/lib/api/cas";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
@@ -43,22 +44,31 @@ export async function PATCH(
     where: { id: supplierItemId, itemId: id, deletedAt: null },
   });
   if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "供应商关联不存在");
-  if (existing.version !== version) {
-    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  }
 
+  // A4-CAS：原子乐观锁置于事务首部（消除 read-check-update TOCTOU）
   const updated = await prisma.$transaction(async (tx) => {
+    const cas = await casUpdate(tx, "supplierItem", supplierItemId, version, {
+      ...updates,
+      updatedById: user!.id,
+    });
+    if (cas.outcome !== "OK") return null;
     if (updates.isPreferred === true) {
       await tx.supplierItem.updateMany({
         where: { itemId: id, deletedAt: null, id: { not: supplierItemId } },
         data: { isPreferred: false, updatedById: user?.id ?? null },
       });
     }
-    return tx.supplierItem.update({
-      where: { id: supplierItemId },
-      data: { ...updates, version: { increment: 1 }, updatedById: user!.id },
-    });
+    return tx.supplierItem.findFirst({ where: { id: supplierItemId, deletedAt: null } });
   });
+  if (!updated) {
+    const stillExists = await prisma.supplierItem.findFirst({
+      where: { id: supplierItemId, deletedAt: null },
+      select: { id: true },
+    });
+    return stillExists
+      ? failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试")
+      : failNotFound(ERROR_CODES.NOT_FOUND, "供应商关联不存在");
+  }
 
   await writeAuditLog({
     actorId: user?.id,
