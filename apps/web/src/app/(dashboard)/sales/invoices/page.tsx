@@ -190,11 +190,13 @@ function InvoiceList() {
           {
             key: "invoiceTotal",
             header: "含税合计",
+            align: "right",
             render: (row) => formatMoney(row.invoiceTotal, row.currency),
           },
           {
             key: "balanceAmount",
             header: "应收余额",
+            align: "right",
             render: (row) => formatMoney(row.balanceAmount, row.currency),
           },
         ]}

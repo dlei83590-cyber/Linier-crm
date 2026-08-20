@@ -18,6 +18,8 @@ export interface ListColumn<T> {
   key: string;
   header: string;
   width?: string;
+  /** 对齐：right 用于金额/数量列（右对齐 + tabular-nums，财务读数规范） */
+  align?: "left" | "right";
   /** 单元格渲染；缺省输出 row[key] 原始值 */
   render?: (row: T) => React.ReactNode;
 }
@@ -42,6 +44,10 @@ interface EntityListWorkspaceProps<T> {
   pageSize: number;
   total: number;
   onPageChange: (page: number) => void;
+  /** 行内操作区（最右侧固定列；tr hover 时浮现，现代表格交互） */
+  rowActions?: (row: T) => React.ReactNode;
+  /** 表格密度：compact 缩小行高/字号；默认 default */
+  density?: "default" | "compact";
   /** 表格下方扩展区（如统计行） */
   footer?: React.ReactNode;
 }
@@ -63,6 +69,8 @@ export function EntityListWorkspace<T>({
   pageSize,
   total,
   onPageChange,
+  rowActions,
+  density = "default",
   footer,
 }: EntityListWorkspaceProps<T>) {
   return (
@@ -73,40 +81,51 @@ export function EntityListWorkspace<T>({
       ) : null}
       <div className="overflow-x-auto">
         <table className="divide-border min-w-full divide-y text-sm">
-          <thead className="text-ink-secondary bg-canvas text-left text-xs font-medium">
+          <thead className="text-ink-secondary bg-canvas sticky top-0 z-10 text-left text-xs font-medium">
             <tr>
               {columns.map((col) => (
                 <th
                   key={col.key}
                   scope="col"
-                  className="px-4 py-3 font-medium"
+                  className={`px-4 py-3 font-semibold ${col.align === "right" ? "text-right" : "text-left"}`}
                   style={col.width ? { width: col.width } : undefined}
                 >
                   {col.header}
                 </th>
               ))}
+              {rowActions ? <th scope="col" className="px-4 py-3 text-right font-semibold">操作</th> : null}
             </tr>
           </thead>
           <tbody className="divide-border divide-y">
             {loading ? (
-              <LoadingRow colSpan={columns.length} />
+              <LoadingRow colSpan={columns.length + (rowActions ? 1 : 0)} />
             ) : error ? (
-              <ErrorRow colSpan={columns.length} error={error} onRetry={onRetry} />
+              <ErrorRow colSpan={columns.length + (rowActions ? 1 : 0)} error={error} onRetry={onRetry} />
             ) : rows.length === 0 ? (
-              <EmptyRow colSpan={columns.length} message={emptyMessage} />
+              <EmptyRow colSpan={columns.length + (rowActions ? 1 : 0)} message={emptyMessage} />
             ) : (
               rows.map((row) => (
-                <tr key={rowKey(row)} className="transition-colors hover:bg-brand-50/40">
+                <tr
+                  key={rowKey(row)}
+                  className="group transition-colors hover:bg-brand-50/40"
+                >
                   {columns.map((col) => (
                     <td
                       key={col.key}
-                      className="text-ink-primary whitespace-nowrap px-4 py-3 text-sm"
+                      className={`whitespace-nowrap px-4 text-ink-primary ${
+                        col.align === "right" ? "text-right tabular-nums" : "text-left"
+                      } ${density === "compact" ? "py-2 text-[13px]" : "py-3 text-sm"}`}
                     >
                       {col.render
                         ? col.render(row)
                         : String((row as Record<string, unknown>)[col.key] ?? '—')}
                     </td>
                   ))}
+                  {rowActions ? (
+                    <td className="whitespace-nowrap px-4 py-2 text-right opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                      <div className="flex justify-end gap-1">{rowActions(row)}</div>
+                    </td>
+                  ) : null}
                 </tr>
               ))
             )}

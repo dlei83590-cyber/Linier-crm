@@ -187,6 +187,7 @@ function SupplierInvoiceList() {
           {
             key: "grossAmount",
             header: "价税合计",
+            align: "right",
             render: (row) => formatMoney(row.grossAmount, row.currency),
           },
           {
