@@ -67,7 +67,7 @@ describe('POST /api/gl/journal-entries/:id/post — 路由级（B 项）', () =>
   it('APPROVED → POSTED：取号 记202608-0042（(期间,凭证字) 连续，ADR-0044）', async () => {
     const tx = makeTx();
     mockPrisma.$transaction.mockImplementation((fn: any) => fn(tx));
-    const res = await POST(makeRequest('post', { version: 1 }));
+    const res = await POST(makeRequest('post', { version: 1 }), { params: Promise.resolve({ id: 'entry-1', action: 'post' }) });
     expect(res.status).toBe(200);
     const updateArgs = (tx.glJournalEntry.update as any).mock.calls[0][0];
     expect(updateArgs.data.status).toBe('POSTED');
@@ -85,7 +85,7 @@ describe('POST /api/gl/journal-entries/:id/post — 路由级（B 项）', () =>
       },
     });
     mockPrisma.$transaction.mockImplementation((fn: any) => fn(tx));
-    const res = await POST(makeRequest('post', { version: 1 }));
+    const res = await POST(makeRequest('post', { version: 1 }), { params: Promise.resolve({ id: 'entry-1', action: 'post' }) });
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error.message).toContain('maker-checker');
@@ -96,7 +96,7 @@ describe('POST /api/gl/journal-entries/:id/post — 路由级（B 项）', () =>
       accountingPeriod: { findFirst: vi.fn().mockResolvedValue({ id: 'p1', periodKey: '202608', status: 'CLOSED' }) },
     });
     mockPrisma.$transaction.mockImplementation((fn: any) => fn(tx));
-    const res = await POST(makeRequest('post', { version: 1 }));
+    const res = await POST(makeRequest('post', { version: 1 }), { params: Promise.resolve({ id: 'entry-1', action: 'post' }) });
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error.code).toBe('GL_PERIOD_CLOSED');
