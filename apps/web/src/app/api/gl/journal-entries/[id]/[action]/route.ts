@@ -21,15 +21,7 @@ const TRANSITIONS: Record<string, { from: string[]; to: string; permission: stri
   post: { from: ['APPROVED'], to: 'POSTED', permission: 'gl:create', audit: 'gl.journal-entry.post', makerCheck: true },
 };
 
-/** DocumentSequence 原子取号（docType=JOURNAL；事务内——回滚则号不消耗） */
-async function nextVoucherNo(tx: Prisma.TransactionClient): Promise<string> {
-  const seq = await tx.documentSequence.findFirst({
-    where: { docType: 'JOURNAL' as never, isActive: true, deletedAt: null },
-  });
-  if (!seq) throw new Error('JOURNAL_SEQUENCE_MISSING');
-  const updated = await tx.documentSequence.update({ where: { id: seq.id }, data: { nextNo: { increment: 1 } } });
-  return `${seq.prefix}${String(updated.nextNo - 1).padStart(seq.padLength, '0')}`;
-}
+// 取号已迁移至 lib/gl/voucher-number.ts（ADR-0044：按 (期间, 凭证字) 连续编号）
 
 /**
  * POST /api/gl/journal-entries/:id/:action — 手工凭证状态动作（submit/approve/reject/post；ADR-0035）
