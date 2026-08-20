@@ -49,7 +49,9 @@ for (const f of files) {
   const whereIdx = s.indexOf('where: {', updIdx);
   const whereEnd = s.indexOf('}', whereIdx);
   const whereClause = s.slice(whereIdx + 'where: {'.length, whereEnd).trim();
-  const varName = whereClause.split(',')[0].trim();
+  // 支持 `id: <var>`（嵌套路由）与直接 `<var>` 两种 where 形式
+  const idMap = whereClause.match(/^id:\s*([A-Za-z_]+)/);
+  const varName = idMap ? idMap[1] : whereClause.split(',')[0].trim();
   if (!/^[A-Za-z_]+$/.test(varName)) { skip('bad-where-var:' + whereClause); continue; }
   let nfCode = 'ERROR_CODES.NOT_FOUND';
   let nfMsg = '资源不存在';
@@ -86,7 +88,7 @@ for (const f of files) {
     "const cas = await casUpdate(prisma, '" + model + "', " + varName + ", version, {" + dataClean + "\n});" +
     "\n  if (cas.outcome === 'NOT_FOUND') return failNotFound(" + nfCode + ", \"" + nfMsg + "\");" +
     "\n  if (cas.outcome === 'CONFLICT') return failConflict(ERROR_CODES.VERSION_CONFLICT, \"版本冲突，请刷新后重试\");" +
-    "\n  const updated = await prisma." + model + ".findFirst({ where: { " + varName + ", deletedAt: null } });" +
+    "\n  const updated = await prisma." + model + ".findFirst({ where: { id: " + varName + ", deletedAt: null } });" +
     "\n  if (!updated) return failNotFound(" + nfCode + ", \"" + nfMsg + "\");";
   s = before + replacement + after;
   if (s.indexOf('import { casUpdate }') === -1) {

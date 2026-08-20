@@ -5,6 +5,7 @@ import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/l
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
+import { casUpdate } from "@/lib/api/cas";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -42,21 +43,18 @@ export async function PATCH(
     where: { id: costId, itemId: id, deletedAt: null },
   });
   if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "成本记录不存在");
-  if (existing.version !== version) {
-    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  }
+  
 
-  const updated = await prisma.itemCost.update({
-    where: { id: costId },
-    data: {
-      ...updates,
+  const cas = await casUpdate(prisma, 'itemCost', costId, version, {...updates,
       costType: updates.costType as ItemCostType | undefined,
       effectiveFrom: updates.effectiveFrom === undefined ? undefined : updates.effectiveFrom === null ? null : new Date(updates.effectiveFrom),
       effectiveTo: updates.effectiveTo === undefined ? undefined : updates.effectiveTo === null ? null : new Date(updates.effectiveTo),
-      version: { increment: 1 },
       updatedById: user!.id,
-    },
-  });
+});
+  if (cas.outcome === 'NOT_FOUND') return failNotFound(ERROR_CODES.NOT_FOUND, "成本记录不存在");
+  if (cas.outcome === 'CONFLICT') return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
+  const updated = await prisma.itemCost.findFirst({ where: { id: costId, deletedAt: null } });
+  if (!updated) return failNotFound(ERROR_CODES.NOT_FOUND, "成本记录不存在");
 
   await writeAuditLog({
     actorId: user?.id,
