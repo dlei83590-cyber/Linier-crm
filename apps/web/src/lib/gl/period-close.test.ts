@@ -32,9 +32,16 @@ function makeTx(overrides: Record<string, unknown> = {}) {
       aggregate: vi.fn().mockResolvedValue({ _sum: { debit: null, credit: null } }),
     },
     documentSequence: {
-      findFirst: vi.fn().mockResolvedValue({ id: "seq-jrn", docType: "JOURNAL", prefix: "JRN", nextNo: 100, padLength: 6 }),
+      findFirst: vi.fn().mockResolvedValue({ id: "seq-jrn", docType: "JOURNAL", prefix: null, nextNo: 100, padLength: 4 }),
+      create: vi.fn(),
       update: vi.fn().mockResolvedValue({ id: "seq-jrn", nextNo: 101 }),
     },
+    // 会计期间（ADR-0044）：202608 默认 OPEN；close 后 updateMany 置 CLOSED
+    accountingPeriod: {
+      findFirst: vi.fn().mockResolvedValue({ id: "ap1", periodKey: "202608", status: "OPEN" }),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
+    $queryRaw: vi.fn().mockResolvedValue([{ id: "seq-jrn" }]),
     glJournalEntry: {
       create: vi.fn().mockImplementation((args: any) =>
         Promise.resolve({ id: "entry-close", voucherNo: args.data.voucherNo, ...args.data }),
@@ -131,9 +138,14 @@ describe("reopenPeriod — 期间重开（ADR-0037）", () => {
         delete: vi.fn().mockResolvedValue({}),
       },
       documentSequence: {
-        findFirst: vi.fn().mockResolvedValue({ id: "seq-jrn", docType: "JOURNAL", prefix: "JRN", nextNo: 200, padLength: 6 }),
+        findFirst: vi.fn().mockResolvedValue({ id: "seq-jrn", docType: "JOURNAL", prefix: null, nextNo: 200, padLength: 4 }),
+        create: vi.fn(),
         update: vi.fn().mockResolvedValue({ id: "seq-jrn", nextNo: 201 }),
       },
+      accountingPeriod: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      $queryRaw: vi.fn().mockResolvedValue([{ id: "seq-jrn" }]),
       glJournalEntry: {
         create: vi.fn().mockImplementation((args: any) => Promise.resolve({ id: "entry-rev", voucherNo: args.data.voucherNo, ...args.data })),
       },

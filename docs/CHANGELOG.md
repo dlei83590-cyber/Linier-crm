@@ -2,6 +2,20 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Sprint 7 会计期间体系（2026-08-20，ADR-0044，Migration 0038）
+
+### 新增（会计期间表/过账期间校验/凭证字+附件/编号按月重排/GL dateTo 时区修复）
+
+- **Schema + Migration 0038**：AccountingPeriod（periodKey YYYYMM/status OPEN·CLOSED·LOCKED/periodCloseId 引用结转）+ AccountingPeriodStatus + GlVoucherType（记/收/付/转）；GlJournalEntry + voucherType（默认记）+ attachmentCount（≥0）；DocumentSequence + periodPattern/perPeriodReset
+- **期间校验 fail-closed**：lib/gl/period.ts assertPeriodOpen（CLOSED/LOCKED/FUTURE/NOT_FOUND 409；系统凭证 PERIOD_CLOSE/REVERSAL 豁免）；postGlEntry + 手工 POST 双路径
+- **编号按月重排**：lib/gl/voucher-number.ts（(期间,凭证字) 连续，记202608-0001，FOR UPDATE 原子）；替换 posting/period-close/[action] 三处重复实现；历史凭证不重编号
+- **close/reopen 状态联动**：同事务 AccountingPeriod CLOSED/OPEN + periodCloseId 同步
+- **时区修复**：GL 列表 dateTo/dateFrom 按 Asia/Shanghai 业务日（修复 UTC 日边界 bug）
+- **错误码 +8**（ERROR_CODES 自动生成 269 码）+ backfill 脚本（scripts/backfill-accounting-periods.ts，部署期幂等）
+- **单测**：period.test.ts 19 用例 + posting/period-close 断言更新
+
+---
+
 ## [Unreleased] - Sprint 7 增值税发票管理字段（2026-08-20，ADR-0043，Migration 0037）
 
 ### 新增（发票类型/税务号码/红字实体/开票资料结构化/USCC 校验/9% 税率档；后端切片）

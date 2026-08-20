@@ -7,6 +7,8 @@ import { requestLog } from '@/lib/api/logger';
 import { z } from 'zod';
 import type { Prisma } from '@prisma/client';
 import { assertGlLinesBalanced } from '@/lib/gl/entry-helpers';
+import { assertPeriodOpen, periodKeyOf } from '@/lib/gl/period';
+import { nextVoucherNo } from '@/lib/gl/voucher-number';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,9 +67,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         data.approvedById = user?.id ?? null;
         data.approvedAt = new Date();
       } else if (action === 'post') {
-        // 借贷平衡最终复核 + 取号（事务内）
+        // 借贷平衡最终复核 + 期间校验（fail closed，ADR-0044）+ 取号（事务内）
         assertGlLinesBalanced(existing.lines);
-        data.voucherNo = await nextVoucherNo(tx);
+        await assertPeriodOpen(tx, existing.postingDate, existing.sourceType);
+        data.voucherNo = await nextVoucherNo(tx, {
+          periodKey: periodKeyOf(existing.postingDate),
+          voucherType: existing.voucherType,
+        });
         data.postedById = user?.id ?? null;
         data.postedAt = new Date();
       }
@@ -95,6 +101,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (msg === 'MAKER_CHECKER') return failConflict(ERROR_CODES.CONFLICT, '审核/过账人不能是创建人（maker-checker）');
     if (msg === 'GL_UNBALANCED') return failConflict(ERROR_CODES.CONFLICT, '借贷不平衡，拒绝过账');
     if (msg === 'JOURNAL_SEQUENCE_MISSING') return failConflict(ERROR_CODES.INTERNAL_ERROR, 'JOURNAL 序列缺失（部署配置错误）');
+    if (msg === 'GL_PERIOD_CLOSED') return failConflict(ERROR_CODES.GL_PERIOD_CLOSED, '该期间已结转（CLOSED），禁止过账');
+    if (msg === 'GL_PERIOD_LOCKED') return failConflict(ERROR_CODES.GL_PERIOD_LOCKED, '该期间已锁定（LOCKED），禁止过账');
+    if (msg === 'GL_PERIOD_FUTURE') return failConflict(ERROR_CODES.GL_PERIOD_FUTURE, '禁止未来期间过账');
+    if (msg === 'GL_PERIOD_NOT_FOUND') return failConflict(ERROR_CODES.GL_PERIOD_NOT_FOUND, '会计期间不存在——请先运行期间 backfill 初始化');
     console.error('[gl.journal-entry.' + action + ']', err);
     return failConflict(ERROR_CODES.INTERNAL_ERROR, '操作失败（事务已回滚）');
   }

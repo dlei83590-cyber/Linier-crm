@@ -31,9 +31,15 @@ function makeTx(overrides: Record<string, unknown> = {}) {
       ),
     },
     documentSequence: {
-      findFirst: vi.fn().mockResolvedValue({ id: "seq-jrn", docType: "JOURNAL", prefix: "JRN", nextNo: 42, padLength: 6 }),
+      findFirst: vi.fn().mockResolvedValue({ id: "seq-jrn", code: "JRN:202608:GENERAL", docType: "JOURNAL", prefix: null, nextNo: 42, padLength: 4 }),
+      create: vi.fn(),
       update: vi.fn().mockResolvedValue({ id: "seq-jrn", nextNo: 43 }),
     },
+    // 会计期间（ADR-0044）：测试期间 202608 默认 OPEN
+    accountingPeriod: {
+      findFirst: vi.fn().mockResolvedValue({ id: "p1", periodKey: "202608", status: "OPEN" }),
+    },
+    $queryRaw: vi.fn().mockResolvedValue([{ id: "seq-jrn" }]),
     supplierPaymentAllocation: {
       findMany: vi.fn().mockResolvedValue([{ allocatedAmount: "300.00" }, { allocatedAmount: "200.00" }]),
     },
@@ -55,7 +61,7 @@ describe("postGlEntry — 过账服务不变量", () => {
     });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.voucherNo).toBe("JRN000042");
+    expect(r.voucherNo).toBe("记202608-0042"); // ADR-0044：凭证字+期间+流水（padLength 4 → 0042）
     expect(tx.glJournalEntry.create).toHaveBeenCalledTimes(1);
   });
 

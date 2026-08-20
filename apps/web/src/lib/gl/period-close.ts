@@ -1,4 +1,6 @@
 import { Prisma } from '@prisma/client';
+import { toAccountingPeriodKey, currentPeriodKey } from '@/lib/gl/period';
+import { nextVoucherNo } from '@/lib/gl/voucher-number';
 
 /**
  * GL 期末结转（Sprint 7 Finance，ADR-0036）
@@ -91,18 +93,17 @@ export async function reopenPeriod(
     }
   }
 
-  // 取号
-  const seq = await tx.documentSequence.findFirst({ where: { docType: 'JOURNAL' as never, isActive: true, deletedAt: null } });
-  if (!seq) return { ok: false, code: 'JOURNAL_SEQUENCE_MISSING', message: 'JOURNAL 序列缺失（部署配置错误）', httpStatus: 500 };
-  const updated = await tx.documentSequence.update({ where: { id: seq.id }, data: { nextNo: { increment: 1 } } });
-  const voucherNo = `${seq.prefix}${String(updated.nextNo - 1).padStart(seq.padLength, '0')}`;
+  // 取号（ADR-0044：冲销凭证 = 当期 TRANSFER；格式 转YYYYMM-0001）
+  const voucherNo = await nextVoucherNo(tx, { periodKey: currentPeriodKey(), voucherType: 'TRANSFER' });
 
-  // 冲销凭证（sourceType=PERIOD_CLOSE_REVERSAL, sourceId 唯一）
+  // 冲销凭证（sourceType=PERIOD_CLOSE_REVERSAL, sourceId 唯一；期间校验豁免白名单 PERIOD_CLOSE_REVERSAL）
   const reversal = await tx.glJournalEntry.create({
     data: {
       voucherNo,
       postingDate: new Date(),
       status: 'POSTED',
+      voucherType: 'TRANSFER',
+      attachmentCount: 0,
       sourceType: 'PERIOD_CLOSE_REVERSAL',
       sourceId: `${close.periodKey}|reopen|${Date.now()}`,
       summary: '冲销结转：' + close.periodKey,
@@ -115,6 +116,12 @@ export async function reopenPeriod(
 
   // 删除 GlPeriodClose（允许重新结转）
   await tx.glPeriodClose.delete({ where: { id: params.periodCloseId } });
+
+  // AccountingPeriod 状态联动（ADR-0044，INV2）：CLOSED → OPEN + 清引用（同事务）
+  await tx.accountingPeriod.updateMany({
+    where: { periodKey: toAccountingPeriodKey(close.periodKey) },
+    data: { status: 'OPEN', periodCloseId: null, closedById: null, closedAt: null },
+  });
 
   return {
     ok: true,
@@ -134,6 +141,15 @@ export async function closePeriod(
   const existing = await tx.glPeriodClose.findFirst({ where: { periodKey: params.periodKey } });
   if (existing) {
     return { ok: false, code: 'GL_PERIOD_ALREADY_CLOSED', message: '该期间已结转（periodKey 唯一防重复）', httpStatus: 409 };
+  }
+  // AccountingPeriod 期间校验（ADR-0044，INV8）：仅 OPEN 可结转；LOCKED 拒绝
+  const accPeriodKey = toAccountingPeriodKey(params.periodKey);
+  const accPeriod = await tx.accountingPeriod.findFirst({ where: { periodKey: accPeriodKey } });
+  if (!accPeriod) {
+    return { ok: false, code: 'GL_PERIOD_NOT_FOUND', message: '会计期间不存在（' + accPeriodKey + '）——请先运行期间 backfill 初始化', httpStatus: 409 };
+  }
+  if (accPeriod.status !== 'OPEN') {
+    return { ok: false, code: accPeriod.status === 'LOCKED' ? 'GL_PERIOD_LOCKED' : 'GL_PERIOD_ALREADY_CLOSED', message: '仅 OPEN 期间可结转（当前 ' + accPeriod.status + '）', httpStatus: 409 };
   }
 
   // 期间范围：periodKey "YYYY-MM"
@@ -212,18 +228,17 @@ export async function closePeriod(
   // 更稳妥：直接构造平衡凭证——借 REVENUE 合计 + 借 4103(expenseNet) = 贷 4103(revenueNet) + 贷 EXPENSE 合计
   // 简化实现：以上 allLines 已经数学平衡（revenueNet 借 = 4103 贷；expenseNet 贷 = 4103 借；retained 差额在 4103 净额行）
 
-  // 取号
-  const seq = await tx.documentSequence.findFirst({ where: { docType: 'JOURNAL' as never, isActive: true, deletedAt: null } });
-  if (!seq) return { ok: false, code: 'JOURNAL_SEQUENCE_MISSING', message: 'JOURNAL 序列缺失（部署配置错误）', httpStatus: 500 };
-  const updated = await tx.documentSequence.update({ where: { id: seq.id }, data: { nextNo: { increment: 1 } } });
-  const voucherNo = `${seq.prefix}${String(updated.nextNo - 1).padStart(seq.padLength, '0')}`;
+  // 取号（ADR-0044：结转凭证 = 结转期间 TRANSFER；格式 转YYYYMM-0001）
+  const voucherNo = await nextVoucherNo(tx, { periodKey: accPeriodKey, voucherType: 'TRANSFER' });
 
-  // 创建结转凭证（sourceType=PERIOD_CLOSE, sourceId=periodKey 幂等）
+  // 创建结转凭证（sourceType=PERIOD_CLOSE, sourceId=periodKey 幂等；期间校验豁免白名单 PERIOD_CLOSE）
   const entry = await tx.glJournalEntry.create({
     data: {
       voucherNo,
       postingDate: periodEnd,
       status: 'POSTED',
+      voucherType: 'TRANSFER',
+      attachmentCount: 0,
       sourceType: 'PERIOD_CLOSE',
       sourceId: params.periodKey,
       summary: '期末结转：' + params.periodKey,
@@ -239,8 +254,14 @@ export async function closePeriod(
   });
 
   // GlPeriodClose（防重复月结）
-  await tx.glPeriodClose.create({
+  const periodClose = await tx.glPeriodClose.create({
     data: { periodKey: params.periodKey, journalEntryId: entry.id, closedById: params.actorId ?? null },
+  });
+
+  // AccountingPeriod 状态联动（ADR-0044，INV2）：OPEN → CLOSED + periodCloseId（同事务）
+  await tx.accountingPeriod.updateMany({
+    where: { periodKey: accPeriodKey },
+    data: { status: 'CLOSED', periodCloseId: periodClose.id, closedById: params.actorId ?? null, closedAt: new Date() },
   });
 
   return {

@@ -1026,6 +1026,8 @@ model DocumentSequence {
   prefix      String?
   nextNo      Int      @default(1)
   padLength   Int      @default(4)
+  periodPattern  String? // 期间前缀模板（如 "{YYYY}{MM}"；JOURNAL 启用，其余暂空 = 现状；ADR-0044）
+  perPeriodReset Boolean @default(false) // 是否按月重排（JOURNAL = true）
   isActive    Boolean  @default(true)
   createdById String?
   updatedById String?
@@ -6194,6 +6196,42 @@ model GlAccount {
   @@index([deletedAt])
 }
 
+/// 会计期间状态（ADR-0044：OPEN 可过账/可结转；CLOSED 已结转可重开；LOCKED 人为锁定终态）
+enum AccountingPeriodStatus {
+  OPEN
+  CLOSED
+  LOCKED
+}
+
+/// 凭证字（中国《会计基础工作规范》惯例：记/收/付/转；ADR-0044）
+enum GlVoucherType {
+  GENERAL   // 记
+  RECEIPT   // 收
+  PAYMENT   // 付
+  TRANSFER  // 转
+}
+
+/// 会计期间（自然月，中国市场；Sprint 7，Migration 0038，ADR-0044）
+/// periodKey "YYYYMM" 与 GlPeriodClose.periodKey "YYYY-MM" 经转换函数兼容；close/reopen 同事务联动 status
+model AccountingPeriod {
+  id            String   @id @default(cuid())
+  periodKey     String   @unique // "YYYYMM"（如 202608）
+  fiscalYear    Int      // 会计年度（= 自然年；跨年结转逻辑后续）
+  startDate     DateTime @db.Date // 当月 1 日（Asia/Shanghai 业务日）
+  endDate       DateTime @db.Date // 当月最后一日（含）
+  status        AccountingPeriodStatus @default(OPEN)
+  periodCloseId String?  @unique // status=CLOSED 时指向 GlPeriodClose.id（期末结转引用）
+  periodClose   GlPeriodClose? @relation(fields: [periodCloseId], references: [id])
+  closedById    String?
+  closedAt      DateTime? @db.Timestamptz(3)
+  createdById   String?
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([fiscalYear])
+  @@index([status])
+}
+
 /// 记账凭证头（Sprint 7 GL，Migration 0033；ADR-0033）
 /// POSTED 一次性终态不可变；sourceType+sourceId 幂等（防重复过账）；纠错 → 追加红字冲销凭证
 model GlJournalEntry {
@@ -6201,6 +6239,8 @@ model GlJournalEntry {
   voucherNo  String?  @unique // 凭证号（自动过账：创建即取号；手工凭证：DRAFT 不占号，POSTED 时取号——4D 教训，ADR-0035）
   postingDate DateTime @db.Timestamptz(3) // 过账日期
   status     String   @default("POSTED") // 自动过账 POSTED；手工凭证 DRAFT→SUBMITTED→APPROVED→POSTED/REJECTED（ADR-0035）
+  voucherType     GlVoucherType @default(GENERAL) // 凭证字：记/收/付/转（ADR-0044；自动过账=记，结转/冲销=转）
+  attachmentCount Int           @default(0) // 附件张数（ADR-0044；>= 0，DB CHECK）
   sourceType String   // 来源类型（SupplierInvoicePosted / SupplierPaymentApplied / SupplierCreditDebitNoteApplied / SupplierPaymentReversed / MANUAL）
   sourceId   String   // 来源业务事实 id（发票 id / 核销行 id / CN-DN id；手工凭证 = cuid）
   summary    String?  // 摘要

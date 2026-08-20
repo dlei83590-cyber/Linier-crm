@@ -324,6 +324,16 @@ export const ERROR_CODES = {
   RED_INVOICE_OVERFLOW: 'RED_INVOICE_OVERFLOW', // 红字累计超冲：Σ|红字| > |原票|（R4，锁内校验），409
   PARTNER_LINK_REQUIRED: 'PARTNER_LINK_REQUIRED', // 开票客户必须关联 BusinessPartner（I10，fail closed），409
   PARTNER_INVOICE_INFO_MISSING: 'PARTNER_INVOICE_INFO_MISSING', // 开票资料缺失（title+uscc 必填）（I10，fail closed），409
+
+  // Sprint 7 会计期间（ADR-0044：期间校验/凭证字/按月编号）
+  GL_PERIOD_NOT_FOUND: 'GL_PERIOD_NOT_FOUND', // 会计期间不存在（未 backfill 初始化）（INV1），409
+  GL_PERIOD_CLOSED: 'GL_PERIOD_CLOSED', // 期间已结转（CLOSED），禁止过账（INV1），409
+  GL_PERIOD_LOCKED: 'GL_PERIOD_LOCKED', // 期间已锁定（LOCKED），禁止过账/结转/重开（INV1），409
+  GL_PERIOD_FUTURE: 'GL_PERIOD_FUTURE', // 禁止未来期间过账（INV1），409
+  GL_PERIOD_ALREADY_CLOSED: 'GL_PERIOD_ALREADY_CLOSED', // 期间已结转，禁止重复结转（INV8），409
+  GL_PERIOD_INVALID: 'GL_PERIOD_INVALID', // 期间格式非法（须 YYYY-MM），400
+  GL_VOUCHER_TYPE_INVALID: 'GL_VOUCHER_TYPE_INVALID', // 凭证字非法（记/收/付/转），400
+  GL_ATTACHMENT_COUNT_INVALID: 'GL_ATTACHMENT_COUNT_INVALID', // 附件张数非法（0-999），400
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
