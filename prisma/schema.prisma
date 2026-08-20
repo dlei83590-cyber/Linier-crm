@@ -609,7 +609,7 @@ model BusinessPartner {
   partnerTags         PartnerTag[]
   partnerBankAccounts PartnerBankAccount[]
   partnerCredit       PartnerCredit?
-  invoiceInfo         BusinessPartnerInvoiceInfo? // 开票资料（1:1；中国审计 P1，ADR-0043）
+  invoiceInfoRecord   BusinessPartnerInvoiceInfo? // 开票资料（1:1；中国审计 P1，ADR-0043；invoiceInfo 遗留 Json 保留兼容）
   suppliers           Supplier[]
   supplierItems       SupplierItem[]
   partnerPrices       PartnerPrice[]
