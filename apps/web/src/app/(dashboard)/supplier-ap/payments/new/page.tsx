@@ -20,6 +20,9 @@ const METHOD_OPTIONS = [
   { value: "CHEQUE", label: "支票" },
   { value: "CASH", label: "现金" },
   { value: "CARD", label: "刷卡" },
+  { value: "BANK_ACCEPTANCE_BILL", label: "银行承兑汇票" },
+  { value: "COMMERCIAL_ACCEPTANCE_BILL", label: "商业承兑汇票" },
+  { value: "TT_ELECTRONIC_TRANSFER", label: "电汇" },
   { value: "OTHER", label: "其他" },
 ];
 

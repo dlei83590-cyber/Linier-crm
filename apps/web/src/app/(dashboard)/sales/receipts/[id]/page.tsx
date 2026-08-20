@@ -43,6 +43,9 @@ const PAYMENT_METHOD_LABEL: Record<string, string> = {
   CHEQUE: "支票",
   CASH: "现金",
   CARD: "刷卡",
+  BANK_ACCEPTANCE_BILL: "银行承兑汇票",
+  COMMERCIAL_ACCEPTANCE_BILL: "商业承兑汇票",
+  TT_ELECTRONIC_TRANSFER: "电汇",
   OTHER: "其他",
 };
 

@@ -2,6 +2,16 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 中国结算方式扩展（2026-08-20，ADR-0046，Migration 0039）
+
+### 新增（银行/商业承兑汇票 + 电汇）
+
+- **PaymentMethod +3**：BANK_ACCEPTANCE_BILL / COMMERCIAL_ACCEPTANCE_BILL / TT_ELECTRONIC_TRANSFER（Migration 0039 ALTER TYPE）
+- **API**：receiptCreateSchema.paymentMethod zod +3
+- **前端**：payments/receipts 4 页标签与选项 +3（银行承兑汇票/商业承兑汇票/电汇）
+
+---
+
 ## [Unreleased] - 认证存储升级（2026-08-20，ADR-0045）
 
 ### 新增（httpOnly Cookie + SameSite=Lax，消除 localStorage JWT 的 XSS 窃取向量）
