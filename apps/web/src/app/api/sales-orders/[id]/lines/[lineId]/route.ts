@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { casUpdate } from "@/lib/api/cas";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound, fail } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
@@ -46,9 +47,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   const line = await prisma.salesOrderLine.findFirst({ where: { id: lineId, salesOrderId: id, deletedAt: null } });
   if (!line) return failNotFound(ERROR_CODES.SALES_ORDER_LINE_NOT_FOUND, "销售订单行不存在");
-  if (line.version !== version) {
-    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  }
 
   const nextQuantity = quantity !== undefined ? new Prisma.Decimal(quantity) : line.quantity;
   const nextUomId = fields.uomId !== undefined ? fields.uomId : line.uomId;
@@ -79,29 +77,29 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   // ② 单事务：更新行（业务字段 + 定价回写，sourceQuotationLineId 溯源永不清除）→ 重算 SO totals → Revision
   //    → 审批触发（CTO Final Review 阻断项②/非阻断建议：商业修改与审批状态切换统一事务，命中策略失败整体回滚显式报错）
-  let saved: { salesOrder: { id: string; code: string; totalAmount: unknown } | null; line: unknown };
+  let saved:
+    | { error: "CONFLICT" | "NOT_FOUND" }
+    | { salesOrder: { id: string; code: string; totalAmount: unknown } | null; line: unknown };
   try {
     saved = await prisma.$transaction(async (tx) => {
-      await tx.salesOrderLine.update({
-        where: { id: lineId },
-        data: {
-          ...(fields.description !== undefined ? { description: fields.description } : {}),
-          ...(fields.uomId !== undefined ? { uomId: fields.uomId } : {}),
-          ...(fields.lineNo !== undefined ? { lineNo: fields.lineNo } : {}),
-          ...(quantity !== undefined ? { quantity: nextQuantity } : {}),
-          ...(pricingResult
-            ? {
-                priceSnapshotId: pricingResult.priceSnapshotId,
-                unitPrice: pricingResult.unitPrice,
-                lineAmount: pricingResult.lineAmount,
-                taxAmount: pricingResult.taxAmount,
-                totalAmount: pricingResult.totalAmount,
-              }
-            : {}),
-          version: { increment: 1 },
-          updatedById: user!.id,
-        },
+      // A4-CAS：原子乐观锁置于事务首部（消除 read-check-update TOCTOU）
+      const cas = await casUpdate(tx, "salesOrderLine", lineId, version, {
+        ...(fields.description !== undefined ? { description: fields.description } : {}),
+        ...(fields.uomId !== undefined ? { uomId: fields.uomId } : {}),
+        ...(fields.lineNo !== undefined ? { lineNo: fields.lineNo } : {}),
+        ...(quantity !== undefined ? { quantity: nextQuantity } : {}),
+        ...(pricingResult
+          ? {
+              priceSnapshotId: pricingResult.priceSnapshotId,
+              unitPrice: pricingResult.unitPrice,
+              lineAmount: pricingResult.lineAmount,
+              taxAmount: pricingResult.taxAmount,
+              totalAmount: pricingResult.totalAmount,
+            }
+          : {}),
+        updatedById: user!.id,
       });
+      if (cas.outcome !== "OK") return { error: cas.outcome as "CONFLICT" | "NOT_FOUND" };
       const lines = await tx.salesOrderLine.findMany({ where: { salesOrderId: id, deletedAt: null }, orderBy: { lineNo: "asc" } });
       await recalcSalesOrderTotals(tx, id, lines);
       const so = await tx.salesOrder.findFirst({ where: { id } });
@@ -122,6 +120,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return fail(ERROR_CODES.SALES_ORDER_WORKFLOW_FAILED, "审批流程定义不存在或未发布（SALES_ORDER_APPROVAL），商业条件变更已回滚", 409);
     }
     throw e;
+  }
+
+  if ("error" in saved) {
+    return saved.error === "NOT_FOUND"
+      ? failNotFound(ERROR_CODES.SALES_ORDER_LINE_NOT_FOUND, "销售订单行不存在")
+      : failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
   }
 
   await publishSalesOrderEvent({
