@@ -2,6 +2,20 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Sprint8 UI 现代化（2026-08-20，PR #103-#105）
+
+### 新增（高饱和彩色仪表盘风 + 全局反馈系统 + 壳层交互）
+
+- **U1 壳层与导航**（#103）：10 业务域高饱和色板（design-system MODULE_ACCENTS + tailwind domain-*，单一事实来源）；侧栏折叠（64px 色块轨道，localStorage 记忆）+ 当前项域色指示条 + 域分组色点/chevron 旋转过渡；移动端抽屉滑入动画 + backdrop blur；顶栏模块搜索（/ 快捷键、Enter 直达、hold 仅展示）+ 当前模块域色徽标
+- **U2a 全局反馈系统**（#104）：Toast（ToastProvider + useToast，success/error/info/warning 四态、右上堆叠、自动消失、aria-live、零依赖）；骨架屏 Skeleton + Spinner + PageLoading（shimmer）；空态 EmptyState；列表 LoadingRow→骨架/EmptyRow→空态；提交/动作按钮内联 loading（EntityFormWorkspace/StateActionBar）；AdminShell 认证加载骨架
+- **U2b 接线**（#105）：财务关键流程 Toast（销售开票/取消、供应商发票创建/提交/匹配/过账、GL 凭证创建/提交/批准/过账/驳回、往来单位保存）+ 4 页面「加载中…」→ 骨架屏
+
+### Known Risk
+
+- 折叠动画/搜索下拉/抽屉/Toast 时序/骨架屏渲染需人工登录验证，无 E2E
+
+---
+
 ## [Unreleased] - 增值税/会计期间前端接线（2026-08-20，ADR-0043/0044，PR #98-#101）
 
 ### 新增（Design Gate §5 前端清单 F1-F4 全部落地）
