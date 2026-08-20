@@ -2,6 +2,22 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Sprint 7 销售侧 GL 记账闭环（2026-08-20，ADR-0042）
+
+### 新增（销售侧财务闭环：收入确认 + 收款入账 + 核销反转红字；零 Migration / 零新表 / 零新 API）
+
+- **Invoice ISSUE → 收入确认凭证**：issue 事务内原子写 Outbox `InvoiceIssued`（载荷含 subtotal/taxAmount/invoiceTotal 服务端 canonical）；GL consumer 注册 handler → 借 应收账款 1122（含税）/ 贷 主营业务收入 6001（未税）/ 贷 销项税额 22210102（税额）；零税额省略税行；收入确认时点 = ISSUE
+- **收款核销 → 入账凭证**：allocate 事务内逐 ReceiptAllocation 行原子写 Outbox `ReceiptAllocated`（含 receiptAllocationId/paymentMethod）；GL handler → 借 银行存款 1002（CASH→1001 库存现金）/ 贷 应收账款 1122
+- **核销反转 → 红字冲销**：reverse 事务内原子写 Outbox `ReceiptAllocationReversed`；GL handler → 红字反向 借 1122 / 贷 1002（CASH→1001）
+- **seed 科目**：SEED_GL_ACCOUNTS +1122 应收账款 / 6001 主营业务收入 / 22210102 应交税费-应交增值税-销项税额（GlAccountCategory REVENUE 已有，免枚举迁移）
+- **单测**：posting.test.ts +7 用例（平衡/零税额/金额不一致 GL_UNBALANCED/CASH 分科目/反转方向/幂等）
+
+### 文档
+
+- ADR-0042、EVENTS v1.40（3 事件 Outbox 化 + 载荷升级）、QA Sprint7_SalesGL_QA.md、test-cases（Invoice_API / Receipt_WriteOff_API +GL 段）、Design Gate docs/SPRINTS/Sprint7_SalesGL_Design.md、ROADMAP v1.26
+
+---
+
 ## [Unreleased] - Pending Pages Completion（9 个待开发页面打通，2026-08-18）
 
 ### 新增（Design/Scope Gate → 3 批实现，ADR-0029；7 域 CRUD + 2 引导页，零 Schema/Migration 变更）

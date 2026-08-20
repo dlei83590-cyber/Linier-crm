@@ -578,12 +578,15 @@ const SEED_DOCUMENT_SEQUENCES = [
 const SEED_GL_ACCOUNTS = [
   { code: "1001", name: "库存现金", category: "ASSET", direction: "DEBIT", remark: "现金" },
   { code: "1002", name: "银行存款", category: "ASSET", direction: "DEBIT", remark: "GL_ACCOUNT_BANK" },
+  { code: "1122", name: "应收账款", category: "ASSET", direction: "DEBIT", remark: "GL_ACCOUNT_AR（销售发票 ISSUE 借，ADR-0042）" },
   { code: "1403", name: "原材料", category: "ASSET", direction: "DEBIT", remark: "GL_ACCOUNT_PURCHASE" },
   { code: "1405", name: "库存商品", category: "ASSET", direction: "DEBIT", remark: "GL_ACCOUNT_FINISHED_GOODS（成品/半成品 COGS 贷方，ADR-0041）" },
   { code: "2202", name: "应付账款", category: "LIABILITY", direction: "CREDIT", remark: "GL_ACCOUNT_AP" },
   { code: "2203", name: "应付账款-暂估（GRIR）", category: "LIABILITY", direction: "CREDIT", remark: "GL_ACCOUNT_AP_ESTIMATE" },
   { code: "222101", name: "应交税费-应交增值税-进项税额", category: "LIABILITY", direction: "CREDIT", remark: "GL_ACCOUNT_TAX_INPUT" },
   { code: "6111", name: "采购调整", category: "EXPENSE", direction: "DEBIT", remark: "GL_ACCOUNT_ADJUST" },
+  { code: "6001", name: "主营业务收入", category: "REVENUE", direction: "CREDIT", remark: "GL_ACCOUNT_REVENUE（销售发票 ISSUE 贷，ADR-0042）" },
+  { code: "22210102", name: "应交税费-应交增值税-销项税额", category: "LIABILITY", direction: "CREDIT", remark: "GL_ACCOUNT_TAX_OUTPUT（销售发票 ISSUE 贷，ADR-0042）" },
   { code: "4103", name: "本年利润", category: "EQUITY", direction: "CREDIT", remark: "GL_ACCOUNT_RETAINED_EARNINGS（期末结转目标）" },
   { code: "6401", name: "主营业务成本", category: "EXPENSE", direction: "DEBIT", remark: "GL_ACCOUNT_COGS（出库结转，ADR-0040）" },
 ] as const;

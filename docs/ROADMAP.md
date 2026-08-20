@@ -1,7 +1,7 @@
 # 产品路线图（ROADMAP）
 
-- 版本：v1.24
-- 日期：2026-08-18
+- 版本：v1.26
+- 日期：2026-08-20
 - 维护者：CIO（JINZA）｜审核：CTO
 - 状态说明：✅ 已完成 ｜ 🔄 进行中 ｜ ⬜ 未开始
 - **本文件是项目唯一开发路线依据，CTO / CIO / 开发人员一律以此为准，不再依赖聊天记录推进项目。**
@@ -283,6 +283,7 @@
 ## 15. 变更记录
 
 | 日期       | 变更       | 说明                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| 2026-08-20 | 更新 v1.26 | **销售侧 GL 记账闭环 ✅（CTO 拍板下一开发项 A，ADR-0042，EVENTS v1.40）**：Invoice ISSUE 收入确认（借 1122 应收 / 贷 6001 收入 + 贷 22210102 销项税）/ 收款核销入账（借 1002 银行（CASH→1001）/ 贷 1122）/ 核销反转红字——三个销售侧事件 Outbox 化（业务事务内原子写）+ GL consumer 注册 3 handler；seed +3 科目；零 Migration/新表/新 API；posting.test.ts +7 用例；利润表/试算平衡自动反映销售侧（修复中国环境审计 P0 利润表失真）；销售 CN/DN / 坏账核销 / 预收 GL 为 backlog |
 | 2026-08-20 | 更新 v1.25 | **Sprint 7 Finance 首块落地（GL）✅ + 单币种决策（CTO 2026-08-20）**：ADR-0033 GL 过账消费 5C/GRIR 事件 → ADR-0034 余额/试算/利润 → ADR-0035 手工凭证+审核流 → ADR-0036 期初+月结 → ADR-0037 期间重开，全链 CI 全绿；**多币种折算不实施**（系统仅中国市场，单币种 CNY，正式从 GL backlog 移除）；GL 过账其余子项（AR/Expense/Voucher/Profit/Cash Flow）仍后续 |
 | 2026-08-19 | 更新 v1.24 | **Project Lifecycle Contract Audit 收口 ✅**（docs/reviews/ProjectLifecycle_Contract_Audit.md：L0-L2-B1 8 项契约点全部 FINAL、无 Blocking GAP；GAP G-1 lifecycle 单测 / G-2 closure DELETE 移除 / G-3 专项 QA 为 backlog）＋ **5C-2 Supplier CN/DN + Payment Allocation（CTO 解锁 2026-08-19，ADR-0030）**：Batch 1 Supplier CN/DN（Migration 0029，`b0d68e7` CI ✅）+ Batch 2 Payment Allocation（Migration 0030，`9be51c5` CI ✅）——AP 侧独立事实、Apply 同事务重算 ApOpenItem 投影、防超调/防超核销锁内重算、maker-checker、事件 v1.34；5C-2 由 HOLD 解除为 ✅（GL 过账仍 HOLD）；BI（reports）保持信息架构待 20 份报表清单 |
 | 2026-08-18 | 更新 v1.23 | **Pending Pages Completion（9 个待开发页面全部打通，Design/Scope Gate → 3 批实现，ADR-0029）**：Batch 1 Master Data 4 模块 CRUD（business-partners / technical-standards / commercial-terms / document-sequences，8ca5f06，CI ✅）+ Batch 2 System 3 模块（users / departments / roles + department RBAC 注册 ADR-0028，053e256，CI ✅）+ Batch 3 走访/风险独立页改引导（不建平行 CRUD，B2-1B 项目详情 Tab 已交付，05183cc）；零 Schema/Migration；7 模块 registry hold→ready（ui=UI_LIST_CRUD）；users 停用语义 / 无 CAS（模型无 version）/ roles 无 DELETE / nextNo 编号引擎只读；OpenAPI +7 域 paths；Frontend 全页面无 Placeholder（9 页全部真实可用或引导）；HOLD 领域不变（Reservation/Costing/5C-2/GL/BI/OA/Mobile） |

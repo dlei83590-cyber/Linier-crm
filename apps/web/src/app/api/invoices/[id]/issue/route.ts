@@ -8,6 +8,7 @@ import { requestLog } from "@/lib/api/logger";
 import { invoiceIssueSchema } from "@/lib/api/schemas";
 import { nextInvoiceCode, createInvoiceSnapshot, latestInvoiceRevisionNo } from "@/lib/invoice/helpers";
 import { publishInvoiceEvent } from "@/lib/invoice/events";
+import { writeDomainEvent } from "@/lib/domain-events/writer";
 
 export const dynamic = "force-dynamic";
 
@@ -130,6 +131,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       },
     );
 
+    // ── 8b. InvoiceIssued Outbox（业务事务内原子写；GL consumer → 收入确认凭证，ADR-0042） ──
+    await writeDomainEvent(tx, {
+      eventType: "InvoiceIssued",
+      aggregateType: "Invoice",
+      aggregateId: id,
+      payload: {
+        invoiceId: id,
+        invoiceCode: code,
+        customerId: updated.customerId,
+        currency: updated.currency,
+        subtotal: updated.subtotal.toString(),
+        taxAmount: updated.taxAmount.toString(),
+        invoiceTotal: updated.invoiceTotal.toString(),
+        issuedAt: issuedAt.toISOString(),
+        issuedById: user?.id ?? null,
+      },
+      idempotencyKey: "InvoiceIssued|" + id,
+    });
+
     return { invoice: updated, code, issuedAt };
   });
 
@@ -169,6 +189,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         salesOrderId: result.invoice.salesOrderId,
         customerId: result.invoice.customerId,
         currency: result.invoice.currency,
+        subtotal: result.invoice.subtotal,
+        taxAmount: result.invoice.taxAmount,
         invoiceTotal: result.invoice.invoiceTotal,
         issuedAt: result.issuedAt.toISOString(),
         issuedById: user?.id,

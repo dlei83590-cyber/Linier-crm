@@ -23,7 +23,7 @@ export const DOMAIN_EVENT_RETRY_CAP_SECONDS = 300;
 /** 库存链事件白名单：这些事件由 inventory-ledger/consumer 消费，本 consumer 跳过 */
 const INVENTORY_CHAIN_EVENTS = new Set(['WarehouseReceiptPosted', 'PurchaseReturned', 'InventoryMovementCommitted']);
 
-/** GL 过账消费事件（Sprint 7 Finance 首块，ADR-0033）：消费 5C 会计事件 → 自动过账（同事务） */
+/** GL 过账消费事件（Sprint 7 Finance 首块，ADR-0033 + ADR-0042）：消费 5C/销售侧会计事件 → 自动过账（同事务） */
 const GL_POSTED_EVENTS = new Set([
   'SupplierInvoicePosted',
   'SupplierPaymentApplied',
@@ -31,6 +31,9 @@ const GL_POSTED_EVENTS = new Set([
   'SupplierPaymentReversed',
   'GrirAccrued',
   'GrirReversed',
+  'InvoiceIssued',
+  'ReceiptAllocated',
+  'ReceiptAllocationReversed',
 ]);
 
 interface ClaimedOutboxRow {

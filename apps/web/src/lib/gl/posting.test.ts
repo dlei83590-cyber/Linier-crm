@@ -229,3 +229,112 @@ describe("glPostFromEvent — 5C 事件 → GL 分录映射（ADR-0033）", () =
     if (!r.ok) expect(r.code).toBe("UNSUPPORTED_EVENT");
   });
 });
+
+describe("glPostFromEvent — 销售侧 GL（ADR-0042）", () => {
+  it("InvoiceIssued：借 应收账款(1122, 含税) 贷 主营业务收入(6001, 未税) + 销项税额(22210102) — 借贷平衡", async () => {
+    const tx = makeTx();
+    const r = await glPostFromEvent(tx, "InvoiceIssued", {
+      invoiceId: "inv-s1",
+      invoiceCode: "INV-2026-000001",
+      subtotal: "100.00",
+      taxAmount: "13.00",
+      invoiceTotal: "113.00",
+      issuedAt: "2026-08-20T02:00:00.000Z",
+    });
+    expect(r.ok).toBe(true);
+    const created = (tx.glJournalEntry.create as any).mock.calls[0][0];
+    const debitTotal = created.data.lines.create.reduce((acc: Prisma.Decimal, l: any) => acc.add(l.debit), new Prisma.Decimal(0));
+    const creditTotal = created.data.lines.create.reduce((acc: Prisma.Decimal, l: any) => acc.add(l.credit), new Prisma.Decimal(0));
+    expect(debitTotal.eq(creditTotal)).toBe(true);
+    expect(created.data.sourceType).toBe("InvoiceIssued");
+    expect(created.data.sourceId).toBe("inv-s1");
+    const ar = created.data.lines.create.find((l: any) => l.accountId === "acct-1122");
+    expect(ar.debit.toFixed(2)).toBe("113.00");
+    const revenue = created.data.lines.create.find((l: any) => l.accountId === "acct-6001");
+    expect(revenue.credit.toFixed(2)).toBe("100.00");
+    const outputTax = created.data.lines.create.find((l: any) => l.accountId === "acct-22210102");
+    expect(outputTax.credit.toFixed(2)).toBe("13.00");
+  });
+
+  it("InvoiceIssued 零税额：省略销项税行（1122 = 6001）", async () => {
+    const tx = makeTx();
+    const r = await glPostFromEvent(tx, "InvoiceIssued", {
+      invoiceId: "inv-s2",
+      subtotal: "100.00",
+      taxAmount: "0",
+      invoiceTotal: "100.00",
+      issuedAt: "2026-08-20T02:00:00.000Z",
+    });
+    expect(r.ok).toBe(true);
+    const created = (tx.glJournalEntry.create as any).mock.calls[0][0];
+    expect(created.data.lines.create).toHaveLength(2);
+    expect(created.data.lines.create.some((l: any) => l.accountId === "acct-22210102")).toBe(false);
+  });
+
+  it("InvoiceIssued 金额不一致（subtotal+tax ≠ invoiceTotal）→ GL_UNBALANCED", async () => {
+    const tx = makeTx();
+    const r = await glPostFromEvent(tx, "InvoiceIssued", {
+      invoiceId: "inv-s3",
+      subtotal: "100.00",
+      taxAmount: "13.00",
+      invoiceTotal: "120.00",
+      issuedAt: "2026-08-20T02:00:00.000Z",
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("GL_UNBALANCED");
+  });
+
+  it("ReceiptAllocated：借 银行存款(1002) 贷 应收账款(1122) — 按核销行金额", async () => {
+    const tx = makeTx();
+    const r = await glPostFromEvent(tx, "ReceiptAllocated", {
+      receiptAllocationId: "alloc-1",
+      receiptId: "rcpt-1",
+      receiptCode: "RCPT-2026-000001",
+      allocatedAmount: "113.00",
+      paymentMethod: "BANK_TRANSFER",
+      allocatedAt: "2026-08-20T03:00:00.000Z",
+    });
+    expect(r.ok).toBe(true);
+    const created = (tx.glJournalEntry.create as any).mock.calls[0][0];
+    expect(created.data.sourceType).toBe("ReceiptAllocated");
+    expect(created.data.sourceId).toBe("alloc-1");
+    const bank = created.data.lines.create.find((l: any) => l.accountId === "acct-1002");
+    expect(bank.debit.toFixed(2)).toBe("113.00");
+    const ar = created.data.lines.create.find((l: any) => l.accountId === "acct-1122");
+    expect(ar.credit.toFixed(2)).toBe("113.00");
+  });
+
+  it("ReceiptAllocated CASH：借 库存现金(1001)", async () => {
+    const tx = makeTx();
+    const r = await glPostFromEvent(tx, "ReceiptAllocated", {
+      receiptAllocationId: "alloc-2",
+      receiptId: "rcpt-2",
+      allocatedAmount: "50.00",
+      paymentMethod: "CASH",
+      allocatedAt: "2026-08-20T03:00:00.000Z",
+    });
+    expect(r.ok).toBe(true);
+    const created = (tx.glJournalEntry.create as any).mock.calls[0][0];
+    const cash = created.data.lines.create.find((l: any) => l.accountId === "acct-1001");
+    expect(cash.debit.toFixed(2)).toBe("50.00");
+  });
+
+  it("ReceiptAllocationReversed：红字反向 借 应收账款 贷 银行存款", async () => {
+    const tx = makeTx();
+    const r = await glPostFromEvent(tx, "ReceiptAllocationReversed", {
+      receiptAllocationId: "alloc-1",
+      receiptId: "rcpt-1",
+      reversedAmount: "113.00",
+      paymentMethod: "BANK_TRANSFER",
+      reversedAt: "2026-08-20T04:00:00.000Z",
+    });
+    expect(r.ok).toBe(true);
+    const created = (tx.glJournalEntry.create as any).mock.calls[0][0];
+    expect(created.data.sourceType).toBe("ReceiptAllocationReversed");
+    expect(created.data.sourceId).toBe("alloc-1");
+    const ar = created.data.lines.create.find((l: any) => l.accountId === "acct-1122");
+    expect(ar.debit.toFixed(2)).toBe("113.00");
+    const bank = created.data.lines.create.find((l: any) => l.accountId === "acct-1002");
+    expect(bank.credit.toFixed(2)).toBe("113.00");
+  });
+});

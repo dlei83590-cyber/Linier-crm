@@ -209,4 +209,15 @@
 | M11 | 分页边界 | pageSize>100 | 钳制 100 |
 | M12 | 空列表 | 无数据 | 200 空数组 + meta |
 
-> 合计：11（A）+ 18（B）+ 8（C）+ 10（D）+ 17（E）+ 15（F）+ 7（G）+ 13（H）+ 9（I）+ 6（J）+ 6（K）+ 5（L）+ 12（M）= **137 用例**
+## N. 销售侧 GL（ADR-0042，2026-08-20）
+
+| # | 用例 | 方法/路径 | 预期 |
+| --- | --- | --- | --- |
+| N1 | InvoiceIssued Outbox 原子写 | issue 事务 | 同事务写 OutboxMessage（幂等键 InvoiceIssued|invoiceId），载荷含 subtotal/taxAmount/invoiceTotal |
+| N2 | 收入确认凭证 | GL consumer 消费 InvoiceIssued | 借 1122 应收（含税）/ 贷 6001 收入（未税）/ 贷 22210102 销项税（税额）；借贷平衡 |
+| N3 | 零税额发票 | taxAmount=0 | 省略销项税行（1122 = 6001） |
+| N4 | 金额不一致 | subtotal+tax≠invoiceTotal | 409 GL_UNBALANCED（fail-closed，不静默） |
+| N5 | 幂等防重复过账 | 重复消费同事件 | GlJournalEntry @@unique(sourceType,sourceId) 跳过创建 |
+| N6 | 收入确认时点 | DRAFT/取消 | 不产生任何 GL 凭证（仅 ISSUE 后） |
+
+> 合计：11（A）+ 18（B）+ 8（C）+ 10（D）+ 17（E）+ 15（F）+ 7（G）+ 13（H）+ 9（I）+ 6（J）+ 6（K）+ 5（L）+ 12（M）+ 6（N）= **143 用例**

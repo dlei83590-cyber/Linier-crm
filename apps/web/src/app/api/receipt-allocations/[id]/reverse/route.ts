@@ -10,6 +10,7 @@ import { createReceiptRevision, createReceiptSnapshot, latestReceiptRevisionNo }
 import { createAccountsReceivableRevision, latestAccountsReceivableRevisionNo } from "@/lib/accounts-receivable/helpers";
 import { computeBalance, computeArStatus } from "@/lib/accounts-receivable/projection";
 import { publishReceiptEvent } from "@/lib/receipt/events";
+import { writeDomainEvent } from "@/lib/domain-events/writer";
 
 export const dynamic = "force-dynamic";
 
@@ -170,6 +171,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     await createReceiptRevision(tx, receipt.id, `冲销核销：${reverseReason}`, receiptSnapshotData, user?.id);
     const receiptRevisionNo = await latestReceiptRevisionNo(tx, receipt.id);
     await createReceiptSnapshot(tx, receipt.id, "REVERSED", receiptRevisionNo, receiptSnapshotData, user?.id);
+
+    // ── 9b. ReceiptAllocationReversed Outbox（业务事务内原子写；GL consumer → 红字冲销，ADR-0042） ──
+    await writeDomainEvent(tx, {
+      eventType: "ReceiptAllocationReversed",
+      aggregateType: "ReceiptAllocation",
+      aggregateId: allocation.id,
+      payload: {
+        receiptAllocationId: allocation.id,
+        receiptId: receipt.id,
+        receiptCode: receipt.code,
+        accountsReceivableId: ar.id,
+        allocatedAmount: allocation.allocatedAmount.toString(),
+        reversedAmount: reversedAmount.toString(),
+        paymentMethod: receipt.paymentMethod,
+        reversedAt: now.toISOString(),
+        reversedById: user?.id ?? null,
+      },
+      idempotencyKey: "ReceiptAllocationReversed|" + allocation.id,
+    });
 
     return {
       allocationId: allocation.id,

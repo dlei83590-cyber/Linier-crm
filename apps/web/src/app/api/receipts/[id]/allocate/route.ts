@@ -10,6 +10,7 @@ import { createReceiptRevision, createReceiptSnapshot, latestReceiptRevisionNo }
 import { createAccountsReceivableRevision, createAccountsReceivableSnapshot, latestAccountsReceivableRevisionNo } from "@/lib/accounts-receivable/helpers";
 import { computeBalance, computeArStatus } from "@/lib/accounts-receivable/projection";
 import { publishReceiptEvent } from "@/lib/receipt/events";
+import { writeDomainEvent } from "@/lib/domain-events/writer";
 
 export const dynamic = "force-dynamic";
 
@@ -132,9 +133,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
     }
 
-    // ── 6. Create ReceiptAllocation（每 AR 一行；reversedAt 留空） ────────────
+    // ── 6. Create ReceiptAllocation（每 AR 一行；reversedAt 留空）+ 事务内 Outbox（ADR-0042） ──
+    const allocatedAt = new Date();
     for (const arId of targetArIds) {
-      await tx.receiptAllocation.create({
+      const allocation = await tx.receiptAllocation.create({
         data: {
           receiptId: receipt.id,
           accountsReceivableId: arId,
@@ -143,6 +145,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           createdById: user?.id ?? null,
           updatedById: user?.id ?? null,
         },
+      });
+      await writeDomainEvent(tx, {
+        eventType: "ReceiptAllocated",
+        aggregateType: "ReceiptAllocation",
+        aggregateId: allocation.id,
+        payload: {
+          receiptAllocationId: allocation.id,
+          receiptId: receipt.id,
+          receiptCode: receipt.code,
+          accountsReceivableId: arId,
+          customerId: receipt.customerId,
+          currency: receipt.currency,
+          allocatedAmount: allocation.allocatedAmount.toString(),
+          paymentMethod: receipt.paymentMethod,
+          allocatedAt: allocatedAt.toISOString(),
+          allocatedById: user?.id ?? null,
+        },
+        idempotencyKey: "ReceiptAllocated|" + allocation.id,
       });
     }
 

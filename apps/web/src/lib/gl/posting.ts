@@ -222,6 +222,60 @@ export async function glPostFromEvent(
         actorId: payload.reversedById ? String(payload.reversedById) : null,
       });
     }
+    case 'InvoiceIssued': {
+      // 销售开票（收入确认）：借 应收账款(1122, 含税) 贷 主营业务收入(6001, 未税) + 贷 销项税额(22210102, 税额)
+      // 金额一律取发票服务端 canonical 头字段（subtotal/taxAmount/invoiceTotal），不信任客户端；零税额省略税额行
+      const gross = String(payload.invoiceTotal ?? '0');
+      const net = String(payload.subtotal ?? '0');
+      const tax = String(payload.taxAmount ?? '0');
+      const lines: GlLineInput[] = [
+        { accountCode: '1122', debit: gross, credit: '0', summary: '应收账款（含税）', sourceRef: String(payload.invoiceId) },
+        { accountCode: '6001', debit: '0', credit: net, summary: '主营业务收入（未税）', sourceRef: String(payload.invoiceId) },
+      ];
+      if (new Prisma.Decimal(tax).gt(0)) {
+        lines.push({ accountCode: '22210102', debit: '0', credit: tax, summary: '销项税额', sourceRef: String(payload.invoiceId) });
+      }
+      return postGlEntry(tx, {
+        sourceType: 'InvoiceIssued',
+        sourceId: String(payload.invoiceId),
+        postingDate: payload.issuedAt ? new Date(String(payload.issuedAt)) : new Date(),
+        summary: '销售发票开票：' + String(payload.invoiceCode ?? ''),
+        lines,
+        actorId: payload.issuedById ? String(payload.issuedById) : null,
+      });
+    }
+    case 'ReceiptAllocated': {
+      // 收款核销：借 银行存款(1002, CASH→1001 库存现金) 贷 应收账款(1122)；按核销行 allocatedAmount
+      const amount = String(payload.allocatedAmount ?? '0');
+      const bankCode = String(payload.paymentMethod ?? '') === 'CASH' ? '1001' : '1002';
+      return postGlEntry(tx, {
+        sourceType: 'ReceiptAllocated',
+        sourceId: String(payload.receiptAllocationId),
+        postingDate: payload.allocatedAt ? new Date(String(payload.allocatedAt)) : new Date(),
+        summary: '收款核销：' + String(payload.receiptCode ?? ''),
+        lines: [
+          { accountCode: bankCode, debit: amount, credit: '0', summary: '银行存款/库存现金', sourceRef: String(payload.receiptId) },
+          { accountCode: '1122', debit: '0', credit: amount, summary: '冲减应收账款', sourceRef: String(payload.receiptId) },
+        ],
+        actorId: payload.allocatedById ? String(payload.allocatedById) : null,
+      });
+    }
+    case 'ReceiptAllocationReversed': {
+      // 核销冲销（红字反向）：借 应收账款(1122) 贷 银行存款(1002, CASH→1001)
+      const amount = String(payload.reversedAmount ?? '0');
+      const bankCode = String(payload.paymentMethod ?? '') === 'CASH' ? '1001' : '1002';
+      return postGlEntry(tx, {
+        sourceType: 'ReceiptAllocationReversed',
+        sourceId: String(payload.receiptAllocationId),
+        postingDate: payload.reversedAt ? new Date(String(payload.reversedAt)) : new Date(),
+        summary: '收款核销冲销：' + String(payload.receiptCode ?? ''),
+        lines: [
+          { accountCode: '1122', debit: amount, credit: '0', summary: '恢复应收账款', sourceRef: String(payload.receiptId) },
+          { accountCode: bankCode, debit: '0', credit: amount, summary: '银行存款/库存现金回补', sourceRef: String(payload.receiptId) },
+        ],
+        actorId: payload.reversedById ? String(payload.reversedById) : null,
+      });
+    }
     default:
       return { ok: false, code: 'UNSUPPORTED_EVENT', message: 'GL 未注册该事件类型：' + eventType, httpStatus: 409 };
   }

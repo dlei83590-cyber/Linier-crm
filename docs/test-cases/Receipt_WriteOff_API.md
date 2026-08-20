@@ -252,3 +252,13 @@
 | N8 | 空列表（WriteOff） | 无数据 | 200 空数组 |
 | N9 | Invoice 删除保护 | AR 存在时删 Invoice | Restrict 阻止（4E-1 必改③ 延续） |
 | N10 | 事件载荷基境字段 | 全部 4E-2 事件 | 载荷含 customerId/currency/amount（CI 教训：缺字段致 Quality Gates 红） |
+
+## O. 销售侧 GL（ADR-0042，2026-08-20）
+
+| # | 用例 | 方法/路径 | 预期 |
+| --- | --- | --- | --- |
+| O1 | ReceiptAllocated Outbox 原子写 | allocate 事务（逐核销行） | 每 ReceiptAllocation 行同事务写 Outbox（幂等键 ReceiptAllocated|receiptAllocationId），载荷含 paymentMethod |
+| O2 | 收款入账凭证 | GL consumer 消费 ReceiptAllocated | 借 1002 银行（CASH→1001）/ 贷 1122 应收（allocatedAmount）；借贷平衡 |
+| O3 | 核销反转红字 | GL consumer 消费 ReceiptAllocationReversed | 借 1122 / 贷 1002（反向）；sourceType=ReceiptAllocationReversed |
+| O4 | 反转幂等 | 重复反转 | 409 ALREADY_REVERSED（路由守卫）；GL 侧 @@unique 幂等 |
+| O5 | VOID 无 GL | 未核销收款单 VOID | 无 GL 凭证（仅 UNALLOCATED 可 VOID，无入账事实） |
