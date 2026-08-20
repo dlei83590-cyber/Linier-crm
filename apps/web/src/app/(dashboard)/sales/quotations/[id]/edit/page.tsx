@@ -443,7 +443,7 @@ function QuotationEditForm() {
         <h1 className="text-lg font-semibold text-ink-primary">
           编辑报价单 — {detail?.code}
           <span className="ml-2 text-xs font-normal text-ink-muted">
-            {STATUS_LABELS[detail?.status ?? ""] ?? detail?.status}（v{detail?.version}）
+            {STATUS_LABELS[detail?.status ?? ""] ?? detail?.status}
           </span>
         </h1>
         <div className="flex items-center gap-2">
