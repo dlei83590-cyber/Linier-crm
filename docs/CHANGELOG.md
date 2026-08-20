@@ -2,6 +2,16 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 中国部署适配（2026-08-20，ADR-0048）
+
+### 新增（npm 镜像 + TZ + Docker 说明）
+
+- .npmrc `registry=https://registry.npmmirror.com`（NPM_CONFIG_REGISTRY 可覆盖）
+- docker-compose app/postgres 设 `TZ=Asia/Shanghai`（存储仍 UTC）
+- README 部署章节：Docker 加速器 + PG ≥16 说明
+
+---
+
 ## [Unreleased] - 材料成本差异（2026-08-20，ADR-0047）
 
 ### 新增（发票净额 vs 暂估价差入 1404，修复存货成本与 AP 口径漂移）
