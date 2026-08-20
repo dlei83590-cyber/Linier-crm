@@ -50,7 +50,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "行业不存在");
   
 
-  const cas = await casUpdate(prisma, 'industry', id, version, {
+  const cas = await casUpdate(prisma, 'industry', id, version, {...updates, updatedById: user!.id
 });
   if (cas.outcome === 'NOT_FOUND') return failNotFound(ERROR_CODES.NOT_FOUND, "行业不存在");
   if (cas.outcome === 'CONFLICT') return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
