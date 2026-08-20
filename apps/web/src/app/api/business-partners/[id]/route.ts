@@ -3,10 +3,11 @@ import { Prisma } from "@prisma/client";
 import type { PartnerType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
-import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
+import { ok, fail, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { z } from "zod";
+import { validateUscc, normalizeUscc } from "@/lib/tax-invoice";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +44,19 @@ const businessPartnerUpdateSchema = z
     email: z.string().max(200).nullable().optional(),
     address: z.string().max(500).nullable().optional(),
     isActive: z.boolean().optional(),
+    // 开票资料（ADR-0043，I1：uscc GB 32100-2015 校验；I10：maker-checker 走 approvalStatus）
+    taxInvoiceInfo: z
+      .object({
+        title: z.string().min(1).max(200),
+        uscc: z.string().min(1).max(32),
+        taxpayerType: z.enum(["GENERAL_VAT_PAYER", "SMALL_SCALE"]).optional(),
+        registeredAddress: z.string().max(500).nullable().optional(),
+        registeredPhone: z.string().max(50).nullable().optional(),
+        bankName: z.string().max(100).nullable().optional(),
+        bankAccountNo: z.string().max(100).nullable().optional(),
+      })
+      .nullable()
+      .optional(),
     version: z.number().int().positive(),
   })
   .refine((v) => Object.keys(v).length > 1, { message: "至少提供一个更新字段" });
@@ -103,17 +117,59 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
   }
 
-  const updated = await prisma.businessPartner.update({
-    where: { id },
-    data: {
-      ...updates,
-      type: updates.type as PartnerType | undefined,
-      invoiceInfo: updates.invoiceInfo === undefined ? undefined : updates.invoiceInfo === null ? Prisma.JsonNull : (updates.invoiceInfo as Prisma.InputJsonValue),
-      tags: updates.tags === undefined ? undefined : updates.tags === null ? Prisma.JsonNull : (updates.tags as Prisma.InputJsonValue),
-      foundedDate: updates.foundedDate === undefined ? undefined : updates.foundedDate === null ? null : new Date(updates.foundedDate),
-      version: { increment: 1 },
-      updatedById: user?.id ?? null,
-    },
+  // 开票资料（ADR-0043）：uscc GB 32100-2015 校验（I1）——拒绝非法，fail closed
+  const { taxInvoiceInfo, ...partnerUpdates } = updates;
+  if (taxInvoiceInfo !== undefined && taxInvoiceInfo !== null) {
+    if (!validateUscc(taxInvoiceInfo.uscc)) {
+      return fail(ERROR_CODES.USCC_INVALID, "统一社会信用代码非法（GB 32100-2015，18 位含校验码）", 400, { uscc: taxInvoiceInfo.uscc });
+    }
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const saved = await tx.businessPartner.update({
+      where: { id },
+      data: {
+        ...partnerUpdates,
+        type: partnerUpdates.type as PartnerType | undefined,
+        invoiceInfo: partnerUpdates.invoiceInfo === undefined ? undefined : partnerUpdates.invoiceInfo === null ? Prisma.JsonNull : (partnerUpdates.invoiceInfo as Prisma.InputJsonValue),
+        tags: partnerUpdates.tags === undefined ? undefined : partnerUpdates.tags === null ? Prisma.JsonNull : (partnerUpdates.tags as Prisma.InputJsonValue),
+        foundedDate: partnerUpdates.foundedDate === undefined ? undefined : partnerUpdates.foundedDate === null ? null : new Date(partnerUpdates.foundedDate),
+        version: { increment: 1 },
+        updatedById: user?.id ?? null,
+      },
+    });
+    // 开票资料 upsert（1:1；变更走 approvalStatus=DRAFT，由 BusinessPartner 审批投影治理，I10）
+    if (taxInvoiceInfo !== undefined && taxInvoiceInfo !== null) {
+      await tx.businessPartnerInvoiceInfo.upsert({
+        where: { partnerId: id },
+        create: {
+          partnerId: id,
+          title: taxInvoiceInfo.title,
+          uscc: normalizeUscc(taxInvoiceInfo.uscc),
+          taxpayerType: taxInvoiceInfo.taxpayerType ?? "GENERAL_VAT_PAYER",
+          registeredAddress: taxInvoiceInfo.registeredAddress ?? null,
+          registeredPhone: taxInvoiceInfo.registeredPhone ?? null,
+          bankName: taxInvoiceInfo.bankName ?? null,
+          bankAccountNo: taxInvoiceInfo.bankAccountNo ?? null,
+          approvalStatus: "DRAFT",
+          createdById: user?.id ?? null,
+          updatedById: user?.id ?? null,
+        },
+        update: {
+          title: taxInvoiceInfo.title,
+          uscc: normalizeUscc(taxInvoiceInfo.uscc),
+          taxpayerType: taxInvoiceInfo.taxpayerType ?? "GENERAL_VAT_PAYER",
+          registeredAddress: taxInvoiceInfo.registeredAddress ?? null,
+          registeredPhone: taxInvoiceInfo.registeredPhone ?? null,
+          bankName: taxInvoiceInfo.bankName ?? null,
+          bankAccountNo: taxInvoiceInfo.bankAccountNo ?? null,
+          approvalStatus: "DRAFT",
+          updatedById: user?.id ?? null,
+          version: { increment: 1 },
+        },
+      });
+    }
+    return saved;
   });
 
   await writeAuditLog({

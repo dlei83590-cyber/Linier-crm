@@ -72,13 +72,55 @@ enum PriceListStatus {
   ARCHIVED
 }
 
-/// 税率类型（CTO #2204/#2225：0%/6%/13%/免税/自定义）
+/// 税率类型（CTO #2204/#2225：0%/6%/13%/免税/自定义；9% = 中国审计 P2，ADR-0043）
 enum TaxRateType {
   ZERO      // 0%
   SIX       // 6%
   THIRTEEN  // 13%
   EXEMPT    // 免税
   CUSTOM    // 自定义
+  NINE      // 9%（交通运输/建筑/不动产租赁/农产品）
+}
+
+/// 增值税发票类型（中国市场；中国审计 P1，ADR-0043）
+enum InvoiceInvoiceType {
+  SPECIAL_VAT    // 增值税专用发票（一般纳税人开具；购买方可抵扣进项）
+  ORDINARY_VAT   // 增值税普通发票（购买方不可抵扣进项）
+  ELECTRONIC_VAT // 数电票（全电发票；20 位号码，无 12 位代码）
+  EXPORT         // 出口发票（零税率/免税场景）
+  OTHER          // 其他（非增值税单据：内部凭证/形式凭证）
+}
+
+/// 纳税人类型（中国市场；替代 BusinessPartner.taxpayerType 自由文本，ADR-0043）
+enum InvoiceTaxpayerType {
+  GENERAL_VAT_PAYER // 一般纳税人
+  SMALL_SCALE       // 小规模纳税人
+}
+
+/// 开票资料（税务发票要素；1:1 挂 BusinessPartner；中国审计 P1-4/P1-5，ADR-0043）
+model BusinessPartnerInvoiceInfo {
+  id             String   @id @default(cuid())
+  partnerId      String   @unique
+  partner        BusinessPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  title          String   // 发票抬头（MUST = 营业执照企业全称）
+  uscc           String   // 统一社会信用代码（MUST 18 位，GB 32100-2015）
+  taxpayerType   InvoiceTaxpayerType @default(GENERAL_VAT_PAYER)
+  registeredAddress String? // 注册地址（税务发票要素）
+  registeredPhone  String? // 注册电话（税务发票要素）
+  bankName         String? // 开户银行（税务发票要素；开票账户 ≠ 收款账户）
+  bankAccountNo    String? // 银行账号（税务发票要素）
+  // 审计字段（对齐既有模式）
+  isActive    Boolean  @default(true)
+  createdById String?
+  updatedById String?
+  approvedById String?
+  approvalStatus ApprovalStatus @default(DRAFT) // 变更走 maker-checker（复用 BusinessPartner 审批投影）
+  version     Int      @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([partnerId])
 }
 
 /// 价格来源（CTO #2225：BI 分析价格来源）
@@ -567,6 +609,7 @@ model BusinessPartner {
   partnerTags         PartnerTag[]
   partnerBankAccounts PartnerBankAccount[]
   partnerCredit       PartnerCredit?
+  invoiceInfoRecord   BusinessPartnerInvoiceInfo? // 开票资料（1:1；中国审计 P1，ADR-0043；invoiceInfo 遗留 Json 保留兼容）
   suppliers           Supplier[]
   supplierItems       SupplierItem[]
   partnerPrices       PartnerPrice[]
@@ -3826,6 +3869,13 @@ model Invoice {
   currency     String   @default("CNY")
   taxProfileId String?  // 税率档案（继承 SalesOrder；Consolidated Invoice 合并校验需一致）
   paymentTerm  String?  // 付款条款（4E AR 使用；Consolidated Invoice 合并校验需一致）
+  // 增值税发票管理（中国审计 P1，ADR-0043：ISSUE 时必填+冻结；税务号码与内部 code 解耦；红字=新增负数事实）
+  invoiceType     InvoiceInvoiceType? // 发票类型（DRAFT 可空；ISSUE 必填 fail-closed I4）
+  taxInvoiceCode  String? // 税务发票代码（专/普票 12 位；数电票 NULL；ISSUE 后冻结 I3）
+  taxInvoiceNo    String? // 税务发票号码（专/普票 8 位；数电票 20 位；表内组合唯一 I2）
+  redLetter       Boolean  @default(false) // 红字（负数）发票标志（R1：redInvoiceRefId 非空 ⇔ true）
+  redInvoiceRefId String?  // 引用被冲销的原蓝字发票（同表自引用；R2 终态蓝票；禁链式 R6）
+  redInvoiceRef   Invoice? @relation("InvoiceRedRef", fields: [redInvoiceRefId], references: [id], onDelete: Restrict)
   // 金额（财务事实，直接复制自 DeliveryLine 快照；禁止重新计算）
   subtotal     Decimal  @default(0) @db.Decimal(18, 4) // 未税合计
   taxAmount    Decimal  @default(0) @db.Decimal(18, 4) // 税额
@@ -3855,7 +3905,9 @@ model Invoice {
   accountsReceivable AccountsReceivable? // 余额事实源（4E-1；1:1，Invoice 为单据事实源，AR 持真实余额）
   creditDebitNotes CreditDebitNote[] // 4E-3：发票调整单（CN/DN；单票制 sourceInvoiceId）
   adjustments InvoiceAdjustment[] // 4E-3：调整事实（InvoiceAdjustment.invoiceId 方向）
+  redInvoices Invoice[] @relation("InvoiceRedRef") // 红字发票集合（原票 → 红字；ADR-0043）
 
+  @@unique([taxInvoiceCode, taxInvoiceNo]) // I2：税务发票号码组合唯一（NULL 不参与）
   @@index([deliveryId])
   @@index([salesOrderId])
   @@index([customerId])
@@ -3945,6 +3997,10 @@ model InvoiceSnapshot {
   sstNo        String?   // SST 注册号快照（销售与服务税登记号）
   currencyRate Decimal?  @db.Decimal(18, 8) // 汇率快照
   exchangeRate Decimal?  @db.Decimal(18, 8) // 汇率快照（与 currencyRate 同值冗余，兼容不同字段命名）
+  // 增值税要素快照（ADR-0043：ISSUED 快照固化 invoiceType/taxInvoiceCode/taxInvoiceNo，I9 100% 还原）
+  invoiceType     InvoiceInvoiceType?
+  taxInvoiceCode  String?
+  taxInvoiceNo    String?
   generatedById String?
   generatedAt  DateTime @default(now()) @db.Timestamptz(3)
   // 统一审计字段
@@ -5737,6 +5793,13 @@ model SupplierInvoice {
   postedById String?
   postedBy  User? @relation("SupplierInvoicePostedBy", fields: [postedById], references: [id], onDelete: SetNull)
   paymentDueDate DateTime? @db.Date // 账期（对齐 4E-1 dueDate，方向相反）
+  // 增值税发票管理（ADR-0043：POSTED 时必填+冻结；三号区分：invoiceNo ≠ supplierInvoiceNo ≠ taxInvoiceNo）
+  invoiceType     InvoiceInvoiceType? // 进项发票类型（POSTED 必填 fail-closed）
+  taxInvoiceCode  String? // 税务发票代码（进项专/普票 12 位；数电票 NULL）
+  taxInvoiceNo    String? // 税务发票号码（进项专/普票 8 位；数电票 20 位；表内组合唯一）
+  redLetter       Boolean  @default(false) // 供应商红字（负数进项票）
+  redInvoiceRefId String?  // 自引用原蓝字 SupplierInvoice
+  redInvoiceRef   SupplierInvoice? @relation("SupplierInvoiceRedRef", fields: [redInvoiceRefId], references: [id], onDelete: Restrict)
   remark    String?
   isActive  Boolean @default(true)
   createdById String?
@@ -5752,8 +5815,10 @@ model SupplierInvoice {
   apLiabilityFact ApLiabilityFact?
   creditDebitNotes SupplierCreditDebitNote[] // 5C-2：供应商贷/借项（SupplierCreditDebitNote.sourceSupplierInvoiceId 方向，单票兼容）
   creditDebitNoteInvoices SupplierCreditDebitNoteInvoice[] // 5C-2 跨票：供应商贷/借项关联（M:N，SupplierCreditDebitNoteInvoice.supplierInvoiceId 方向）
+  redInvoices SupplierInvoice[] @relation("SupplierInvoiceRedRef") // 红字进项发票集合（ADR-0043）
 
   @@unique([supplierId, supplierInvoiceNo]) // 不变量②：供应商发票号唯一（组合，不全局误锁）
+  @@unique([taxInvoiceCode, taxInvoiceNo]) // I2：税务发票号码组合唯一（NULL 不参与）
   @@index([invoiceNo])
   @@index([supplierId])
   @@index([documentStatus])

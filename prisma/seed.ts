@@ -782,9 +782,10 @@ const SEED_PRICE_RULES = [
   { policyCode: "PROJECT_PRICE", ruleType: "REGION", ruleName: "华东区域价", conditions: { region: "East China" }, discountRate: 0, priority: 100, description: "Region = East China → Regional Price" },
 ];
 
-/** 税率档案（多国复用：中国 13% / 马来西亚 SST / 新加坡 GST） */
+/** 税率档案（多国复用：中国 13%/9% / 马来西亚 SST / 新加坡 GST；9% = ADR-0043 交通运输/建筑/不动产租赁档） */
 const SEED_TAX_PROFILES = [
   { code: "CN_VAT_13", name: "中国增值税 13%", country: "CN", region: null, taxIncluded: false, rateType: "THIRTEEN", rate: 13 },
+  { code: "CN_VAT_9", name: "中国增值税 9%（交通运输/建筑/不动产租赁）", country: "CN", region: null, taxIncluded: false, rateType: "NINE", rate: 9 },
   { code: "MY_SST", name: "马来西亚销售与服务税", country: "MY", region: null, taxIncluded: false, rateType: "CUSTOM", rate: 8 },
   { code: "SG_GST", name: "新加坡消费税", country: "SG", region: null, taxIncluded: false, rateType: "CUSTOM", rate: 9 },
 ];

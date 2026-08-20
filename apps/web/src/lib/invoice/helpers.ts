@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, type InvoiceInvoiceType } from "@prisma/client";
 
 /** Sprint 4D - Invoice 领域辅助（编号生成 / Revision / Snapshot 创建）
  * 对齐 Delivery/SalesOrder helpers 模式；CTO Review 96/100 锁定：
@@ -69,6 +69,10 @@ export async function createInvoiceSnapshot(
     sstNo?: string | null;
     currencyRate?: Prisma.Decimal | null;
     exchangeRate?: Prisma.Decimal | null;
+    // VAT 要素快照（ADR-0043，I9：ISSUED 快照固化发票类型/税务号码）
+    invoiceType?: InvoiceInvoiceType | null;
+    taxInvoiceCode?: string | null;
+    taxInvoiceNo?: string | null;
   } | null,
 ) {
   return tx.invoiceSnapshot.create({
@@ -82,6 +86,9 @@ export async function createInvoiceSnapshot(
       sstNo: taxSnapshot?.sstNo ?? null,
       currencyRate: taxSnapshot?.currencyRate ?? null,
       exchangeRate: taxSnapshot?.exchangeRate ?? null,
+      invoiceType: taxSnapshot?.invoiceType ?? null,
+      taxInvoiceCode: taxSnapshot?.taxInvoiceCode ?? null,
+      taxInvoiceNo: taxSnapshot?.taxInvoiceNo ?? null,
       generatedById: actorId ?? null,
       createdById: actorId ?? null,
       updatedById: actorId ?? null,

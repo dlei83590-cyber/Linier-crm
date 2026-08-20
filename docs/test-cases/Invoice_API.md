@@ -220,4 +220,16 @@
 | N5 | 幂等防重复过账 | 重复消费同事件 | GlJournalEntry @@unique(sourceType,sourceId) 跳过创建 |
 | N6 | 收入确认时点 | DRAFT/取消 | 不产生任何 GL 凭证（仅 ISSUE 后） |
 
-> 合计：11（A）+ 18（B）+ 8（C）+ 10（D）+ 17（E）+ 15（F）+ 7（G）+ 13（H）+ 9（I）+ 6（J）+ 6（K）+ 5（L）+ 12（M）+ 6（N）= **143 用例**
+> 合计：11（A）+ 18（B）+ 8（C）+ 10（D）+ 17（E）+ 15（F）+ 7（G）+ 13（H）+ 9（I）+ 6（J）+ 6（K）+ 5（L）+ 12（M）+ 6（N）+ 7（O）= **150 用例**
+
+## O. 增值税发票管理（ADR-0043，2026-08-20）
+
+| # | 用例 | 方法/路径 | 预期 |
+| --- | --- | --- | --- |
+| O1 | 发票类型必填 | issue 缺 invoiceType | 409 INVOICE_TYPE_REQUIRED（I4 fail-closed） |
+| O2 | 专票 12+8 校验 | issue SPECIAL_VAT | 格式非法 → 400 TAX_INVOICE_CODE/NO_INVALID；合法 → 通过（I7） |
+| O3 | 数电票 20 位且 code 空 | issue ELECTRONIC_VAT | code 非空 → 400；20 位 → 通过 |
+| O4 | 开票资料门禁 | customer 未关联 Partner / 无开票资料 | 409 PARTNER_LINK_REQUIRED / PARTNER_INVOICE_INFO_MISSING（I10） |
+| O5 | 红字引用 | redInvoiceRefId 指向 DRAFT/红字 | 409 RED_INVOICE_REF_STATUS_INVALID（R2/R6） |
+| O6 | 红字金额取反+防超冲 | 红字 issue | 金额=原票取反（R3）；Σ超原票 → 409 RED_INVOICE_OVERFLOW（R4） |
+| O7 | 冻结 | ISSUED 后改 VAT 字段 | PATCH schema 不含 VAT 字段（I3 天然冻结） |

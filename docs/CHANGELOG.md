@@ -2,6 +2,19 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Sprint 7 增值税发票管理字段（2026-08-20，ADR-0043，Migration 0037）
+
+### 新增（发票类型/税务号码/红字实体/开票资料结构化/USCC 校验/9% 税率档；后端切片）
+
+- **Schema + Migration 0037**：InvoiceInvoiceType 枚举（专/普/数电/出口/其他）、InvoiceTaxpayerType 枚举、TaxRateType +NINE；Invoice/SupplierInvoice + invoiceType/taxInvoiceCode/taxInvoiceNo/redLetter/redInvoiceRefId（自引用 Restrict）+ 税务号码组合唯一（NULL 不参与）；InvoiceSnapshot + 3 列（ISSUED 快照固化）；新表 BusinessPartnerInvoiceInfo（partnerId 1:1，uscc DB CHECK）
+- **校验**：validateUscc（GB 32100-2015 校验码）+ validateTaxInvoiceFields（12+8/数电 20/EXPORT 可空）+ 单测 15 用例
+- **开票 ISSUE 集成**：类型必填（I4）/号码格式（I7）/开票资料门禁（I10）/红字（服务端取反 R3 + 防超冲 R4 + 终态蓝票引用 R2）；红字跳过 GL Outbox（负数 GL=backlog）
+- **开票资料管理**：business-partners PATCH taxInvoiceInfo 结构化 upsert（uscc 校验 fail-closed）
+- **错误码**：+10 码（ERROR_CODES.md 自动重新生成 261 码，dogfood ② 脚本）
+- **Seed**：+CN_VAT_9（9%）
+
+---
+
 ## [Unreleased] - Sprint 7 销售侧 GL 记账闭环（2026-08-20，ADR-0042）
 
 ### 新增（销售侧财务闭环：收入确认 + 收款入账 + 核销反转红字；零 Migration / 零新表 / 零新 API）
