@@ -15,6 +15,15 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { CARD_CLASS } from "@/lib/ui-classes";
 
+/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: "草稿",
+  SUBMITTED: "已提交",
+  APPROVED: "已批准",
+  APPLIED: "已应用",
+  CANCELLED: "已取消",
+};
+
 interface AdjustmentDetail {
   id: string;
   version: number;
@@ -134,7 +143,9 @@ function AdjustmentEditForm() {
       <div className="flex items-center justify-between border-b border-border p-4">
         <h1 className="text-lg font-semibold text-ink-primary">
           编辑库存调整 — {detail?.adjustmentNo}
-          <span className="ml-2 text-xs font-normal text-ink-muted">{detail?.status}（v{detail?.version}）</span>
+          <span className="ml-2 text-xs font-normal text-ink-muted">
+            {STATUS_LABELS[detail?.status ?? ""] ?? detail?.status}
+          </span>
         </h1>
         <div className="flex items-center gap-2">
           {dirty && <span className="text-xs text-status-warning-text">有未保存的更改</span>}

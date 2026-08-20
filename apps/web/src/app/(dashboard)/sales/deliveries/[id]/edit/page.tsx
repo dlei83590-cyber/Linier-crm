@@ -17,6 +17,16 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { CARD_CLASS } from "@/lib/ui-classes";
 
+/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: "草稿",
+  READY: "待发运",
+  DISPATCHED: "已发运",
+  DELIVERED: "已送达",
+  COMPLETED: "已完成",
+  CANCELLED: "已取消",
+};
+
 interface DeliveryDetail {
   id: string;
   code: string;
@@ -195,7 +205,7 @@ function DeliveryEditForm() {
         <h1 className="text-lg font-semibold text-ink-primary">
           编辑送货单 — {detail?.code}
           <span className="ml-2 text-xs font-normal text-ink-muted">
-            {detail?.status}（v{detail?.version}）
+            {STATUS_LABELS[detail?.status ?? ""] ?? detail?.status}
           </span>
         </h1>
         <div className="flex items-center gap-2">

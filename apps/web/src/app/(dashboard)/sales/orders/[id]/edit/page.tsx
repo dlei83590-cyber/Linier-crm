@@ -19,6 +19,16 @@ import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { CARD_CLASS } from "@/lib/ui-classes";
 import { formatMoney } from "@/lib/format";
 
+/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: "草稿",
+  CONFIRMED: "已确认",
+  PARTIALLY_DELIVERED: "部分交付",
+  DELIVERED: "已交付",
+  COMPLETED: "已完成",
+  CANCELLED: "已取消",
+};
+
 interface SalesOrderDetail {
   id: string;
   code: string;
@@ -187,7 +197,7 @@ function SalesOrderEditForm() {
         <h1 className="text-lg font-semibold text-ink-primary">
           编辑销售订单 — {detail?.code}
           <span className="ml-2 text-xs font-normal text-ink-muted">
-            {detail?.status}（v{detail?.version}）
+            {STATUS_LABELS[detail?.status ?? ""] ?? detail?.status}
           </span>
         </h1>
         <div className="flex items-center gap-2">
