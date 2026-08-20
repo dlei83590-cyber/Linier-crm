@@ -2,6 +2,21 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Sprint8 UI 现代化 U4-U7（2026-08-20，PR #111-#114，一次合并）
+
+### 新增（命令面板 / 密度切换 / 列排序 / 数字滚动）
+
+- **U4 命令面板 Ctrl+K**（#111）：Linear/Notion 式全局模块搜索（↑↓ 选择 + Enter 跳转、输入即过滤、hold 仅展示、域色点、fade+dialog 进场）；域色类抽公共模块 design-system/domain-class.ts（AdminShell/面板共用）
+- **U5 全局密度切换**（#112）：DensityContext（localStorage 记忆）+ 顶栏切换按钮；EntityListWorkspace/AppPage 消费（组件 prop 优先）
+- **U6 表格列排序**（#113）：ListColumn.sortable——表头点击升序→降序→清除、▲/▼/↕ 指示、aria-sort、数值/文本智能比较；销售发票/供应商发票/GL 凭证列表启用（客户端当前页，服务端排序 backlog）
+- **U7 路由过渡 + 数字滚动**（#114）：页面切换 fade-up（page-in keyframes）；AnimatedNumber/AnimatedMoney（rAF ease-out 缓动滚动），利润表三大数字卡片应用
+
+### Known Risk
+
+- 命令面板/密度切换/列排序/过渡与滚动动画需人工登录验证，无 E2E
+
+---
+
 ## [Unreleased] - Sprint8 UI 现代化 U3（2026-08-20，PR #108-#109）
 
 ### 新增（表格现代化 + 微动效）
