@@ -2,6 +2,20 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - U8 响应式满屏布局 + 手风琴导航（2026-08-20，PR #123）
+
+### 新增（去固定宽度，平铺满屏自适应）
+
+- **平铺满屏**：AdminShell 主布局去 `max-w-7xl` 居中 → 满宽平铺（随设备宽度自适应）；AppPage 默认 maxWidth 改 full（全部页面默认满屏，保留聚焦场景显式宽度）；侧栏桌面 `w-56 xl:w-64`
+- **手风琴导航**：域展开从多域并存改为单一展开——点击域互斥展开、点击其它域自动收起当前域（当前业务域仍默认展开）
+- 巡检确认：列表/详情/表单/对话框栅格均已有响应式断点（仅 2 处对话框内固定 2 列属窄容器合理设计，保留）
+
+### Known Risk
+
+- 满屏布局/手风琴交互需人工登录验证（无 E2E）
+
+---
+
 ## [Unreleased] - A-4 原子乐观锁批量落地（2026-08-20，PR #116-#121，一次合并）
 
 ### 新增（30 个 PATCH/事务路由 CAS 化，消除 read-check-update TOCTOU）
