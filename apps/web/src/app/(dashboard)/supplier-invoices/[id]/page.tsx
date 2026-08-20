@@ -33,6 +33,15 @@ const TONE_MAP: Record<string, StatusTone> = {
   POSTED: "success",
 };
 
+/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: "草稿",
+  SUBMITTED: "已提交",
+  MATCHED: "已匹配",
+  APPROVED: "已批准",
+  POSTED: "已过账",
+};
+
 interface SupplierInvoiceLine {
   id: string;
   lineNo: number;
@@ -183,6 +192,7 @@ function SupplierInvoiceDetailPage() {
         title={`供应商发票详情 — ${detail.invoiceNo}`}
         backHref="/supplier-invoices"
         status={detail.documentStatus}
+        statusLabel={STATUS_LABELS[detail.documentStatus] ?? detail.documentStatus}
         statusTone={TONE_MAP[detail.documentStatus] ?? "neutral"}
         actions={
           canEdit ? (

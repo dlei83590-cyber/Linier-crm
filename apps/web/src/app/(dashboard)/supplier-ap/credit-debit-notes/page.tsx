@@ -67,6 +67,7 @@ function CnDnList() {
       <EntityListWorkspace<CnDnRow>
         title="供应商贷项/借项"
         description="供应商开给我方的 AP 侧调整单据（贷项冲减应付 / 借项增加应付；APPLIED 才回写应付未结项）"
+        emptyMessage="暂无 AP 调整单据——点击「+ 新建」创建第一张调整单"
         headerActions={
           canCreate ? (
             <Link href="/supplier-ap/credit-debit-notes/new" className={BUTTON_PRIMARY_CLASS}>
@@ -102,7 +103,7 @@ function CnDnList() {
           { key: "noteType", header: "类型", render: (row) => TYPE_LABELS[row.noteType] ?? row.noteType },
           { key: "supplier", header: "供应商", render: (row) => row.supplier?.name ?? "—" },
           { key: "invoiceNo", header: "来源发票", render: (row) => row.invoices && row.invoices.length > 0 ? row.invoices.map((i) => i.supplierInvoice?.invoiceNo ?? "—").join("、") : row.sourceSupplierInvoice?.invoiceNo ?? "—" },
-          { key: "adjustmentTotal", header: "调整金额", render: (row) => formatMoney(row.adjustmentTotal, row.currency) },
+          { key: "adjustmentTotal", header: "调整金额", align: "right", render: (row) => formatMoney(row.adjustmentTotal, row.currency) },
           { key: "status", header: "状态", render: (row) => (<StatusBadge status={row.status} label={STATUS_LABELS[row.status] ?? row.status} toneMap={STATUS_TONE_MAP} />) },
           { key: "createdAt", header: "创建时间", render: (row) => formatDate(row.createdAt) },
         ]}

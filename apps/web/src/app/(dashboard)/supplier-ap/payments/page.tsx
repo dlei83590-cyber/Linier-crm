@@ -65,6 +65,7 @@ function PaymentList() {
       <EntityListWorkspace<PaymentRow>
         title="付款核销"
         description="供应商付款单与应付未结项核销（Created ≠ Applied；Apply 唯一回写结算投影；防超核销锁内重算）"
+        emptyMessage="暂无供应商付款单——点击「+ 新建付款单」创建第一张付款单"
         headerActions={
           canCreate ? (
             <Link href="/supplier-ap/payments/new" className={BUTTON_PRIMARY_CLASS}>
@@ -97,8 +98,8 @@ function PaymentList() {
         columns={[
           { key: "code", header: "付款单号", render: (row) => (<Link href={`/supplier-ap/payments/${row.id}`} className="font-medium text-brand-600 hover:underline">{row.code}</Link>) },
           { key: "supplier", header: "供应商", render: (row) => row.supplier?.name ?? "—" },
-          { key: "amount", header: "付款金额", render: (row) => formatMoney(row.amount, row.currency) },
-          { key: "unallocatedAmount", header: "未核销余额", render: (row) => formatMoney(row.unallocatedAmount, row.currency) },
+          { key: "amount", header: "付款金额", align: "right", render: (row) => formatMoney(row.amount, row.currency) },
+          { key: "unallocatedAmount", header: "未核销余额", align: "right", render: (row) => formatMoney(row.unallocatedAmount, row.currency) },
           { key: "paymentDate", header: "付款日期", render: (row) => formatDate(row.paymentDate) },
           { key: "status", header: "状态", render: (row) => (<StatusBadge status={row.status} label={STATUS_LABELS[row.status] ?? row.status} toneMap={STATUS_TONE_MAP} />) },
           { key: "voidedAt", header: "作废", render: (row) => (row.voidedAt ? "已作废" : "—") },
