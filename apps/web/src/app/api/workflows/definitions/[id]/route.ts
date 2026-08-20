@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { casUpdate } from "@/lib/api/cas";
 import { authenticate, requirePermission, clientIp, writeAuditLog } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
@@ -54,9 +55,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (!existing) {
     return failNotFound(ERROR_CODES.WORKFLOW_DEFINITION_NOT_FOUND, "工作流定义不存在");
   }
-  if (existing.version !== version) {
-    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  }
   // 发布/归档后禁止修改关键结构（code/module/steps）
   if (existing.status !== "DRAFT" && (updates.code || updates.module || steps)) {
     return failConflict(
@@ -65,51 +63,59 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     );
   }
 
-  const updated = await prisma.$transaction(async (tx) => {
+  // A4-CAS：原子乐观锁置于事务首部（头部字段 CAS；steps 整体替换紧随其后，不再二次 bump version）
+  const result = await prisma.$transaction(async (tx) => {
+    const cas = await casUpdate(tx, "workflowDefinition", id, version, {
+      ...(updates.name !== undefined ? { name: updates.name } : {}),
+      ...(updates.description !== undefined ? { description: updates.description } : {}),
+      ...(updates.code !== undefined ? { code: updates.code } : {}),
+      ...(updates.module !== undefined ? { module: updates.module } : {}),
+      updatedById: user!.id,
+    });
+    if (cas.outcome !== "OK") return cas;
     const wf = await tx.workflowDefinition.update({
       where: { id },
-      data: {
-        ...(updates.name !== undefined ? { name: updates.name } : {}),
-        ...(updates.description !== undefined ? { description: updates.description } : {}),
-        ...(updates.code !== undefined ? { code: updates.code } : {}),
-        ...(updates.module !== undefined ? { module: updates.module } : {}),
-        version: { increment: 1 },
-        updatedById: user!.id,
-        ...(steps
-          ? {
-              steps: {
-                deleteMany: {},
-                create: steps.map((s) => ({
-                  stepNo: s.stepNo,
-                  stepName: s.stepName,
-                  approverType: s.approverType,
-                  approverValue: s.approverValue ?? null,
-                  approvalMode: s.approvalMode,
-                  timeoutHours: s.timeoutHours ?? null,
-                  allowReject: s.allowReject,
-                  allowTransfer: s.allowTransfer,
-                  allowDelegate: s.allowDelegate,
-                  allowWithdraw: s.allowWithdraw,
-                  createdById: user!.id,
-                  updatedById: user!.id,
-                  conditions: {
-                    create: s.conditions.map((c) => ({
-                      expression: c.expression ?? null,
-                      field: c.field,
-                      operator: c.operator,
-                      value: c.value,
-                      createdById: user!.id,
-                      updatedById: user!.id,
-                    })),
-                  },
-                })),
-              },
-            }
-          : {}),
-      },
+      data: steps
+        ? {
+            steps: {
+              deleteMany: {},
+              create: steps.map((s) => ({
+                stepNo: s.stepNo,
+                stepName: s.stepName,
+                approverType: s.approverType,
+                approverValue: s.approverValue ?? null,
+                approvalMode: s.approvalMode,
+                timeoutHours: s.timeoutHours ?? null,
+                allowReject: s.allowReject,
+                allowTransfer: s.allowTransfer,
+                allowDelegate: s.allowDelegate,
+                allowWithdraw: s.allowWithdraw,
+                createdById: user!.id,
+                updatedById: user!.id,
+                conditions: {
+                  create: s.conditions.map((c) => ({
+                    expression: c.expression ?? null,
+                    field: c.field,
+                    operator: c.operator,
+                    value: c.value,
+                    createdById: user!.id,
+                    updatedById: user!.id,
+                  })),
+                },
+              })),
+            },
+          }
+        : {},
     });
-    return wf;
+    return { outcome: "OK" as const, wf };
   });
+  if (result.outcome === "NOT_FOUND") {
+    return failNotFound(ERROR_CODES.WORKFLOW_DEFINITION_NOT_FOUND, "工作流定义不存在");
+  }
+  if (result.outcome === "CONFLICT") {
+    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
+  }
+  const updated = result.wf;
 
   const result = await loadDefinition(updated.id);
 
