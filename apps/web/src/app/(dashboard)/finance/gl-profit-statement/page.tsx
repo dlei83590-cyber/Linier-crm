@@ -8,6 +8,7 @@ import { AppPage, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
 import { formatMoney } from "@/lib/format";
+import { AnimatedMoney } from "@/components/ui/animated-number";
 
 interface ProfitLine { code: string; name: string; category: string; net: string; }
 interface ProfitData { revenue: string; expense: string; profit: string; lines: ProfitLine[]; }
@@ -52,9 +53,9 @@ function ProfitStatementView() {
         {data && !loading && !error ? (
           <div className="space-y-3">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-              <div className="rounded-md border border-border p-3"><div className="text-sm text-ink-secondary">收入</div><div className="text-lg font-semibold text-ink-primary">{formatMoney(data.revenue, "CNY")}</div></div>
-              <div className="rounded-md border border-border p-3"><div className="text-sm text-ink-secondary">成本/费用</div><div className="text-lg font-semibold text-ink-primary">{formatMoney(data.expense, "CNY")}</div></div>
-              <div className="rounded-md border border-border p-3"><div className="text-sm text-ink-secondary">利润</div><div className={`text-lg font-semibold ${Number(data.profit) >= 0 ? "text-status-success-text" : "text-status-danger-text"}`}>{formatMoney(data.profit, "CNY")}</div></div>
+              <div className="rounded-md border border-border p-3"><div className="text-sm text-ink-secondary">收入</div><div className="text-lg font-semibold text-ink-primary"><AnimatedMoney value={data.revenue} currency="CNY" /></div></div>
+              <div className="rounded-md border border-border p-3"><div className="text-sm text-ink-secondary">成本/费用</div><div className="text-lg font-semibold text-ink-primary"><AnimatedMoney value={data.expense} currency="CNY" /></div></div>
+              <div className="rounded-md border border-border p-3"><div className="text-sm text-ink-secondary">利润</div><div className={`text-lg font-semibold ${Number(data.profit) >= 0 ? "text-status-success-text" : "text-status-danger-text"}`}><AnimatedMoney value={data.profit} currency="CNY" /></div></div>
             </div>
             <div className="overflow-x-auto rounded-md border border-border">
               <table className="min-w-full divide-y divide-border text-sm">
