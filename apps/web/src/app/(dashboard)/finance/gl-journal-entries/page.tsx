@@ -71,8 +71,8 @@ function GlEntryList() {
           </>
         }
         columns={[
-          { key: "voucherNo", header: "凭证号", render: (row) => (<Link href={`/finance/gl-journal-entries/${row.id}`} className="font-medium text-brand-600 hover:underline">{row.voucherNo ?? "（未取号）"}</Link>) },
-          { key: "postingDate", header: "过账日期", render: (row) => formatDate(row.postingDate) },
+          { key: "voucherNo", header: "凭证号", sortable: true, render: (row) => (<Link href={`/finance/gl-journal-entries/${row.id}`} className="font-medium text-brand-600 hover:underline">{row.voucherNo ?? "（未取号）"}</Link>) },
+          { key: "postingDate", header: "过账日期", sortable: true, render: (row) => formatDate(row.postingDate) },
           {
             key: "voucherType",
             header: "凭证字",
@@ -84,8 +84,8 @@ function GlEntryList() {
           },
           { key: "sourceType", header: "来源", render: (row) => SOURCE_LABELS[row.sourceType] ?? row.sourceType },
           { key: "summary", header: "摘要", render: (row) => row.summary ?? "—" },
-          { key: "totalDebit", header: "借方合计", align: "right", render: (row) => formatMoney(row.totalDebit, "CNY") },
-          { key: "totalCredit", header: "贷方合计", align: "right", render: (row) => formatMoney(row.totalCredit, "CNY") },
+          { key: "totalDebit", header: "借方合计", align: "right", sortable: true, render: (row) => formatMoney(row.totalDebit, "CNY") },
+          { key: "totalCredit", header: "贷方合计", align: "right", sortable: true, render: (row) => formatMoney(row.totalCredit, "CNY") },
           { key: "lineCount", header: "行数", render: (row) => row.lineCount },
           { key: "status", header: "状态", render: (row) => (<StatusBadge status={row.status} label="已过账" toneMap={{ POSTED: "success" }} />) },
         ]}
