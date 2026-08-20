@@ -1,0 +1,4 @@
+-- AlterEnum（ADR-0046：中国结算方式扩展——银行/商业承兑汇票 + 电汇；PG16 事务内 ADD VALUE 允许，本迁移不使用新值）
+ALTER TYPE "PaymentMethod" ADD VALUE 'BANK_ACCEPTANCE_BILL';
+ALTER TYPE "PaymentMethod" ADD VALUE 'COMMERCIAL_ACCEPTANCE_BILL';
+ALTER TYPE "PaymentMethod" ADD VALUE 'TT_ELECTRONIC_TRANSFER';

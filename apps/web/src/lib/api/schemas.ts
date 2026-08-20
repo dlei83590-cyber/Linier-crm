@@ -396,7 +396,7 @@ export const receiptCreateSchema = z.object({
   currency: z.string().min(3).max(3).default('CNY'),
   amount: z.coerce.number().positive(),
   receiptDate: z.string().datetime().optional(),
-  paymentMethod: z.enum(['BANK_TRANSFER', 'CHEQUE', 'CASH', 'CARD', 'OTHER']),
+  paymentMethod: z.enum(['BANK_TRANSFER', 'CHEQUE', 'CASH', 'CARD', 'OTHER', 'BANK_ACCEPTANCE_BILL', 'COMMERCIAL_ACCEPTANCE_BILL', 'TT_ELECTRONIC_TRANSFER']),
   referenceNo: z.string().max(100).nullable().optional(),
   changeReason: z.string().max(500).optional(),
 });
