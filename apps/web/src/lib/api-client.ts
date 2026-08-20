@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Track A Frontend Iteration 1 — Frontend Error Contract（CTO Scale-Out Gate Required Hardening）
  *
  * 统一 API 响应/错误规范化：
@@ -62,12 +62,6 @@ interface ApiFailureShape {
   error?: { code?: string; message?: string; details?: { requestId?: string } };
 }
 
-/** 判断是否 same-origin /api/* 请求（仅这类请求统一附加 Bearer token） */
-function isSameOriginApiRequest(input: string | URL): boolean {
-  if (typeof window === "undefined") return false;
-  const url = typeof input === "string" ? new URL(input, window.location.origin) : input;
-  return url.origin === window.location.origin && url.pathname.startsWith("/api/");
-}
 
 /**
  * 统一 fetch 包装：
