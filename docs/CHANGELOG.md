@@ -2,6 +2,16 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 材料成本差异（2026-08-20，ADR-0047）
+
+### 新增（发票净额 vs 暂估价差入 1404，修复存货成本与 AP 口径漂移）
+
+- seed +1404 材料成本差异
+- SupplierInvoicePosted GL：1403=ΣGRIR CONSUME baseAmount（暂估入账）；差额入 1404（借/贷按符号）；无暂估回退原路径
+- 单测：暂估 90 vs 净额 100 → 1403=90 + 1404=10
+
+---
+
 ## [Unreleased] - 中国结算方式扩展（2026-08-20，ADR-0046，Migration 0039）
 
 ### 新增（银行/商业承兑汇票 + 电汇）

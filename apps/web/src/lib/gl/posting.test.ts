@@ -43,6 +43,10 @@ function makeTx(overrides: Record<string, unknown> = {}) {
     supplierPaymentAllocation: {
       findMany: vi.fn().mockResolvedValue([{ allocatedAmount: "300.00" }, { allocatedAmount: "200.00" }]),
     },
+    // 材料成本差异（ADR-0047）：默认无已消耗暂估 → 走原路径（1403=发票净额，无 1404 行）
+    grirRecord: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
     ...overrides,
   } as unknown as Prisma.TransactionClient;
 }
@@ -142,6 +146,31 @@ describe("glPostFromEvent — 5C 事件 → GL 分录映射（ADR-0033）", () =
     expect(debitTotal.eq(creditTotal)).toBe(true);
     expect(created.data.sourceType).toBe("SupplierInvoicePosted");
     expect(created.data.sourceId).toBe("inv1");
+  });
+
+  it("SupplierInvoicePosted 材料成本差异（ADR-0047）：暂估 90 vs 发票净额 100 → 借 1403=90 + 借 1404=10（借贷平衡）", async () => {
+    const tx = makeTx({
+      grirRecord: {
+        findMany: vi.fn().mockResolvedValue([{ baseAmount: new Prisma.Decimal("90.00") }]),
+      },
+    });
+    const r = await glPostFromEvent(tx, "SupplierInvoicePosted", {
+      invoiceId: "inv-v1",
+      invoiceNo: "SINV-2026-000099",
+      grossAmount: "113.00",
+      netAmount: "100.00",
+      inputVatAmount: "13.00",
+      nonRecoverableTaxAmount: "0",
+    });
+    expect(r.ok).toBe(true);
+    const created = (tx.glJournalEntry.create as any).mock.calls[0][0];
+    const debitTotal = created.data.lines.create.reduce((acc: Prisma.Decimal, l: any) => acc.add(l.debit), new Prisma.Decimal(0));
+    const creditTotal = created.data.lines.create.reduce((acc: Prisma.Decimal, l: any) => acc.add(l.credit), new Prisma.Decimal(0));
+    expect(debitTotal.eq(creditTotal)).toBe(true);
+    const inv = created.data.lines.create.find((l: any) => l.accountId === "acct-1403");
+    expect(inv.debit.toFixed(2)).toBe("90.00"); // 暂估入账
+    const variance = created.data.lines.create.find((l: any) => l.accountId === "acct-1404");
+    expect(variance.debit.toFixed(2)).toBe("10.00"); // 材料成本差异
   });
 
   it("SupplierPaymentApplied：借 应付账款 贷 银行存款", async () => {
