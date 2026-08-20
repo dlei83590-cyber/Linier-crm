@@ -182,7 +182,7 @@ function DeliveryEditForm() {
         </div>
         <div className="p-6">
           <p className="text-sm text-status-warning-text">
-            仅 DRAFT 状态可编辑（当前 {detail.status}）——READY 后行已冻结，错误需取消后新建。
+            仅 草稿 状态可编辑（当前 {detail.status}）——READY 后行已冻结，错误需取消后新建。
           </p>
         </div>
       </div>
