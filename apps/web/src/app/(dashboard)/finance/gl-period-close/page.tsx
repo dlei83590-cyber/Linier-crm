@@ -97,7 +97,8 @@ function PeriodCloseView() {
         ) : null}
         <EntityListWorkspace<PeriodCloseRow>
           title="已结转期间"
-          description=""
+          description="已结转会计期间（可重开）"
+          emptyMessage="暂无已结转期间——执行期末结转后显示"
           columns={[
             { key: "periodKey", header: "期间" },
             { key: "journalEntry", header: "结转凭证", render: (row) => (row.journalEntry ? <Link href={`/finance/gl-journal-entries/${row.journalEntry.id}`} className="font-medium text-brand-600 hover:underline">{row.journalEntry.voucherNo ?? "—"}</Link> : "—") },
