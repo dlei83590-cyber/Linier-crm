@@ -1,14 +1,27 @@
 import { describeStatus, type ApiClientError } from "@/lib/api-client";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /**
- * Track A Frontend Iteration 1 — 列表三态（Loading / Empty / Error）横切组件（Reference 实现）
+ * Track A Frontend Iteration 1 — 列表三态（Loading / Empty / Error）横切组件
+ * Sprint8 U2：LoadingRow → 骨架屏 shimmer；EmptyRow → EmptyState（图标+标题+描述）
  * ErrorRow 消费结构化 ApiClientError（status/code/message），按 HTTP 状态分类展示。
  */
+const SKELETON_WIDTHS = ["w-1/4", "w-1/3", "w-1/4", "w-1/6", "w-1/5"];
+
 export function LoadingRow({ colSpan }: { colSpan: number }) {
   return (
-    <tr>
-      <td colSpan={colSpan} className="px-4 py-10 text-center text-sm text-ink-muted">
-        加载中…
+    <tr aria-busy="true">
+      <td colSpan={colSpan} className="px-4 py-4">
+        <div className="space-y-3">
+          {[0, 1, 2].map((row) => (
+            <div key={row} className="flex items-center gap-4">
+              {SKELETON_WIDTHS.map((w, i) => (
+                <Skeleton key={i} className={`h-4 ${w}`} />
+              ))}
+            </div>
+          ))}
+        </div>
       </td>
     </tr>
   );
@@ -17,8 +30,8 @@ export function LoadingRow({ colSpan }: { colSpan: number }) {
 export function EmptyRow({ colSpan, message = "暂无数据" }: { colSpan: number; message?: string }) {
   return (
     <tr>
-      <td colSpan={colSpan} className="px-4 py-10 text-center text-sm text-ink-muted">
-        {message}
+      <td colSpan={colSpan}>
+        <EmptyState title={message} />
       </td>
     </tr>
   );
