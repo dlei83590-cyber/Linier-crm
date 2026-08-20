@@ -21,6 +21,7 @@ import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
 import { useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
+import { INVOICE_TYPE_LABELS, formatTaxInvoiceNumber } from "@/lib/vat-labels";
 
 const TONE_MAP: Record<string, StatusTone> = {
   DRAFT: "neutral",
@@ -49,6 +50,10 @@ interface SupplierInvoiceDetail {
   version: number;
   invoiceNo: string;
   supplierInvoiceNo: string;
+  invoiceType?: string | null;
+  taxInvoiceCode?: string | null;
+  taxInvoiceNo?: string | null;
+  redLetter?: boolean;
   documentStatus: string;
   settlementStatus?: string | null;
   invoiceDate: string;
@@ -211,6 +216,22 @@ function SupplierInvoiceDetailPage() {
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <InfoItem label="发票号" value={detail.invoiceNo} />
             <InfoItem label="供应商发票号" value={detail.supplierInvoiceNo} />
+            <InfoItem
+              label="进项发票类型"
+              value={
+                detail.invoiceType ? (
+                  <span className="inline-flex items-center gap-1">
+                    {INVOICE_TYPE_LABELS[detail.invoiceType] ?? detail.invoiceType}
+                    {detail.redLetter ? (
+                      <span className="rounded bg-status-danger-bg/20 px-1 py-0.5 text-xs text-status-danger-text">红字</span>
+                    ) : null}
+                  </span>
+                ) : (
+                  "—"
+                )
+              }
+            />
+            <InfoItem label="税务发票号码" value={formatTaxInvoiceNumber(detail.taxInvoiceCode, detail.taxInvoiceNo)} />
             <InfoItem label="供应商" value={detail.supplier?.name} />
             <InfoItem label="结算状态" value={detail.settlementStatus} />
             <InfoItem label="开票日期" value={formatDate(detail.invoiceDate)} />

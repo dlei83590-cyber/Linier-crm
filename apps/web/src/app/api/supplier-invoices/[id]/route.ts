@@ -189,6 +189,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         headerData.paymentDueDate = fields.paymentDueDate ? new Date(fields.paymentDueDate) : null;
       }
       if (fields.remark !== undefined) headerData.remark = fields.remark;
+      // VAT 要素（ADR-0043）：DRAFT 可编辑；POSTED 后冻结（patch 仅 DRAFT）
+      if (fields.invoiceType !== undefined) headerData.invoiceType = fields.invoiceType;
+      if (fields.taxInvoiceCode !== undefined) headerData.taxInvoiceCode = fields.taxInvoiceCode;
+      if (fields.taxInvoiceNo !== undefined) headerData.taxInvoiceNo = fields.taxInvoiceNo;
       if (totals) {
         headerData.netAmount = totals.netAmount;
         headerData.taxAmount = totals.taxAmount;

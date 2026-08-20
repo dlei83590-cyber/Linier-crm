@@ -154,6 +154,10 @@ export async function POST(request: NextRequest) {
           exchangeRate: new Prisma.Decimal(data.exchangeRate),
           paymentDueDate: data.paymentDueDate ? new Date(data.paymentDueDate) : null,
           remark: data.remark ?? null,
+          // VAT 要素（ADR-0043）
+          invoiceType: data.invoiceType ?? null,
+          taxInvoiceCode: data.taxInvoiceCode ?? null,
+          taxInvoiceNo: data.taxInvoiceNo ?? null,
           netAmount: totals.netAmount,
           taxAmount: totals.taxAmount,
           grossAmount: totals.grossAmount,
