@@ -8,6 +8,7 @@ import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityFormWorkspace, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { formatDate, formatMoney } from "@/lib/format";
+import { VOUCHER_TYPE_LABELS } from "@/lib/vat-labels";
 
 interface GlLine {
   id: string;
@@ -24,6 +25,8 @@ interface GlEntryDetail {
   sourceType: string;
   sourceId: string;
   summary: string | null;
+  voucherType?: string | null;
+  attachmentCount?: number | null;
   version: number;
   createdAt: string;
   lines: GlLine[];
@@ -80,7 +83,7 @@ function GlEntryDetailView() {
     <AppPage>
       <EntityFormWorkspace
         title={`记账凭证 ${detail.voucherNo ?? "（未取号）"}`}
-        description={`来源：${SOURCE_LABELS[detail.sourceType] ?? (detail.sourceType === "MANUAL" ? "手工录入" : detail.sourceType)} ｜ 过账日期：${formatDate(detail.postingDate)} ｜ 状态：${STATUS_LABELS[detail.status] ?? detail.status} ｜ 凭证号：${detail.voucherNo ?? "（未取号）"}`}
+        description={`来源：${SOURCE_LABELS[detail.sourceType] ?? (detail.sourceType === "MANUAL" ? "手工录入" : detail.sourceType)} ｜ 过账日期：${formatDate(detail.postingDate)} ｜ 状态：${STATUS_LABELS[detail.status] ?? detail.status} ｜ 凭证号：${detail.voucherNo ?? "（未取号）"} ｜ 凭证字：${VOUCHER_TYPE_LABELS[detail.voucherType ?? "GENERAL"] ?? "记"} ｜ 附件：${detail.attachmentCount ?? 0} 张`}
         backHref="/finance/gl-journal-entries"
         mode="edit"
         submitting={acting}

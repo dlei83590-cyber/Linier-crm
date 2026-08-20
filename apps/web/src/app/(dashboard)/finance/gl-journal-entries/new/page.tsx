@@ -8,6 +8,7 @@ import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityFormWorkspace } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { INPUT_CLASS } from "@/lib/ui-classes";
+import { VOUCHER_TYPE_OPTIONS } from "@/lib/vat-labels";
 
 interface AccountOption { id: string; code: string; name: string; category: string; direction: string; }
 interface LineRow { accountCode: string; debit: string; credit: string; summary: string; }
@@ -20,6 +21,9 @@ function ManualEntryForm() {
   const [accountsLoaded, setAccountsLoaded] = useState(false);
   const [postingDate, setPostingDate] = useState(new Date().toISOString().slice(0, 10));
   const [summary, setSummary] = useState("");
+  // 凭证字 + 附件张数（ADR-0044）
+  const [voucherType, setVoucherType] = useState("GENERAL");
+  const [attachmentCount, setAttachmentCount] = useState("0");
   const [lines, setLines] = useState<LineRow[]>([
     { accountCode: "", debit: "", credit: "", summary: "" },
     { accountCode: "", debit: "", credit: "", summary: "" },
@@ -68,6 +72,8 @@ function ManualEntryForm() {
       body: JSON.stringify({
         postingDate,
         summary: summary.trim(),
+        voucherType,
+        attachmentCount: Number(attachmentCount) || 0,
         lines: validLines.map((l) => ({ accountCode: l.accountCode, debit: Number(l.debit) ? String(Number(l.debit).toFixed(2)) : undefined, credit: Number(l.credit) ? String(Number(l.credit).toFixed(2)) : undefined, summary: l.summary || undefined })),
       }),
     })
@@ -96,6 +102,16 @@ function ManualEntryForm() {
           <label className="flex flex-col gap-1">
             <span className="text-sm font-medium text-ink-secondary">过账日期<span className="ml-0.5 text-status-danger-text">*</span></span>
             <input type="date" value={postingDate} onChange={(e) => { setPostingDate(e.target.value); setDirty(true); }} className={inputClass} />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium text-ink-secondary">凭证字</span>
+            <select value={voucherType} onChange={(e) => { setVoucherType(e.target.value); setDirty(true); }} className={inputClass}>
+              {VOUCHER_TYPE_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium text-ink-secondary">附件张数</span>
+            <input type="number" min="0" max="999" value={attachmentCount} onChange={(e) => { setAttachmentCount(e.target.value); setDirty(true); }} className={inputClass} />
           </label>
           <label className="flex flex-col gap-1 md:col-span-2">
             <span className="text-sm font-medium text-ink-secondary">摘要<span className="ml-0.5 text-status-danger-text">*</span></span>
