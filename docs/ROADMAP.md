@@ -1,6 +1,6 @@
 # 产品路线图（ROADMAP）
 
-- 版本：v1.34
+- 版本：v1.35
 - 日期：2026-08-20
 - 维护者：CIO（JINZA）｜审核：CTO
 - 状态说明：✅ 已完成 ｜ 🔄 进行中 ｜ ⬜ 未开始
@@ -283,6 +283,7 @@
 ## 15. 变更记录
 
 | 日期       | 变更       | 说明                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| 2026-08-20 | 更新 v1.35 | **Sprint8 UI 现代化 ✅（PR #103-#105）**：高饱和彩色仪表盘风——10 业务域高饱和色板（MODULE_ACCENTS + tailwind domain-*）+ 壳层交互（侧栏折叠/域色指示条/域分组色点/抽屉动画/顶栏模块搜索 + 当前模块域色徽标）；全局反馈系统——Toast（四态/堆叠/自动消失）+ 骨架屏 shimmer（列表/表单/详情/AdminShell）+ 空态 EmptyState + 按钮内联 loading；财务关键流程 Toast 接线（销售开票/供应商发票/GL 凭证/往来单位）；零业务逻辑变更、零新依赖；Design Gate docs/SPRINTS/Sprint8_UI_Modern_Design.md；Known Risk：运行时交互需人工登录验证（无 E2E） |
 | 2026-08-20 | 更新 v1.34 | **增值税/会计期间前端接线 ✅（Design Gate §5 清单 F1-F4，PR #98-#101）**：F1 销售发票 VAT（列表徽标列/详情 VAT 项/自定义开票对话框，发票类型默认专票 + 税务号码数字过滤 + 红字引用）｜F2 供应商发票 VAT（后端接收 + 前端类型选择/号码录入展示）｜F3 往来单位开票资料编辑 Section（taxInvoiceInfo 回显 + uscc GB 32100 实时校验 + 纳税人类型下拉）｜F4 GL 凭证字徽标列 + 详情/新建表单凭证字与附件张数（ADR-0044 前端落地）；零 Schema/Migration；Known Risk：前端运行时需人工登录验证（无 E2E） |
 | 2026-08-20 | 更新 v1.33 | **中国部署适配 ✅（CTO backlog F，ADR-0048）**：.npmrc registry=npmmirror（NPM_CONFIG_REGISTRY 可覆盖）+ docker-compose TZ=Asia/Shanghai（app/postgres，存储仍 UTC）+ README 部署说明（Docker 加速器 / PG ≥16 依赖）；npm registry 镜像修复大陆 CI/Docker 慢/超时 |
 | 2026-08-20 | 更新 v1.32 | **材料成本差异 ✅（CTO backlog E，ADR-0047）**：SupplierInvoicePosted GL 修正——1403=ΣGRIR CONSUME baseAmount（暂估入账）+ 差额入 1404 材料成本差异（借/贷按符号）；seed +1404；无暂估回退原路径；单测（暂估 90 vs 净额 100 → 1403=90+1404=10）；修复存货成本与 AP 口径漂移（中国审计 P1）；差异月末分摊 = backlog |
