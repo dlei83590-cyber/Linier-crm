@@ -6319,6 +6319,7 @@ model GlPeriodClose {
   periodKey String   @unique // "YYYY-MM"（如 2026-08）
   journalEntryId String @unique // 结转凭证（借 REVENUE / 借本年利润 贷 EXPENSE，本年利润=差额）
   journalEntry GlJournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Restrict)
+  accountingPeriod AccountingPeriod? // 反向：AccountingPeriod.periodCloseId 引用（ADR-0044，1:1）
   closedById String? // 执行人
   closedAt   DateTime @default(now()) @db.Timestamptz(3)
   createdAt  DateTime @default(now()) @db.Timestamptz(3)
