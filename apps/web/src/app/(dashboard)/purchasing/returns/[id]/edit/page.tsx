@@ -236,7 +236,7 @@ function PurchaseReturnEditForm() {
         </div>
         <div className="p-6">
           <p className="text-sm text-status-warning-text">
-            仅 DRAFT 状态可编辑（当前 {detail.status}）——已退货事实不可修改。
+            仅草稿状态可编辑（当前 {detail.status}）——已退货事实不可修改。
           </p>
         </div>
       </div>

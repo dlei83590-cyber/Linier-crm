@@ -313,7 +313,7 @@ function PurchaseOrderEditForm() {
         <div className="border-border bg-surface rounded-lg border p-6">
           <p className="text-sm font-medium text-ink-primary">当前状态不可编辑</p>
           <p className="mt-1 text-sm text-ink-secondary">
-            仅 DRAFT 状态可编辑（当前状态：{detail?.status ?? "—"}）
+            仅草稿状态可编辑（当前状态：{detail?.status ?? "—"}）
           </p>
           <button
             type="button"

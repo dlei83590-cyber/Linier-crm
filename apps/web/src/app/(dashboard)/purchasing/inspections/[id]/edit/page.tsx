@@ -141,7 +141,7 @@ function InspectionEditForm() {
         </div>
         <div className="p-6">
           <p className="text-sm text-status-warning-text">
-            仅 PENDING 状态可编辑（当前 {detail.result}）——质检结果已定稿，不可修改。
+            仅待检状态可编辑（当前 {detail.result}）——质检结果已定稿，不可修改。
           </p>
         </div>
       </div>

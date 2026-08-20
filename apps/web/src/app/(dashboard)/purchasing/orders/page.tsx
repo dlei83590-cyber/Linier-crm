@@ -37,6 +37,17 @@ const STATUS_OPTIONS = [
   "CANCELLED",
 ] as const;
 
+/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: "草稿",
+  SUBMITTED: "已提交",
+  APPROVED: "已批准",
+  CONFIRMED: "已确认",
+  PARTIALLY_RECEIVED: "部分收货",
+  RECEIVED: "已收货",
+  CANCELLED: "已取消",
+};
+
 function OrderList() {
   const { state } = useSession();
   const canCreate =
@@ -70,6 +81,7 @@ function OrderList() {
       <EntityListWorkspace<OrderRow>
         title="采购订单"
         description="采购订单工作台"
+        emptyMessage="暂无采购订单——点击「+ 新建采购订单」创建第一张采购订单"
         headerActions={
           canCreate ? (
             <Link
@@ -99,7 +111,7 @@ function OrderList() {
               <option value="">全部状态</option>
               {STATUS_OPTIONS.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {STATUS_LABELS[s] ?? s}
                 </option>
               ))}
             </select>
@@ -139,7 +151,9 @@ function OrderList() {
           {
             key: "status",
             header: "状态",
-            render: (row) => <StatusBadge status={row.status} />,
+            render: (row) => (
+              <StatusBadge status={row.status} label={STATUS_LABELS[row.status] ?? row.status} />
+            ),
           },
           {
             key: "supplier",

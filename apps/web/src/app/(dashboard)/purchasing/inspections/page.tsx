@@ -35,6 +35,14 @@ interface InspectionRow {
 
 const MODE_OPTIONS = ["SKIP", "SPOT", "FULL"] as const;
 
+/** 质检结果中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
+const RESULT_LABELS: Record<string, string> = {
+  QUALIFIED: "合格",
+  PARTIAL: "部分合格",
+  REJECTED: "拒收",
+  PENDING: "待检",
+};
+
 function InspectionList() {
   const { state } = useSession();
   const canCreate =
@@ -153,7 +161,9 @@ function InspectionList() {
           {
             key: "result",
             header: "结果",
-            render: (row) => <StatusBadge status={row.result} />,
+            render: (row) => (
+              <StatusBadge status={row.result} label={RESULT_LABELS[row.result] ?? row.result} />
+            ),
           },
           { key: "qualifiedQty", header: "合格数量", render: (row) => row.qualifiedQty },
           { key: "rejectedQty", header: "拒收数量", render: (row) => row.rejectedQty },
