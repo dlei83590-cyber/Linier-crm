@@ -11,7 +11,9 @@ import {
   type ModuleDomain,
 } from "@/lib/frontend/modules";
 import { MODULE_ACCENT_MAP } from "@/components/design-system";
+import { domainClass } from "@/components/design-system/domain-class";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CommandPalette } from "./command-palette";
 import { useTableDensity } from "@/lib/table-density-context";
 
 /**
@@ -29,31 +31,7 @@ import { useTableDensity } from "@/lib/table-density-context";
 
 const SIDEBAR_STORAGE_KEY = "linier.sidebar.collapsed";
 
-/** Tailwind 字面量域色类（JIT 无法扫描动态类名，必须静态注册；与 tokens.ts MODULE_ACCENTS 一一对应） */
-interface DomainClassSet {
-  dot: string;
-  soft: string;
-  text: string;
-  indicator: string;
-  square: string;
-}
-
-const DOMAIN_CLASS: Record<string, DomainClassSet> = {
-  workbench: { dot: "bg-domain-workbench-500", soft: "bg-domain-workbench-50", text: "text-domain-workbench-600", indicator: "bg-domain-workbench-600", square: "bg-domain-workbench-100 text-domain-workbench-700" },
-  "customer-project": { dot: "bg-domain-customer-project-500", soft: "bg-domain-customer-project-50", text: "text-domain-customer-project-600", indicator: "bg-domain-customer-project-600", square: "bg-domain-customer-project-100 text-domain-customer-project-700" },
-  sales: { dot: "bg-domain-sales-500", soft: "bg-domain-sales-50", text: "text-domain-sales-600", indicator: "bg-domain-sales-600", square: "bg-domain-sales-100 text-domain-sales-700" },
-  purchasing: { dot: "bg-domain-purchasing-500", soft: "bg-domain-purchasing-50", text: "text-domain-purchasing-600", indicator: "bg-domain-purchasing-600", square: "bg-domain-purchasing-100 text-domain-purchasing-700" },
-  inventory: { dot: "bg-domain-inventory-500", soft: "bg-domain-inventory-50", text: "text-domain-inventory-600", indicator: "bg-domain-inventory-600", square: "bg-domain-inventory-100 text-domain-inventory-700" },
-  "supplier-ap": { dot: "bg-domain-supplier-ap-500", soft: "bg-domain-supplier-ap-50", text: "text-domain-supplier-ap-600", indicator: "bg-domain-supplier-ap-600", square: "bg-domain-supplier-ap-100 text-domain-supplier-ap-700" },
-  finance: { dot: "bg-domain-finance-500", soft: "bg-domain-finance-50", text: "text-domain-finance-600", indicator: "bg-domain-finance-600", square: "bg-domain-finance-100 text-domain-finance-700" },
-  "master-data": { dot: "bg-domain-master-data-500", soft: "bg-domain-master-data-50", text: "text-domain-master-data-600", indicator: "bg-domain-master-data-600", square: "bg-domain-master-data-100 text-domain-master-data-700" },
-  system: { dot: "bg-domain-system-500", soft: "bg-domain-system-50", text: "text-domain-system-600", indicator: "bg-domain-system-600", square: "bg-domain-system-100 text-domain-system-700" },
-  reports: { dot: "bg-domain-reports-500", soft: "bg-domain-reports-50", text: "text-domain-reports-600", indicator: "bg-domain-reports-600", square: "bg-domain-reports-100 text-domain-reports-700" },
-};
-
-function domainClass(domainId: string): DomainClassSet {
-  return DOMAIN_CLASS[domainId] ?? DOMAIN_CLASS.workbench;
-}
+// 域色类单一事实来源 = components/design-system/domain-class.ts（AdminShell / CommandPalette 共用）
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const { state, logout } = useSession();
@@ -74,6 +52,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  // U4：命令面板（Ctrl+K / ⌘K）
+  const [paletteOpen, setPaletteOpen] = useState(false);
   // U5：全局密度切换
   const { density, setDensity } = useTableDensity();
 
@@ -120,6 +100,18 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     };
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
+  }, []);
+
+  // U4：Ctrl+K / ⌘K 呼出命令面板
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   const roles = (state.user?.roles ?? []) as RoleCode[];
@@ -505,6 +497,17 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             </svg>
             <span>{density === "compact" ? "标准" : "紧凑"}</span>
           </button>
+          <button
+            type="button"
+            onClick={() => setPaletteOpen(true)}
+            title="命令面板（Ctrl+K）"
+            className="hidden items-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs text-ink-muted transition-colors hover:bg-slate-100 hover:text-ink-primary md:flex"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <span className="font-medium">Ctrl K</span>
+          </button>
           <Link
             href="/profile"
             className="hidden items-center gap-2 text-sm text-ink-secondary transition-colors hover:text-ink-primary sm:flex"
@@ -564,6 +567,13 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           Deployment: {process.env.NEXT_PUBLIC_DEPLOYMENT_ENV ?? "-"}
         </p>
       </footer>
+
+      {/* U4：命令面板（Ctrl+K / ⌘K） */}
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        groups={visibleGroups}
+      />
     </div>
   );
 }
