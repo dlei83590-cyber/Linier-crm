@@ -18,9 +18,15 @@ import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
-import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
+import { BUTTON_PRIMARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
+import {
+  INVOICE_TYPE_LABELS,
+  INVOICE_TYPE_OPTIONS,
+  formatTaxInvoiceNumber,
+  validateIssueVatFields,
+} from "@/lib/vat-labels";
 
 const TONE_MAP: Record<string, StatusTone> = {
   DRAFT: "neutral",
@@ -49,6 +55,11 @@ interface InvoiceDetail {
   invoiceTotal: string;
   paidAmount: string;
   balanceAmount: string;
+  invoiceType?: string | null;
+  taxInvoiceCode?: string | null;
+  taxInvoiceNo?: string | null;
+  redLetter?: boolean;
+  redInvoiceRefId?: string | null;
   remark?: string | null;
   customer?: { id: string; code: string | null; name: string | null } | null;
   delivery?: {
@@ -83,6 +94,14 @@ function InvoiceDetailPage() {
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiClientError | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  // VAT 开票表单（ADR-0043）：发票类型默认普票；税务号码按类型校验；红字引用原票 ID
+  const [issueForm, setIssueForm] = useState({
+    invoiceType: "ORDINARY_VAT",
+    taxInvoiceCode: "",
+    taxInvoiceNo: "",
+    redInvoiceRefId: "",
+  });
+  const [issueVatError, setIssueVatError] = useState<string | null>(null);
 
   const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
   const canApprove = hasPermission(roles, actionPermission("invoice", "approve"));
@@ -124,10 +143,23 @@ function InvoiceDetailPage() {
     setActionError(null);
     try {
       if (action === "issue") {
+        // VAT 校验（ADR-0043）：类型必填 + 号码格式（I4/I7）；红字引用非空时后端二次校验
+        const vatErr = validateIssueVatFields(issueForm.invoiceType, issueForm.taxInvoiceCode, issueForm.taxInvoiceNo);
+        if (vatErr) {
+          setIssueVatError(vatErr);
+          return;
+        }
+        setIssueVatError(null);
         await apiFetch(`/api/invoices/${id}/issue`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ changeReason: "对外开票" }),
+          body: JSON.stringify({
+            changeReason: "对外开票",
+            invoiceType: issueForm.invoiceType,
+            taxInvoiceCode: issueForm.taxInvoiceCode || null,
+            taxInvoiceNo: issueForm.taxInvoiceNo || null,
+            redInvoiceRefId: issueForm.redInvoiceRefId || null,
+          }),
         });
       } else {
         await apiFetch(`/api/invoices/${id}/cancel`, {
@@ -229,6 +261,25 @@ function InvoiceDetailPage() {
             <InfoItem label="开票日期" value={formatDate(detail.invoiceDate)} />
             <InfoItem label="到期日" value={formatDate(detail.dueDate)} />
             <InfoItem label="币种" value={detail.currency} />
+            <InfoItem
+              label="发票类型"
+              value={
+                detail.invoiceType ? (
+                  <span className="inline-flex items-center gap-1">
+                    {INVOICE_TYPE_LABELS[detail.invoiceType] ?? detail.invoiceType}
+                    {detail.redLetter ? (
+                      <span className="rounded bg-status-danger-bg/20 px-1 py-0.5 text-xs text-status-danger-text">红字</span>
+                    ) : null}
+                  </span>
+                ) : (
+                  "—"
+                )
+              }
+            />
+            <InfoItem
+              label="税务发票号码"
+              value={formatTaxInvoiceNumber(detail.taxInvoiceCode, detail.taxInvoiceNo)}
+            />
             <InfoItem label="含税合计" value={formatMoney(detail.invoiceTotal, detail.currency)} />
             <InfoItem label="已收款" value={formatMoney(detail.paidAmount, detail.currency)} />
             <InfoItem label="应收余额" value={formatMoney(detail.balanceAmount, detail.currency)} />
@@ -286,21 +337,114 @@ function InvoiceDetailPage() {
         </section>
       </EntityDetailWorkspace>
 
+      {/* VAT 开票表单（ADR-0043）：类型 + 税务号码 + 红字引用 */}
+      {confirmAction === "issue" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+          <div className="border-border bg-surface w-full max-w-md rounded-lg border p-5 shadow-lg">
+            <h3 className="text-ink-primary text-base font-semibold">开具发票（VAT）</h3>
+            <p className="text-ink-muted mt-1 text-xs">
+              开具后生成正式编号（ISSUED），不可撤销；开票资料缺失时后端会拒绝。
+            </p>
+            {issueVatError && (
+              <div className="border-status-danger-border mt-3 rounded-md border bg-status-danger-bg/10 p-2 text-xs text-status-danger-text">
+                {issueVatError}
+              </div>
+            )}
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="text-ink-secondary text-xs">发票类型 *</label>
+                <select
+                  value={issueForm.invoiceType}
+                  onChange={(e) =>
+                    setIssueForm((f) => ({ ...f, invoiceType: e.target.value, taxInvoiceCode: "", taxInvoiceNo: "" }))
+                  }
+                  className={SELECT_CLASS + " mt-1 w-full"}
+                >
+                  {INVOICE_TYPE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-ink-muted mt-1 text-xs">
+                  {issueForm.invoiceType === "SPECIAL_VAT"
+                    ? "一般纳税人客户请选专票（需完整开票资料）"
+                    : "默认普票；数电票填 20 位号码"}
+                </p>
+              </div>
+              {issueForm.invoiceType !== "EXPORT" && issueForm.invoiceType !== "OTHER" && (
+                <>
+                  {issueForm.invoiceType !== "ELECTRONIC_VAT" && (
+                    <div>
+                      <label className="text-ink-secondary text-xs">发票代码（12 位）</label>
+                      <input
+                        value={issueForm.taxInvoiceCode}
+                        onChange={(e) => setIssueForm((f) => ({ ...f, taxInvoiceCode: e.target.value.replace(/\D/g, "") }))}
+                        placeholder="12 位数字"
+                        maxLength={12}
+                        className={SELECT_CLASS + " mt-1 w-full"}
+                      />
+                    </div>
+                  )}
+                  <div>
+                    <label className="text-ink-secondary text-xs">
+                      发票号码（{issueForm.invoiceType === "ELECTRONIC_VAT" ? "20 位" : "8 位"}）
+                    </label>
+                    <input
+                      value={issueForm.taxInvoiceNo}
+                      onChange={(e) => setIssueForm((f) => ({ ...f, taxInvoiceNo: e.target.value.replace(/\D/g, "") }))}
+                      placeholder={issueForm.invoiceType === "ELECTRONIC_VAT" ? "20 位数字" : "8 位数字"}
+                      maxLength={issueForm.invoiceType === "ELECTRONIC_VAT" ? 20 : 8}
+                      className={SELECT_CLASS + " mt-1 w-full"}
+                    />
+                  </div>
+                </>
+              )}
+              <div>
+                <label className="text-ink-secondary text-xs">红字引用原票 ID（可选）</label>
+                <input
+                  value={issueForm.redInvoiceRefId}
+                  onChange={(e) => setIssueForm((f) => ({ ...f, redInvoiceRefId: e.target.value }))}
+                  placeholder="填原蓝字发票 ID 则按红字开具（金额服务端取反）"
+                  className={SELECT_CLASS + " mt-1 w-full"}
+                />
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmAction(null);
+                  setIssueVatError(null);
+                }}
+                disabled={actionBusy}
+                className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-ink-primary hover:bg-canvas"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => void runAction("issue")}
+                disabled={actionBusy}
+                className={BUTTON_PRIMARY_CLASS}
+              >
+                {actionBusy ? "开具中…" : "确认开具"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <ConfirmActionDialog
-        open={confirmAction !== null}
-        title={confirmAction === "issue" ? "开具发票" : "取消发票"}
-        description={
-          confirmAction === "issue"
-            ? "开具后将生成正式发票编号（ISSUED），不可撤销；发票审批未通过时后端会拒绝。确认开具？"
-            : "取消该草稿发票？取消后释放送货单已占用的开票数量（ISSUED 后禁止直接取消，需走贷项通知单）。"
-        }
-        confirmLabel={confirmAction === "issue" ? "确认开具" : "确认取消"}
-        tone={confirmAction === "cancel" ? "danger" : "primary"}
+        open={confirmAction === "cancel"}
+        title="取消发票"
+        description="取消该草稿发票？取消后释放送货单已占用的开票数量（ISSUED 后禁止直接取消，需走贷项通知单）。"
+        confirmLabel="确认取消"
+        tone="danger"
         busy={actionBusy}
         onConfirm={() => {
-          const a = confirmAction;
           setConfirmAction(null);
-          if (a) void runAction(a);
+          void runAction("cancel");
         }}
         onCancel={() => setConfirmAction(null)}
       />

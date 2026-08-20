@@ -17,6 +17,7 @@ import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspac
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate, formatMoney } from "@/lib/format";
+import { INVOICE_TYPE_LABELS } from "@/lib/vat-labels";
 
 interface InvoiceRow {
   id: string;
@@ -28,6 +29,8 @@ interface InvoiceRow {
   invoiceTotal: string;
   paidAmount: string;
   balanceAmount: string;
+  invoiceType?: string | null;
+  redLetter?: boolean;
   customer?: { id: string; code: string | null; name: string | null } | null;
   delivery?: { id: string; code: string | null; status: string | null } | null;
   _count?: { lines: number };
@@ -139,6 +142,25 @@ function InvoiceList() {
             key: "status",
             header: "状态",
             render: (row) => <StatusBadge status={row.status} toneMap={TONE_MAP} />,
+          },
+          {
+            key: "invoiceType",
+            header: "发票类型",
+            render: (row) =>
+              row.invoiceType ? (
+                <span className="inline-flex items-center gap-1">
+                  <span className="rounded bg-canvas px-1.5 py-0.5 text-xs text-ink-primary">
+                    {INVOICE_TYPE_LABELS[row.invoiceType] ?? row.invoiceType}
+                  </span>
+                  {row.redLetter ? (
+                    <span className="rounded bg-status-danger-bg/20 px-1.5 py-0.5 text-xs text-status-danger-text">
+                      红字
+                    </span>
+                  ) : null}
+                </span>
+              ) : (
+                "—"
+              ),
           },
           {
             key: "customer",
