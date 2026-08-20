@@ -74,8 +74,10 @@ for (const f of files) {
   depth = 1; i = dataIdx + 'data: {'.length;
   while (depth > 0 && i < s.length) { if (s[i] === '{') depth++; else if (s[i] === '}') depth--; i++; }
   const dataObj = s.slice(dataIdx + 'data: {'.length, i - 1);
-  const dataLines = dataObj.split('\n').filter((ln) => ln.indexOf('version: { increment: 1 }') === -1);
-  const dataClean = dataLines.join('\n');
+  const dataClean = dataObj
+    .replace(/,\s*version: \{ increment: 1 \}/, '')
+    .replace(/version: \{ increment: 1 \},\s*/, '')
+    .trim();
   const endIdx = s.indexOf('});', updIdx2);
   if (endIdx === -1) { skip('no-update-end'); continue; }
   const before = s.slice(0, mIdx2);
