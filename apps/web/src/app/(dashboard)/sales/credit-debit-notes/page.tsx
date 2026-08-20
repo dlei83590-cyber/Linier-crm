@@ -187,7 +187,7 @@ function CnDnList() {
               <option value="">全部状态</option>
               {STATUS_OPTIONS.map((s) => (
                 <option key={s} value={s}>
-                  {STATUS_LABEL[s]}（{s}）
+                  {STATUS_LABEL[s] ?? s}
                 </option>
               ))}
             </select>

@@ -38,6 +38,15 @@ interface ArRow {
 
 const STATUS_OPTIONS = ["OPEN", "PARTIALLY_PAID", "PAID", "OVERDUE", "CLOSED"] as const;
 
+/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
+const STATUS_LABELS: Record<string, string> = {
+  OPEN: "未结清",
+  PARTIALLY_PAID: "部分收款",
+  PAID: "已结清",
+  OVERDUE: "已逾期",
+  CLOSED: "已关闭",
+};
+
 const TONE_MAP: Record<string, StatusTone> = {
   OPEN: "warning",
   PARTIALLY_PAID: "warning",
@@ -77,6 +86,7 @@ function ArList() {
       <EntityListWorkspace<ArRow>
         title="应收账款"
         description="应收账款列表（只读）"
+        emptyMessage="暂无应收账款——开票后自动生成应收"
         filters={
           <select
             value={statusInput}
@@ -86,7 +96,7 @@ function ArList() {
             <option value="">全部状态</option>
             {STATUS_OPTIONS.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {STATUS_LABELS[s] ?? s}
               </option>
             ))}
           </select>
@@ -136,6 +146,7 @@ function ArList() {
             render: (row) => (
               <StatusBadge
                 status={row.effectiveStatus ?? row.status}
+                label={STATUS_LABELS[row.effectiveStatus ?? row.status] ?? row.effectiveStatus ?? row.status}
                 toneMap={TONE_MAP}
               />
             ),
@@ -153,11 +164,13 @@ function ArList() {
           {
             key: "paidAmount",
             header: "已收款",
+            align: "right",
             render: (row) => formatMoney(row.paidAmount, row.currency),
           },
           {
             key: "balanceAmount",
             header: "应收余额",
+            align: "right",
             render: (row) => formatMoney(row.balanceAmount, row.currency),
           },
         ]}

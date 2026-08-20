@@ -26,6 +26,15 @@ const TONE_MAP: Record<string, StatusTone> = {
   CLOSED: "neutral",
 };
 
+/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
+const STATUS_LABELS: Record<string, string> = {
+  OPEN: "未结清",
+  PARTIALLY_PAID: "部分收款",
+  PAID: "已结清",
+  OVERDUE: "已逾期",
+  CLOSED: "已关闭",
+};
+
 interface ArDetail {
   id: string;
   status: string;
@@ -115,7 +124,7 @@ function ArDetailPage() {
         title={`应收账款详情 — ${detail.invoice?.code ?? "（草稿）"}`}
         backHref="/sales/accounts-receivable"
         status={displayStatus}
-        statusLabel={displayStatus}
+        statusLabel={STATUS_LABELS[displayStatus] ?? displayStatus}
         statusTone={TONE_MAP[displayStatus] ?? "neutral"}
         summary={
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">

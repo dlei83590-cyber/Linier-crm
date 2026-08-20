@@ -102,7 +102,7 @@ function ReceiptList() {
               <option value="">全部状态</option>
               {STATUS_OPTIONS.map((s) => (
                 <option key={s} value={s}>
-                  {STATUS_LABEL[s]}（{s}）
+                  {STATUS_LABEL[s] ?? s}
                 </option>
               ))}
             </select>
@@ -159,16 +159,19 @@ function ReceiptList() {
           {
             key: "amount",
             header: "收款金额",
+            align: "right",
             render: (row) => formatMoney(row.amount, row.currency),
           },
           {
             key: "allocatedAmount",
             header: "已核销",
+            align: "right",
             render: (row) => formatMoney(row.allocatedAmount, row.currency),
           },
           {
             key: "unallocatedAmount",
             header: "未核销",
+            align: "right",
             render: (row) => formatMoney(row.unallocatedAmount, row.currency),
           },
           {

@@ -259,7 +259,7 @@ function ReceiptCreateForm() {
         </div>
 
         <p className="mb-4 rounded-md bg-status-warning-bg p-3 text-xs text-status-warning-text">
-          创建后收款单为「未核销（UNALLOCATED）」状态；核销请进入详情页按应收未结项逐笔核销。
+          创建后收款单为「未核销」状态；核销请进入详情页按应收未结项逐笔核销。
         </p>
 
         <div className="flex items-center gap-3">
