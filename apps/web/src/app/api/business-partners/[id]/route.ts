@@ -8,6 +8,7 @@ import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { z } from "zod";
 import { validateUscc, normalizeUscc } from "@/lib/tax-invoice";
+import { casUpdate } from "@/lib/api/cas";
 
 export const dynamic = "force-dynamic";
 
@@ -94,9 +95,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const { version, ...updates } = parsed.data;
   const existing = await prisma.businessPartner.findFirst({ where: { id, deletedAt: null } });
   if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "往来单位不存在");
-  if (existing.version !== version) {
-    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  }
 
   if (updates.code) {
     const codeExisting = await prisma.businessPartner.findUnique({ where: { code: updates.code } });
@@ -125,19 +123,22 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
   }
 
-  const updated = await prisma.$transaction(async (tx) => {
-    const saved = await tx.businessPartner.update({
-      where: { id },
-      data: {
-        ...partnerUpdates,
-        type: partnerUpdates.type as PartnerType | undefined,
-        invoiceInfo: partnerUpdates.invoiceInfo === undefined ? undefined : partnerUpdates.invoiceInfo === null ? Prisma.JsonNull : (partnerUpdates.invoiceInfo as Prisma.InputJsonValue),
-        tags: partnerUpdates.tags === undefined ? undefined : partnerUpdates.tags === null ? Prisma.JsonNull : (partnerUpdates.tags as Prisma.InputJsonValue),
-        foundedDate: partnerUpdates.foundedDate === undefined ? undefined : partnerUpdates.foundedDate === null ? null : new Date(partnerUpdates.foundedDate),
-        version: { increment: 1 },
-        updatedById: user?.id ?? null,
-      },
+  let updated: Awaited<ReturnType<typeof prisma.businessPartner.findFirst>>;
+  try {
+  updated = await prisma.$transaction(async (tx) => {
+    // 原子乐观锁（审计 P1：updateMany where {id,version} + count 判定，消除 read-check-update TOCTOU）
+    const cas = await casUpdate(tx, 'businessPartner', id, version, {
+      ...partnerUpdates,
+      type: partnerUpdates.type as PartnerType | undefined,
+      invoiceInfo: partnerUpdates.invoiceInfo === undefined ? undefined : partnerUpdates.invoiceInfo === null ? Prisma.JsonNull : (partnerUpdates.invoiceInfo as Prisma.InputJsonValue),
+      tags: partnerUpdates.tags === undefined ? undefined : partnerUpdates.tags === null ? Prisma.JsonNull : (partnerUpdates.tags as Prisma.InputJsonValue),
+      foundedDate: partnerUpdates.foundedDate === undefined ? undefined : partnerUpdates.foundedDate === null ? null : new Date(partnerUpdates.foundedDate),
+      updatedById: user?.id ?? null,
     });
+    if (cas.outcome === 'NOT_FOUND') throw new Error('NOT_FOUND');
+    if (cas.outcome === 'CONFLICT') throw new Error('VERSION_CONFLICT');
+    const saved = await tx.businessPartner.findFirst({ where: { id, deletedAt: null } });
+    if (!saved) throw new Error('NOT_FOUND');
     // 开票资料 upsert（1:1；变更走 approvalStatus=DRAFT，由 BusinessPartner 审批投影治理，I10）
     if (taxInvoiceInfo !== undefined && taxInvoiceInfo !== null) {
       await tx.businessPartnerInvoiceInfo.upsert({
@@ -171,6 +172,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
     return saved;
   });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : '';
+    if (msg === 'NOT_FOUND') return failNotFound(ERROR_CODES.NOT_FOUND, '往来单位不存在');
+    if (msg === 'VERSION_CONFLICT') return failConflict(ERROR_CODES.VERSION_CONFLICT, '版本冲突，请刷新后重试');
+    throw e;
+  }
 
   await writeAuditLog({
     actorId: user?.id,

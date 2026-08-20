@@ -5,6 +5,7 @@ import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/l
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
+import { casUpdate } from "@/lib/api/cas";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -87,21 +88,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   const existing = await prisma.item.findFirst({ where: { id, deletedAt: null } });
   if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "物料不存在");
-  if (existing.version !== version) {
-    return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  }
 
-  const updated = await prisma.item.update({
-    where: { id },
-    data: {
-      ...updates,
-      itemType: updates.itemType as ItemType | undefined,
-      lifecycle: updates.lifecycle === undefined ? undefined : (updates.lifecycle as ItemLifecycle | null),
-      status: updates.status as ItemStatus | undefined,
-      version: { increment: 1 },
-      updatedById: user!.id,
-    },
+  // 原子乐观锁（审计 P1：updateMany where {id,version} + count 判定）
+  const cas = await casUpdate(prisma, 'item', id, version, {
+    ...updates,
+    itemType: updates.itemType as ItemType | undefined,
+    lifecycle: updates.lifecycle === undefined ? undefined : (updates.lifecycle as ItemLifecycle | null),
+    status: updates.status as ItemStatus | undefined,
+    updatedById: user!.id,
   });
+  if (cas.outcome === 'NOT_FOUND') return failNotFound(ERROR_CODES.NOT_FOUND, "物料不存在");
+  if (cas.outcome === 'CONFLICT') return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
+  const updated = await prisma.item.findFirst({ where: { id, deletedAt: null } });
+  if (!updated) return failNotFound(ERROR_CODES.NOT_FOUND, "物料不存在");
 
   await writeAuditLog({
     actorId: user?.id,
