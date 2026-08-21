@@ -246,7 +246,6 @@ function RequisitionDetailPage() {
             <InfoItem label="申请人" value={detail.requester?.name} />
             <InfoItem label="部门" value={detail.department?.name} />
             <InfoItem label="需求日期" value={formatDate(detail.needDate)} />
-            <InfoItem label="创建时间" value={formatDate(detail.createdAt)} />
             <InfoItem label="备注" value={detail.remark} />
           </div>
         }
@@ -289,6 +288,12 @@ function RequisitionDetailPage() {
                 )}
               </tbody>
             </table>
+          </div>
+        </section>
+        <section className="border-border rounded-md border p-4">
+          <h2 className="text-ink-primary mb-3 text-sm font-semibold">审计信息</h2>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <InfoItem label="创建时间" value={formatDate(detail.createdAt)} />
           </div>
         </section>
       </EntityDetailWorkspace>

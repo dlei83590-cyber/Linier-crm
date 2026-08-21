@@ -32,6 +32,7 @@ interface SupplierOption {
   id: string;
   code: string | null;
   name: string | null;
+  currency?: string | null;
 }
 
 interface ItemOption {
@@ -68,6 +69,9 @@ const emptyLine = (): POItemOptionRow => ({
   unitPrice: "",
   priceReason: "",
 });
+
+/** 币种受控选择（Phase 2：币种来自系统受控列表；供应商选择后自动带出供应商默认币种） */
+const CURRENCY_OPTIONS = ["CNY", "USD", "EUR", "HKD", "GBP", "JPY"] as const;
 
 const PRICE_SOURCE_OPTIONS = [
   { value: "SUPPLIER_PRICE_SNAPSHOT", label: "供应商价格快照" },
@@ -225,6 +229,8 @@ function PurchaseOrderCreateForm() {
               value={supplierId}
               onChange={(v) => {
                 setSupplierId(v);
+                const s = suppliers.find((it) => it.id === v);
+                if (s?.currency) setCurrency(s.currency);
                 setDirty(true);
               }}
               options={suppliers.map((s) => ({
@@ -237,15 +243,21 @@ function PurchaseOrderCreateForm() {
             />
           </FormField>
           <FormField label="币种">
-            <input
+            <select
               value={currency}
               onChange={(e) => {
                 setCurrency(e.target.value);
                 setDirty(true);
               }}
-              placeholder="如 CNY / USD"
               className={inputClass}
-            />
+            >
+              <option value="">自动（供应商默认）</option>
+              {CURRENCY_OPTIONS.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
           </FormField>
           <FormField label="期望交货日期">
             <input
