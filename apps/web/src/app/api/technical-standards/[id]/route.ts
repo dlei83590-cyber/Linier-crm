@@ -62,7 +62,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 
   const cas = await casUpdate(prisma, 'technicalStandard', id, version, {
-});
+    ...updates,
+    updatedById: user!.id,
+  });
   if (cas.outcome === 'NOT_FOUND') return failNotFound(ERROR_CODES.NOT_FOUND, "技术标准不存在");
   if (cas.outcome === 'CONFLICT') return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
   const updated = await prisma.technicalStandard.findFirst({ where: { id, deletedAt: null } });
@@ -91,8 +93,16 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   const { id } = await params;
   const meta = requestMeta(request);
 
-  const existing = await prisma.technicalStandard.findFirst({ where: { id, deletedAt: null } });
+  const existing = await prisma.technicalStandard.findFirst({
+    where: { id, deletedAt: null },
+    include: { _count: { select: { items: { where: { standard: { deletedAt: null } } } } } },
+  });
   if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "技术标准不存在");
+
+  // 引用检查：已被物料关联（ItemStandard）→ 不可删除（可编辑）
+  if (existing._count.items > 0) {
+    return failConflict(ERROR_CODES.CONFLICT, "技术标准已被物料引用，不能删除（可编辑）");
+  }
 
   await prisma.technicalStandard.update({
     where: { id },

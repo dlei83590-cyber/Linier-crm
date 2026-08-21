@@ -57,7 +57,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 
   const cas = await casUpdate(prisma, 'commercialTerm', id, version, {
-});
+    ...updates,
+    updatedById: user!.id,
+  });
   if (cas.outcome === 'NOT_FOUND') return failNotFound(ERROR_CODES.NOT_FOUND, "商业条款不存在");
   if (cas.outcome === 'CONFLICT') return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
   const updated = await prisma.commercialTerm.findFirst({ where: { id, deletedAt: null } });
