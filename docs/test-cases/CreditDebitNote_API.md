@@ -31,7 +31,7 @@
 | # | 用例 | 方法/路径 | 预期 |
 | --- | --- | --- | --- |
 | B1 | CreditDebitNote 无 PATCH | PATCH /api/credit-debit-notes/:id | 404/405（金额/状态受控事务驱动） |
-| B2 | CreditDebitNote 无 DELETE | DELETE /api/credit-debit-notes/:id | 404/405（财务单据，禁止删除） |
+| B2 | CreditDebitNote DELETE（状态门禁） | DELETE /api/credit-debit-notes/:id | DRAFT/CANCELLED/REVERSED → 200 软删；APPLIED → 409（先反冲）；SUBMITTED → 409（先取消）；不存在 → 404 CN_DN_NOT_FOUND |
 | B3 | InvoiceAdjustment 无独立端点 | /api/invoice-adjustments 任意方法 | 404（事实由 Apply 事务生成，客户端不可直接访问） |
 | B4 | 列表空数据 | GET /api/credit-debit-notes（无数据） | 200 空数组 + meta |
 | B5 | 分页默认 | GET（无参数） | page=1 pageSize=20 |
@@ -227,6 +227,9 @@
 | N8 | 事件失败降级 | 模拟事件发布失败 | DB 事实已提交，主流程不阻断（边界②） |
 | N9 | 审计含 changeReason | create/submit/apply 带 changeReason | afterData 含 changeReason |
 | N10 | 事件载荷基境字段 | 各事件 | 含 customerId/currency/amount 等基境字段（CI 教训） |
+| N11 | **InvoiceAdjustmentReversed（Outbox）** | Reverse 后 | 事务内 OutboxMessage eventType=InvoiceAdjustmentReversed，幂等键 InvoiceAdjustmentReversed|noteId，载荷含 noteId/code/noteType/adjustmentTotal/reversedAt/reversedById |
+| N12 | **GL 反向凭证** | Reverse 后 GL consumer 消费 | CREDIT 反冲 → 借1122贷6001；DEBIT 反冲 → 借6001贷1122（借贷平衡，sourceType=InvoiceAdjustmentReversed） |
+| N13 | **GL consumer 白名单** | consumer.ts | InvoiceAdjustmentApplied + InvoiceAdjustmentReversed 均已注册（#163 漏注册修复） |
 
 ## O. Boundary / Error mapping（边界 / 错误映射）
 
@@ -247,6 +250,35 @@
 | O13 | 404 vs 409 语义 | 不存在=404；状态冲突=409 | 错误码映射正确 |
 | O14 | 审计 entityType | 各事件 | credit-debit-note / accounts-receivable / invoice-adjustment 正确 |
 
+## R. Reverse（反冲减——用户指令：贷/项也应支持反冲减）
+
+| # | 用例 | 方法/路径 | 预期 |
+| --- | --- | --- | --- |
+| R1 | APPLIED 反冲成功 | POST /api/credit-debit-notes/:id/reverse（APPLIED） | 200；status=REVERSED；AR.adjustedAmount -= signedTotal；AR.balanceAmount=computeBalance 重算；Invoice.balanceAmount 同步 |
+| R2 | 已 REVERSED 重复反冲 | 对 REVERSED 再 reverse | 409 CONFLICT（幂等稳定） |
+| R3 | 未生效（DRAFT/SUBMITTED）反冲 | DRAFT/SUBMITTED reverse | 409 CN_DN_INVALID_STATE（仅 APPLIED 可反冲） |
+| R4 | 不存在 | badId reverse | 404 NOT_FOUND |
+| R5 | 关联 AR 不存在 | 反冲时 AR 已删 | 409 CN_DN_SOURCE_NOT_COMPATIBLE |
+| R6 | InvoiceAdjustment 回写 | reverse 后 | 该单全部 adjustments.reversedAt/reversedById 非空 |
+| R7 | AR Revision/Snapshot | reverse 后 | 新增 AR Revision（"CN/DN 反冲"）+ Snapshot(ADJUSTED/ADJUSTMENT) |
+| R8 | 无权限 | 无 credit-debit-note:approve | 403 |
+| R9 | 原 Invoice 金额事实不变 | reverse 后查 Invoice | invoiceTotal/subtotal/taxAmount 不变（仅 balanceAmount 回退） |
+| R10 | 权限复用 | reverse 用 credit-debit-note:approve | 与 apply 同级权限 |
+
+## S. Delete（删除——用户指令：贷/项也应支持删除）
+
+| # | 用例 | 方法/路径 | 预期 |
+| --- | --- | --- | --- |
+| S1 | DRAFT 删除成功 | DELETE /api/credit-debit-notes/:id（DRAFT） | 200；header+lines+adjustments 软删（deletedAt/isActive=false） |
+| S2 | CANCELLED 删除成功 | DELETE（CANCELLED） | 200 软删 |
+| S3 | REVERSED 删除成功 | DELETE（REVERSED） | 200 软删（已反冲历史痕迹可清理） |
+| S4 | APPLIED 禁止删除 | DELETE（APPLIED） | 409 CN_DN_INVALID_STATE（先反冲再删） |
+| S5 | SUBMITTED 禁止删除 | DELETE（SUBMITTED） | 409 CN_DN_INVALID_STATE（先取消再删） |
+| S6 | 不存在 | DELETE badId | 404 CN_DN_NOT_FOUND |
+| S7 | 无权限 | 无 credit-debit-note:delete | 403 |
+| S8 | 列表隔离 | 删除后 GET 列表 | 不再出现（deletedAt 过滤） |
+| S9 | 审计 | 删除后 | AuditLog action=credit-debit-note.delete |
+
 ---
 
-> 用例统计：A 12 + B 14 + C 18 + D 12 + E 12 + F 18 + G 8 + H 8 + I 8 + J 10 + K 8 + L 8 + M 6 + N 10 + O 14 = **166 用例**（覆盖用户 #5703 指定全部财务边界与 5 个并发场景）
+> 用例统计：A 12 + B 14 + C 18 + D 12 + E 12 + F 18 + G 8 + H 8 + I 8 + J 10 + K 8 + L 8 + M 6 + N 13 + O 14 + R 10 + S 9 = **190 用例**（覆盖用户 #5703 指定全部财务边界与 5 个并发场景；含 CN/DN 反冲减与删除状态机）
