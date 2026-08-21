@@ -12,7 +12,7 @@
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
@@ -85,7 +85,7 @@ interface InvoiceDetail {
   createdAt: string;
 }
 
-type ConfirmAction = "issue" | "cancel" | "delete-red";
+type ConfirmAction = "issue" | "cancel" | "delete-red" | "reverse-issue";
 
 function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -98,7 +98,6 @@ function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
 
 function InvoiceDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const { state } = useSession();
   const id = typeof params.id === "string" ? params.id : "";
   const [detail, setDetail] = useState<InvoiceDetail | null>(null);
@@ -192,40 +191,31 @@ function InvoiceDetailPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ changeReason: "取消草稿发票" }),
         });
-      } else {
+      } else if (action === "delete-red") {
         // delete-red：删除红字发票（ISSUED 删除 = 撤销红冲恢复应收）
         await apiFetch(`/api/invoices/${id}`, {
           method: "DELETE",
         });
+      } else {
+        // reverse-issue：反开票撤销（红冲 = 撤销错误开票）
+        await apiFetch(`/api/invoices/${id}/reverse-issue`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ changeReason: "反开票（撤销错误开票）" }),
+        });
       }
       await loadDetail();
       toast.success(
-        action === "issue" ? "开票成功" : action === "cancel" ? "发票已取消" : "红字发票已删除",
+        action === "issue"
+          ? "开票成功"
+          : action === "cancel"
+            ? "发票已取消"
+            : action === "delete-red"
+              ? "红字发票已删除"
+              : "已反开票撤销（原票作废、应收清除、开票数量释放）",
       );
     } catch (err: unknown) {
       toast.error("操作失败", err instanceof ApiClientError ? err.message : "网络错误");
-      setActionError(
-        err instanceof ApiClientError ? err : new ApiClientError(0, "操作失败", "NETWORK_ERROR"),
-      );
-    } finally {
-      setActionBusy(false);
-    }
-  };
-
-  const runRedInvoice = async () => {
-    if (!detail || actionBusy) return;
-    setActionBusy(true);
-    setActionError(null);
-    try {
-      const body = await apiFetch<{ id: string }>(`/api/invoices/${id}/red-invoice`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      toast.success("红字发票草稿已创建，请在详情页完成开具");
-      router.push(`/sales/invoices/${body.data.id}`);
-    } catch (err: unknown) {
-      toast.error("红冲失败", err instanceof ApiClientError ? err.message : "网络错误");
       setActionError(
         err instanceof ApiClientError ? err : new ApiClientError(0, "操作失败", "NETWORK_ERROR"),
       );
@@ -295,11 +285,11 @@ function InvoiceDetailPage() {
               {isIssuedBlue && canCreate && (
                 <button
                   type="button"
-                  onClick={() => void runRedInvoice()}
+                  onClick={() => setConfirmAction("reverse-issue")}
                   disabled={actionBusy}
                   className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-status-danger-bg disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {actionBusy ? "创建中…" : "红冲（生成红字发票）"}
+                  {actionBusy ? "处理中…" : "红冲（撤销开票）"}
                 </button>
               )}
               {isRedDeletable && canDelete && (
@@ -538,6 +528,20 @@ function InvoiceDetailPage() {
         onConfirm={() => {
           setConfirmAction(null);
           void runAction("delete-red");
+        }}
+        onCancel={() => setConfirmAction(null)}
+      />
+
+      <ConfirmActionDialog
+        open={confirmAction === "reverse-issue"}
+        title="红冲（撤销开票）"
+        description="反开票撤销该已开票发票？将作废原票（CANCELLED）、清除应收、释放送货单开票数量（可重新开票）。仅未收款发票可撤销；有收款请先冲销核销。"
+        confirmLabel="确认撤销"
+        tone="danger"
+        busy={actionBusy}
+        onConfirm={() => {
+          setConfirmAction(null);
+          void runAction("reverse-issue");
         }}
         onCancel={() => setConfirmAction(null)}
       />
