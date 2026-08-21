@@ -212,9 +212,9 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
           customers: true,
           opportunities: true,
           projects: true,
-          contacts: true,
-          addresses: true,
-          bankAccounts: true,
+          partnerContacts: true,
+          partnerAddresses: true,
+          partnerBankAccounts: true,
         },
       },
     },
@@ -227,9 +227,9 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     existing._count.customers +
     existing._count.opportunities +
     existing._count.projects +
-    existing._count.contacts +
-    existing._count.addresses +
-    existing._count.bankAccounts;
+    existing._count.partnerContacts +
+    existing._count.partnerAddresses +
+    existing._count.partnerBankAccounts;
   if (referenced > 0) {
     return failConflict(ERROR_CODES.CONFLICT, "往来单位已被客户/供应商/项目等引用，不能删除（可编辑）");
   }
