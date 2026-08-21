@@ -257,7 +257,7 @@ function InvoiceList() {
         total={total}
         onPageChange={setPage}
         rowActions={(row) =>
-          canDelete && row.status === "CANCELLED" ? (
+          canDelete && (row.status === "CANCELLED" || (row.redLetter === true && (row.status === "DRAFT" || row.status === "ISSUED"))) ? (
             <div className="flex justify-end gap-1">
               <button type="button" onClick={() => setDeleting(row)} className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text transition-colors hover:bg-red-50">
                 删除
@@ -269,7 +269,7 @@ function InvoiceList() {
       <ConfirmActionDialog
         open={deleting !== null}
         title={"删除发票「" + (deleting?.code ?? deleting?.id ?? "") + "」？"}
-        description="仅已取消（CANCELLED）且无应收的发票可删除（回退后清理列表）。"
+        description="蓝票仅已取消（CANCELLED）且无应收可删；红字发票（草稿/已开票）可删——已开票红字删除 = 撤销红冲恢复原票应收。"
         confirmLabel="删除"
         tone="danger"
         busy={deleteBusy}

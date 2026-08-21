@@ -211,7 +211,7 @@ function DeliveryList() {
         total={total}
         onPageChange={setPage}
         rowActions={(row) =>
-          canDelete && row.status === "CANCELLED" ? (
+          canDelete && (row.status === "CANCELLED" || row.status === "DISPATCHED") ? (
             <div className="flex justify-end gap-1">
               <button type="button" onClick={() => setDeleting(row)} className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text transition-colors hover:bg-red-50">
                 删除
@@ -223,7 +223,7 @@ function DeliveryList() {
       <ConfirmActionDialog
         open={deleting !== null}
         title={"删除送货单「" + (deleting?.code ?? "") + "」？"}
-        description="仅已取消（CANCELLED）且无发票的送货单可删除（回退后清理列表）。"
+        description="仅已取消（CANCELLED）或反签收后（DISPATCHED）且无发票的送货单可删除；删除后订单交付状态重算（可回未发货）。"
         confirmLabel="删除"
         tone="danger"
         busy={deleteBusy}

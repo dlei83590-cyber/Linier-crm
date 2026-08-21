@@ -7,6 +7,7 @@ import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { invoiceIssueSchema } from "@/lib/api/schemas";
 import { nextInvoiceCode, createInvoiceSnapshot, latestInvoiceRevisionNo } from "@/lib/invoice/helpers";
+import { computeBalance } from "@/lib/accounts-receivable/projection";
 import { publishInvoiceEvent } from "@/lib/invoice/events";
 import { writeDomainEvent } from "@/lib/domain-events/writer";
 import { validateTaxInvoiceFields, normalizeTaxInvoiceNumber } from "@/lib/tax-invoice";
@@ -89,6 +90,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const effectiveRedRef = redInvoiceRefId ?? invoice.redInvoiceRefId ?? null;
     let redLetter = false;
     let redRefId: string | null = null;
+    let original: {
+      id: string;
+      code: string | null;
+      redLetter: boolean;
+      status: string;
+      subtotal: Prisma.Decimal;
+      taxAmount: Prisma.Decimal;
+      invoiceTotal: Prisma.Decimal;
+    } | null = null;
     let issueSubtotal = invoice.subtotal;
     let issueTax = invoice.taxAmount;
     let issueTotal = invoice.invoiceTotal;
@@ -97,7 +107,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         Prisma.sql`SELECT "id" FROM "Invoice" WHERE "id" = ${effectiveRedRef} AND "deletedAt" IS NULL FOR UPDATE`,
       );
       if (origLocked.length === 0) return { error: "RED_INVOICE_REF_STATUS_INVALID" as const };
-      const original = await tx.invoice.findFirst({ where: { id: effectiveRedRef, deletedAt: null } });
+      original = await tx.invoice.findFirst({ where: { id: effectiveRedRef, deletedAt: null } });
       if (!original || original.redLetter || original.status !== "ISSUED") {
         return { error: "RED_INVOICE_REF_STATUS_INVALID" as const }; // R2：终态蓝票；R6：禁红字冲红字
       }
@@ -198,53 +208,118 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       },
     );
 
-    // ── 8a. 创建 AccountsReceivable（1:1 绑定 Invoice；originalAmount = invoiceTotal 复制；余额 = computeBalance 单口径）
-    //     红字发票同样生成 AR（负数余额 = 冲销应收；红字 GL 记账另属 ADR-0043 backlog）
-    const ar = await tx.accountsReceivable.create({
-      data: {
-        invoiceId: id,
-        customerId: updated.customerId,
-        currency: updated.currency,
-        originalAmount: updated.invoiceTotal,
-        adjustedAmount: new Prisma.Decimal(0),
-        paidAmount: new Prisma.Decimal(0),
-        writeOffAmount: new Prisma.Decimal(0),
-        balanceAmount: updated.invoiceTotal,
-        status: "OPEN",
-        effectiveStatus: "OPEN",
-        dueDate: updated.dueDate,
-        createdById: user!.id,
-        updatedById: user!.id,
-      },
-    });
-    // AR Revision + AR Snapshot(CREATED, ISSUE)（余额留痕 + 关键节点固化，对齐 4E 领域模式）
-    await createAccountsReceivableRevision(
-      tx,
-      ar.id,
-      "发票开票生成应收",
-      { invoiceId: id, invoiceCode: code, originalAmount: updated.invoiceTotal.toString(), balanceAmount: updated.invoiceTotal.toString() },
-      user?.id,
-    );
-    const arRevisionNo = await latestAccountsReceivableRevisionNo(tx, ar.id);
-    await createAccountsReceivableSnapshot(
-      tx,
-      ar.id,
-      "CREATED",
-      "ISSUE",
-      arRevisionNo,
-      {
-        invoiceId: id,
-        invoiceCode: code,
-        customerId: updated.customerId,
-        currency: updated.currency,
-        originalAmount: updated.invoiceTotal.toString(),
-        balanceAmount: updated.invoiceTotal.toString(),
-        dueDate: updated.dueDate?.toISOString() ?? null,
-        issuedAt: issuedAt.toISOString(),
-        issuedById: user?.id ?? null,
-      },
-      user?.id,
-    );
+    // ── 8a. AccountsReceivable（1:1 绑定 Invoice；originalAmount = invoiceTotal 复制；余额 = computeBalance 单口径）
+    //     蓝票：创建独立 AR（originalAmount = 正数 invoiceTotal）。
+    //     红字发票（redLetter=true，用户指令 2026-08-21）：**不再创建独立负应收**——改回退**原票** AR：
+    //       原票 AR.adjustedAmount -= |红字金额|（负向冲减）+ balanceAmount 重算（computeBalance 单入口）
+    //       + 原票 Invoice.balanceAmount 同步 + AR Revision/Snapshot（snapshotSource=ADJUSTMENT）
+    //       删除红字发票（ISSUED）时恢复原票 AR（撤销红冲）。
+    if (redLetter && redRefId) {
+      // 锁原票 AR（红字冲减与红字删除恢复并发安全）
+      const origArLocked = await tx.$queryRaw<Array<{ id: string }>>(
+        Prisma.sql`SELECT "id" FROM "AccountsReceivable" WHERE "invoiceId" = ${redRefId} AND "deletedAt" IS NULL FOR UPDATE`,
+      );
+      if (origArLocked.length === 0) return { error: "ORIGINAL_AR_NOT_FOUND" as const };
+      const origAr = await tx.accountsReceivable.findFirst({
+        where: { invoiceId: redRefId, deletedAt: null },
+      });
+      if (!origAr) return { error: "ORIGINAL_AR_NOT_FOUND" as const };
+      const redAbs = updated.invoiceTotal.abs(); // 红字金额绝对值（= 原票金额）
+      const newAdjusted = origAr.adjustedAmount.minus(redAbs);
+      const newBalance = new Prisma.Decimal(
+        computeBalance(origAr.originalAmount, newAdjusted, origAr.paidAmount, origAr.writeOffAmount),
+      );
+      await tx.accountsReceivable.update({
+        where: { id: origAr.id },
+        data: { adjustedAmount: newAdjusted, balanceAmount: newBalance, updatedById: user!.id },
+      });
+      // 原票 Invoice.balanceAmount 同步（投影）
+      await tx.invoice.update({
+        where: { id: redRefId },
+        data: { balanceAmount: newBalance, updatedById: user!.id },
+      });
+      // AR Revision + Snapshot（红字冲减留痕）
+      await createAccountsReceivableRevision(
+        tx,
+        origAr.id,
+        "红字发票冲减应收（红冲自 " + (original?.code ?? "") + "）",
+        {
+          invoiceId: redRefId,
+          redInvoiceId: id,
+          redInvoiceCode: code,
+          redAmount: redAbs.toString(),
+          adjustedAmount: newAdjusted.toString(),
+          balanceAmount: newBalance.toString(),
+          reversedAt: issuedAt.toISOString(),
+        },
+        user?.id,
+      );
+      const origArRevisionNo = await latestAccountsReceivableRevisionNo(tx, origAr.id);
+      await createAccountsReceivableSnapshot(
+        tx,
+        origAr.id,
+        "ADJUSTED",
+        "ADJUSTMENT",
+        origArRevisionNo,
+        {
+          invoiceId: redRefId,
+          redInvoiceId: id,
+          redInvoiceCode: code,
+          redAmount: redAbs.toString(),
+          adjustedAmount: newAdjusted.toString(),
+          balanceAmount: newBalance.toString(),
+          issuedAt: issuedAt.toISOString(),
+          issuedById: user?.id ?? null,
+        },
+        user?.id,
+      );
+    } else {
+      const ar = await tx.accountsReceivable.create({
+        data: {
+          invoiceId: id,
+          customerId: updated.customerId,
+          currency: updated.currency,
+          originalAmount: updated.invoiceTotal,
+          adjustedAmount: new Prisma.Decimal(0),
+          paidAmount: new Prisma.Decimal(0),
+          writeOffAmount: new Prisma.Decimal(0),
+          balanceAmount: updated.invoiceTotal,
+          status: "OPEN",
+          effectiveStatus: "OPEN",
+          dueDate: updated.dueDate,
+          createdById: user!.id,
+          updatedById: user!.id,
+        },
+      });
+      // AR Revision + AR Snapshot(CREATED, ISSUE)（余额留痕 + 关键节点固化，对齐 4E 领域模式）
+      await createAccountsReceivableRevision(
+        tx,
+        ar.id,
+        "发票开票生成应收",
+        { invoiceId: id, invoiceCode: code, originalAmount: updated.invoiceTotal.toString(), balanceAmount: updated.invoiceTotal.toString() },
+        user?.id,
+      );
+      const arRevisionNo = await latestAccountsReceivableRevisionNo(tx, ar.id);
+      await createAccountsReceivableSnapshot(
+        tx,
+        ar.id,
+        "CREATED",
+        "ISSUE",
+        arRevisionNo,
+        {
+          invoiceId: id,
+          invoiceCode: code,
+          customerId: updated.customerId,
+          currency: updated.currency,
+          originalAmount: updated.invoiceTotal.toString(),
+          balanceAmount: updated.invoiceTotal.toString(),
+          dueDate: updated.dueDate?.toISOString() ?? null,
+          issuedAt: issuedAt.toISOString(),
+          issuedById: user?.id ?? null,
+        },
+        user?.id,
+      );
+    }
 
     // ── 8b. InvoiceIssued Outbox（业务事务内原子写；GL consumer → 收入确认凭证，ADR-0042）
     // 红字发票（负数金额）跳过 GL 过账——GL 借贷行拒绝负数（GL_NEGATIVE_AMOUNT），红字 GL 记账 = ADR-0043 backlog
@@ -310,6 +385,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return failConflict(ERROR_CODES.RED_INVOICE_REF_STATUS_INVALID, "红字引用无效：被冲销发票必须为已开票（ISSUED）的蓝字发票，且禁止红字冲红字");
       case "RED_INVOICE_OVERFLOW":
         return failConflict(ERROR_CODES.RED_INVOICE_OVERFLOW, `红字累计超冲：Σ|红字金额| 不得超过原票金额（原票 ${result.originalTotal}）`);
+      case "ORIGINAL_AR_NOT_FOUND":
+        return failConflict(ERROR_CODES.CN_DN_SOURCE_NOT_COMPATIBLE, "原票应收不存在，无法回退应收（红冲失败）");
     }
   }
 
