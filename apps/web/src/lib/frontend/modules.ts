@@ -790,7 +790,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     createPermission: actionPermission('document-sequence', 'create'),
     order: 7,
   },
-  // F2-2 Wave 1：仓库/库位（GET 列表 FINAL；main 已有列表页 → ui list 开放；Detail 待后端 /{id} 契约）
+  // 仓库（CRUD FINAL：POST create + [id] GET/PATCH/DELETE；删除引用检查——被库位/单据引用不可删但可编辑）
   {
     id: 'warehouses',
     domain: 'master-data',
@@ -798,7 +798,9 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/warehouses',
     permission: PERMISSIONS.WAREHOUSE_READ,
     availability: 'ready',
-    capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_LIST },
+    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_DETAIL_CRUD },
+    createRoute: '/warehouses/new',
+    createPermission: actionPermission('warehouse', 'create'),
     order: 8,
   },
   {
