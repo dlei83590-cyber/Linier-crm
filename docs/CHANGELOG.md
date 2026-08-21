@@ -2,6 +2,17 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 快照唯一约束修复（2026-08-21，PR #172）
+
+### 修复
+
+- **CN/DN 反冲减 INTERNAL_ERROR**：reverse 与 apply 对同一 AR 写 snapshotType=ADJUSTED 快照撞 `AccountsReceivableSnapshot @@unique([arId, snapshotType])`（P2002）→ 500
+- **收款多次核销/多选核销 INTERNAL_ERROR**：同一 AR 第二次核销写 PARTIALLY_PAID/PAID 快照撞同一唯一约束 → 500
+- **送货单反签收/再确认（预防）**：unconfirm 与 confirm-delivery 写 DELIVERED 快照撞 `DeliverySnapshot @@unique([deliveryId, snapshotType])`
+- **Migration 0046**：快照唯一约束放宽 `[X, snapshotType]` → `[X, snapshotType, revisionNo]`（对齐 PurchaseOrderSnapshot 0022 先例）；confirm/unconfirm 状态流转先建 DeliveryRevision 递增 revisionNo
+
+---
+
 ## [Unreleased] - 销售链层层回退闭环（2026-08-21，PR #170）
 
 ### 新增
