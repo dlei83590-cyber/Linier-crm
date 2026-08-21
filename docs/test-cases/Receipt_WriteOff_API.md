@@ -190,15 +190,12 @@
 
 | # | 用例 | 方法/路径 | 预期 |
 | --- | --- | --- | --- |
-| K1 | DRAFT → SUBMITTED | POST /api/write-offs/:id/submit | 200；status=SUBMITTED |
+| K1 | DRAFT → SUBMITTED（auto-approve） | POST /api/write-offs/:id/submit | 200；status=SUBMITTED；approvalStatus=APPROVED + approvedAt/approvedById=提交人；workflowSkipped='no-policy' |
 | K2 | 非 DRAFT 不可提交 | APPLIED 后 submit | 409 WRITE_OFF_INVALID_STATE |
-| K3 | 命中策略 → PENDING | submit（WRITE_OFF 策略命中金额区间） | approvalStatus=PENDING + workflowInstanceId + workflowTriggered=true（T11） |
-| K4 | 未命中策略 → 可直接 Apply | submit（无策略/无规则匹配） | workflowSkipped=no-policy/no-rule-matched；approvalStatus 仍 DRAFT（T11 补充） |
-| K5 | 已有 RUNNING 实例不重复建 | 二次 submit | 保持 PENDING，skipped=instance-running |
+| K3 | 不创建 WorkflowInstance | submit（有/无 WRITE_OFF 策略） | workflowInstanceId=null、workflowTriggered=false（auto-approve 跳过 Workflow；apply 门禁 status=SUBMITTED + workflowInstanceId==null 放行） |
+| K4 | 并发防双提交 | 并发两次 submit | 仅一次成功；第二次 409 WRITE_OFF_INVALID_STATE（updateMany status=DRAFT CAS） |
 | K6 | 不修改 AR | submit | AR.writeOffAmount/balanceAmount 不变（审批≠生效） |
-| K7 | 发布事件 | submit | AuditLog 记 WriteOffSubmitted |
-| K8 | Workflow COMPLETED → APPROVED | workflow actions（businessType=write-off） | syncWriteOffApproval：approvalStatus=APPROVED + approvedAt/approvedById（T12 前置） |
-| K9 | Workflow REJECTED → REJECTED | workflow actions | approvalStatus=REJECTED |
+| K7 | 发布事件 | submit | AuditLog 记 WriteOffSubmitted（payload approvalStatus=APPROVED） |
 | K10 | APPROVED 仍未影响 AR | APPROVED 后检查 | AR.writeOffAmount/balanceAmount **不变**（T13——APPROVED ≠ APPLIED） |
 
 ## L. WriteOff Apply（财务生效入口）

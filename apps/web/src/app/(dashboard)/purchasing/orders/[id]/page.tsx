@@ -183,7 +183,7 @@ function OrderDetailPage() {
                 disabled={actionBusy}
                 className={BUTTON_PRIMARY_CLASS}
               >
-                {actionBusy ? "处理中…" : "提交审批"}
+                {actionBusy ? "处理中…" : "提交生效"}
               </button>
             )}
             {detail.status === "APPROVED" && canApprove && (

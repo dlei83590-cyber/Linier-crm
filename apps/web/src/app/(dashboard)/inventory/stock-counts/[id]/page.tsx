@@ -339,7 +339,7 @@ function StockCountDetailPage() {
         title={confirmAction === "complete" ? "完成盘点" : "取消盘点"}
         description={
           confirmAction === "complete"
-            ? "完成盘点将冻结差异（非零差异自动生成库存调整单，需审批后落账）。确认完成？"
+            ? "完成盘点将冻结差异（非零差异自动生成库存调整单，提交生效后可应用落账）。确认完成？"
             : "取消该盘点单？仅 DRAFT/COUNTING 可取消。确认后不可恢复。"
         }
         confirmLabel={confirmAction === "complete" ? "确认完成" : "确认取消"}

@@ -85,21 +85,18 @@
 | D11 | 客户端传金额被忽略 | POST 带 unitPrice/lineAmount 等 | 201 但行金额 = 快照复制（禁止客户端直传） |
 | D12 | 快照完整性 | 原行快照字段齐全 | 所有行字段非空（description/quantity/unitPrice/...） |
 
-## E. Submit / Workflow（Submit）
+## E. Submit（auto-approve：移除审核，提交即生效）
 
 | # | 用例 | 方法/路径 | 预期 |
 | --- | --- | --- | --- |
-| E1 | DRAFT → SUBMITTED 成功 | POST /{id}/submit | 200；status=SUBMITTED；approvalStatus 保持 DRAFT（未命中策略） |
+| E1 | DRAFT → SUBMITTED 成功 | POST /{id}/submit | 200；status=SUBMITTED；approvalStatus=APPROVED + approvedAt/approvedById=提交人；workflowTriggered=false、workflowSkipped='no-policy' |
 | E2 | 非 DRAFT 提交 | APPLIED Note submit | 409 CN_DN_INVALID_STATE |
 | E3 | CANCELLED Note submit | CANCELLED Note submit | 409 CN_DN_INVALID_STATE |
-| E4 | 重复 Submit | SUBMITTED 后再 submit | 409 CN_DN_INVALID_STATE（仅 DRAFT 可提交） |
-| E5 | 命中策略 → PENDING | 配置 CREDIT_DEBIT_NOTE 策略且命中金额区间 | approvalStatus=PENDING + workflowInstanceId 非空（事件 CreditDebitNoteApprovalStarted） |
-| E6 | 未命中策略 → 可直接 Apply | 无策略或金额不命中 | approvalStatus=DRAFT、workflowInstanceId=null（可直接进入可 Apply 状态） |
+| E4 | 重复 Submit | SUBMITTED 后再 submit | 409 CN_DN_INVALID_STATE（仅 DRAFT 可提交，CAS status=DRAFT） |
+| E5 | 不创建 WorkflowInstance | submit 后查询 | 无 credit-debit-note 实例；workflowInstanceId=null（可直接 Apply——apply 门禁 status=SUBMITTED + workflowInstanceId==null 放行） |
 | E7 | **Submit 不改 AR.adjustedAmount** | submit 前后查 AR | adjustedAmount/balanceAmount 不变（T2——边界②） |
 | E8 | **Submit 不创建 InvoiceAdjustment** | submit 后查 | 无新增（边界③） |
-| E9 | **Workflow 失败 → 整体回滚** | 命中策略但 WorkflowDefinition 缺失/未激活 | 409 CN_DN_WORKFLOW_FAILED；Note 保持 DRAFT（事务回滚） |
-| E10 | Workflow RUNNING 不重复建 | 已 RUNNING 再 submit（不允许，DRAFT 门禁） | 409（只读场景：若允许重提则 skipped=instance-running） |
-| E11 | 终态实例复用重启 | 已 COMPLETED 实例 + 重新 submit | 重启审批（失效旧 Approver → 新建 PENDING → approvalStatus=PENDING） |
+| E9 | 并发防双提交 | 并发两次 submit | 仅一次成功；第二次 409 CN_DN_INVALID_STATE（updateMany status=DRAFT CAS） |
 | E12 | changeReason 写入审计 | submit 带 changeReason | 审计 afterData 含 changeReason |
 
 ## F. Apply（Apply 事务）

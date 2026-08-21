@@ -259,7 +259,7 @@ function QuotationDetailPage() {
                   disabled={actionBusy}
                   className={BUTTON_PRIMARY_CLASS}
                 >
-                  {actionBusy ? "提交中…" : "提交审批"}
+                  {actionBusy ? "提交中…" : "提交生效"}
                 </button>
               )}
               {canAccept && (

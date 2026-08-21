@@ -46,18 +46,17 @@
 | C6 | 更新自调拨 | PATCH 改到同仓同库位 | 409 SELF_TRANSFER |
 | C7 | DRAFT 更新不发领域事件 | PATCH 后 | 仅 AuditLog；无 InventoryTransferExecuted |
 
-## D. 提交与审批（POST /{id}/submit + Workflow）
+## D. 提交（auto-approve：移除审核，提交即生效——POST /{id}/submit）
 
 | # | 用例 | 场景 | 预期 |
 | --- | --- | --- | --- |
-| D1 | 正常提交（未命中策略） | DRAFT → submit，无 INVENTORY_TRANSFER 策略 | 200 status=APPROVED + approvedById=提交人（直接审批投影，**绝不 EXECUTED**） |
-| D2 | 正常提交（命中策略） | 配置 ApprovalPolicy(module=INVENTORY_TRANSFER) | 200 status=SUBMITTED；WorkflowInstance RUNNING + PENDING Approver |
+| D1 | 正常提交 | DRAFT → submit（不配置 INVENTORY_TRANSFER 策略） | 200 status=APPROVED + approvedById=提交人；workflowSkipped='no-policy'（**绝不 EXECUTED**） |
+| D2 | 正常提交（有策略也不再建审批） | 配置 ApprovalPolicy(module=INVENTORY_TRANSFER) | 200 status=APPROVED（auto-approve 跳过 Workflow；不再 status=SUBMITTED/PENDING） |
 | D3 | 提交非 DRAFT | APPROVED/SUBMITTED 再 submit | 409 INVALID_STATE |
-| D4 | 审批 COMPLETED 回写 | Workflow action APPROVE 终态 | syncInventoryTransferApproval → status=APPROVED + approvedById |
-| D5 | 审批 REJECTED 回写 | Workflow action REJECT 终态 | status=DRAFT（可重提）+ approvedById 清空 |
-| D6 | 审批回写不落账 | COMPLETED 后 | 无 Movement（**APPROVED ≠ EXECUTED 红线**） |
-| D7 | 版本冲突 | submit 旧 version | 409 VERSION_CONFLICT |
-| D8 | 无行提交 | DRAFT 无行 | 400 INVENTORY_TRANSFER_NO_LINES |
+| D4 | 提交回写不落账 | submit 后 | 无 Movement（**APPROVED ≠ EXECUTED 红线**，execute 门禁 status=APPROVED） |
+| D5 | 版本冲突 | submit 旧 version | 409 VERSION_CONFLICT |
+| D6 | 无行提交 | DRAFT 无行 | 400 INVENTORY_TRANSFER_NO_LINES |
+| D7 | 不创建 WorkflowInstance | submit 后查询 | 无 inventory-transfer 实例（workflowSkipped='no-policy'） |
 
 ## E. 取消（POST /{id}/cancel）
 
