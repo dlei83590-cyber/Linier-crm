@@ -109,8 +109,17 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   const { id } = await params;
   const meta = requestMeta(request);
 
-  const existing = await prisma.priceList.findFirst({ where: { id, deletedAt: null } });
+  const existing = await prisma.priceList.findFirst({
+    where: { id, deletedAt: null },
+    include: { _count: { select: { items: { where: { deletedAt: null } }, versions: { where: { deletedAt: null } } } } },
+  });
   if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "价目表不存在");
+
+  // 引用检查：已配置单价明细/已发布版本/被报价单快照引用 → 不可删除（可编辑）
+  const snapshotCount = await prisma.quotationPriceSnapshot.count({ where: { priceListId: id } });
+  if (existing._count.items > 0 || existing._count.versions > 0 || snapshotCount > 0) {
+    return failConflict(ERROR_CODES.CONFLICT, "价目表已配置单价/版本或被报价单引用，不能删除（可编辑）");
+  }
 
   await prisma.priceList.update({
     where: { id },

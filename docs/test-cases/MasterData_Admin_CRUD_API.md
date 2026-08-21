@@ -39,6 +39,8 @@
 | TS-3 | POST 重复 code | 409 |
 | TS-4 | PATCH { version, name } | 200 version+1 |
 | TS-5 | DELETE | 200 软删；再 GET → 404 |
+| TS-6 | DELETE 已被 ItemStandard 引用（物料已关联该标准） | 409 CONFLICT「已被物料引用，不能删除（可编辑）」 |
+| TS-7 | PATCH 空 payload 仅 version | 400 VALIDATION_ERROR（至少一个更新字段） |
 
 ## 4. /api/commercial-terms（commercial-term:*）
 
@@ -47,7 +49,7 @@
 | CT-1 | GET 分页 + code/name 过滤 | 200 |
 | CT-2 | POST { code, name } | 201 |
 | CT-3 | PATCH 过期 version | 409 VERSION_CONFLICT |
-| CT-4 | DELETE | 200 软删 |
+| CT-4 | DELETE | 200 软删（无 FK 引用） |
 
 ## 5. /api/document-sequences（document-sequence:*）
 
@@ -56,9 +58,36 @@
 | DS-1 | GET 分页 + docType 过滤 | 200 |
 | DS-2 | POST { code, name, docType:'SALES_ORDER', prefix:'SO-', padLength:6 } | 201 nextNo=1 |
 | DS-3 | POST 非法 docType | 400 VALIDATION_ERROR |
-| DS-4 | PATCH 含 nextNo | 400（schema 拒绝未知字段→zod 默认 strip；若传 nextNo 不生效，nextNo 恒为引擎值） |
+| DS-4 | PATCH 含 nextNo | 200（#151 起 nextNo 可编辑：管理员显式调整/初始化；约束 nextNo ≥ startNo） |
 | DS-5 | PATCH { version, padLength } | 200 version+1；nextNo 不变 |
 | DS-6 | DELETE | 200 软删 |
+
+## 5.5 /api/price-lists（price-list:view/create/edit/delete）
+
+| 用例 | 输入 | 期望 |
+|---|---|---|
+| PL-1 | GET 分页 + code/name/status/priceType 过滤 | 200 含 _count.items |
+| PL-2 | POST { code, name, priceType:'SALES' } | 201；approvalStatus=APPROVED |
+| PL-3 | POST 重复 code | 409 CONFLICT |
+| PL-4 | PATCH { version, name } | 200 version+1 |
+| PL-5 | PATCH 过期 version | 409 VERSION_CONFLICT |
+| PL-6 | DELETE 无引用 | 200 软删 |
+| PL-7 | DELETE 已配置 PriceListItem（单价） | 409 CONFLICT「已配置单价/版本或被报价单引用，不能删除（可编辑）」 |
+| PL-8 | DELETE 已有 PriceListVersion / 被 QuotationPriceSnapshot 引用 | 409 CONFLICT（同上） |
+
+## 5.6 /api/unit-of-measures（unit-of-measure:view/create/edit/delete）
+
+| 用例 | 输入 | 期望 |
+|---|---|---|
+| UOM-1 | GET 分页 + code/name/isActive 过滤 | 200（默认 isActive=true） |
+| UOM-2 | POST { code, name, symbol } | 201；approvalStatus=APPROVED |
+| UOM-3 | POST 重复 code | 409 CONFLICT |
+| UOM-4 | GET /{id} | 200 |
+| UOM-5 | PATCH { version, name } | 200 version+1 |
+| UOM-6 | PATCH 过期 version | 409 VERSION_CONFLICT |
+| UOM-7 | PATCH 改 code 与他人冲突 | 409 CONFLICT |
+| UOM-8 | DELETE 无引用 | 200 软删 |
+| UOM-9 | DELETE 被物料/单据行/UomConversion 引用 | 409 CONFLICT「已被物料/单据/换算引用，不能删除（可编辑）」 |
 
 ## 6. /api/users（user:view/create/edit/delete）
 
@@ -119,8 +148,10 @@
 | 用例 | 路径 | 期望 |
 |---|---|---|
 | UI-1 | /business-partners + /new + /[id]/edit | 列表/新建/编辑可用；无权限 403 |
-| UI-2 | /technical-standards + /new + /[id]/edit | 同上 |
-| UI-3 | /commercial-terms + /new + /[id]/edit | 同上 |
+| UI-2 | /technical-standards + /new + /[id]/edit | 同上；列表含编辑/删除行操作 |
+| UI-3 | /commercial-terms + /new + /[id]/edit | 同上；列表含编辑/删除行操作 |
+| UI-3b | /price-lists + /new + /[id]/edit | 同上；列表含编辑/删除行操作 |
+| UI-3c | /unit-of-measures + /new + /[id]/edit | 新建/编辑/删除行操作（此前仅只读列表） |
 | UI-4 | /document-sequences + /new + /[id]/edit | 同上；nextNo 只读展示 |
 | UI-5 | /users + /new + /[id]/edit | 角色多选、密码字段、停用 |
 | UI-6 | /departments + /new + /[id]/edit | parent 列/选择；自身排除 |
