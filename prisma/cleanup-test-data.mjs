@@ -32,25 +32,29 @@ const SOFT_DELETE_TABLES = [
 ];
 
 async function seedExampleCleanup(tx) {
-  // 直线导轨示例物料（LG- 前缀，seed 创建）
+  const safe = async (label, fn) => {
+    try { await fn(); console.log("  [cleanup] " + label + ": ok"); }
+    catch (e) { console.log("  [cleanup] " + label + ": skipped (" + (e instanceof Error ? e.message.slice(0, 100) : "unknown") + ")"); }
+  };
+  // 直线导轨示例物料（LG- 前缀，seed 创建）——先删子表再删物料
   const lgItems = await tx.item.findMany({ where: { code: { startsWith: "LG-" } }, select: { id: true } });
   for (const it of lgItems) {
-    await tx.linearGuideSpecification.deleteMany({ where: { itemId: it.id } });
-    await tx.itemStandard.deleteMany({ where: { itemId: it.id } });
-    await tx.itemCost.deleteMany({ where: { itemId: it.id } });
-    await tx.itemRevision.deleteMany({ where: { itemId: it.id } });
-    await tx.itemTag.deleteMany({ where: { itemId: it.id } });
-    await tx.priceListItem.deleteMany({ where: { itemId: it.id } });
-    await tx.item.delete({ where: { id: it.id } });
+    await safe("LG item " + it.id + " specs", () => tx.linearGuideSpecification.deleteMany({ where: { itemId: it.id } }));
+    await safe("LG item " + it.id + " standards", () => tx.itemStandard.deleteMany({ where: { itemId: it.id } }));
+    await safe("LG item " + it.id + " costs", () => tx.itemCost.deleteMany({ where: { itemId: it.id } }));
+    await safe("LG item " + it.id + " revisions", () => tx.itemRevision.deleteMany({ where: { itemId: it.id } }));
+    await safe("LG item " + it.id + " tags", () => tx.itemTag.deleteMany({ where: { itemId: it.id } }));
+    await safe("LG item " + it.id + " prices", () => tx.priceListItem.deleteMany({ where: { itemId: it.id } }));
+    await safe("LG item " + it.id + " delete", () => tx.item.delete({ where: { id: it.id } }));
   }
   // 示例技术标准（description 含"示例"）
-  await tx.technicalStandard.deleteMany({ where: { description: { contains: "示例" } } });
+  await safe("technical standards (示例)", () => tx.technicalStandard.deleteMany({ where: { description: { contains: "示例" } } }));
   // 示例工作流/审批组/价格规则/促销（name 含"示例"）
-  await tx.workflowDefinition.deleteMany({ where: { name: { contains: "示例" } } });
-  await tx.approverGroup.deleteMany({ where: { name: { contains: "示例" } } });
-  await tx.priceRule.deleteMany({ where: { name: { contains: "示例" } } });
-  await tx.promotionRule.deleteMany({ where: { name: { contains: "示例" } } });
-  console.log("[cleanup] seed examples removed");
+  await safe("workflow definitions (示例)", () => tx.workflowDefinition.deleteMany({ where: { name: { contains: "示例" } } }));
+  await safe("approver groups (示例)", () => tx.approverGroup.deleteMany({ where: { name: { contains: "示例" } } }));
+  await safe("price rules (示例)", () => tx.priceRule.deleteMany({ where: { name: { contains: "示例" } } }));
+  await safe("promotions (示例)", () => tx.promotionRule.deleteMany({ where: { name: { contains: "示例" } } }));
+  console.log("[cleanup] seed examples pass complete");
 }
 
 async function main() {
@@ -60,7 +64,7 @@ async function main() {
     let total = 0;
     for (const t of SOFT_DELETE_TABLES) {
       try {
-        const r = await prisma.$executeRawUnsafe(`DELETE FROM "${t}" WHERE "deletedAt" IS NOT NULL`);
+        const r = await tx.$executeRawUnsafe(`DELETE FROM "${t}" WHERE "deletedAt" IS NOT NULL`);
         if (r > 0) { console.log(`  [cleanup] ${t}: ${r} soft-deleted rows purged`); total += r; }
       } catch (e) {
         console.log(`  [cleanup] ${t}: skipped (${e instanceof Error ? e.message.slice(0, 80) : "unknown"})`);
