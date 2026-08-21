@@ -81,16 +81,14 @@
 - **CONTRACT ISSUE C-1（不实施，标记待 ADR）**：PR 状态机声明 CANCELLED（DRAFT/SUBMITTED 可取消），但 purchase-requisitions/[id] 下无 cancel route（仅 convert/route/submit）——CANCELLED 状态不可达；前端不做假按钮
 - **CONTRACT ISSUE C-2（不实施）**：PO 编辑页改交期/付款条件不触发重定价（税率先例快照为正确契约，前端已保持只读金额）——无需整改，记录确认
 
-## Proposed Changes（本轮实施，纯前端）
+## Implemented（本轮已实施，纯前端 + 零后端变更）
 
-1. PR 详情页：补 cancel 动作入口（DRAFT/SUBMITTED，quotation:close 对应 purchase-requisition:close 权限映射——需与后端 cancel 权限一致）
-2. PO 新建页：currency 受控下拉（CNY 默认 + 常用币种），默认供应商币种带出
-3. 详情页审计字段归位（创建时间等移入审计信息区）
-4. 跨字段约束：PO expectedDeliveryDate 校验（> orderDate）；PR needDate 校验
+1. ✅ PO 详情页：摘要补未税合计/税额/含税合计 + 确认时间投影（Phase 2「详情页顶部优先关键金额」）
+2. ✅ PO 新建页：currency 自由文本 → 受控下拉（CNY/USD/EUR/HKD/GBP/JPY）+ 供应商选择后自动带出 Supplier.currency（可再改；空=自动供应商默认，与后端 `currency ?? supplier.currency ?? 'CNY'` 一致）
+3. ✅ PO 详情页：sourceType 中文化（REQUISITION→来自采购申请 / DIRECT→直接采购）
+4. ✅ PR 详情页：「创建时间」移出业务摘要 → 新增「审计信息」区
 
-**Backend Contract Preserved**：零后端变更（除非发现真实契约错误）
-
-**CONTRACT ISSUE 记录（待 ADR，不实施）**：待深审后补充
+**Backend Contract Preserved**：零后端变更、零 Schema/Migration、零新依赖；金额服务端聚合、价格双通道、税率先例快照、receivedQty/remainingReceiveQty 仅 5B 回写全部不变
 
 ## Validation
 - lint / type-check / unit / build → GitHub CI（CI-First）
