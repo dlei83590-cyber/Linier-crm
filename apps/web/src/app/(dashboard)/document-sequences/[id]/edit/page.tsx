@@ -193,10 +193,10 @@ function DocumentSequenceEditForm() {
             <input type="number" min={1} max={12} value={padLength} onChange={(e) => setPadLength(e.target.value)} className={inputClass} />
           </FormField>
           <FormField label="起始序号">
-            <input type="number" min={1} value={startNo} onChange={(e) => setStartNo(e.target.value)} className={inputClass} />
+            <input type="number" min={1} value={startNo} onChange={(e) => setStartNo(Number(e.target.value) || 1)} className={inputClass} />
           </FormField>
           <FormField label="当前序号（下一个将使用；可调整）">
-            <input type="number" min={1} value={nextNo} onChange={(e) => setNextNo(e.target.value)} className={inputClass} />
+            <input type="number" min={1} value={nextNo} onChange={(e) => setNextNo(Number(e.target.value) || 1)} className={inputClass} />
           </FormField>
           <FormField label="启用">
             <select value={isActive ? "true" : "false"} onChange={(e) => setIsActive(e.target.value === "true")} className={inputClass}>
