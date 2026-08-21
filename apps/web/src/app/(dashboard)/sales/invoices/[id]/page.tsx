@@ -124,8 +124,9 @@ function InvoiceDetailPage() {
   const isDraft = detail !== null && detail.status === "DRAFT";
   // 蓝票（ISSUED 且非红字）可红冲；红字草稿自动预填引用
   const isIssuedBlue = detail !== null && detail.status === "ISSUED" && !detail.redLetter;
-  // 红字发票（redLetter）DRAFT/ISSUED 可删除（ISSUED 删除 = 撤销红冲恢复应收）
-  const isRedDeletable = detail !== null && detail.redLetter === true && (detail.status === "DRAFT" || detail.status === "ISSUED");
+  // 红字发票（redLetter）DRAFT/ISSUED/CANCELLED 可删除（ISSUED 删除 = 撤销红冲恢复应收；CANCELLED 直接删）
+  const isRedDeletable =
+    detail !== null && detail.redLetter === true && ["DRAFT", "ISSUED", "CANCELLED"].includes(detail.status);
 
   const loadDetail = async () => {
     try {

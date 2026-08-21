@@ -188,23 +188,23 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     if (arCount > 0) {
       return failConflict(ERROR_CODES.INVOICE_INVALID_STATE, "发票已生成应收，禁止删除（保持应收溯源）");
     }
-  } else if (invoice.status !== "DRAFT" && invoice.status !== "ISSUED") {
-    return failConflict(ERROR_CODES.INVOICE_INVALID_STATE, "红字发票仅 DRAFT/ISSUED 状态可删除");
+  } else if (!["DRAFT", "ISSUED", "CANCELLED"].includes(invoice.status)) {
+    // 红字发票：DRAFT/ISSUED/CANCELLED 可删（用户指令 2026-08-21：无关联应收时 CANCELLED 红字也可清理）
+    return failConflict(ERROR_CODES.INVOICE_INVALID_STATE, "红字发票仅 DRAFT/ISSUED/CANCELLED 状态可删除");
   }
 
   const now = new Date();
   await prisma.$transaction(async (tx) => {
-    // 红字 ISSUED 删除 = 撤销红冲：恢复原票 AR（仅当红字已生效且原票 AR 存在）
+    // 红字 ISSUED 删除 = 撤销红冲：恢复原票 AR（尽力恢复；原票 AR 不存在（如已反开票清除）则跳过恢复直接删——用户指令 2026-08-21）
     if (isRed && invoice.status === "ISSUED" && invoice.redInvoiceRefId) {
       const origArLocked = await tx.$queryRaw<Array<{ id: string }>>(
         Prisma.sql`SELECT "id" FROM "AccountsReceivable" WHERE "invoiceId" = ${invoice.redInvoiceRefId} AND "deletedAt" IS NULL FOR UPDATE`,
       );
-      if (origArLocked.length === 0) return { error: "ORIGINAL_AR_NOT_FOUND" as const };
-      const origAr = await tx.accountsReceivable.findFirst({
-        where: { invoiceId: invoice.redInvoiceRefId, deletedAt: null },
-      });
-      if (!origAr) return { error: "ORIGINAL_AR_NOT_FOUND" as const };
-      {
+      if (origArLocked.length > 0) {
+        const origAr = await tx.accountsReceivable.findFirst({
+          where: { invoiceId: invoice.redInvoiceRefId, deletedAt: null },
+        });
+        if (origAr) {
         const redAbs = invoice.invoiceTotal.abs();
         const newAdjusted = origAr.adjustedAmount.plus(redAbs);
         const newBalance = new Prisma.Decimal(
@@ -250,6 +250,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
           },
           user?.id,
         );
+        }
       }
     }
     await tx.invoice.update({ where: { id }, data: { deletedAt: now, isActive: false, updatedById: user!.id } });

@@ -112,3 +112,15 @@
 | SALES_ORDER_PRICE_FAILED | 重定价失败 | 400 |
 | VERSION_CONFLICT | 乐观锁冲突 | 409 |
 | QUOTATION_INVALID_STATE / QUOTATION_EXPIRED / QUOTATION_ALREADY_CONVERTED / QUOTATION_NO_LINES | convert 前置校验 | 409 |
+
+## I. 删除 + 报价单回退（用户指令 2026-08-21：层层回退、层层可删除）
+
+| # | 用例 | 方法/路径 | 预期 |
+| --- | --- | --- | --- |
+| I1 | CANCELLED 订单删除回退报价单 | DELETE /api/sales-orders/:id（CANCELLED，无送货单，有报价单） | 200 软删订单；关联报价单 status=CONVERTED→DRAFT、salesOrderId/convertedAt/convertedById 清空（可编辑+可删除） |
+| I2 | 无报价单删除 | DELETE（CANCELLED，quotationId 空） | 200 软删；报价单逻辑跳过 |
+| I3 | 报价单非 CONVERTED | DELETE（报价单已是 DRAFT/CANCELLED） | 200 软删订单；报价单不重复回退（仅 CONVERTED 回退） |
+| I4 | 非 CANCELLED 禁止删除 | DELETE（DRAFT/CONFIRMED/DELIVERED） | 409 SALES_ORDER_NOT_EDITABLE |
+| I5 | 有送货单禁止删除 | DELETE（有 Delivery） | 409 SALES_ORDER_NOT_EDITABLE（保持交付溯源） |
+| I6 | 回退后报价单可编辑 | 回退后 PATCH /api/quotations/:id | 200（status=DRAFT 命中 EDITABLE_STATUSES） |
+| I7 | 回退后报价单可删除 | 回退后 DELETE /api/quotations/:id | 200（DRAFT + salesOrderId=null） |
