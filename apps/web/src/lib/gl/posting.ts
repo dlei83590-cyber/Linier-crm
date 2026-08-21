@@ -290,6 +290,30 @@ export async function glPostFromEvent(
         actorId: payload.reversedById ? String(payload.reversedById) : null,
       });
     }
+    case 'InvoiceAdjustmentApplied': {
+      // 销售贷/借项调整（CN/DN Apply）：贷项（CREDIT）冲减应收 + 冲减收入；借项（DEBIT）增加应收 + 增加收入。
+      // 含税口径（对齐 SupplierCreditDebitNoteApplied 先例；税拆分（6001 vs 22210102）后续细化）。
+      // 与收款核销（ReceiptAllocated）同侧联动——核销在 AR.adjustedAmount 已含 CN/DN 的前提下按余额核销。
+      const amount = new Prisma.Decimal(String(payload.adjustmentTotal ?? '0')).abs();
+      if (amount.lte(0)) return { ok: false, code: 'GL_ZERO_AMOUNT', message: 'CN/DN 调整金额为 0，跳过过账', httpStatus: 409 };
+      const isCredit = String(payload.noteType ?? '') === 'CREDIT';
+      return postGlEntry(tx, {
+        sourceType: 'InvoiceAdjustmentApplied',
+        sourceId: String(payload.noteId),
+        postingDate: payload.appliedAt ? new Date(String(payload.appliedAt)) : new Date(),
+        summary: '销售贷/借项调整：' + String(payload.noteCode ?? ''),
+        lines: isCredit
+          ? [
+              { accountCode: '6001', debit: amount.toFixed(2), credit: '0', summary: '销售调整（贷项冲减收入）', sourceRef: String(payload.noteId) },
+              { accountCode: '1122', debit: '0', credit: amount.toFixed(2), summary: '冲减应收账款（贷项）', sourceRef: String(payload.noteId) },
+            ]
+          : [
+              { accountCode: '1122', debit: amount.toFixed(2), credit: '0', summary: '增加应收账款（借项）', sourceRef: String(payload.noteId) },
+              { accountCode: '6001', debit: '0', credit: amount.toFixed(2), summary: '销售调整（借项增加收入）', sourceRef: String(payload.noteId) },
+            ],
+        actorId: payload.appliedById ? String(payload.appliedById) : null,
+      });
+    }
     default:
       return { ok: false, code: 'UNSUPPORTED_EVENT', message: 'GL 未注册该事件类型：' + eventType, httpStatus: 409 };
   }

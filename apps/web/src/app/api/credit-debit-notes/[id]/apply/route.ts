@@ -9,6 +9,7 @@ import { creditDebitNoteApplySchema } from "@/lib/api/schemas";
 import { createAccountsReceivableRevision, createAccountsReceivableSnapshot, latestAccountsReceivableRevisionNo } from "@/lib/accounts-receivable/helpers";
 import { computeBalance, computeArStatus } from "@/lib/accounts-receivable/projection";
 import { publishCreditDebitNoteEvent } from "@/lib/credit-debit-note/events";
+import { writeDomainEvent } from "@/lib/domain-events/writer";
 
 export const dynamic = "force-dynamic";
 
@@ -310,6 +311,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           appliedById: user?.id ?? null,
           updatedById: user?.id ?? null,
         },
+      });
+
+      // ── 14b. 事务内原子写 Outbox（GL consumer → 销售贷/借项应收调整凭证，关联总财务） ──
+      //     与收款核销（ReceiptAllocated）同一总账域：核销按 AR 调整后余额进行，CN/DN 调整先落总账
+      await writeDomainEvent(tx, {
+        eventType: "InvoiceAdjustmentApplied",
+        aggregateType: "CreditDebitNote",
+        aggregateId: note.id,
+        payload: {
+          noteId: note.id,
+          noteCode: applied.code,
+          noteType: applied.noteType,
+          sourceInvoiceId: applied.sourceInvoiceId,
+          customerId: applied.customerId,
+          currency: applied.currency,
+          adjustmentTotal: signedTotal.toString(),
+          appliedAt: now.toISOString(),
+          appliedById: user?.id ?? null,
+        },
+        idempotencyKey: "InvoiceAdjustmentApplied|" + note.id,
       });
 
       return {
