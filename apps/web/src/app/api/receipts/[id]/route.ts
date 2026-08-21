@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { authenticate, requirePermission } from "@/lib/api-helpers";
-import { ok, failNotFound } from "@/lib/api/response";
+import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
+import { ok, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 

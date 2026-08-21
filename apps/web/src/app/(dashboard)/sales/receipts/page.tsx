@@ -62,7 +62,6 @@ function ReceiptList() {
   const canDelete = hasPermission((state.user?.roles ?? []) as RoleCode[], actionPermission("receipt", "delete"));
   const [deleting, setDeleting] = useState<ReceiptRow | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
-  const { state } = useSession();
   const canCreate =
     state.status === "authenticated" &&
     state.user !== null &&
