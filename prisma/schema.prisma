@@ -3865,7 +3865,7 @@ model DeliverySnapshot {
   createdAt   DateTime @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @db.Timestamptz(3)
 
-  @@unique([deliveryId, snapshotType])
+  @@unique([deliveryId, snapshotType, revisionNo]) // 多轮同类型快照可并存（反签收/再确认修复；对齐 0046）
   @@index([deliveryId])
   @@index([deletedAt])
 }
@@ -4152,7 +4152,7 @@ model AccountsReceivableSnapshot {
   createdAt   DateTime @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @db.Timestamptz(3)
 
-  @@unique([accountsReceivableId, snapshotType])
+  @@unique([accountsReceivableId, snapshotType, revisionNo]) // 多轮同类型快照可并存（对齐 PurchaseOrderSnapshot 0022 先例；修复多核销/反冲减 P2002）
   @@index([accountsReceivableId])
   @@index([deletedAt])
 }
