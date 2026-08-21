@@ -2,6 +2,13 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Business UX Rationalization Phase 2 / Deep Business Semantics（2026-08-21，CIO）
+
+### 新增（Phase 2 规范归档）
+
+- **规范归档**：`docs/BUSINESS_UX_RATIONALIZATION_PHASE2.md`（Phase 2 主提示词——Deep Business Semantics / 深层业务语义整改：字段所有权、来源单据继承、阶段性必填、跨字段业务约束、状态动作副作用；Field Decision Matrix / Action/State Matrix 强制前置；Derived Fields canonical source；CONTRACT ISSUE 标记机制；Runtime Acceptance 升级；每批 1 业务流程或 1-3 强关联页面；PR 输出标准 Business Problem / Root Cause / Field Decisions / Action Decisions / Business Rules Preserved / Validation / Runtime Acceptance / Known Risk）
+- **ROADMAP v1.40 → v1.41 / SPRINT_PLAN**：正式进入 Phase 2，Batch 1 = Quotation 链纵向深审（销售链 P0 优先），不再以「页面更整齐」为完成标准
+
 ## [Unreleased] - Business UX Rationalization / 业务页面合理性整改（2026-08-21，CIO）
 
 ### 新增（规范归档 + Batch 1：Sales Order 页面整改）

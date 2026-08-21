@@ -59,7 +59,17 @@ Minor changes identified during acceptance are incorporated into the next planni
 | Sprint 5 | ✅ FINAL | Purchase（5A PR/PO、5B Goods Receipt & Inbound、**5C-1 Supplier Invoice / 3-Way Match / GRIR / AP——PR #23 已合并 main `5a8dcae`**；5C-2 Payment/Allocation HOLD） |
 | Sprint 6 | ✅ FINAL | Inventory（6A Ledger Foundation、6B Operations 四块 Vertical Slice；Reservation/Costing HOLD） |
 
+## 当前阶段（2026-08-21，Business UX Rationalization Phase 2 / Deep Business Semantics 深层业务语义整改）
+
+- **阶段命名（CIO 2026-08-21，规范见 docs/BUSINESS_UX_RATIONALIZATION_PHASE2.md）**：Phase 1（Batch 1-15 表现层整改）已全部合并 main，正式进入 **Phase 2 深层业务语义整改**——不是继续「页面更整齐」，而是验证字段语义与业务事实链：字段所有权（谁提供）、来源单据继承（下游不得任意重开来源字段编辑）、阶段性必填（SAVE DRAFT/SUBMIT/APPROVE/EXECUTE 分阶段）、跨字段业务约束（日期/数量/金额/税/价格）、状态动作副作用（动作产生哪些不可逆业务事实、如何正式撤销）。
+- **执行方法**：每批 1 个业务流程或 1-3 个强关联页面；整改前完整阅读业务上下文（Prisma model / create·update schema / GET·POST·PATCH·action APIs / enums / 状态机 / RBAC / CAS·FOR UPDATE / 来源·下游单据关系 / domain event / GL·Inventory side effect / ADR / QA）；先输出 Business Context / Current Contract / Field Decision Matrix / Action Matrix / Problems Found（P0-P4）/ Proposed Changes，完成分析后再编码；UI/API/Schema/ADR 冲突必须指出，禁止静默适配；后端契约问题标记 CONTRACT ISSUE，禁止前端 workaround 掩盖。
+- **Derived Fields**：subtotal/taxAmount/totalAmount/balance/remainingQty 等必须 canonical backend source，UI 只展示或触发重算；禁止前端 quantity×unitPrice 估算替代服务端金额（除非明确标注 Preview）。
+- **整改优先级（不变）**：P0 销售链（Quotation→SO→Delivery→Invoice→AR/Receipt）→ P0 采购链 → P0 财务 → P1 主数据/库存 → P2 Project；BI/OA/Mobile 不抢占。
+- **Batch 1（Phase 2，进行中）**：Quotation 链纵向深审（列表/新建/详情/编辑 + 状态机 + 来源继承 Customer/PriceList + 下游 SO Convert）。
+
 ## 当前阶段（2026-08-21，Business UX Rationalization / 业务页面合理性整改）
+
+
 
 - **阶段命名（CIO 2026-08-21，规范见 docs/BUSINESS_UX_RATIONALIZATION.md）**：本轮统一称 **Business UX Rationalization / 业务页面合理性整改**，与 Sprint 8 UI Modernization（好看/交互现代）区分——本轮解决「好用、业务对」。页面层从「字段搬运优先」切换到「业务合理性优先」。
 - **整改流程**：每个页面先业务审计（角色/页面类型/字段审计/业务排序/自动带出/状态矩阵）再改代码；每次 1-3 个强关联页面；lint → type-check → unit → build → Runtime Acceptance（最终验证事实以 GitHub CI 为准，CI-First 不变）。
