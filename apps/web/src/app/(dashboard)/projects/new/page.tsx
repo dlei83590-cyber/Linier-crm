@@ -89,7 +89,7 @@ function ProjectCreateForm() {
   // Customer selector 数据源（GET FINAL）
   useEffect(() => {
     const controller = new AbortController();
-    apiFetch<CustomerOption[]>("/api/customers?pageSize=100", { signal: controller.signal })
+    apiFetch<CustomerOption[]>("/api/business-partners?pageSize=100&type=CUSTOMER&isActive=true", { signal: controller.signal })
       .then((body) => {
         setCustomers(body.data);
         setSelectorsLoading(false);

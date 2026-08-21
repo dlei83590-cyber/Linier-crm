@@ -24,7 +24,7 @@ export interface SalesOrderPricingLineInput {
 
 export interface SalesOrderPricingInput {
   quotationId: string; // 来源报价（快照 quotationId 回写，保持价格链溯源）
-  customerId: string; // Customer.id（转 PricingContext.partnerId = customer.partnerId）
+  customerId: string; // BusinessPartner.id（销售链客户=往来单位，PricingContext.partnerId = customerId）
   currency: string;
   pricingDate: Date;
   taxProfileId?: string;
@@ -50,9 +50,9 @@ export class SalesOrderPricingService {
 
   /** 逐行重定价：SalesOrder 上下文 → PricingContext → resolvePrice() → 回写快照 quotationId（不写 quotationLineId） */
   async priceLines(input: SalesOrderPricingInput): Promise<SalesOrderPricingLineResult[]> {
-    // 客户 → Partner（PricingEngine 按 partnerId 命中 PartnerPrice）
-    const customer = await this.db.customer.findFirst({ where: { id: input.customerId, deletedAt: null } });
-    const partnerId = customer?.partnerId ?? undefined;
+    // 客户 = BusinessPartner（统一往来单位；PricingEngine 按 partnerId 命中 PartnerPrice）
+    const customer = await this.db.businessPartner.findFirst({ where: { id: input.customerId, deletedAt: null } });
+    const partnerId = customer?.id ?? undefined;
 
     const results: SalesOrderPricingLineResult[] = [];
     for (const line of input.lines) {

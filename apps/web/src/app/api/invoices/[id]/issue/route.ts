@@ -73,10 +73,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!vat.ok) return { error: vat.code as "INVOICE_TYPE_REQUIRED" | "TAX_INVOICE_CODE_INVALID" | "TAX_INVOICE_NO_INVALID", message: vat.message };
     const normTaxCode = taxInvoiceCode ? normalizeTaxInvoiceNumber(taxInvoiceCode) : null;
     const normTaxNo = taxInvoiceNo ? normalizeTaxInvoiceNumber(taxInvoiceNo) : null;
-    // I10：开票客户必须关联 BusinessPartner 且已维护开票资料（title+uscc 必填，fail closed）
-    const customer = await tx.customer.findFirst({ where: { id: invoice.customerId, deletedAt: null } });
-    if (!customer?.partnerId) return { error: "PARTNER_LINK_REQUIRED" as const };
-    const invInfo = await tx.businessPartnerInvoiceInfo.findFirst({ where: { partnerId: customer.partnerId, deletedAt: null } });
+    // I10：开票客户必须为 BusinessPartner 且已维护开票资料（title+uscc 必填，fail closed）
+    const customer = await tx.businessPartner.findFirst({ where: { id: invoice.customerId, deletedAt: null } });
+    if (!customer) return { error: "PARTNER_LINK_REQUIRED" as const };
+    const invInfo = await tx.businessPartnerInvoiceInfo.findFirst({ where: { partnerId: customer.id, deletedAt: null } });
     if (!invInfo || !invInfo.title || !invInfo.uscc) return { error: "PARTNER_INVOICE_INFO_MISSING" as const };
     // 红字（R3 服务端取反 / R4 防超冲 / R2+R6 引用终态蓝票禁链式）
     let redLetter = false;

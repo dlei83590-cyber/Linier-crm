@@ -24,7 +24,7 @@ export interface QuotationPricingLineInput {
 
 export interface QuotationPricingInput {
   quotationId: string;
-  customerId: string; // Customer.id（转 PricingContext.partnerId = customer.partnerId）
+  customerId: string; // BusinessPartner.id（销售链客户=往来单位，PricingContext.partnerId = customerId）
   currency: string;
   pricingDate: Date;
   taxProfileId?: string;
@@ -50,9 +50,9 @@ export class QuotationPricingService {
 
   /** 逐行定价：Quotation 上下文 → PricingContext → resolvePrice() → 回写快照 quotationId/lineId */
   async priceLines(input: QuotationPricingInput): Promise<QuotationPricingLineResult[]> {
-    // 客户 → Partner（BusinessPartner 唯一主体；PricingEngine 按 partnerId 命中 PartnerPrice）
-    const customer = await this.db.customer.findFirst({ where: { id: input.customerId, deletedAt: null } });
-    const partnerId = customer?.partnerId ?? undefined;
+    // 客户 = BusinessPartner（统一往来单位；PricingEngine 按 partnerId 命中 PartnerPrice）
+    const customer = await this.db.businessPartner.findFirst({ where: { id: input.customerId, deletedAt: null } });
+    const partnerId = customer?.id ?? undefined;
 
     const results: QuotationPricingLineResult[] = [];
     for (const line of input.lines) {
