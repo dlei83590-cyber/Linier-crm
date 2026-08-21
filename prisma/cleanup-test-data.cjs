@@ -32,12 +32,27 @@ const SOFT_DELETE_TABLES = [
 async function main() {
   console.error("[cleanup] start");
   let total = 0;
-  for (const t of SOFT_DELETE_TABLES) {
-    try {
-      const r = await prisma.$executeRawUnsafe("DELETE FROM " + JSON.stringify(t) + " WHERE \"deletedAt\" IS NOT NULL");
-      if (r > 0) { console.error("[cleanup] " + t + ": " + r + " purged"); total += r; }
-    } catch (e) {
-      console.error("[cleanup] " + t + ": skipped (" + (e.message || "").slice(0, 80) + ")");
+  // 多轮循环：每轮删除能删的软删残留；被外键阻止（子表残留先删后父表可删）的进入下一轮重试；
+  // 达到稳定（无变化）或轮次上限后，剩余的被活跃行引用的父表报告为"业务事实保留"
+  const MAX_ROUNDS = 5;
+  for (let round = 1; round <= MAX_ROUNDS; round++) {
+    let roundDeleted = 0;
+    const skippedThisRound = [];
+    for (const t of SOFT_DELETE_TABLES) {
+      try {
+        const r = await prisma.$executeRawUnsafe("DELETE FROM " + JSON.stringify(t) + " WHERE \"deletedAt\" IS NOT NULL");
+        if (r > 0) { console.error("[cleanup] round " + round + " " + t + ": " + r + " purged"); total += r; roundDeleted += r; }
+      } catch (e) {
+        skippedThisRound.push(t);
+      }
+    }
+    console.error("[cleanup] round " + round + " deleted: " + roundDeleted + " (total " + total + ")");
+    if (roundDeleted === 0) {
+      // 无变化：剩余被阻止的表（活跃行引用）报告
+      for (const t of skippedThisRound) {
+        console.error("[cleanup] retained (active refs): " + t);
+      }
+      break;
     }
   }
   console.error("[cleanup] soft-deleted total: " + total);
