@@ -5,7 +5,7 @@ import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/l
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
-import { createDeliverySnapshot, latestDeliveryRevisionNo } from "@/lib/delivery/helpers";
+import { createDeliveryRevision, createDeliverySnapshot, latestDeliveryRevisionNo } from "@/lib/delivery/helpers";
 import { publishDeliveryEvent } from "@/lib/delivery/events";
 import { recalcSalesOrderDeliveryProjections } from "@/lib/sales-order/delivery-aggregation";
 import { z } from "zod";
@@ -89,7 +89,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       },
     });
 
-    // 5. Snapshot 留痕（复用 DELIVERED 快照类型记录反签收事实；含 changeReason）
+    // 5. Revision + Snapshot 留痕（复用 DELIVERED 快照类型记录反签收事实；含 changeReason）
+    //    先创建 DeliveryRevision 递增 revisionNo——否则与 confirm-delivery 的 DELIVERED 快照同 revisionNo 撞唯一键
+    await createDeliveryRevision(tx, id, changeReason ?? "送货单反签收", { status: "UNCONFIRMED", previousStatus: "DELIVERED" }, user?.id);
     const revisionNo = await latestDeliveryRevisionNo(tx, id);
     await createDeliverySnapshot(
       tx,

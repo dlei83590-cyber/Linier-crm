@@ -6,7 +6,7 @@ import { ok, failValidation, failConflict, failNotFound, fail } from "@/lib/api/
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { deliveryConfirmSchema } from "@/lib/api/schemas";
-import { computeDeliveryAllocation, createDeliverySnapshot, latestDeliveryRevisionNo } from "@/lib/delivery/helpers";
+import { computeDeliveryAllocation, createDeliveryRevision, createDeliverySnapshot, latestDeliveryRevisionNo } from "@/lib/delivery/helpers";
 import { publishDeliveryEvent } from "@/lib/delivery/events";
 import { recalcSalesOrderDeliveryProjections } from "@/lib/sales-order/delivery-aggregation";
 import { publishSalesOrderEvent } from "@/lib/sales-order/events";
@@ -124,7 +124,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       },
     });
 
-    // ── 8. 创建 DeliverySnapshot(DELIVERED)（Decimal 一律 toString） ────────
+    // ── 8. Revision + 创建 DeliverySnapshot(DELIVERED)（Decimal 一律 toString） ──
+    //     先创建 DeliveryRevision 递增 revisionNo——反签收后再确认时 DELIVERED 快照需新 revisionNo（0046 唯一约束）
+    await createDeliveryRevision(tx, id, changeReason ?? "确认收货", { status: "DELIVERED", podStatus }, user?.id);
     const revisionNo = await latestDeliveryRevisionNo(tx, id);
     await createDeliverySnapshot(
       tx,
