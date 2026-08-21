@@ -8,12 +8,15 @@
  */
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
 import { formatDate } from "@/lib/format";
 
 interface ItemRow {
@@ -73,11 +76,15 @@ const ITEM_TONE_MAP: Record<string, "success" | "neutral" | "warning" | "danger"
 };
 
 function ItemList() {
+  const router = useRouter();
+  const toast = useToast();
   const { state } = useSession();
-  const canCreate =
-    state.status === "authenticated" &&
-    state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("item", "create"));
+  const roles = (state.user?.roles ?? []) as RoleCode[];
+  const canCreate = hasPermission(roles, actionPermission("item", "create"));
+  const canEdit = hasPermission(roles, actionPermission("item", "edit"));
+  const canDelete = hasPermission(roles, actionPermission("item", "delete"));
+  const [deleting, setDeleting] = useState<ItemRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const [codeInput, setCodeInput] = useState("");
   const [nameInput, setNameInput] = useState("");
@@ -110,6 +117,24 @@ function ItemList() {
     setStatusInput("");
     setFilters({});
     setPage(1);
+  };
+
+  const runDelete = async () => {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      await apiFetch(`/api/items/${deleting.id}`, { method: "DELETE" });
+      toast.success("物料已删除");
+      setDeleting(null);
+      refresh();
+    } catch (err) {
+      const e = err instanceof ApiClientError ? err : new ApiClientError(0, "删除失败", "NETWORK_ERROR");
+      toast.error("删除失败", e.message);
+      setDeleting(null);
+      refresh();
+    } finally {
+      setDeleteBusy(false);
+    }
   };
 
   return (
@@ -253,6 +278,30 @@ function ItemList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        rowActions={(row) => (
+          <div className="flex justify-end gap-1">
+            {canEdit && (
+              <button type="button" onClick={() => router.push(`/items/${row.id}/edit`)} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary transition-colors hover:bg-slate-100">
+                编辑
+              </button>
+            )}
+            {canDelete && (
+              <button type="button" onClick={() => setDeleting(row)} className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text transition-colors hover:bg-red-50">
+                删除
+              </button>
+            )}
+          </div>
+        )}
+      />
+      <ConfirmActionDialog
+        open={deleting !== null}
+        title={`删除物料「${deleting?.name ?? ""}」？`}
+        description="物料已被价格表/项目/单据引用后不可删除（可编辑）；无引用将软删除并停用。"
+        confirmLabel="删除"
+        tone="danger"
+        busy={deleteBusy}
+        onConfirm={runDelete}
+        onCancel={() => setDeleting(null)}
       />
     </AppPage>
   );
