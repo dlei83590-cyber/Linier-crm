@@ -1,19 +1,21 @@
 "use client";
 
 /**
- * Warehouse Locations — 库位列表页（F2-2 Master Data Workspaces）
- *
- * 依据 Contract Card（warehouse-locations.md）：backend 仅 GET list FINAL → 本 Wave 实现 List。
- * 父上下文：支持 ?warehouseId= 参数（从仓库行「查看库位」进入），
- * 同时保留独立搜索入口；warehouseId 筛选为已核验的 backend 参数。
+ * Warehouse Locations — 库位列表页（主数据 CRUD：新建/编辑/删除行操作）
+ * 父上下文：支持 ?warehouseId= 参数（从仓库行「查看库位」进入），同时保留独立搜索入口。
+ * 删除遵循「有应用不可删除（可编辑）」：被库存流水/单据/盘点/调拨/调整/转换引用 → 后端 409。
  */
 import { Suspense, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { hasPermission, actionPermission, PERMISSIONS, type RoleCode } from "@nilier-crm/shared";
+import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { PERMISSIONS } from "@nilier-crm/shared";
-import { AppPage, EntityListWorkspace } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
 import { formatDate } from "@/lib/format";
 
 interface LocationRow {
@@ -26,8 +28,17 @@ interface LocationRow {
 }
 
 function LocationListInner() {
+  const router = useRouter();
+  const toast = useToast();
   const searchParams = useSearchParams();
   const initialWarehouseId = searchParams.get("warehouseId") ?? "";
+  const { state } = useSession();
+  const roles = (state.user?.roles ?? []) as RoleCode[];
+  const canCreate = hasPermission(roles, actionPermission("warehouse-location", "create"));
+  const canEdit = hasPermission(roles, actionPermission("warehouse-location", "edit"));
+  const canDelete = hasPermission(roles, actionPermission("warehouse-location", "delete"));
+  const [deleting, setDeleting] = useState<LocationRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const [codeInput, setCodeInput] = useState("");
   const [activeInput, setActiveInput] = useState("");
@@ -55,16 +66,44 @@ function LocationListInner() {
     setPage(1);
   };
 
+  const runDelete = async () => {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      await apiFetch("/api/warehouse-locations/" + deleting.id, { method: "DELETE" });
+      toast.success("库位已删除");
+      setDeleting(null);
+      refresh();
+    } catch (err) {
+      const e = err instanceof ApiClientError ? err : new ApiClientError(0, "删除失败", "NETWORK_ERROR");
+      toast.error("删除失败", e.message);
+      setDeleting(null);
+      refresh();
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
   return (
     <AppPage>
       <EntityListWorkspace<LocationRow>
         title="库位"
         description={
           initialWarehouseId
-            ? "库位列表（已按所属仓库过滤，来自仓库详情入口）"
-            : "库位主数据（只读：后端当前仅开放列表契约）"
+            ? "库位列表（已按所属仓库过滤，来自仓库详情入口）——支持新建/编辑/删除"
+            : "库位主数据（按仓库划分的存储位置）——支持新建/编辑/删除"
         }
-        emptyMessage="暂无库位"
+        emptyMessage="暂无库位——点击「+ 新建库位」创建第一个库位"
+        headerActions={
+          canCreate ? (
+            <Link
+              href={initialWarehouseId ? "/warehouse-locations/new?warehouseId=" + initialWarehouseId : "/warehouse-locations/new"}
+              className={BUTTON_PRIMARY_CLASS}
+            >
+              + 新建库位
+            </Link>
+          ) : undefined
+        }
         filters={
           <>
             <input
@@ -106,7 +145,15 @@ function LocationListInner() {
           </>
         }
         columns={[
-          { key: "code", header: "库位编码" },
+          {
+            key: "code",
+            header: "库位编码",
+            render: (row) => (
+              <Link href={"/warehouse-locations/" + row.id + "/edit"} className="font-medium text-brand-600 hover:underline">
+                {row.code}
+              </Link>
+            ),
+          },
           { key: "name", header: "名称" },
           {
             key: "warehouse",
@@ -133,6 +180,30 @@ function LocationListInner() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        rowActions={(row) => (
+          <div className="flex justify-end gap-1">
+            {canEdit && (
+              <button type="button" onClick={() => router.push("/warehouse-locations/" + row.id + "/edit")} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary transition-colors hover:bg-slate-100">
+                编辑
+              </button>
+            )}
+            {canDelete && (
+              <button type="button" onClick={() => setDeleting(row)} className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text transition-colors hover:bg-red-50">
+                删除
+              </button>
+            )}
+          </div>
+        )}
+      />
+      <ConfirmActionDialog
+        open={deleting !== null}
+        title={"删除库位「" + (deleting?.name ?? "") + "」？"}
+        description="库位已被库存流水/单据/盘点/调拨/调整/转换引用后不可删除（可编辑）；无引用将软删除并停用。"
+        confirmLabel="删除"
+        tone="danger"
+        busy={deleteBusy}
+        onConfirm={runDelete}
+        onCancel={() => setDeleting(null)}
       />
     </AppPage>
   );

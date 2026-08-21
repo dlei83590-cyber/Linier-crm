@@ -51,6 +51,18 @@
 | D7 | 更新状态/时间窗口（乐观锁） | PATCH | 200 |
 | D8 | 软删除 | DELETE | 200 `{deleted:true}` |
 
+## D.5 Price List Items 单价明细管理（/api/price-lists/:id/items）
+
+| # | 用例 | 输入 | 预期 |
+| --- | --- | --- | --- |
+| PI-1 | 新增单价 | { itemId, unitPriceExclTax, taxRate } | 201；服务端算 taxAmount/inclTax（不信任客户端） |
+| PI-2 | 物料不存在 | itemId 随机 | 409 NOT_FOUND |
+| PI-3 | 未税价 ≤ 0 | unitPriceExclTax=0 | 400 VALIDATION_ERROR |
+| PI-4 | 编辑单价 | { version, unitPriceExclTax } | 200 version+1；金额重算 |
+| PI-5 | 编辑过期 version | 旧 version | 409 VERSION_CONFLICT |
+| PI-6 | 删除单价 | DELETE :itemId | 200 软删（历史报价快照不受影响） |
+| PI-7 | 无 price-list:edit | POST/PATCH/DELETE items | 403 |
+
 ## E. Price List Versions（/api/price-list-versions）
 
 | # | 用例 | 方法/路径 | 预期 |

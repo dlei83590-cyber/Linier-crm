@@ -204,6 +204,9 @@ const SEED_RESTRICTED_ACTION_PERMISSIONS: Array<{ name: string; code: string; mo
   // Sprint 5B：Goods Receipt Inbound 子资源（warehouse-location 由 Warehouse 驱动；各 line 由单据驱动，客户端不直接改行——对齐 5A line 模式）
   { name: "view warehouse-location", code: "warehouse-location:view", module: "warehouse-location" },
   { name: "edit warehouse-location", code: "warehouse-location:edit", module: "warehouse-location" },
+  // 库位主数据 CRUD（backlog）：create/delete 补齐（warehouse-location 由 Warehouse 驱动，但主数据维护需完整 CRUD）
+  { name: "create warehouse-location", code: "warehouse-location:create", module: "warehouse-location" },
+  { name: "delete warehouse-location", code: "warehouse-location:delete", module: "warehouse-location" },
   { name: "view purchase-receipt-line", code: "purchase-receipt-line:view", module: "purchase-receipt-line" },
   { name: "edit purchase-receipt-line", code: "purchase-receipt-line:edit", module: "purchase-receipt-line" },
   { name: "view warehouse-receipt-line", code: "warehouse-receipt-line:view", module: "warehouse-receipt-line" },
@@ -537,6 +540,7 @@ const SEED_COMMERCIAL_TERMS = [
 const SEED_DOCUMENT_SEQUENCES = [
   { code: "QUO", name: "报价单", docType: "QUOTATION", prefix: "QT", nextNo: 1, padLength: 6 },
   { code: "SO", name: "销售订单", docType: "SALES_ORDER", prefix: "SO", nextNo: 1, padLength: 6 },
+  { code: "PIN", name: "生产入库单", docType: "PRODUCTION_INBOUND", prefix: "PIN", nextNo: 1, padLength: 6 }, // P-2：inboundNo 创建即取号
   { code: "PO", name: "采购订单", docType: "PURCHASE_ORDER", prefix: "PO", nextNo: 1, padLength: 6 },
   // Sprint 5A：Purchase Requisition 单据序列（docType=PURCHASE_REQUISITION 为 5A 新增，prefix PR，padLength 6；幂等 upsert——仅补 PR，PO 序列复用上方已有，**禁止重复 seed**）
   { code: "PR", name: "采购申请", docType: "PURCHASE_REQUISITION", prefix: "PR", nextNo: 1, padLength: 6 },
