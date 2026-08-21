@@ -1,17 +1,21 @@
 "use client";
 
 /**
- * Unit of Measures — 计量单位列表页（F2-2 Master Data Workspaces）
+ * Unit of Measures — 计量单位列表页（Master-Data CRUD：列表 + 新建/编辑/删除行操作）
  *
- * 依据 Contract Card（unit-of-measures.md）：backend 仅 GET list FINAL →
- * 本 Wave 只实现 List（无 Detail/Create/Edit contract，不越界补后端）。
+ * 删除遵循「有应用不可删除（可编辑）」：被物料/单据行/换算引用 → 后端 409，前端 toast 提示。
  */
 import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
+import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { actionPermission } from "@nilier-crm/shared";
-import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
 import { formatDate } from "@/lib/format";
 
 interface UomRow {
@@ -39,6 +43,16 @@ const APPROVAL_TONE_MAP: Record<string, "neutral" | "info" | "success" | "danger
 };
 
 function UomList() {
+  const router = useRouter();
+  const toast = useToast();
+  const { state } = useSession();
+  const roles = (state.user?.roles ?? []) as RoleCode[];
+  const canCreate = hasPermission(roles, actionPermission("unit-of-measure", "create"));
+  const canEdit = hasPermission(roles, actionPermission("unit-of-measure", "edit"));
+  const canDelete = hasPermission(roles, actionPermission("unit-of-measure", "delete"));
+  const [deleting, setDeleting] = useState<UomRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
   const [codeInput, setCodeInput] = useState("");
   const [nameInput, setNameInput] = useState("");
   const [activeInput, setActiveInput] = useState("");
@@ -64,12 +78,37 @@ function UomList() {
     setPage(1);
   };
 
+  const runDelete = async () => {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      await apiFetch("/api/unit-of-measures/" + deleting.id, { method: "DELETE" });
+      toast.success("计量单位已删除");
+      setDeleting(null);
+      refresh();
+    } catch (err) {
+      const e = err instanceof ApiClientError ? err : new ApiClientError(0, "删除失败", "NETWORK_ERROR");
+      toast.error("删除失败", e.message);
+      setDeleting(null);
+      refresh();
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
   return (
     <AppPage>
       <EntityListWorkspace<UomRow>
         title="计量单位"
-        description="计量单位主数据（只读：后端当前仅开放列表契约）"
-        emptyMessage="暂无计量单位"
+        description="计量单位主数据（件/套/米/公斤…）——列表支持新建/编辑/删除"
+        emptyMessage="暂无计量单位——点击「+ 新建计量单位」创建第一个单位"
+        headerActions={
+          canCreate ? (
+            <Link href="/unit-of-measures/new" className={BUTTON_PRIMARY_CLASS}>
+              + 新建计量单位
+            </Link>
+          ) : undefined
+        }
         filters={
           <>
             <input
@@ -120,7 +159,15 @@ function UomList() {
           </>
         }
         columns={[
-          { key: "code", header: "编码" },
+          {
+            key: "code",
+            header: "编码",
+            render: (row) => (
+              <Link href={"/unit-of-measures/" + row.id + "/edit"} className="font-medium text-brand-600 hover:underline">
+                {row.code}
+              </Link>
+            ),
+          },
           { key: "name", header: "名称" },
           { key: "symbol", header: "符号", render: (row) => row.symbol ?? "—" },
           {
@@ -157,6 +204,30 @@ function UomList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        rowActions={(row) => (
+          <div className="flex justify-end gap-1">
+            {canEdit && (
+              <button type="button" onClick={() => router.push("/unit-of-measures/" + row.id + "/edit")} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary transition-colors hover:bg-slate-100">
+                编辑
+              </button>
+            )}
+            {canDelete && (
+              <button type="button" onClick={() => setDeleting(row)} className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text transition-colors hover:bg-red-50">
+                删除
+              </button>
+            )}
+          </div>
+        )}
+      />
+      <ConfirmActionDialog
+        open={deleting !== null}
+        title={"删除计量单位「" + (deleting?.name ?? "") + "」？"}
+        description="计量单位已被物料/单据/换算引用后不可删除（可编辑）；无引用将软删除并停用。"
+        confirmLabel="删除"
+        tone="danger"
+        busy={deleteBusy}
+        onConfirm={runDelete}
+        onCancel={() => setDeleting(null)}
       />
     </AppPage>
   );
