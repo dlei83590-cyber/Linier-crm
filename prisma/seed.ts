@@ -540,6 +540,7 @@ const SEED_COMMERCIAL_TERMS = [
 const SEED_DOCUMENT_SEQUENCES = [
   { code: "QUO", name: "报价单", docType: "QUOTATION", prefix: "QT", nextNo: 1, padLength: 6 },
   { code: "SO", name: "销售订单", docType: "SALES_ORDER", prefix: "SO", nextNo: 1, padLength: 6 },
+  { code: "PIN", name: "生产入库单", docType: "PRODUCTION_INBOUND", prefix: "PIN", nextNo: 1, padLength: 6 }, // P-2：inboundNo 创建即取号
   { code: "PO", name: "采购订单", docType: "PURCHASE_ORDER", prefix: "PO", nextNo: 1, padLength: 6 },
   // Sprint 5A：Purchase Requisition 单据序列（docType=PURCHASE_REQUISITION 为 5A 新增，prefix PR，padLength 6；幂等 upsert——仅补 PR，PO 序列复用上方已有，**禁止重复 seed**）
   { code: "PR", name: "采购申请", docType: "PURCHASE_REQUISITION", prefix: "PR", nextNo: 1, padLength: 6 },

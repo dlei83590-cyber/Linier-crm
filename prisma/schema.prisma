@@ -241,6 +241,7 @@ enum DocumentType {
   INVENTORY_CONVERSION // 库存转换单 CVT（Sprint 6B 新增，同 item Repack / UOM Conversion）
   SUPPLIER_INVOICE // 供应商发票 SINV（Sprint 5C-1 新增；DocumentSequence docType=SUPPLIER_INVOICE，创建即取号 P1 Final，缺失 fail closed）
   SUPPLIER_CREDIT_NOTE // 供应商贷项通知单 SCN（Sprint 5C-2 新增；AP 侧冲减，5C-2 创建即取号）
+  PRODUCTION_INBOUND // 生产入库单 PIN（P-2 新增；半成品→产成品入库，inboundNo DocumentSequence 创建即取号）
   SUPPLIER_DEBIT_NOTE // 供应商借项通知单 SDN（Sprint 5C-2 新增；AP 侧增加，5C-2 创建即取号）
 }
 
@@ -5236,6 +5237,7 @@ enum InventoryMovementSourceType {
   TRANSFER // 6B：调拨（SOURCE_OUT + DESTINATION_IN 双边，同一 movementGroupId，同步共享 Ledger Command）
   ADJUSTMENT // 6B：库存调整（Count 差异 / Manual，经共享 Ledger Command；Count 经 sourceStockCountLineId 追溯，不新增 STOCK_COUNT sourceType）
   CONVERSION // 6B：同 item Repack / UOM Conversion（CONSUME + PRODUCE，同一 movementGroupId）
+  PRODUCTION // P-2：生产入库 POSTED（半成品 OUT + 产成品 IN，同一 movementGroupId，role 复用 CONSUME/PRODUCE）
   REVERSAL // 纠错：冲销（拥有自己的 source/action identity，不与原 Movement 共用幂等身份）
   CORRECTION // 纠错：修正（同上）
 }
