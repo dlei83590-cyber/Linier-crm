@@ -82,6 +82,8 @@ interface ReceiptDetail {
 interface ArOption {
   id: string;
   invoiceId: string;
+  originalAmount?: string;
+  adjustedAmount?: string;
   balanceAmount: string;
   status: string;
   invoice?: { id: string; code: string | null; status: string | null } | null;
@@ -512,7 +514,8 @@ function ReceiptDetailPage() {
                     <tr>
                       <th className="px-3 py-2">选择</th>
                       <th className="px-3 py-2">发票</th>
-                      <th className="px-3 py-2">应收余额</th>
+                      <th className="px-3 py-2">贷/借项调整</th>
+                      <th className="px-3 py-2">应收余额（含调整）</th>
                       <th className="px-3 py-2">状态</th>
                       <th className="px-3 py-2">本次核销</th>
                     </tr>
@@ -531,6 +534,16 @@ function ReceiptDetailPage() {
                             />
                           </td>
                           <td className="px-3 py-2 text-ink-secondary">{ar.invoice?.code ?? ar.invoiceId}</td>
+                          <td className="px-3 py-2 text-ink-secondary">
+                            {ar.adjustedAmount != null && Number(ar.adjustedAmount) !== 0 ? (
+                              <span className={Number(ar.adjustedAmount) < 0 ? "text-red-600" : "text-emerald-600"}>
+                                {Number(ar.adjustedAmount) < 0 ? "贷项 -" : "借项 +"}
+                                {Math.abs(Number(ar.adjustedAmount))}
+                              </span>
+                            ) : (
+                              <span className="text-ink-muted">—</span>
+                            )}
+                          </td>
                           <td className="px-3 py-2 text-ink-secondary">{ar.balanceAmount}</td>
                           <td className="px-3 py-2 text-ink-secondary">{ar.status}</td>
                           <td className="px-3 py-2">
@@ -549,7 +562,7 @@ function ReceiptDetailPage() {
                     })}
                     {arOptions.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="px-3 py-8 text-center text-sm text-ink-muted">
+                        <td colSpan={6} className="px-3 py-8 text-center text-sm text-ink-muted">
                           该客户无正余额应收未结项
                         </td>
                       </tr>
