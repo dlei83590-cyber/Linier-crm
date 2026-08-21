@@ -54,10 +54,13 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (receipt.status !== "VOIDED") {
     return failConflict(ERROR_CODES.RECEIPT_VOID_FORBIDDEN, "仅 VOIDED 状态可删除（作废后清理列表）；未核销/已核销收款单禁止删除");
   }
-  // 引用防御：已有核销记录（ReceiptAllocation.receiptId）禁止删除——保持核销审计
-  const allocCount = await prisma.receiptAllocation.count({ where: { receiptId: id, deletedAt: null } });
-  if (allocCount > 0) {
-    return failConflict(ERROR_CODES.RECEIPT_VOID_FORBIDDEN, "收款单已有核销记录，禁止删除（保持核销审计）");
+  // 引用防御：仅**实际应用**（未冲销 reversedAt IS NULL）的核销记录阻止删除；
+  // 已冲销（reversedAt 非空）的核销属历史痕迹，不再实际核销该收款单 → 允许删除清理
+  const activeAllocCount = await prisma.receiptAllocation.count({
+    where: { receiptId: id, deletedAt: null, reversedAt: null },
+  });
+  if (activeAllocCount > 0) {
+    return failConflict(ERROR_CODES.RECEIPT_VOID_FORBIDDEN, "收款单仍有未冲销的核销记录，禁止删除（先冲销核销后再删除）");
   }
 
   const now = new Date();
