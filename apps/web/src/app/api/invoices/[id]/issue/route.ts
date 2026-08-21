@@ -242,7 +242,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       await createAccountsReceivableRevision(
         tx,
         origAr.id,
-        "红字发票冲减应收（红冲自 " + (original.code ?? "") + "）",
+        "红字发票冲减应收（红冲自 " + (original?.code ?? "") + "）",
         {
           invoiceId: redRefId,
           redInvoiceId: id,
