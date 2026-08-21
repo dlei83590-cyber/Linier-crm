@@ -56,7 +56,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
 
       // 3. 复制 header → 红字 DRAFT
-      const now = new Date();
       const red = await tx.invoice.create({
         data: {
           deliveryId: original.deliveryId,
