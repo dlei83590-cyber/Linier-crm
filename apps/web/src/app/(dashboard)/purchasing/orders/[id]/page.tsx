@@ -16,7 +16,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatMoney } from "@/lib/format";
 
 /** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
 const STATUS_LABELS: Record<string, string> = {
@@ -29,6 +29,12 @@ const STATUS_LABELS: Record<string, string> = {
   CANCELLED: "已取消",
 };
 
+/** 来源类型中文（Phase 2：枚举展示中文，不展示数据库枚举值） */
+const SOURCE_TYPE_LABELS: Record<string, string> = {
+  REQUISITION: "来自采购申请",
+  DIRECT: "直接采购",
+};
+
 interface OrderDetail {
   id: string;
   code: string;
@@ -37,7 +43,11 @@ interface OrderDetail {
   currency?: string | null;
   orderDate?: string | null;
   expectedDeliveryDate?: string | null;
+  subtotal?: string | null;
+  taxAmount?: string | null;
+  totalAmount?: string | null;
   remark?: string | null;
+  confirmedAt?: string | null;
   supplier?: { name: string | null } | null;
   requisition?: { code: string | null } | null;
   lines?: Array<{
@@ -46,6 +56,7 @@ interface OrderDetail {
     description: string;
     quantity: string;
     unitPrice?: string | null;
+    totalAmount?: string | null;
     priceSource?: string | null;
     item?: { code: string | null; name: string | null } | null;
     uom?: { symbol: string | null } | null;
@@ -200,12 +211,16 @@ function OrderDetailPage() {
         summary={
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <InfoItem label="单号" value={detail.code} />
-            <InfoItem label="来源类型" value={detail.sourceType} />
+            <InfoItem label="来源类型" value={SOURCE_TYPE_LABELS[detail.sourceType ?? ""] ?? detail.sourceType} />
             <InfoItem label="供应商" value={detail.supplier?.name} />
             <InfoItem label="来源申请" value={detail.requisition?.code} />
             <InfoItem label="币种" value={detail.currency} />
             <InfoItem label="下单日期" value={formatDate(detail.orderDate)} />
             <InfoItem label="期望交期" value={formatDate(detail.expectedDeliveryDate)} />
+            <InfoItem label="未税合计" value={formatMoney(detail.subtotal ?? "0", detail.currency ?? "CNY")} />
+            <InfoItem label="税额" value={formatMoney(detail.taxAmount ?? "0", detail.currency ?? "CNY")} />
+            <InfoItem label="含税合计" value={formatMoney(detail.totalAmount ?? "0", detail.currency ?? "CNY")} />
+            <InfoItem label="确认时间" value={formatDate(detail.confirmedAt)} />
             <InfoItem label="备注" value={detail.remark} />
           </div>
         }
