@@ -217,7 +217,7 @@ function PriceListPage() {
             header: "价格策略",
             render: (row) => row.policy?.name ?? "—",
           },
-          { key: "currency", header: "币种", render: (row) => row.currency ?? "—" },
+          // 单币种 CNY：币种列移除（消除多币种残留）
           {
             key: "items",
             header: "条目数",
