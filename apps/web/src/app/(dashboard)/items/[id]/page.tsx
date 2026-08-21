@@ -202,8 +202,6 @@ function ItemDetailPage() {
             <InfoItem label="分类" value={detail.category?.name ?? null} />
             <InfoItem label="品牌" value={detail.brand} />
             <InfoItem label="制造商" value={detail.manufacturer} />
-            <InfoItem label="创建时间" value={formatDate(detail.createdAt)} />
-            <InfoItem label="更新时间" value={formatDate(detail.updatedAt)} />
           </div>
         }
         audit={
