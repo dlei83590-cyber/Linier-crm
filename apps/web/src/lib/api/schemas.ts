@@ -197,17 +197,22 @@ export const quotationLineCreateSchema = z.object({
   lineNo: z.number().int().positive().optional(),
 });
 
-export const quotationCreateSchema = z.object({
-  customerId: z.string().min(1),
-  opportunityId: z.string().min(1).nullable().optional(),
-  projectId: z.string().min(1).nullable().optional(),
-  currency: z.string().max(10).default('CNY'),
-  validFrom: z.string().datetime().nullable().optional(),
-  validUntil: z.string().datetime().nullable().optional(),
-  taxProfileId: z.string().min(1).nullable().optional(),
-  remark: z.string().max(1000).nullable().optional(),
-  lines: z.array(quotationLineCreateSchema).min(1, '至少需要一行'),
-});
+export const quotationCreateSchema = z
+  .object({
+    customerId: z.string().min(1),
+    opportunityId: z.string().min(1).nullable().optional(),
+    projectId: z.string().min(1).nullable().optional(),
+    currency: z.string().max(10).default('CNY'),
+    validFrom: z.string().datetime().nullable().optional(),
+    validUntil: z.string().datetime().nullable().optional(),
+    taxProfileId: z.string().min(1).nullable().optional(),
+    remark: z.string().max(1000).nullable().optional(),
+    lines: z.array(quotationLineCreateSchema).min(1, '至少需要一行'),
+  })
+  .refine((v) => !v.validFrom || !v.validUntil || v.validUntil >= v.validFrom, {
+    message: '有效期至不能早于有效期从',
+    path: ['validUntil'],
+  });
 
 export const quotationUpdateSchema = z
   .object({
@@ -218,7 +223,11 @@ export const quotationUpdateSchema = z
     changeReason: z.string().max(500).optional(),
     version: z.number().int().positive(),
   })
-  .refine((v) => Object.keys(v).length > 1, { message: '至少提供一个更新字段' });
+  .refine((v) => Object.keys(v).length > 1, { message: '至少提供一个更新字段' })
+  .refine((v) => !v.validFrom || !v.validUntil || v.validUntil >= v.validFrom, {
+    message: '有效期至不能早于有效期从',
+    path: ['validUntil'],
+  });
 
 export const quotationLineUpdateSchema = z
   .object({
