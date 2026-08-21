@@ -22,7 +22,7 @@ import { useToast } from "@/components/ui/toast";
 import { PageLoading } from "@/components/ui/skeleton";
 import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
 import { useSession } from "@/lib/session-context";
-import { formatDate, formatMoney } from "@/lib/format";
+import { formatDateOnly, formatMoney, formatMoneyValue } from "@/lib/format";
 import { INVOICE_TYPE_LABELS, formatTaxInvoiceNumber } from "@/lib/vat-labels";
 
 const TONE_MAP: Record<string, StatusTone> = {
@@ -40,6 +40,13 @@ const STATUS_LABELS: Record<string, string> = {
   MATCHED: "已匹配",
   APPROVED: "已批准",
   POSTED: "已过账",
+};
+
+// 结算状态中文化（单币种 CNY 财务口径：未核销/部分核销/已核销）
+const SETTLEMENT_STATUS_LABELS: Record<string, string> = {
+  UNPAID: "未核销",
+  PARTIALLY_PAID: "部分核销",
+  PAID: "已核销",
 };
 
 interface SupplierInvoiceLine {
@@ -251,15 +258,13 @@ function SupplierInvoiceDetailPage() {
             />
             <InfoItem label="税务发票号码" value={formatTaxInvoiceNumber(detail.taxInvoiceCode, detail.taxInvoiceNo)} />
             <InfoItem label="供应商" value={detail.supplier?.name} />
-            <InfoItem label="结算状态" value={detail.settlementStatus} />
-            <InfoItem label="开票日期" value={formatDate(detail.invoiceDate)} />
-            <InfoItem label="收到日期" value={formatDate(detail.receivedDate)} />
-            <InfoItem label="币种" value={detail.currency} />
-            <InfoItem label="汇率" value={detail.exchangeRate} />
-            <InfoItem label="净额" value={formatMoney(detail.netAmount, detail.currency)} />
-            <InfoItem label="税额" value={formatMoney(detail.taxAmount, detail.currency)} />
-            <InfoItem label="价税合计" value={formatMoney(detail.grossAmount, detail.currency)} />
-            <InfoItem label="到期日" value={formatDate(detail.paymentDueDate)} />
+            <InfoItem label="结算状态" value={SETTLEMENT_STATUS_LABELS[detail.settlementStatus ?? ""] ?? detail.settlementStatus ?? "—"} />
+            <InfoItem label="开票日期" value={formatDateOnly(detail.invoiceDate)} />
+            <InfoItem label="收到日期" value={formatDateOnly(detail.receivedDate)} />
+            <InfoItem label="净额" value={formatMoneyValue(detail.netAmount)} />
+            <InfoItem label="税额" value={formatMoneyValue(detail.taxAmount)} />
+            <InfoItem label="价税合计" value={formatMoneyValue(detail.grossAmount)} />
+            <InfoItem label="到期日" value={formatDateOnly(detail.paymentDueDate)} />
             <InfoItem label="备注" value={detail.remark} />
           </div>
         }
@@ -290,10 +295,10 @@ function SupplierInvoiceDetailPage() {
                       {line.item ? `${line.item.code ?? ""} ${line.item.name ?? ""}`.trim() : "—"}
                     </td>
                     <td className="px-3 py-2 text-ink-primary">{line.quantity}</td>
-                    <td className="px-3 py-2 text-ink-secondary">{line.unitPrice}</td>
+                    <td className="px-3 py-2 text-ink-secondary">{formatMoneyValue(line.unitPrice)}</td>
                     <td className="px-3 py-2 text-ink-secondary">{line.taxRate}%</td>
-                    <td className="px-3 py-2 text-ink-primary">{formatMoney(line.netAmount, detail.currency)}</td>
-                    <td className="px-3 py-2 text-ink-secondary">{formatMoney(line.taxAmount, detail.currency)}</td>
+                    <td className="px-3 py-2 text-ink-primary">{formatMoneyValue(line.netAmount)}</td>
+                    <td className="px-3 py-2 text-ink-secondary">{formatMoneyValue(line.taxAmount)}</td>
                     <td className="px-3 py-2 text-ink-secondary">
                       {line.warehouseReceiptLine?.warehouseReceipt?.code
                         ? `入库 ${line.warehouseReceiptLine.warehouseReceipt.code}`
