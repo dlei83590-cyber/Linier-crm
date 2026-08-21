@@ -262,6 +262,10 @@ function QuotationEditForm() {
       return;
     }
 
+    if (validFrom && validUntil && new Date(validUntil) < new Date(validFrom)) {
+      setFieldErrors({ validUntil: "有效期至不能早于有效期从" });
+      return;
+    }
     setSubmitting(true);
     setError(null);
     setFieldErrors({});
@@ -531,9 +535,17 @@ function QuotationEditForm() {
               onChange={(e) => setValidUntil(e.target.value)}
               className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
+            {fieldErrors.validUntil && (
+              <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.validUntil}</p>
+            )}
           </div>
           <div>
             <label className="block text-xs text-ink-secondary">税率档案（可选，可清空）</label>
+            {taxProfileId !== headerInit.taxProfileId && (
+              <p className="mt-1 text-xs text-status-warning-text">
+                税率档案变更后，明细行税额需重新定价确认（当前后端不自动重算，属契约缺口，建议保持原税档）
+              </p>
+            )}
             <select
               value={taxProfileId}
               onChange={(e) => setTaxProfileId(e.target.value)}

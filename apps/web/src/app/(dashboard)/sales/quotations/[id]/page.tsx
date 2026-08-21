@@ -103,12 +103,31 @@ function QuotationDetailPage() {
   const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
   const canEdit = hasPermission(roles, actionPermission("quotation", "edit"));
   const canApprove = hasPermission(roles, actionPermission("quotation", "approve"));
+  const canClose = hasPermission(roles, actionPermission("quotation", "close"));
   const canConvert =
     detail !== null &&
     detail.status === "ACCEPTED" &&
     detail.effectiveStatus !== "EXPIRED" &&
     !detail.convertedAt &&
     !detail.salesOrderId;
+  // Phase 2 Batch 1：补全动作矩阵（API 允许但 UI 无入口 → 补齐；状态/权限与后端一致）
+  const canSubmit =
+    detail !== null &&
+    detail.status === "DRAFT" &&
+    detail.effectiveStatus !== "EXPIRED" &&
+    canEdit;
+  const canAccept =
+    detail !== null &&
+    (detail.status === "APPROVED" || detail.status === "SENT") &&
+    detail.effectiveStatus !== "EXPIRED" &&
+    canApprove;
+  const canCancel =
+    detail !== null &&
+    (detail.status === "DRAFT" ||
+      detail.status === "SUBMITTED" ||
+      detail.status === "APPROVED" ||
+      detail.status === "SENT") &&
+    canClose;
 
   const handleConvert = async () => {
     if (!detail || actionBusy) return;
@@ -127,6 +146,46 @@ function QuotationDetailPage() {
       );
       setActionBusy(false);
     }
+  };
+
+  const reloadDetail = () => {
+    setLoading(true);
+    setError(null);
+    apiFetch<QuotationDetail>(`/api/quotations/${id}`)
+      .then((body) => setDetail(body.data))
+      .catch((err: unknown) => {
+        setError(
+          err instanceof ApiClientError ? err : new ApiClientError(0, "网络错误", "NETWORK_ERROR"),
+        );
+      })
+      .finally(() => setLoading(false));
+  };
+
+  const runAction = async (path: string, successMessage?: string) => {
+    if (!detail || actionBusy) return;
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      await apiFetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      reloadDetail();
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "操作失败", "NETWORK_ERROR"),
+      );
+      setActionBusy(false);
+    }
+  };
+
+  const handleSubmit = () => runAction(`/api/quotations/${id}/submit`, "已提交审批");
+  const handleAccept = () => runAction(`/api/quotations/${id}/accept`, "已记录客户接受");
+  const handleCancel = async () => {
+    if (!detail || actionBusy) return;
+    if (!window.confirm("确定取消该报价单？取消后不可恢复。")) return;
+    await runAction(`/api/quotations/${id}/cancel`, "已取消");
   };
 
   useEffect(() => {
@@ -183,8 +242,7 @@ function QuotationDetailPage() {
         statusLabel={STATUS_LABELS[detail.effectiveStatus ?? detail.status] ?? detail.effectiveStatus ?? detail.status}
         statusTone={TONE_MAP[detail.effectiveStatus ?? detail.status] ?? "neutral"}
         actions={
-          (canEdit && (detail.status === "DRAFT" || detail.status === "REJECTED")) ||
-          (canConvert && canApprove) ? (
+          canEdit || canSubmit || canAccept || canCancel || (canConvert && canApprove) ? (
             <>
               {canEdit && (detail.status === "DRAFT" || detail.status === "REJECTED") && (
                 <Link
@@ -193,6 +251,36 @@ function QuotationDetailPage() {
                 >
                   编辑
                 </Link>
+              )}
+              {canSubmit && (
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={actionBusy}
+                  className={BUTTON_PRIMARY_CLASS}
+                >
+                  {actionBusy ? "提交中…" : "提交审批"}
+                </button>
+              )}
+              {canAccept && (
+                <button
+                  type="button"
+                  onClick={handleAccept}
+                  disabled={actionBusy}
+                  className={BUTTON_PRIMARY_CLASS}
+                >
+                  {actionBusy ? "处理中…" : "客户接受"}
+                </button>
+              )}
+              {canCancel && (
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  disabled={actionBusy}
+                  className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-status-danger-bg"
+                >
+                  {actionBusy ? "处理中…" : "取消报价"}
+                </button>
               )}
               {canConvert && canApprove && (
                 <button
@@ -218,7 +306,6 @@ function QuotationDetailPage() {
             <InfoItem label="税额" value={formatMoney(detail.taxAmount ?? "0", detail.currency)} />
             <InfoItem label="含税合计" value={formatMoney(detail.totalAmount, detail.currency)} />
             <InfoItem label="备注" value={detail.remark} />
-            <InfoItem label="创建时间" value={formatDate(detail.createdAt)} />
           </div>
         }
       >
@@ -266,6 +353,13 @@ function QuotationDetailPage() {
                 )}
               </tbody>
             </table>
+          </div>
+        </section>
+        <section className="border-border rounded-md border p-4">
+          <h2 className="text-ink-primary mb-3 text-sm font-semibold">审计信息</h2>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <InfoItem label="创建时间" value={formatDate(detail.createdAt)} />
+            <InfoItem label="转换时间" value={formatDate(detail.convertedAt)} />
           </div>
         </section>
       </EntityDetailWorkspace>

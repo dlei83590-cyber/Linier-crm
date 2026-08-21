@@ -39,6 +39,9 @@ interface LineForm {
 
 const EMPTY_LINE: LineForm = { itemId: "", description: "", quantity: "", uomId: "" };
 
+/** 币种受控选择（Phase 2：币种来自系统受控列表，禁止自由文本输入） */
+const CURRENCY_OPTIONS = ["CNY", "USD", "EUR", "HKD", "GBP", "JPY"] as const;
+
 function toIso(value: string): string | undefined {
   if (!value) return undefined;
   const d = new Date(value);
@@ -119,6 +122,9 @@ function QuotationCreateForm() {
   const validate = (): boolean => {
     const errs: Record<string, string> = {};
     if (!customerId) errs.customerId = "请选择客户";
+    if (validFrom && validUntil && toIso(validUntil) && toIso(validFrom) && new Date(validUntil) < new Date(validFrom)) {
+      errs.validUntil = "有效期至不能早于有效期从";
+    }
     lines.forEach((l, i) => {
       if (!l.itemId) errs[`lines.${i}.itemId`] = "请选择物料";
       if (!l.quantity || Number(l.quantity) <= 0) errs[`lines.${i}.quantity`] = "数量必须大于 0";
@@ -211,15 +217,20 @@ function QuotationCreateForm() {
           </div>
           <div>
             <label className="block text-xs text-ink-secondary">币种</label>
-            <input
+            <select
               value={currency}
               onChange={(e) => {
                 setCurrency(e.target.value);
                 markDirty();
               }}
-              maxLength={10}
               className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
-            />
+            >
+              {CURRENCY_OPTIONS.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-xs text-ink-secondary">有效期从（可选）</label>
@@ -244,6 +255,9 @@ function QuotationCreateForm() {
               }}
               className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
             />
+            {fieldErrors.validUntil && (
+              <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.validUntil}</p>
+            )}
           </div>
           <div className="col-span-2 md:col-span-1">
             <label className="block text-xs text-ink-secondary">备注（可选，≤1000）</label>
