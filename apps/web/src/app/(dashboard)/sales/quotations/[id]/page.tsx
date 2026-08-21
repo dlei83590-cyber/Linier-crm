@@ -161,7 +161,7 @@ function QuotationDetailPage() {
       .finally(() => setLoading(false));
   };
 
-  const runAction = async (path: string, successMessage?: string) => {
+  const runAction = async (path: string) => {
     if (!detail || actionBusy) return;
     setActionBusy(true);
     setActionError(null);
@@ -180,12 +180,12 @@ function QuotationDetailPage() {
     }
   };
 
-  const handleSubmit = () => runAction(`/api/quotations/${id}/submit`, "已提交审批");
-  const handleAccept = () => runAction(`/api/quotations/${id}/accept`, "已记录客户接受");
+  const handleSubmit = () => runAction(`/api/quotations/${id}/submit`);
+  const handleAccept = () => runAction(`/api/quotations/${id}/accept`);
   const handleCancel = async () => {
     if (!detail || actionBusy) return;
     if (!window.confirm("确定取消该报价单？取消后不可恢复。")) return;
-    await runAction(`/api/quotations/${id}/cancel`, "已取消");
+    await runAction(`/api/quotations/${id}/cancel`);
   };
 
   useEffect(() => {
