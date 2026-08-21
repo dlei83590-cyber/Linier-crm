@@ -9,13 +9,16 @@
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { actionPermission } from "@nilier-crm/shared";
+import { useRouter } from "next/navigation";
+import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
+import { useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
 
 interface SalesOrderRow {
@@ -52,6 +55,12 @@ const TONE_MAP: Record<string, StatusTone> = {
 };
 
 function SalesOrderList() {
+  const router = useRouter();
+  const toast = useToast();
+  const { state } = useSession();
+  const canDelete = hasPermission((state.user?.roles ?? []) as RoleCode[], actionPermission("sales-order", "delete"));
+  const [deleting, setDeleting] = useState<SalesOrderRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [customers, setCustomers] = useState<Array<{ id: string; name: string | null }>>([]);
   const [customerInput, setCustomerInput] = useState("");
   const [dateFromInput, setDateFromInput] = useState("");
@@ -88,6 +97,24 @@ function SalesOrderList() {
     setStatusInput("");
     setFilters({});
     setPage(1);
+  };
+
+  const runDelete = async () => {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      await apiFetch("/api/sales-orders/" + deleting.id, { method: "DELETE" });
+      toast.success("销售订单已删除");
+      setDeleting(null);
+      refresh();
+    } catch (err) {
+      const e = err instanceof ApiClientError ? err : new ApiClientError(0, "删除失败", "NETWORK_ERROR");
+      toast.error("删除失败", e.message);
+      setDeleting(null);
+      refresh();
+    } finally {
+      setDeleteBusy(false);
+    }
   };
 
   return (
@@ -215,6 +242,25 @@ function SalesOrderList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        rowActions={(row) =>
+          canDelete && row.status === "CANCELLED" ? (
+            <div className="flex justify-end gap-1">
+              <button type="button" onClick={() => setDeleting(row)} className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text transition-colors hover:bg-red-50">
+                删除
+              </button>
+            </div>
+          ) : undefined
+        }
+      />
+      <ConfirmActionDialog
+        open={deleting !== null}
+        title={"删除销售订单「" + (deleting?.code ?? "") + "」？"}
+        description="仅已取消（CANCELLED）且无送货单的销售订单可删除（回退后清理列表）。"
+        confirmLabel="删除"
+        tone="danger"
+        busy={deleteBusy}
+        onConfirm={runDelete}
+        onCancel={() => setDeleting(null)}
       />
     </AppPage>
   );

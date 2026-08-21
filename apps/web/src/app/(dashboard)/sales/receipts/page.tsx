@@ -10,13 +10,16 @@
  */
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { useSession } from "@/lib/session-context";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
 import { formatDate, formatMoney } from "@/lib/format";
 
 interface ReceiptRow {
@@ -55,6 +58,12 @@ const TONE_MAP: Record<string, StatusTone> = {
 };
 
 function ReceiptList() {
+  const router = useRouter();
+  const toast = useToast();
+  const { state } = useSession();
+  const canDelete = hasPermission((state.user?.roles ?? []) as RoleCode[], actionPermission("receipt", "delete"));
+  const [deleting, setDeleting] = useState<ReceiptRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const { state } = useSession();
   const canCreate =
     state.status === "authenticated" &&
@@ -75,6 +84,24 @@ function ReceiptList() {
     setStatusInput("");
     setFilters({});
     setPage(1);
+  };
+
+  const runDelete = async () => {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      await apiFetch("/api/receipts/" + deleting.id, { method: "DELETE" });
+      toast.success("收款单已删除");
+      setDeleting(null);
+      refresh();
+    } catch (err) {
+      const e = err instanceof ApiClientError ? err : new ApiClientError(0, "删除失败", "NETWORK_ERROR");
+      toast.error("删除失败", e.message);
+      setDeleting(null);
+      refresh();
+    } finally {
+      setDeleteBusy(false);
+    }
   };
 
   return (
@@ -189,6 +216,25 @@ function ReceiptList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        rowActions={(row) =>
+          canDelete && row.status === "VOIDED" ? (
+            <div className="flex justify-end gap-1">
+              <button type="button" onClick={() => setDeleting(row)} className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text transition-colors hover:bg-red-50">
+                删除
+              </button>
+            </div>
+          ) : undefined
+        }
+      />
+      <ConfirmActionDialog
+        open={deleting !== null}
+        title={"删除收款单「" + (deleting?.code ?? "") + "」？"}
+        description="仅已作废（VOIDED）且无核销记录的收款单可删除（回退后清理列表）。"
+        confirmLabel="删除"
+        tone="danger"
+        busy={deleteBusy}
+        onConfirm={runDelete}
+        onCancel={() => setDeleting(null)}
       />
     </AppPage>
   );

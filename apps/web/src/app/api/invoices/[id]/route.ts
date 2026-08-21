@@ -151,3 +151,44 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   return ok(updated);
 }
+
+/** DELETE /api/invoices/:id（层层回退-层层可删除：仅 CANCELLED 且无应收引用可软删除） */
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await authenticate(request);
+  const denied = requirePermission(user, "invoice:delete");
+  if (denied) return denied;
+  requestLog(request, user?.id, "invoice.delete");
+
+  const { id } = await params;
+  const meta = requestMeta(request);
+
+  const invoice = await prisma.invoice.findFirst({ where: { id, deletedAt: null } });
+  if (!invoice) return failNotFound(ERROR_CODES.INVOICE_NOT_FOUND, "发票不存在");
+  if (invoice.status !== "CANCELLED") {
+    return failConflict(ERROR_CODES.INVOICE_INVALID_STATE, "仅 CANCELLED 状态可删除（回退后清理列表）；已开票/已收款发票禁止删除");
+  }
+  // 引用防御：已生成应收（AR.invoiceId）禁止删除——保持应收溯源链（CTO 必改③：有 AR 的发票禁止删除）
+  const arCount = await prisma.accountsReceivable.count({ where: { invoiceId: id, deletedAt: null } });
+  if (arCount > 0) {
+    return failConflict(ERROR_CODES.INVOICE_INVALID_STATE, "发票已生成应收，禁止删除（保持应收溯源）");
+  }
+
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.invoice.update({ where: { id }, data: { deletedAt: now, isActive: false, updatedById: user!.id } });
+    await tx.invoiceLine.updateMany({ where: { invoiceId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+    await tx.invoiceRevision.updateMany({ where: { invoiceId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+    await tx.invoiceSnapshot.updateMany({ where: { invoiceId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+  });
+
+  await writeAuditLog({
+    actorId: user?.id,
+    action: "invoice.delete",
+    entityType: "invoice",
+    entityId: id,
+    afterData: { code: invoice.code },
+    ...meta,
+  });
+
+  return ok({ id, deleted: true });
+}

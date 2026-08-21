@@ -143,3 +143,44 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   return ok(updated);
 }
+
+/** DELETE /api/sales-orders/:id（层层回退-层层可删除：仅 CANCELLED 且无交付引用可软删除，清理列表） */
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await authenticate(request);
+  const denied = requirePermission(user, "sales-order:delete");
+  if (denied) return denied;
+  requestLog(request, user?.id, "sales-order.delete");
+
+  const { id } = await params;
+  const meta = requestMeta(request);
+
+  const salesOrder = await prisma.salesOrder.findFirst({ where: { id, deletedAt: null } });
+  if (!salesOrder) return failNotFound(ERROR_CODES.SALES_ORDER_NOT_FOUND, "销售订单不存在");
+  if (salesOrder.status !== "CANCELLED") {
+    return failConflict(ERROR_CODES.SALES_ORDER_NOT_EDITABLE, "仅 CANCELLED 状态可删除（回退后清理列表）；进行中/已交付/已完成订单禁止删除");
+  }
+  // 引用防御：已生成送货单（Delivery.salesOrderId）禁止删除——保持交付溯源链
+  const deliveryCount = await prisma.delivery.count({ where: { salesOrderId: id, deletedAt: null } });
+  if (deliveryCount > 0) {
+    return failConflict(ERROR_CODES.SALES_ORDER_NOT_EDITABLE, "销售订单已有送货单，禁止删除（保持交付溯源）");
+  }
+
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.salesOrder.update({ where: { id }, data: { deletedAt: now, isActive: false, updatedById: user!.id } });
+    await tx.salesOrderLine.updateMany({ where: { salesOrderId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+    await tx.salesOrderRevision.updateMany({ where: { salesOrderId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+    await tx.salesOrderSnapshot.updateMany({ where: { salesOrderId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+  });
+
+  await writeAuditLog({
+    actorId: user?.id,
+    action: "sales-order.delete",
+    entityType: "salesOrder",
+    entityId: id,
+    afterData: { code: salesOrder.code },
+    ...meta,
+  });
+
+  return ok({ id, deleted: true });
+}

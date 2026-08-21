@@ -38,3 +38,43 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (!receipt) return failNotFound(ERROR_CODES.RECEIPT_NOT_FOUND, "收款单不存在");
   return ok(receipt);
 }
+
+/** DELETE /api/receipts/:id（层层回退-层层可删除：仅 VOIDED 且无核销引用可软删除） */
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await authenticate(request);
+  const denied = requirePermission(user, "receipt:delete");
+  if (denied) return denied;
+  requestLog(request, user?.id, "receipt.delete");
+
+  const { id } = await params;
+  const meta = requestMeta(request);
+
+  const receipt = await prisma.receipt.findFirst({ where: { id, deletedAt: null } });
+  if (!receipt) return failNotFound(ERROR_CODES.RECEIPT_NOT_FOUND, "收款单不存在");
+  if (receipt.status !== "VOIDED") {
+    return failConflict(ERROR_CODES.RECEIPT_VOID_FORBIDDEN, "仅 VOIDED 状态可删除（作废后清理列表）；未核销/已核销收款单禁止删除");
+  }
+  // 引用防御：已有核销记录（ReceiptAllocation.receiptId）禁止删除——保持核销审计
+  const allocCount = await prisma.receiptAllocation.count({ where: { receiptId: id, deletedAt: null } });
+  if (allocCount > 0) {
+    return failConflict(ERROR_CODES.RECEIPT_VOID_FORBIDDEN, "收款单已有核销记录，禁止删除（保持核销审计）");
+  }
+
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.receipt.update({ where: { id }, data: { deletedAt: now, isActive: false, updatedById: user!.id } });
+    await tx.receiptRevision.updateMany({ where: { receiptId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+    await tx.receiptSnapshot.updateMany({ where: { receiptId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+  });
+
+  await writeAuditLog({
+    actorId: user?.id,
+    action: "receipt.delete",
+    entityType: "receipt",
+    entityId: id,
+    afterData: { code: receipt.code },
+    ...meta,
+  });
+
+  return ok({ id, deleted: true });
+}

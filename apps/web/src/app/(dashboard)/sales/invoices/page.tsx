@@ -10,12 +10,16 @@
  */
 import { useState } from "react";
 import Link from "next/link";
-import { actionPermission } from "@nilier-crm/shared";
+import { useRouter } from "next/navigation";
+import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
+import { useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
 import { INVOICE_TYPE_LABELS } from "@/lib/vat-labels";
 
@@ -56,6 +60,12 @@ const TONE_MAP: Record<string, StatusTone> = {
 };
 
 function InvoiceList() {
+  const router = useRouter();
+  const toast = useToast();
+  const { state } = useSession();
+  const canDelete = hasPermission((state.user?.roles ?? []) as RoleCode[], actionPermission("invoice", "delete"));
+  const [deleting, setDeleting] = useState<InvoiceRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [codeInput, setCodeInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ code?: string; status?: string }>({});
@@ -76,6 +86,24 @@ function InvoiceList() {
     setStatusInput("");
     setFilters({});
     setPage(1);
+  };
+
+  const runDelete = async () => {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      await apiFetch("/api/invoices/" + deleting.id, { method: "DELETE" });
+      toast.success("发票已删除");
+      setDeleting(null);
+      refresh();
+    } catch (err) {
+      const e = err instanceof ApiClientError ? err : new ApiClientError(0, "删除失败", "NETWORK_ERROR");
+      toast.error("删除失败", e.message);
+      setDeleting(null);
+      refresh();
+    } finally {
+      setDeleteBusy(false);
+    }
   };
 
   return (
@@ -230,6 +258,25 @@ function InvoiceList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        rowActions={(row) =>
+          canDelete && row.status === "CANCELLED" ? (
+            <div className="flex justify-end gap-1">
+              <button type="button" onClick={() => setDeleting(row)} className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text transition-colors hover:bg-red-50">
+                删除
+              </button>
+            </div>
+          ) : undefined
+        }
+      />
+      <ConfirmActionDialog
+        open={deleting !== null}
+        title={"删除发票「" + (deleting?.code ?? deleting?.id ?? "") + "」？"}
+        description="仅已取消（CANCELLED）且无应收的发票可删除（回退后清理列表）。"
+        confirmLabel="删除"
+        tone="danger"
+        busy={deleteBusy}
+        onConfirm={runDelete}
+        onCancel={() => setDeleting(null)}
       />
     </AppPage>
   );

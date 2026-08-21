@@ -113,3 +113,44 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   return ok(updated);
 }
+
+/** DELETE /api/deliveries/:id（层层回退-层层可删除：仅 CANCELLED 且无发票引用可软删除） */
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await authenticate(request);
+  const denied = requirePermission(user, "delivery:delete");
+  if (denied) return denied;
+  requestLog(request, user?.id, "delivery.delete");
+
+  const { id } = await params;
+  const meta = requestMeta(request);
+
+  const delivery = await prisma.delivery.findFirst({ where: { id, deletedAt: null } });
+  if (!delivery) return failNotFound(ERROR_CODES.DELIVERY_NOT_FOUND, "送货单不存在");
+  if (delivery.status !== "CANCELLED") {
+    return failConflict(ERROR_CODES.DELIVERY_INVALID_STATE, "仅 CANCELLED 状态可删除（回退后清理列表）；已发运/已交付/已完成送货禁止删除");
+  }
+  // 引用防御：已生成发票（Invoice.deliveryId）禁止删除——保持发票溯源链
+  const invoiceCount = await prisma.invoice.count({ where: { deliveryId: id, deletedAt: null } });
+  if (invoiceCount > 0) {
+    return failConflict(ERROR_CODES.DELIVERY_INVALID_STATE, "送货单已生成发票，禁止删除（保持发票溯源）");
+  }
+
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.delivery.update({ where: { id }, data: { deletedAt: now, isActive: false, updatedById: user!.id } });
+    await tx.deliveryLine.updateMany({ where: { deliveryId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+    await tx.deliveryRevision.updateMany({ where: { deliveryId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+    await tx.deliverySnapshot.updateMany({ where: { deliveryId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+  });
+
+  await writeAuditLog({
+    actorId: user?.id,
+    action: "delivery.delete",
+    entityType: "delivery",
+    entityId: id,
+    afterData: { code: delivery.code },
+    ...meta,
+  });
+
+  return ok({ id, deleted: true });
+}
