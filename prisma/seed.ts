@@ -204,6 +204,9 @@ const SEED_RESTRICTED_ACTION_PERMISSIONS: Array<{ name: string; code: string; mo
   // Sprint 5B：Goods Receipt Inbound 子资源（warehouse-location 由 Warehouse 驱动；各 line 由单据驱动，客户端不直接改行——对齐 5A line 模式）
   { name: "view warehouse-location", code: "warehouse-location:view", module: "warehouse-location" },
   { name: "edit warehouse-location", code: "warehouse-location:edit", module: "warehouse-location" },
+  // 库位主数据 CRUD（backlog）：create/delete 补齐（warehouse-location 由 Warehouse 驱动，但主数据维护需完整 CRUD）
+  { name: "create warehouse-location", code: "warehouse-location:create", module: "warehouse-location" },
+  { name: "delete warehouse-location", code: "warehouse-location:delete", module: "warehouse-location" },
   { name: "view purchase-receipt-line", code: "purchase-receipt-line:view", module: "purchase-receipt-line" },
   { name: "edit purchase-receipt-line", code: "purchase-receipt-line:edit", module: "purchase-receipt-line" },
   { name: "view warehouse-receipt-line", code: "warehouse-receipt-line:view", module: "warehouse-receipt-line" },
