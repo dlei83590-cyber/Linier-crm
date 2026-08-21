@@ -67,6 +67,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       ...(fields.validFrom !== undefined ? { validFrom: fields.validFrom ? new Date(fields.validFrom) : null } : {}),
       ...(fields.validUntil !== undefined ? { validUntil: fields.validUntil ? new Date(fields.validUntil) : null } : {}),
       ...(fields.taxProfileId !== undefined ? { taxProfileId: fields.taxProfileId } : {}),
+      ...(fields.paymentTerm !== undefined ? { paymentTerm: fields.paymentTerm } : {}),
       ...(fields.remark !== undefined ? { remark: fields.remark } : {}),
       updatedById: user!.id,
     });
@@ -135,6 +136,25 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     await tx.quotationLine.updateMany({ where: { quotationId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
     await tx.quotationRevision.updateMany({ where: { quotationId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
     await tx.quotationSnapshot.updateMany({ where: { quotationId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+
+    // 单号回收：若被删报价为最后一张（序号 == DocumentSequence.nextNo-1），nextNo 回退一位，
+    // 下次新建报价复用该单号；updateMany where {id, nextNo} CAS——并发取号已推进则跳过回收（不误回退他人单号）
+    const seq = await tx.documentSequence.findFirst({
+      where: { docType: "QUOTATION", isActive: true, deletedAt: null },
+      select: { id: true, nextNo: true, prefix: true, padLength: true },
+    });
+    if (seq) {
+      const prefix = seq.prefix ?? "QT";
+      const padLength = seq.padLength ?? 6;
+      const numStr = quotation.code.startsWith(prefix) ? quotation.code.slice(prefix.length) : null;
+      const parsed = numStr !== null && numStr !== "" && !Number.isNaN(Number(numStr)) ? Number(numStr) : null;
+      if (parsed !== null && parsed === seq.nextNo - 1) {
+        await tx.documentSequence.updateMany({
+          where: { id: seq.id, nextNo: seq.nextNo },
+          data: { nextNo: seq.nextNo - 1 },
+        });
+      }
+    }
   });
 
   await writeAuditLog({

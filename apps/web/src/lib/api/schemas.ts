@@ -206,6 +206,7 @@ export const quotationCreateSchema = z
     validFrom: z.string().datetime().nullable().optional(),
     validUntil: z.string().datetime().nullable().optional(),
     taxProfileId: z.string().min(1).nullable().optional(),
+    paymentTerm: z.string().max(100).nullable().optional(),
     remark: z.string().max(1000).nullable().optional(),
     lines: z.array(quotationLineCreateSchema).min(1, '至少需要一行'),
   })
@@ -219,6 +220,7 @@ export const quotationUpdateSchema = z
     validFrom: z.string().datetime().nullable().optional(),
     validUntil: z.string().datetime().nullable().optional(),
     taxProfileId: z.string().min(1).nullable().optional(),
+    paymentTerm: z.string().max(100).nullable().optional(),
     remark: z.string().max(1000).nullable().optional(),
     changeReason: z.string().max(500).optional(),
     version: z.number().int().positive(),
