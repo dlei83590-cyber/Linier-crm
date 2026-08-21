@@ -69,17 +69,19 @@ function PriceListCreateForm() {
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [priceType, setPriceType] = useState("");
-  const [currency, setCurrency] = useState("");
-  const [baseCurrency, setBaseCurrency] = useState("");
-  const [quoteCurrency, setQuoteCurrency] = useState("");
+  // 单币种 CNY 固定（表单无币种输入；setter 不暴露避免 lint unused；payload 兼容提交）
+  const [currency] = useState("CNY");
+  const [baseCurrency] = useState("CNY");
+  const [quoteCurrency] = useState("CNY");
   const [pricePolicyId, setPricePolicyId] = useState("");
   const [status, setStatus] = useState("DRAFT");
   const [priceSource, setPriceSource] = useState("");
   const [freightIncluded, setFreightIncluded] = useState(false);
   const [effectiveFrom, setEffectiveFrom] = useState("");
   const [effectiveTo, setEffectiveTo] = useState("");
-  const [validFrom, setValidFrom] = useState("");
-  const [validTo, setValidTo] = useState("");
+  // validFrom/validTo 兼容旧字段——不提供输入，提交时以 effectiveFrom/effectiveTo 为准
+  const [validFrom] = useState("");
+  const [validTo] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiClientError | null>(null);
@@ -185,15 +187,7 @@ function PriceListCreateForm() {
             error={policiesError}
           />
         </FormField>
-        <FormField label="币种">
-          <input value={currency} onChange={(e) => setCurrency(e.target.value)} className={inputClass} placeholder="如 CNY / USD" />
-        </FormField>
-        <FormField label="基准币种">
-          <input value={baseCurrency} onChange={(e) => setBaseCurrency(e.target.value)} className={inputClass} />
-        </FormField>
-        <FormField label="报价币种">
-          <input value={quoteCurrency} onChange={(e) => setQuoteCurrency(e.target.value)} className={inputClass} />
-        </FormField>
+        {/* 单币种 CNY（中国市场决策）：币种/基准币种/报价币种固定人民币，不提供输入 */}
         <FormField label="价格来源">
           <select value={priceSource} onChange={(e) => setPriceSource(e.target.value)} className={inputClass}>
             <option value="">请选择</option>
@@ -213,12 +207,7 @@ function PriceListCreateForm() {
         <FormField label="失效日期">
           <input type="date" value={effectiveTo} onChange={(e) => setEffectiveTo(e.target.value)} className={inputClass} />
         </FormField>
-        <FormField label="有效起始">
-          <input type="date" value={validFrom} onChange={(e) => setValidFrom(e.target.value)} className={inputClass} />
-        </FormField>
-        <FormField label="有效截止">
-          <input type="date" value={validTo} onChange={(e) => setValidTo(e.target.value)} className={inputClass} />
-        </FormField>
+        {/* validFrom/validTo 为兼容旧字段，业务统一使用生效/失效（effectiveFrom/effectiveTo）——不暴露避免双口径 */}
         <label className="flex items-center gap-2 text-sm text-ink-secondary">
           <input type="checkbox" checked={freightIncluded} onChange={(e) => setFreightIncluded(e.target.checked)} />
           含运费

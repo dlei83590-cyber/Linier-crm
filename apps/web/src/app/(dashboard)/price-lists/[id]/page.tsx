@@ -21,7 +21,7 @@ import {
 } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatDateOnly } from "@/lib/format";
 
 interface PriceListDetail {
   id: string;
@@ -176,11 +176,11 @@ function PriceListDetailPage() {
               label="价格类型"
               value={detail.priceType ? PRICE_TYPE_LABELS[detail.priceType] ?? detail.priceType : null}
             />
-            <InfoItem label="币种" value={detail.currency} />
+            {/* 单币种 CNY：币种固定人民币，不展示（消除多币种残留） */}
             <InfoItem label="策略" value={detail.policy?.name ?? null} />
             <InfoItem label="含运费" value={detail.freightIncluded ? "是" : "否"} />
-            <InfoItem label="生效" value={formatDate(detail.effectiveFrom)} />
-            <InfoItem label="失效" value={formatDate(detail.effectiveTo)} />
+            <InfoItem label="生效" value={formatDateOnly(detail.effectiveFrom)} />
+            <InfoItem label="失效" value={formatDateOnly(detail.effectiveTo)} />
             <InfoItem label="创建时间" value={formatDate(detail.createdAt)} />
             <InfoItem label="更新时间" value={formatDate(detail.updatedAt)} />
           </div>
@@ -233,7 +233,7 @@ function PriceListDetailPage() {
                   <li key={v.id} className="flex items-baseline gap-3 text-sm">
                     <span className="font-medium text-ink-primary">v{v.versionNo}</span>
                     <span className="text-xs text-ink-muted">
-                      {formatDate(v.effectiveFrom)} → {formatDate(v.effectiveTo)}
+                      {formatDateOnly(v.effectiveFrom)} → {formatDateOnly(v.effectiveTo)}
                     </span>
                   </li>
                 ))}
