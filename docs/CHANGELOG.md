@@ -2,6 +2,23 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - CN/DN 反冲减 + 删除 + 销售发票红冲（2026-08-21，PR #169）
+
+### 新增
+
+- **CN/DN 反冲减**：POST /api/credit-debit-notes/:id/reverse（APPLIED → REVERSED）——回退 AR.adjustedAmount/balanceAmount + Invoice.balanceAmount 同步 + AR Revision/Snapshot + 事务内 Outbox（新事件 InvoiceAdjustmentReversed，幂等键 InvoiceAdjustmentReversed|noteId）；GL consumer 过反向凭证（CREDIT 反冲 → 借1122贷6001 / DEBIT 反冲 → 借6001贷1122）
+- **CN/DN 删除**：DELETE /api/credit-debit-notes/:id——DRAFT/CANCELLED/REVERSED 可删（软删 header+lines+adjustments）；APPLIED/SUBMITTED → 409
+- **销售发票红冲**：POST /api/invoices/:id/red-invoice——从 ISSUED 蓝票一键创建红字 DRAFT（复制行 + redLetter/redInvoiceRefId 预填，R1 一致；不回写 delivery 开票投影）；issue 路由支持 DB 预填引用回退 + R4 排除本票（红字草稿不误判超冲）
+- **GL 修复**：consumer 白名单补注册 InvoiceAdjustmentApplied（#163 漏注册——此前 CN/DN Apply 从未过 GL）；InvoiceAdjustmentReversed 注册；posting 单测 +4 条
+- **前端**：CDN 列表 REVERSED/CANCELLED 状态 + 反冲减/删除按钮（状态+权限双 Gate）；发票详情蓝票红冲按钮 + 红字草稿自动预填引用
+- **Migration 0045**：ALTER TYPE CreditDebitNoteStatus ADD VALUE REVERSED；EVENTS v1.43；test-cases +25 用例
+
+### 边界
+
+- 不修改原 Invoice 金额事实（CN/DN 反冲与 Apply 同约束）；红字金额 issue 时服务端按原票取反（R3）；红字跳过 InvoiceIssued Outbox（红字 GL = backlog，与既有红字 issue 一致）
+
+---
+
 ## [Unreleased] - Business UX Rationalization Phase 2 / Deep Business Semantics（2026-08-21，CIO）
 
 ### 新增（Phase 2 规范归档）
