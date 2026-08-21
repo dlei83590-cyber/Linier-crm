@@ -171,6 +171,27 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     await tx.salesOrderLine.updateMany({ where: { salesOrderId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
     await tx.salesOrderRevision.updateMany({ where: { salesOrderId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
     await tx.salesOrderSnapshot.updateMany({ where: { salesOrderId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+
+    // 回退报价单（用户指令 2026-08-21）：删除订单时，对应报价单从 CONVERTED 回退到 DRAFT（未确认），
+    // 释放 salesOrderId/convertedAt/convertedById 投影 → 报价单恢复可编辑/可删除
+    if (salesOrder.quotationId) {
+      const quotation = await tx.quotation.findFirst({
+        where: { id: salesOrder.quotationId, deletedAt: null, status: "CONVERTED" },
+      });
+      if (quotation) {
+        await tx.quotation.update({
+          where: { id: quotation.id },
+          data: {
+            status: "DRAFT",
+            salesOrderId: null,
+            convertedAt: null,
+            convertedById: null,
+            updatedById: user!.id,
+            version: { increment: 1 },
+          },
+        });
+      }
+    }
   });
 
   await writeAuditLog({

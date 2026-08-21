@@ -260,6 +260,7 @@
 | Q5 | 红字 ISSUED 删除=撤销红冲 | DELETE 红字（ISSUED） | 200；原票 AR.adjustedAmount += |红字|（恢复）；原票 Invoice.balanceAmount 恢复；AR Revision+Snapshot |
 | Q6 | 蓝票删除保持现状 | DELETE 蓝票（ISSUED） | 409（仅 CANCELLED 可删；红冲只回退应收不改蓝票状态） |
 | Q7 | 红字重复删除 | 删除后再次 DELETE | 404 INVOICE_NOT_FOUND（deletedAt 过滤） |
+| Q8 | 红字 CANCELLED 删除（用户指令修复） | DELETE 红字（CANCELLED，无关联） | 200 软删（无应收恢复——原票应收已不存在时跳过恢复直接删） |
 
 ## R. 反开票撤销（红冲语义修正——用户指令 2026-08-21：红冲=反开票撤销错误开票）
 

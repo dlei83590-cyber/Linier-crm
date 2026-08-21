@@ -269,7 +269,7 @@ function InvoiceList() {
       <ConfirmActionDialog
         open={deleting !== null}
         title={"删除发票「" + (deleting?.code ?? deleting?.id ?? "") + "」？"}
-        description="蓝票仅已取消（CANCELLED）且无应收可删；红字发票（草稿/已开票）可删——已开票红字删除 = 撤销红冲恢复原票应收。"
+        description="蓝票仅已取消（CANCELLED）且无应收可删；红字发票（草稿/已开票/已取消）可删——已开票红字删除 = 撤销红冲恢复原票应收（原票应收不存在时直接删）。"
         confirmLabel="删除"
         tone="danger"
         busy={deleteBusy}
