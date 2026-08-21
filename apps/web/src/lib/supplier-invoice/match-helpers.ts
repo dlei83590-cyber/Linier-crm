@@ -91,7 +91,12 @@ export async function runMatch(
   });
   if (!invoice) return { ok: false, error: 'NOT_FOUND' };
   // 状态门禁（#9247）：SUBMITTED/MATCHED 可进；APPROVED/POSTED/CANCELLED 禁直接 re-match
-  if (invoice.documentStatus !== 'SUBMITTED' && invoice.documentStatus !== 'MATCHED') {
+  // auto-approve（移除审核）：submit 直达 APPROVED——首次 Match 允许在 APPROVED 执行；POSTED/CANCELLED 仍禁
+  if (
+    invoice.documentStatus !== 'SUBMITTED' &&
+    invoice.documentStatus !== 'MATCHED' &&
+    invoice.documentStatus !== 'APPROVED'
+  ) {
     return { ok: false, error: 'NOT_MATCHABLE', status: invoice.documentStatus };
   }
   if (invoice.version !== params.version) return { ok: false, error: 'VERSION_CONFLICT' };

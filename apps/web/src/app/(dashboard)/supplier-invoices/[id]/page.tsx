@@ -326,7 +326,7 @@ function SupplierInvoiceDetailPage() {
         }
         description={
           confirmAction === "submit"
-            ? "提交后进入三单匹配/审批流程（SUBMITTED ≠ POSTED）。确认提交？"
+            ? "提交即生效（已自动批准），可继续三单匹配与过账。确认提交？"
             : confirmAction === "match"
               ? "执行三单匹配（服务端快照 PO/入库/发票数量与价格差异），产生不可变匹配记录。确认？"
               : "过账将产生 GRIR CONSUME + AP 应付 + 应付未结项（同事务落账），不可逆。确认过账？"
