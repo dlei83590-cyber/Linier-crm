@@ -8,7 +8,7 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
+import { hasPermission, actionPermission, PERMISSIONS, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, ConfirmActionDialog } from "@/components/workspace";
@@ -17,7 +17,6 @@ import { useListQuery } from "@/lib/use-list-query";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { formatDate } from "@/lib/format";
-import { PERMISSIONS } from "@nilier-crm/shared";
 
 interface LocationRow {
   id: string;

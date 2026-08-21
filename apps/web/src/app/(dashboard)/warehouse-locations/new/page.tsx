@@ -10,7 +10,6 @@ import { AppPage, EntityFormWorkspace } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
-import { PERMISSIONS } from "@nilier-crm/shared";
 
 const inputClass = INPUT_CLASS;
 

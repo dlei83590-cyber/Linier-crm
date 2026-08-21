@@ -5,7 +5,6 @@ import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/l
 import { ok, failValidation, failConflict, failNotFound, failServer } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
-import { casUpdate } from "@/lib/api/cas";
 import { z } from "zod";
 import { computeLineAmount } from "@/lib/production-inbound/helpers";
 
