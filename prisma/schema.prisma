@@ -4928,6 +4928,7 @@ model Warehouse {
   locations WarehouseLocation[]
   purchaseReceipts PurchaseReceipt[] // 到货地点方向（PurchaseReceipt.warehouseId）
   warehouseReceipts WarehouseReceipt[] // 入库仓库方向（WarehouseReceipt.warehouseId）
+  productionInbounds ProductionInbound[] // 生产入库仓库方向（ProductionInbound.warehouseId）
   inventoryMovements InventoryMovement[] // 6A：库存流水（InventoryMovement.warehouse 方向）
   stockProjections StockProjection[] // 6A：库存投影（StockProjection.warehouse 方向）
   transferSources InventoryTransfer[] @relation("TransferSourceWarehouse") // 6B：调拨单源仓（InventoryTransfer.sourceWarehouse 方向）
