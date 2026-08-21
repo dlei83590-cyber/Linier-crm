@@ -1035,7 +1035,8 @@ model DocumentSequence {
   name        String
   docType     DocumentType // 单据类型（枚举）
   prefix      String?
-  nextNo      Int      @default(1)
+  startNo     Int      @default(1) // 起始序号（新建时 nextNo 初始 = startNo；可编辑）
+  nextNo      Int      @default(1) // 当前序号（编号引擎推进；管理员可调整）
   padLength   Int      @default(4)
   periodPattern  String? // 期间前缀模板（如 "{YYYY}{MM}"；JOURNAL 启用，其余暂空 = 现状；ADR-0044）
   perPeriodReset Boolean @default(false) // 是否按月重排（JOURNAL = true）

@@ -19,7 +19,7 @@ const DOC_TYPES = [
   "INVENTORY_CONVERSION", "SUPPLIER_INVOICE",
 ] as const;
 
-/** 更新 schema：nextNo 不可由客户端修改（编号引擎唯一事实源，防跳号/并发错号） */
+/** 更新 schema：startNo 起始序号 + nextNo 当前序号（管理员可调整——用于初始化/跳号修复；约束 nextNo ≥ startNo） */
 const documentSequenceUpdateSchema = z
   .object({
     code: z.string().min(1).max(64).optional(),
@@ -27,6 +27,8 @@ const documentSequenceUpdateSchema = z
     docType: z.enum(DOC_TYPES).optional(),
     prefix: z.string().max(32).nullable().optional(),
     padLength: z.number().int().min(1).max(12).optional(),
+    startNo: z.number().int().min(1).optional(),
+    nextNo: z.number().int().min(1).optional(),
     isActive: z.boolean().optional(),
     version: z.number().int().positive(),
   })
@@ -67,6 +69,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (codeExisting && codeExisting.id !== id && !codeExisting.deletedAt) {
       return failConflict(ERROR_CODES.CONFLICT, "单据序列编码已存在");
     }
+  }
+
+  // 起始序号/当前序号约束：nextNo 不得小于 startNo（防回拨导致已发号码重复）
+  const effectiveStartNo = updates.startNo ?? existing.startNo;
+  const effectiveNextNo = updates.nextNo ?? existing.nextNo;
+  if (effectiveNextNo < effectiveStartNo) {
+    return failConflict(ERROR_CODES.CONFLICT, "当前序号不得小于起始序号（防已发号码重复）");
   }
 
   const cas = await casUpdate(prisma, 'documentSequence', id, version, {

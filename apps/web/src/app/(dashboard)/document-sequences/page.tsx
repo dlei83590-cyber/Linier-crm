@@ -3,12 +3,15 @@
 /** Document Sequences — 单据序列列表页（Pending Pages Completion Gate — Batch 1；nextNo 只读） */
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityListWorkspace } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
 import { formatDate } from "@/lib/format";
 
 interface DocumentSequenceRow {
@@ -17,6 +20,7 @@ interface DocumentSequenceRow {
   name: string;
   docType: string;
   prefix: string | null;
+  startNo: number;
   nextNo: number;
   padLength: number;
   isActive: boolean;
@@ -55,11 +59,15 @@ const DOC_TYPE_LABELS: Record<string, string> = {
 };
 
 function DocumentSequenceList() {
+  const router = useRouter();
+  const toast = useToast();
   const { state } = useSession();
-  const canCreate =
-    state.status === "authenticated" &&
-    state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("document-sequence", "create"));
+  const roles = (state.user?.roles ?? []) as RoleCode[];
+  const canCreate = hasPermission(roles, actionPermission("document-sequence", "create"));
+  const canEdit = hasPermission(roles, actionPermission("document-sequence", "edit"));
+  const canDelete = hasPermission(roles, actionPermission("document-sequence", "delete"));
+  const [deleting, setDeleting] = useState<DocumentSequenceRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const [codeInput, setCodeInput] = useState("");
   const [nameInput, setNameInput] = useState("");
@@ -83,10 +91,35 @@ function DocumentSequenceList() {
     setPage(1);
   };
 
+  const runDelete = async () => {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      await apiFetch(`/api/document-sequences/${deleting.id}`, { method: "DELETE" });
+      toast.success("单据序列已删除");
+      setDeleting(null);
+      refresh();
+    } catch (err) {
+      const e = err instanceof ApiClientError ? err : new ApiClientError(0, "删除失败", "NETWORK_ERROR");
+      toast.error("删除失败", e.message);
+      setDeleting(null);
+      refresh();
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
   return (
     <AppPage>
       <EntityListWorkspace<DocumentSequenceRow>
         title="单据序列"
+        headerActions={
+          canCreate ? (
+            <button type="button" onClick={() => router.push("/document-sequences/new")} className={BUTTON_PRIMARY_CLASS}>
+              新建序列
+            </button>
+          ) : null
+        }
         description="维护报价/订单/项目等单据编号序列规则（编号由系统引擎管理）"
         emptyMessage="暂无编号序列规则"
         headerActions={
@@ -152,6 +185,7 @@ function DocumentSequenceList() {
           { key: "name", header: "名称" },
           { key: "docType", header: "单据类型", render: (row) => DOC_TYPE_LABELS[row.docType] ?? row.docType },
           { key: "prefix", header: "前缀", render: (row) => row.prefix ?? "—" },
+          { key: "startNo", header: "起始序号", render: (row) => String(row.startNo).padStart(row.padLength, "0") },
           { key: "nextNo", header: "当前序号", render: (row) => String(row.nextNo).padStart(row.padLength, "0") },
           { key: "isActive", header: "启用", render: (row) => (row.isActive ? "是" : "否") },
           { key: "createdAt", header: "创建时间", render: (row) => formatDate(row.createdAt) },
@@ -165,6 +199,30 @@ function DocumentSequenceList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        rowActions={(row) => (
+          <div className="flex justify-end gap-1">
+            {canEdit && (
+              <button type="button" onClick={() => router.push(`/document-sequences/${row.id}/edit`)} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary transition-colors hover:bg-slate-100">
+                编辑
+              </button>
+            )}
+            {canDelete && (
+              <button type="button" onClick={() => setDeleting(row)} className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text transition-colors hover:bg-red-50">
+                删除
+              </button>
+            )}
+          </div>
+        )}
+      />
+      <ConfirmActionDialog
+        open={deleting !== null}
+        title={`删除单据序列「${deleting?.name ?? ""}」？`}
+        description="删除后该单据类型将无法继续取号；已有单据不受影响。确认删除？"
+        confirmLabel="删除"
+        tone="danger"
+        busy={deleteBusy}
+        onConfirm={runDelete}
+        onCancel={() => setDeleting(null)}
       />
     </AppPage>
   );
