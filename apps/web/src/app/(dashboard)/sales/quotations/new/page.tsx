@@ -30,6 +30,12 @@ interface CustomerOption {
   name: string | null;
 }
 
+interface CommercialTermOption {
+  id: string;
+  code: string | null;
+  name: string | null;
+}
+
 interface LineForm {
   itemId: string;
   description: string;
@@ -52,10 +58,16 @@ function QuotationCreateForm() {
   const router = useRouter();
   const [items, setItems] = useState<ItemOption[]>([]);
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
+  const [terms, setTerms] = useState<CommercialTermOption[]>([]);
   const [customerId, setCustomerId] = useState("");
   const [currency, setCurrency] = useState("CNY");
-  const [validFrom, setValidFrom] = useState("");
-  const [validUntil, setValidUntil] = useState("");
+  // 有效期默认：从 = 当前系统日期；至 = 当前 + 30 天（date 输入，精确到天，无分钟）
+  const today = new Date();
+  const fmtDate = (d: Date) =>
+    d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  const [validFrom, setValidFrom] = useState(fmtDate(today));
+  const [validUntil, setValidUntil] = useState(fmtDate(new Date(today.getTime() + 30 * 86400000)));
+  const [paymentTerm, setPaymentTerm] = useState("");
   const [remark, setRemark] = useState("");
   const [lines, setLines] = useState<LineForm[]>([{ ...EMPTY_LINE }]);
   const [dirty, setDirty] = useState(false);
@@ -68,10 +80,12 @@ function QuotationCreateForm() {
     Promise.all([
       apiFetch<ItemOption[]>("/api/items?pageSize=100", { signal: controller.signal }),
       apiFetch<CustomerOption[]>("/api/business-partners?pageSize=100&type=CUSTOMER&isActive=true", { signal: controller.signal }),
+      apiFetch<CommercialTermOption[]>("/api/commercial-terms?pageSize=100&isActive=true", { signal: controller.signal }),
     ])
-      .then(([itemsBody, customersBody]) => {
+      .then(([itemsBody, customersBody, termsBody]) => {
         setItems(itemsBody.data);
         setCustomers(customersBody.data);
+        setTerms(termsBody.data);
       })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -144,6 +158,7 @@ function QuotationCreateForm() {
         currency,
         ...(validFrom ? { validFrom: toIso(validFrom) } : {}),
         ...(validUntil ? { validUntil: toIso(validUntil) } : {}),
+        ...(paymentTerm ? { paymentTerm } : {}),
         ...(remark ? { remark } : {}),
         lines: lines.map((l) => ({
           itemId: l.itemId,
@@ -233,9 +248,9 @@ function QuotationCreateForm() {
             </select>
           </div>
           <div>
-            <label className="block text-xs text-ink-secondary">有效期从（可选）</label>
+            <label className="block text-xs text-ink-secondary">有效期从（默认今日）</label>
             <input
-              type="datetime-local"
+              type="date"
               value={validFrom}
               onChange={(e) => {
                 setValidFrom(e.target.value);
@@ -245,9 +260,9 @@ function QuotationCreateForm() {
             />
           </div>
           <div>
-            <label className="block text-xs text-ink-secondary">有效期至（可选）</label>
+            <label className="block text-xs text-ink-secondary">有效期至（默认 +30 天）</label>
             <input
-              type="datetime-local"
+              type="date"
               value={validUntil}
               onChange={(e) => {
                 setValidUntil(e.target.value);
@@ -258,6 +273,24 @@ function QuotationCreateForm() {
             {fieldErrors.validUntil && (
               <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.validUntil}</p>
             )}
+          </div>
+          <div>
+            <label className="block text-xs text-ink-secondary">付款方式（商业条款）</label>
+            <select
+              value={paymentTerm}
+              onChange={(e) => {
+                setPaymentTerm(e.target.value);
+                markDirty();
+              }}
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+            >
+              <option value="">请选择付款方式</option>
+              {terms.map((t) => (
+                <option key={t.id} value={t.code ?? t.name ?? t.id}>
+                  {t.name ?? t.code}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="col-span-2 md:col-span-1">
             <label className="block text-xs text-ink-secondary">备注（可选，≤1000）</label>

@@ -89,6 +89,7 @@ export async function POST(request: NextRequest) {
           validFrom: data.validFrom ? new Date(data.validFrom) : null,
           validUntil: data.validUntil ? new Date(data.validUntil) : null,
           taxProfileId: data.taxProfileId ?? null,
+          paymentTerm: data.paymentTerm ?? null,
           remark: data.remark ?? null,
           createdById: user!.id,
           updatedById: user!.id,

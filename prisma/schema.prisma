@@ -3312,6 +3312,7 @@ model Quotation {
   quoteDate    DateTime @default(now()) @db.Timestamptz(3)
   validFrom    DateTime? @db.Timestamptz(3) // 有效期起（CTO 关键约束）
   validUntil   DateTime? @db.Timestamptz(3) // 有效期至（EXPIRED 惰性判定依据）
+  paymentTerm  String? // 付款方式（商业条款 code 快照，如 NET30/FOB；下拉选项来自 /api/commercial-terms）
   currency     String   @default("CNY")
   exchangeRateSnapshot Decimal? @db.Decimal(18, 8) // 汇率快照（仅 Header 存一次，行不存）
   taxProfileId String?  // 税率档案（不存裸 taxRate，CTO 决策 B）

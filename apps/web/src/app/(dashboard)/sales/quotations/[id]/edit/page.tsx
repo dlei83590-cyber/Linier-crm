@@ -82,6 +82,7 @@ interface QuotationDetail {
   validFrom?: string | null;
   validUntil?: string | null;
   taxProfileId?: string | null;
+  paymentTerm?: string | null;
   remark?: string | null;
   currency: string;
   totalAmount: string;
@@ -95,7 +96,7 @@ function toLocalInput(iso?: string | null): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
 }
 
 function toIso(value: string): string | null {
@@ -122,12 +123,15 @@ function QuotationEditForm() {
   const [validFrom, setValidFrom] = useState("");
   const [validUntil, setValidUntil] = useState("");
   const [taxProfileId, setTaxProfileId] = useState("");
+  const [paymentTerm, setPaymentTerm] = useState("");
   const [remark, setRemark] = useState("");
+  const [terms, setTerms] = useState<Array<{ id: string; code: string | null; name: string | null }>>([]);
   // authoritative 初始值（用于 diff：只发 changed 字段 + nullable 清空语义）
   const [headerInit, setHeaderInit] = useState({
     validFrom: "",
     validUntil: "",
     taxProfileId: "",
+    paymentTerm: "",
     remark: "",
   });
 
@@ -151,6 +155,7 @@ function QuotationEditForm() {
     validFrom !== headerInit.validFrom ||
     validUntil !== headerInit.validUntil ||
     taxProfileId !== headerInit.taxProfileId ||
+    paymentTerm !== headerInit.paymentTerm ||
     remark !== headerInit.remark;
   const newLineDirty = newItemId !== "" || newDescription !== "" || newQuantity !== "";
   const anyDirty = headerDirty || lineDirtyIds.size > 0 || newLineDirty;
@@ -162,11 +167,13 @@ function QuotationEditForm() {
       setValidFrom(toLocalInput(body.data.validFrom));
       setValidUntil(toLocalInput(body.data.validUntil));
       setTaxProfileId(body.data.taxProfileId ?? "");
+      setPaymentTerm(body.data.paymentTerm ?? "");
       setRemark(body.data.remark ?? "");
       setHeaderInit({
         validFrom: toLocalInput(body.data.validFrom),
         validUntil: toLocalInput(body.data.validUntil),
         taxProfileId: body.data.taxProfileId ?? "",
+        paymentTerm: body.data.paymentTerm ?? "",
         remark: body.data.remark ?? "",
       });
       setLines(body.data.lines ?? []);
@@ -215,6 +222,18 @@ function QuotationEditForm() {
     return () => controller.abort();
   }, []);
 
+  // 付款方式下拉选项（商业条款）
+  useEffect(() => {
+    const controller = new AbortController();
+    apiFetch<Array<{ id: string; code: string | null; name: string | null }>>(
+      "/api/commercial-terms?pageSize=100&isActive=true",
+      { signal: controller.signal },
+    )
+      .then((body) => setTerms(body.data))
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
+
   useEffect(() => {
     loadDetail();
   }, [loadDetail]);
@@ -256,6 +275,7 @@ function QuotationEditForm() {
     if (validFrom !== headerInit.validFrom) changes.validFrom = toIso(validFrom);
     if (validUntil !== headerInit.validUntil) changes.validUntil = toIso(validUntil);
     if (taxProfileId !== headerInit.taxProfileId) changes.taxProfileId = taxProfileId || null;
+    if (paymentTerm !== headerInit.paymentTerm) changes.paymentTerm = paymentTerm || null;
     if (remark !== headerInit.remark) changes.remark = remark.trim() === "" ? null : remark;
     if (Object.keys(changes).length === 0) {
       setFieldErrors({ scope: "头字段没有修改" });
@@ -521,7 +541,7 @@ function QuotationEditForm() {
           <div>
             <label className="block text-xs text-ink-secondary">有效期从（可选，清空即置空）</label>
             <input
-              type="datetime-local"
+              type="date"
               value={validFrom}
               onChange={(e) => setValidFrom(e.target.value)}
               className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
@@ -530,7 +550,7 @@ function QuotationEditForm() {
           <div>
             <label className="block text-xs text-ink-secondary">有效期至（可选，清空即置空）</label>
             <input
-              type="datetime-local"
+              type="date"
               value={validUntil}
               onChange={(e) => setValidUntil(e.target.value)}
               className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
@@ -538,6 +558,21 @@ function QuotationEditForm() {
             {fieldErrors.validUntil && (
               <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.validUntil}</p>
             )}
+          </div>
+          <div>
+            <label className="block text-xs text-ink-secondary">付款方式（商业条款，可清空）</label>
+            <select
+              value={paymentTerm}
+              onChange={(e) => setPaymentTerm(e.target.value)}
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+            >
+              <option value="">未指定</option>
+              {terms.map((t) => (
+                <option key={t.id} value={t.code ?? t.name ?? t.id}>
+                  {t.name ?? t.code}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-xs text-ink-secondary">税率档案（可选，可清空）</label>
