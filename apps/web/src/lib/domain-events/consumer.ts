@@ -34,6 +34,9 @@ const GL_POSTED_EVENTS = new Set([
   'InvoiceIssued',
   'ReceiptAllocated',
   'ReceiptAllocationReversed',
+  // 销售贷/借项（CN/DN）：Apply 过账 + 反冲反向凭证（#163 漏注册 → 补；反冲与 Apply 成对闭环）
+  'InvoiceAdjustmentApplied',
+  'InvoiceAdjustmentReversed',
 ]);
 
 interface ClaimedOutboxRow {

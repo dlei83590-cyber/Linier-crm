@@ -12,7 +12,7 @@
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
@@ -98,6 +98,7 @@ function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
 
 function InvoiceDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const { state } = useSession();
   const id = typeof params.id === "string" ? params.id : "";
   const [detail, setDetail] = useState<InvoiceDetail | null>(null);
@@ -119,12 +120,20 @@ function InvoiceDetailPage() {
   const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
   const canApprove = hasPermission(roles, actionPermission("invoice", "approve"));
   const canClose = hasPermission(roles, actionPermission("invoice", "close"));
+  const canCreate = hasPermission(roles, actionPermission("invoice", "create"));
   const isDraft = detail !== null && detail.status === "DRAFT";
+  // 蓝票（ISSUED 且非红字）可红冲；红字草稿自动预填引用
+  const isIssuedBlue = detail !== null && detail.status === "ISSUED" && !detail.redLetter;
 
   const loadDetail = async () => {
     try {
       const body = await apiFetch<InvoiceDetail>(`/api/invoices/${id}`);
       setDetail(body.data);
+      // 红字草稿：自动沿用 DB 预填的 redInvoiceRefId（POST /red-invoice 创建时写入），
+      // issue 时后端以 DB 引用为准（R2/R4/R6 校验），避免用户手动重填
+      if (body.data.redInvoiceRefId) {
+        setIssueForm((f) => ({ ...f, redInvoiceRefId: body.data.redInvoiceRefId ?? "" }));
+      }
     } catch (err: unknown) {
       setActionError(
         err instanceof ApiClientError ? err : new ApiClientError(0, "刷新失败", "NETWORK_ERROR"),
@@ -193,6 +202,28 @@ function InvoiceDetailPage() {
     }
   };
 
+  const runRedInvoice = async () => {
+    if (!detail || actionBusy) return;
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      const body = await apiFetch<{ id: string }>(`/api/invoices/${id}/red-invoice`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      toast.success("红字发票草稿已创建，请在详情页完成开具");
+      router.push(`/sales/invoices/${body.data.id}`);
+    } catch (err: unknown) {
+      toast.error("红冲失败", err instanceof ApiClientError ? err.message : "网络错误");
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "操作失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
   if (loading) {
     return (
       <AppPage>
@@ -229,7 +260,7 @@ function InvoiceDetailPage() {
         statusLabel={STATUS_LABELS[detail.status] ?? detail.status}
         statusTone={TONE_MAP[detail.status] ?? "neutral"}
         actions={
-          (isDraft && canApprove) || (isDraft && canClose) ? (
+          (isDraft && (canApprove || canClose)) || (isIssuedBlue && canCreate) ? (
             <>
               {isDraft && canApprove && (
                 <button
@@ -249,6 +280,16 @@ function InvoiceDetailPage() {
                   className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-status-danger-bg disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   取消
+                </button>
+              )}
+              {isIssuedBlue && canCreate && (
+                <button
+                  type="button"
+                  onClick={() => void runRedInvoice()}
+                  disabled={actionBusy}
+                  className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-status-danger-bg disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {actionBusy ? "创建中…" : "红冲（生成红字发票）"}
                 </button>
               )}
             </>

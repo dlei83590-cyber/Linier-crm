@@ -49,7 +49,7 @@ interface CnDnRow {
   lines?: CnDnLine[];
 }
 
-const STATUS_OPTIONS = ["DRAFT", "SUBMITTED", "APPLIED"] as const;
+const STATUS_OPTIONS = ["DRAFT", "SUBMITTED", "APPLIED", "REVERSED", "CANCELLED"] as const;
 const NOTE_TYPE_OPTIONS = ["CREDIT", "DEBIT"] as const;
 
 const NOTE_TYPE_LABEL: Record<string, string> = {
@@ -61,12 +61,16 @@ const STATUS_LABEL: Record<string, string> = {
   DRAFT: "草稿",
   SUBMITTED: "已提交",
   APPLIED: "已应用",
+  REVERSED: "已反冲",
+  CANCELLED: "已取消",
 };
 
 const TONE_MAP: Record<string, StatusTone> = {
   DRAFT: "neutral",
   SUBMITTED: "info",
   APPLIED: "success",
+  REVERSED: "warning",
+  CANCELLED: "danger",
 };
 
 const APPROVAL_TONE: Record<string, StatusTone> = {
@@ -77,7 +81,7 @@ const APPROVAL_TONE: Record<string, StatusTone> = {
 };
 
 interface ConfirmTarget {
-  type: "submit" | "apply";
+  type: "submit" | "apply" | "reverse" | "delete";
   id: string;
   code: string;
 }
@@ -95,6 +99,10 @@ function CnDnList() {
   const canApprove = hasPermission(
     state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [],
     actionPermission("credit-debit-note", "approve"),
+  );
+  const canDelete = hasPermission(
+    state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [],
+    actionPermission("credit-debit-note", "delete"),
   );
 
   const [statusInput, setStatusInput] = useState("");
@@ -139,11 +147,21 @@ function CnDnList() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ changeReason: "提交生效" }),
         });
-      } else {
+      } else if (target.type === "apply") {
         await apiFetch(`/api/credit-debit-notes/${target.id}/apply`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ changeReason: "应用到应收" }),
+        });
+      } else if (target.type === "reverse") {
+        await apiFetch(`/api/credit-debit-notes/${target.id}/reverse`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ changeReason: "反冲减" }),
+        });
+      } else {
+        await apiFetch(`/api/credit-debit-notes/${target.id}`, {
+          method: "DELETE",
         });
       }
       refresh();
@@ -306,6 +324,26 @@ function CnDnList() {
                       {busyKey === `${row.id}:apply` ? "应用中…" : "应用"}
                     </button>
                   )}
+                  {row.status === "APPLIED" && canApprove && (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmTarget({ type: "reverse", id: row.id, code: row.code })}
+                      disabled={busy}
+                      className="rounded-md border border-border px-2 py-1 text-xs text-ink-primary hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {busyKey === `${row.id}:reverse` ? "反冲中…" : "反冲减"}
+                    </button>
+                  )}
+                  {(row.status === "DRAFT" || row.status === "CANCELLED" || row.status === "REVERSED") && canDelete && (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmTarget({ type: "delete", id: row.id, code: row.code })}
+                      disabled={busy}
+                      className="rounded-md border border-border px-2 py-1 text-xs text-status-danger-text hover:bg-status-danger-bg/10 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {busyKey === `${row.id}:delete` ? "删除中…" : "删除"}
+                    </button>
+                  )}
                 </div>
               );
             },
@@ -406,12 +444,22 @@ function CnDnList() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-ink-primary text-base font-semibold">
-              {confirmTarget.type === "submit" ? "提交通知单" : "应用通知单"}
+              {confirmTarget.type === "submit"
+                ? "提交通知单"
+                : confirmTarget.type === "apply"
+                  ? "应用通知单"
+                  : confirmTarget.type === "reverse"
+                    ? "反冲减通知单"
+                    : "删除通知单"}
             </h2>
             <p className="text-ink-secondary mt-2 text-sm">
               {confirmTarget.type === "submit"
                 ? `提交 ${confirmTarget.code}？提交即生效（已自动批准），可继续应用。`
-                : `将 ${confirmTarget.code} 应用到应收（产生不可逆财务事实，APPROVED ≠ APPLIED）？`}
+                : confirmTarget.type === "apply"
+                  ? `将 ${confirmTarget.code} 应用到应收（产生不可逆财务事实，APPROVED ≠ APPLIED）？`
+                  : confirmTarget.type === "reverse"
+                    ? `反冲减 ${confirmTarget.code}？将回退应收调整并生成 GL 反向凭证（原发票金额事实不变）。`
+                    : `删除 ${confirmTarget.code}？仅草稿/已取消/已反冲状态可删除（软删，列表不再展示）。`}
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <button
@@ -431,7 +479,7 @@ function CnDnList() {
                 }}
                 disabled={busyKey !== null}
                 className={
-                  confirmTarget.type === "apply"
+                  confirmTarget.type === "apply" || confirmTarget.type === "delete"
                     ? "rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
                     : "bg-brand-600 hover:bg-brand-700 rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
                 }

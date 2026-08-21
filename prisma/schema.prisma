@@ -4407,6 +4407,7 @@ enum CreditDebitNoteStatus {
   DRAFT     // 草稿（可编辑行）
   SUBMITTED // 已提交（命中策略 → Workflow 审批 PENDING；未命中 → 可直接进入可 Apply 状态）
   APPLIED   // 已生效（唯一回写 AR.adjustedAmount 的入口；APPROVED ≠ APPLIED）
+  REVERSED  // 已反冲（APPLIED 后反向撤销：回退 AR.adjustedAmount + GL 反向凭证）
   CANCELLED // 已取消（未生效前可取消）
 }
 
