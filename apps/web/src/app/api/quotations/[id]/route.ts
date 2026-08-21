@@ -145,7 +145,6 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     });
     if (seq) {
       const prefix = seq.prefix ?? "QT";
-      const padLength = seq.padLength ?? 6;
       const numStr = quotation.code.startsWith(prefix) ? quotation.code.slice(prefix.length) : null;
       const parsed = numStr !== null && numStr !== "" && !Number.isNaN(Number(numStr)) ? Number(numStr) : null;
       if (parsed !== null && parsed === seq.nextNo - 1) {
