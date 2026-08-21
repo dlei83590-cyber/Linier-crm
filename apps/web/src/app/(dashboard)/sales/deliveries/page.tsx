@@ -9,12 +9,15 @@
  */
 import { useState } from "react";
 import Link from "next/link";
-import { actionPermission } from "@nilier-crm/shared";
+import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
+import { useSession } from "@/lib/session-context";
 import { formatDate } from "@/lib/format";
 
 interface DeliveryRow {
@@ -49,6 +52,11 @@ const TONE_MAP: Record<string, StatusTone> = {
 };
 
 function DeliveryList() {
+  const toast = useToast();
+  const { state } = useSession();
+  const canDelete = hasPermission((state.user?.roles ?? []) as RoleCode[], actionPermission("delivery", "delete"));
+  const [deleting, setDeleting] = useState<DeliveryRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [codeInput, setCodeInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ code?: string; status?: string }>({});
@@ -69,6 +77,24 @@ function DeliveryList() {
     setStatusInput("");
     setFilters({});
     setPage(1);
+  };
+
+  const runDelete = async () => {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      await apiFetch("/api/deliveries/" + deleting.id, { method: "DELETE" });
+      toast.success("送货单已删除");
+      setDeleting(null);
+      refresh();
+    } catch (err) {
+      const e = err instanceof ApiClientError ? err : new ApiClientError(0, "删除失败", "NETWORK_ERROR");
+      toast.error("删除失败", e.message);
+      setDeleting(null);
+      refresh();
+    } finally {
+      setDeleteBusy(false);
+    }
   };
 
   return (
@@ -184,6 +210,25 @@ function DeliveryList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        rowActions={(row) =>
+          canDelete && row.status === "CANCELLED" ? (
+            <div className="flex justify-end gap-1">
+              <button type="button" onClick={() => setDeleting(row)} className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text transition-colors hover:bg-red-50">
+                删除
+              </button>
+            </div>
+          ) : undefined
+        }
+      />
+      <ConfirmActionDialog
+        open={deleting !== null}
+        title={"删除送货单「" + (deleting?.code ?? "") + "」？"}
+        description="仅已取消（CANCELLED）且无发票的送货单可删除（回退后清理列表）。"
+        confirmLabel="删除"
+        tone="danger"
+        busy={deleteBusy}
+        onConfirm={runDelete}
+        onCancel={() => setDeleting(null)}
       />
     </AppPage>
   );
