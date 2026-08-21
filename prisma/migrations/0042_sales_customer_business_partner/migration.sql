@@ -2,12 +2,15 @@
 -- 0042 销售链客户重指向：Customer → BusinessPartner（统一往来单位）
 -- 背景：销售单据（Quotation/SalesOrder/Delivery/Invoice/AR/Receipt/CDN/InvoiceAdjustment）
 --       原 FK 指向遗留 Customer 表；业务主数据为 BusinessPartner（往来单位，ROADMAP：统一往来单位）。
--- 本迁移（v2 修复执行顺序——首次部署失败根因：重指向 UPDATE 在旧 FK 未删除时违反
---       Quotation_customerId_fkey（REFERENCES Customer），迁移整体回滚）：
+-- 本迁移（v3 修复——Railway 部署 healthcheck 失败根因）：
+--   v1: 重指向 UPDATE 在旧 FK 未删除时违反 Quotation_customerId_fkey → 整体回滚
+--   v2: 仍可能因 gen_random_uuid()（PG<13 不存在）在回填阶段失败 → v3 改用 md5+random+clock_timestamp（全 PG 版本可用）
+-- 执行顺序：
 --   1) 为每个无 partnerId 的 Customer 回填 BusinessPartner（code 冲突加后缀）并建立 partnerId 关联
---   2) **先删除 8 张单据的旧 Customer FK**（解除约束后再重指向，避免 FK 冲突）
+--   2) 先删除 8 张单据的旧 Customer FK（解除约束后再重指向，避免 FK 冲突）
 --   3) 将 8 张销售单据 customerId 重指向 BusinessPartner.id
---   4) 新增 BusinessPartner FK（ON DELETE RESTRICT ON UPDATE CASCADE）
+--   4) 防御性孤儿校验（任何残留孤儿 → RAISE EXCEPTION 整体回滚）
+--   5) 新增 BusinessPartner FK（ON DELETE RESTRICT ON UPDATE CASCADE）
 -- ============================================================
 
 -- 1) 回填 BusinessPartner（DO 块：逐行处理 code 冲突；唯一索引包含软删除行 → 冲突检查覆盖全部行）
@@ -25,8 +28,8 @@ BEGIN
       suffix := suffix + 1;
       partnerCode := c."code" || '-C' || CASE WHEN suffix = 1 THEN '' ELSE suffix::text END;
     END LOOP;
-    -- 生成 cuid 风格 id（与 Prisma cuid 格式兼容：c + 24 hex）
-    partnerId := 'c' || substr(replace(gen_random_uuid()::text, '-', ''), 1, 24);
+    -- cuid 风格 id：md5(random + clock_timestamp + 行 id)（全 PG 版本可用，不依赖 gen_random_uuid）
+    partnerId := 'c' || substr(md5(random()::text || clock_timestamp()::text || c."id"), 1, 24);
     INSERT INTO "BusinessPartner" ("id", "code", "name", "type", "isActive", "approvalStatus", "version", "createdAt", "updatedAt")
     VALUES (partnerId, partnerCode, c."name", 'CUSTOMER', true, 'APPROVED', 1, now(), now());
     UPDATE "Customer" SET "partnerId" = partnerId WHERE "id" = c."id";
@@ -53,7 +56,7 @@ UPDATE "Receipt" r SET "customerId" = c."partnerId" FROM "Customer" c WHERE r."c
 UPDATE "CreditDebitNote" n SET "customerId" = c."partnerId" FROM "Customer" c WHERE n."customerId" = c."id";
 UPDATE "InvoiceAdjustment" ia SET "customerId" = c."partnerId" FROM "Customer" c WHERE ia."customerId" = c."id";
 
--- 防御性校验：重指向后不允许任何残留孤儿 customerId（若有 → 抛错回滚，防止脏数据进入新 FK）
+-- 4) 防御性孤儿校验：重指向后不允许任何残留孤儿 customerId（若有 → 抛错回滚，防止脏数据进入新 FK）
 DO $$
 DECLARE
   orphanCount BIGINT := 0;
@@ -71,7 +74,7 @@ BEGIN
   END IF;
 END $$;
 
--- 4) 新增 BusinessPartner FK（命名沿用 Prisma 默认 Table_column_fkey）
+-- 5) 新增 BusinessPartner FK（命名沿用 Prisma 默认 Table_column_fkey）
 ALTER TABLE "Quotation" ADD CONSTRAINT "Quotation_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "BusinessPartner"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "SalesOrder" ADD CONSTRAINT "SalesOrder_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "BusinessPartner"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "Delivery" ADD CONSTRAINT "Delivery_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "BusinessPartner"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
