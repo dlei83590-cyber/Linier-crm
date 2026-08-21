@@ -129,8 +129,9 @@ export class PricingEngineService {
 
     if (!unitPrice) {
       const priceListWhere = ctx.priceListId ? { id: ctx.priceListId } : {};
+      // 价目表取价：PUBLISHED / DRAFT 均生效（主数据"配置即生效"；ARCHIVED 排除；DRAFT 兼容历史未发布价目表）
       const priceList = await this.db.priceList.findFirst({
-        where: { ...priceListWhere, deletedAt: null, isActive: true, status: "PUBLISHED" },
+        where: { ...priceListWhere, deletedAt: null, isActive: true, status: { in: ["PUBLISHED", "DRAFT"] } },
         include: {
           versions: { where: { status: "PUBLISHED", isActive: true }, orderBy: [{ versionNo: "desc" }], take: 1 },
         },
@@ -142,7 +143,8 @@ export class PricingEngineService {
             itemId: ctx.itemId,
             deletedAt: null,
             isActive: true,
-            approvalStatus: "APPROVED",
+            // APPROVED / DRAFT 均取价（兼容历史 DRAFT 单价行；ARCHIVED 语义由 isActive 承担）
+            approvalStatus: { in: ["APPROVED", "DRAFT"] },
             AND: [
               { OR: [{ effectiveFrom: null }, { effectiveFrom: { lte: now } }] },
               { OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }] },

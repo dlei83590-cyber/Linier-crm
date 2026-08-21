@@ -72,6 +72,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       effectiveFrom: parsed.data.effectiveFrom ? new Date(parsed.data.effectiveFrom) : null,
       effectiveTo: parsed.data.effectiveTo ? new Date(parsed.data.effectiveTo) : null,
       priceSource: "MANUAL",
+      // 主数据先例：创建即生效（移除审核；PricingEngine 按 approvalStatus 取价）
+      approvalStatus: "APPROVED",
       createdById: user?.id ?? null,
       updatedById: user?.id ?? null,
     },
