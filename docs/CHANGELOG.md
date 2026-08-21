@@ -2,6 +2,23 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 销售链层层回退闭环（2026-08-21，PR #170）
+
+### 新增
+
+- **发票红冲应收回退**：红字发票 ISSUE 不再创建独立负应收——回退原票 AR（adjustedAmount -= |红字| + balanceAmount=computeBalance 重算 + 原票 Invoice.balanceAmount 同步 + AR Revision/Snapshot）
+- **红字发票删除**：DRAFT 直接软删；ISSUED 删除 = 撤销红冲（恢复原票应收）
+- **送货单反签收**：POST /api/deliveries/:id/unconfirm（DELIVERED → DISPATCHED + POD 回退 + SO 投影重算）；DeliveryUnconfirmed 事件（EVENTS v1.44）
+- **送货单删除扩展**：CANCELLED 或反签收后（DISPATCHED）可删（无未红冲发票引用）
+- **订单回未发货**：delivery-aggregation 支持 deliveredQty=0 → CONFIRMED
+- **层层回退 Gate**：反签收/删除要求 ISSUED 蓝票均已红冲
+
+### 边界
+
+- 蓝票 ISSUED 仍不可删（红冲只回退应收不改蓝票状态）；红字 GL 记账仍属 backlog；无 Schema/Migration
+
+---
+
 ## [Unreleased] - CN/DN 反冲减 + 删除 + 销售发票红冲（2026-08-21，PR #169）
 
 ### 新增
