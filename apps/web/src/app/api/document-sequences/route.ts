@@ -24,6 +24,7 @@ const documentSequenceCreateSchema = z.object({
   docType: z.enum(DOC_TYPES),
   prefix: z.string().max(32).nullable().optional(),
   padLength: z.number().int().min(1).max(12).optional(),
+  startNo: z.number().int().min(1).optional(), // 起始序号（默认 1；nextNo 初始 = startNo）
 });
 
 /** GET /api/document-sequences（分页 + code/name/docType/isActive 过滤） */
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest) {
   return ok(items, { page, pageSize, total });
 }
 
-/** POST /api/document-sequences（创建单据序列：code 唯一；nextNo 由编号引擎系统管理，不可客户端写入） */
+/** POST /api/document-sequences（创建单据序列：code 唯一；startNo 起始序号 → nextNo 初始 = startNo；后续 nextNo 可由管理员调整） */
 export async function POST(request: NextRequest) {
   const user = await authenticate(request);
   const denied = requirePermission(user, "document-sequence:create");
@@ -84,7 +85,8 @@ export async function POST(request: NextRequest) {
       docType: parsed.data.docType as DocumentType,
       prefix: parsed.data.prefix ?? null,
       padLength: parsed.data.padLength ?? 4,
-      nextNo: 1,
+      startNo: parsed.data.startNo ?? 1,
+      nextNo: parsed.data.startNo ?? 1, // 当前序号初始 = 起始序号（管理员可后续调整）
       approvalStatus: "APPROVED",
       createdById: user?.id ?? null,
       updatedById: user?.id ?? null,

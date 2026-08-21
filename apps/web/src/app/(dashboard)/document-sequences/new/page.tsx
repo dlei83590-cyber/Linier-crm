@@ -51,6 +51,7 @@ function DocumentSequenceCreateForm() {
   const [docType, setDocType] = useState("");
   const [prefix, setPrefix] = useState("");
   const [padLength, setPadLength] = useState("4");
+  const [startNo, setStartNo] = useState("1"); // 起始序号
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiClientError | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -69,6 +70,7 @@ function DocumentSequenceCreateForm() {
       docType,
       prefix: prefix.trim() || undefined,
       padLength: Number(padLength) || 4,
+      startNo: Number(startNo) || 1,
     };
     apiFetch<{ id: string }>("/api/document-sequences", {
       method: "POST",
@@ -117,6 +119,9 @@ function DocumentSequenceCreateForm() {
           </FormField>
           <FormField label="序号位数">
             <input type="number" min={1} max={12} value={padLength} onChange={(e) => setPadLength(e.target.value)} className={inputClass} />
+          </FormField>
+          <FormField label="起始序号">
+            <input type="number" min={1} value={startNo} onChange={(e) => setStartNo(e.target.value)} className={inputClass} placeholder="默认 1（当前序号初始值）" />
           </FormField>
         </div>
       </section>

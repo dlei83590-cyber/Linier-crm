@@ -16,6 +16,7 @@ interface DocumentSequenceDetail {
   name: string;
   docType: string;
   prefix: string | null;
+  startNo: number;
   nextNo: number;
   padLength: number;
   isActive: boolean;
@@ -65,7 +66,8 @@ function DocumentSequenceEditForm() {
   const [name, setName] = useState("");
   const [docType, setDocType] = useState("");
   const [prefix, setPrefix] = useState("");
-  const [nextNo, setNextNo] = useState(1);
+  const [startNo, setStartNo] = useState(1); // 起始序号
+  const [nextNo, setNextNo] = useState(1); // 当前序号（可调整）
   const [padLength, setPadLength] = useState("4");
   const [isActive, setIsActive] = useState(true);
   const [version, setVersion] = useState(0);
@@ -85,6 +87,7 @@ function DocumentSequenceEditForm() {
         setName(d.name);
         setDocType(d.docType);
         setPrefix(d.prefix ?? "");
+        setStartNo(d.startNo);
         setNextNo(d.nextNo);
         setPadLength(String(d.padLength));
         setIsActive(d.isActive);
@@ -118,6 +121,8 @@ function DocumentSequenceEditForm() {
       docType,
       prefix: prefix.trim() || null,
       padLength: Number(padLength) || 4,
+      startNo: Number(startNo) || 1,
+      nextNo: Number(nextNo) || 1,
       isActive,
     };
     apiFetch<{ id: string }>(`/api/document-sequences/${id}`, {
@@ -187,8 +192,11 @@ function DocumentSequenceEditForm() {
           <FormField label="序号位数">
             <input type="number" min={1} max={12} value={padLength} onChange={(e) => setPadLength(e.target.value)} className={inputClass} />
           </FormField>
-          <FormField label="当前序号（系统管理，只读）">
-            <input value={String(nextNo).padStart(Number(padLength) || 4, "0")} readOnly className={`${inputClass} bg-canvas`} />
+          <FormField label="起始序号">
+            <input type="number" min={1} value={startNo} onChange={(e) => setStartNo(Number(e.target.value) || 1)} className={inputClass} />
+          </FormField>
+          <FormField label="当前序号（下一个将使用；可调整）">
+            <input type="number" min={1} value={nextNo} onChange={(e) => setNextNo(Number(e.target.value) || 1)} className={inputClass} />
           </FormField>
           <FormField label="启用">
             <select value={isActive ? "true" : "false"} onChange={(e) => setIsActive(e.target.value === "true")} className={inputClass}>
