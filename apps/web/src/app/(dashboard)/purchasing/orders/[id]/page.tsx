@@ -280,7 +280,7 @@ function OrderDetailPage() {
         }
         description={
           confirmAction === "submit"
-            ? "提交后进入审批流程（命中策略需 APPROVED 后才能确认）。确认提交？"
+            ? "提交即生效（已自动批准），可继续确认/收货。确认提交？"
             : confirmAction === "confirm"
               ? "确认后形成对供应商的正式采购承诺（CONFIRMED），之后才可收货。确认？"
               : "取消该采购订单？仅 DRAFT/APPROVED 可取消（已确认订单禁止取消）。"

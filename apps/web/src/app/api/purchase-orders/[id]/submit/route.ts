@@ -5,7 +5,6 @@ import { authenticate, requirePermission, requestMeta, writeAuditLog } from '@/l
 import { ok, fail, failConflict, failNotFound } from '@/lib/api/response';
 import { ERROR_CODES } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
-import { maybeTriggerPurchaseOrderApproval } from '@/lib/purchase-order/workflow-sync';
 import { publishPurchaseOrderEvent } from '@/lib/purchase-order/events';
 
 export const dynamic = 'force-dynamic';
@@ -85,36 +84,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return { error: 'AMOUNT_MISMATCH' as const };
     }
 
-    // ⑦ DRAFT → SUBMITTED（同事务）
+    // ⑦ auto-approve（移除审核：提交即生效——DRAFT → APPROVED 同事务，跳过 WorkflowInstance 创建；后续审核打通后恢复）
     await tx.purchaseOrder.update({
       where: { id: po.id },
-      data: { status: 'SUBMITTED', updatedById: actorId },
+      data: {
+        status: 'APPROVED',
+        approvalStatus: 'APPROVED',
+        approvedAt: new Date(),
+        approvedById: actorId,
+        updatedById: actorId,
+      },
     });
-
-    // ⑧ 条件触发审批（同事务；命中策略 → PENDING + workflowInstanceId；未命中 → skipped）
-    const wf = await maybeTriggerPurchaseOrderApproval({
-      purchaseOrderId: po.id,
-      actorId,
-      meta,
-      tx,
-    });
-
-    // ⑨ 未命中策略 → 直接完成审批投影（status=APPROVED + approvalStatus=APPROVED；绝不 CONFIRMED）
-    if (wf.skipped === 'no-policy' || wf.skipped === 'no-rule-matched') {
-      await tx.purchaseOrder.update({
-        where: { id: po.id },
-        data: {
-          status: 'APPROVED',
-          approvalStatus: 'APPROVED',
-          approvedAt: new Date(),
-          approvedById: actorId,
-          updatedById: actorId,
-        },
-      });
-    }
 
     const finalPo = await tx.purchaseOrder.findFirstOrThrow({ where: { id: po.id } });
-    return { po: finalPo, workflow: wf };
+    return { po: finalPo, workflow: { skipped: 'no-policy' as const, resubmitted: false } };
   }).catch((e: Error) => {
     if (e.message === 'WORKFLOW_DEFINITION_NOT_FOUND') {
       return { error: 'WORKFLOW_FAILED' as const };

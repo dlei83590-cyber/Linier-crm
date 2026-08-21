@@ -11,7 +11,7 @@ import { verifyReceiptBasedSourceChain } from '@/lib/supplier-invoice/helpers';
 export const dynamic = 'force-dynamic';
 
 /**
- * POST /api/supplier-invoices/:id/submit —— DRAFT → SUBMITTED（CTO 5C-1A #9083）
+ * POST /api/supplier-invoices/:id/submit —— DRAFT → APPROVED（auto-approve：移除审核，提交即生效——后续审核打通后恢复 SUBMITTED + 审批）
  * - **第三次 RECEIPT_BASED 三重 Gate（红线 1）**：状态迁移前重新验证每行 WHR header = POSTED +
  *   WHR Line ↔ PO Line ↔ Item ↔ Supplier 来源链一致 + 数量 ≤ 已入库
  *   （即使创建/编辑后来源事实异常变化，也不会把失效来源带入后续 Match 阶段——CTO 指令）
@@ -81,11 +81,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return { error: chain.error as 'WHR_NOT_POSTED' | 'SOURCE_CHAIN_MISMATCH' | 'ITEM_INVALID' | 'QUANTITY_INVALID' };
     }
 
-    // ⑥ 状态迁移 DRAFT → SUBMITTED（**不创建 MatchRun/GRIR/ApLiabilityFact；不写 postedAt/postedById**）
+    // ⑥ auto-approve（移除审核：提交即生效——DRAFT → APPROVED 同事务；仍不创建 MatchRun/GRIR/ApLiabilityFact，不写 postedAt/postedById；后续审核打通后恢复）
     await tx.supplierInvoice.update({
       where: { id },
       data: {
-        documentStatus: 'SUBMITTED',
+        documentStatus: 'APPROVED',
         version: { increment: 1 },
         updatedById: actorId,
       },
