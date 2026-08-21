@@ -2,6 +2,20 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 财务模块统一归口（2026-08-21，PR #178）
+
+### 新增
+
+- **销售/采购财务模块统一移入"财务管理"域**（用户指令，为后续权限分配）：应收/收款核销/销售贷借项 + 供应商发票/应付未结项/供应商贷借项/付款核销
+- 移除 supplier-ap 域（ModuleDomain/MODULE_DOMAINS/tokens/domain-class 清理）；finance 域更名"财务管理"（order 6）
+- 物理 URL 不变（遵循 modules.ts 治理原则：不改 URL 避免 redirect 风险）；RBAC 权限码不变
+
+### 边界
+
+- 无 Schema/Migration/API 变更；销售/采购业务域模块不变
+
+---
+
 ## [Unreleased] - 报价单回退 + 红字发票删除修复（2026-08-21，PR #176）
 
 ### 修复
