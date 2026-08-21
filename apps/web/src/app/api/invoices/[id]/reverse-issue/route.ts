@@ -5,10 +5,9 @@ import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/l
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
-import { invoiceCancelSchema } from "@/lib/api/schemas";
+import { z } from "zod";
 import { createInvoiceSnapshot, latestInvoiceRevisionNo } from "@/lib/invoice/helpers";
 import { publishInvoiceEvent } from "@/lib/invoice/events";
-import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
