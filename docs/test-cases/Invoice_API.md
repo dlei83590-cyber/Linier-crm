@@ -260,3 +260,15 @@
 | Q5 | 红字 ISSUED 删除=撤销红冲 | DELETE 红字（ISSUED） | 200；原票 AR.adjustedAmount += |红字|（恢复）；原票 Invoice.balanceAmount 恢复；AR Revision+Snapshot |
 | Q6 | 蓝票删除保持现状 | DELETE 蓝票（ISSUED） | 409（仅 CANCELLED 可删；红冲只回退应收不改蓝票状态） |
 | Q7 | 红字重复删除 | 删除后再次 DELETE | 404 INVOICE_NOT_FOUND（deletedAt 过滤） |
+
+## R. 反开票撤销（红冲语义修正——用户指令 2026-08-21：红冲=反开票撤销错误开票）
+
+| # | 用例 | 方法/路径 | 预期 |
+| --- | --- | --- | --- |
+| R1 | ISSUED 蓝票反开票成功 | POST /api/invoices/:id/reverse-issue（ISSUED 未收款） | 200；原票 status=CANCELLED；AR 软删（应收清除）；DeliveryLine.invoicedQty -= qty / remainingInvoiceQty += qty（释放开票数量）；CANCELLED Snapshot(reverseIssue=true) |
+| R2 | 非 ISSUED 反开票 | DRAFT/CANCELLED/红字发票 | 409 INVOICE_INVALID_STATE（仅 ISSUED 蓝票可撤销） |
+| R3 | 有收款禁止反开票 | paidAmount>0 | 409 INVOICE_INVALID_STATE（先冲销核销） |
+| R4 | 有未冲销核销禁止反开票 | ReceiptAllocation reversedAt IS NULL | 409 INVOICE_INVALID_STATE |
+| R5 | 红字发票禁止反开票 | redLetter=true | 409 INVOICE_INVALID_STATE |
+| R6 | 撤销后可删除清理 | 反开票后 DELETE | 200（CANCELLED 且无 AR → 可删） |
+| R7 | 事件/审计 | 反开票后 | AuditLog action=invoice.reverse-issue + InvoiceCancelled（payload 含 reverseIssue=true） |
