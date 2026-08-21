@@ -2,6 +2,22 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 红冲语义修正：反开票撤销错误开票（2026-08-21，PR #174）
+
+### 修复
+
+- **红冲 = 反开票（撤销错误开票）**（用户指令修正）：不再创建红字发票凭证（原实现被指为"假红冲"——红字可删、原票仍在）
+- 新增 `POST /api/invoices/:id/reverse-issue`：ISSUED 蓝票 → 原票 CANCELLED（作废）+ AR 软删（应收清除）+ 释放 DeliveryLine 开票数量（invoicedQty/remainingInvoiceQty 回滚）+ CANCELLED Snapshot(reverseIssue=true) + AuditLog/InvoiceCancelled
+- 前置：仅未收款（paidAmount=0）且无未冲销核销可撤销（有收款先冲销核销）；红字发票禁止反开票
+- 前端发票详情：ISSUED 蓝票"红冲"按钮改为反开票（确认对话框），不再跳转红字草稿
+- 历史红字发票机制保留（后端能力 + 列表红字删除），新流程不再创建红字凭证
+
+### 边界
+
+- 无 Schema/Migration；送货单反签收 Gate 自动衔接（发票 CANCELLED 不再阻止反签收/删除）
+
+---
+
 ## [Unreleased] - 快照唯一约束修复（2026-08-21，PR #172）
 
 ### 修复
