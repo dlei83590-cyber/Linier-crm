@@ -10,6 +10,11 @@ import { nextInvoiceCode, createInvoiceSnapshot, latestInvoiceRevisionNo } from 
 import { publishInvoiceEvent } from "@/lib/invoice/events";
 import { writeDomainEvent } from "@/lib/domain-events/writer";
 import { validateTaxInvoiceFields, normalizeTaxInvoiceNumber } from "@/lib/tax-invoice";
+import {
+  createAccountsReceivableRevision,
+  createAccountsReceivableSnapshot,
+  latestAccountsReceivableRevisionNo,
+} from "@/lib/accounts-receivable/helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -188,6 +193,54 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         taxInvoiceCode: normTaxCode,
         taxInvoiceNo: normTaxNo,
       },
+    );
+
+    // ── 8a. 创建 AccountsReceivable（1:1 绑定 Invoice；originalAmount = invoiceTotal 复制；余额 = computeBalance 单口径）
+    //     红字发票同样生成 AR（负数余额 = 冲销应收；红字 GL 记账另属 ADR-0043 backlog）
+    const ar = await tx.accountsReceivable.create({
+      data: {
+        invoiceId: id,
+        customerId: updated.customerId,
+        currency: updated.currency,
+        originalAmount: updated.invoiceTotal,
+        adjustedAmount: new Prisma.Decimal(0),
+        paidAmount: new Prisma.Decimal(0),
+        writeOffAmount: new Prisma.Decimal(0),
+        balanceAmount: updated.invoiceTotal,
+        status: "OPEN",
+        effectiveStatus: "OPEN",
+        dueDate: updated.dueDate,
+        createdById: user!.id,
+        updatedById: user!.id,
+      },
+    });
+    // AR Revision + AR Snapshot(CREATED, ISSUE)（余额留痕 + 关键节点固化，对齐 4E 领域模式）
+    await createAccountsReceivableRevision(
+      tx,
+      ar.id,
+      "发票开票生成应收",
+      { invoiceId: id, invoiceCode: code, originalAmount: updated.invoiceTotal.toString(), balanceAmount: updated.invoiceTotal.toString() },
+      user?.id,
+    );
+    const arRevisionNo = await latestAccountsReceivableRevisionNo(tx, ar.id);
+    await createAccountsReceivableSnapshot(
+      tx,
+      ar.id,
+      "CREATED",
+      "ISSUE",
+      arRevisionNo,
+      {
+        invoiceId: id,
+        invoiceCode: code,
+        customerId: updated.customerId,
+        currency: updated.currency,
+        originalAmount: updated.invoiceTotal.toString(),
+        balanceAmount: updated.invoiceTotal.toString(),
+        dueDate: updated.dueDate?.toISOString() ?? null,
+        issuedAt: issuedAt.toISOString(),
+        issuedById: user?.id ?? null,
+      },
+      user?.id,
     );
 
     // ── 8b. InvoiceIssued Outbox（业务事务内原子写；GL consumer → 收入确认凭证，ADR-0042）
