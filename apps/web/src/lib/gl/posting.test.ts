@@ -372,4 +372,82 @@ describe("glPostFromEvent — 销售侧 GL（ADR-0042）", () => {
     const bank = created.data.lines.create.find((l: any) => l.accountId === "acct-1002");
     expect(bank.credit.toFixed(2)).toBe("113.00");
   });
+
+  it("InvoiceAdjustmentApplied CREDIT（贷项冲减）：借 6001 贷 1122 — 借贷平衡", async () => {
+    const tx = makeTx();
+    const r = await glPostFromEvent(tx, "InvoiceAdjustmentApplied", {
+      noteId: "cndn-1",
+      noteCode: "CN-2026-000001",
+      noteType: "CREDIT",
+      adjustmentTotal: "-100.00",
+      appliedAt: "2026-08-20T05:00:00.000Z",
+    });
+    expect(r.ok).toBe(true);
+    const created = (tx.glJournalEntry.create as any).mock.calls[0][0];
+    expect(created.data.sourceType).toBe("InvoiceAdjustmentApplied");
+    expect(created.data.sourceId).toBe("cndn-1");
+    const debitTotal = created.data.lines.create.reduce((acc: Prisma.Decimal, l: any) => acc.add(l.debit), new Prisma.Decimal(0));
+    const creditTotal = created.data.lines.create.reduce((acc: Prisma.Decimal, l: any) => acc.add(l.credit), new Prisma.Decimal(0));
+    expect(debitTotal.eq(creditTotal)).toBe(true);
+    const revenue = created.data.lines.create.find((l: any) => l.accountId === "acct-6001");
+    expect(revenue.debit.toFixed(2)).toBe("100.00");
+    const ar = created.data.lines.create.find((l: any) => l.accountId === "acct-1122");
+    expect(ar.credit.toFixed(2)).toBe("100.00");
+  });
+
+  it("InvoiceAdjustmentApplied DEBIT（借项增加）：借 1122 贷 6001", async () => {
+    const tx = makeTx();
+    const r = await glPostFromEvent(tx, "InvoiceAdjustmentApplied", {
+      noteId: "cndn-2",
+      noteCode: "DN-2026-000001",
+      noteType: "DEBIT",
+      adjustmentTotal: "50.00",
+      appliedAt: "2026-08-20T05:10:00.000Z",
+    });
+    expect(r.ok).toBe(true);
+    const created = (tx.glJournalEntry.create as any).mock.calls[0][0];
+    const ar = created.data.lines.create.find((l: any) => l.accountId === "acct-1122");
+    expect(ar.debit.toFixed(2)).toBe("50.00");
+    const revenue = created.data.lines.create.find((l: any) => l.accountId === "acct-6001");
+    expect(revenue.credit.toFixed(2)).toBe("50.00");
+  });
+
+  it("InvoiceAdjustmentReversed CREDIT（贷项反冲）：借 1122 贷 6001 — 恢复应收", async () => {
+    const tx = makeTx();
+    const r = await glPostFromEvent(tx, "InvoiceAdjustmentReversed", {
+      noteId: "cndn-1",
+      noteCode: "CN-2026-000001",
+      noteType: "CREDIT",
+      adjustmentTotal: "-100.00",
+      reversedAt: "2026-08-20T06:00:00.000Z",
+    });
+    expect(r.ok).toBe(true);
+    const created = (tx.glJournalEntry.create as any).mock.calls[0][0];
+    expect(created.data.sourceType).toBe("InvoiceAdjustmentReversed");
+    expect(created.data.sourceId).toBe("cndn-1");
+    const debitTotal = created.data.lines.create.reduce((acc: Prisma.Decimal, l: any) => acc.add(l.debit), new Prisma.Decimal(0));
+    const creditTotal = created.data.lines.create.reduce((acc: Prisma.Decimal, l: any) => acc.add(l.credit), new Prisma.Decimal(0));
+    expect(debitTotal.eq(creditTotal)).toBe(true);
+    const ar = created.data.lines.create.find((l: any) => l.accountId === "acct-1122");
+    expect(ar.debit.toFixed(2)).toBe("100.00");
+    const revenue = created.data.lines.create.find((l: any) => l.accountId === "acct-6001");
+    expect(revenue.credit.toFixed(2)).toBe("100.00");
+  });
+
+  it("InvoiceAdjustmentReversed DEBIT（借项反冲）：借 6001 贷 1122", async () => {
+    const tx = makeTx();
+    const r = await glPostFromEvent(tx, "InvoiceAdjustmentReversed", {
+      noteId: "cndn-2",
+      noteCode: "DN-2026-000001",
+      noteType: "DEBIT",
+      adjustmentTotal: "50.00",
+      reversedAt: "2026-08-20T06:10:00.000Z",
+    });
+    expect(r.ok).toBe(true);
+    const created = (tx.glJournalEntry.create as any).mock.calls[0][0];
+    const revenue = created.data.lines.create.find((l: any) => l.accountId === "acct-6001");
+    expect(revenue.debit.toFixed(2)).toBe("50.00");
+    const ar = created.data.lines.create.find((l: any) => l.accountId === "acct-1122");
+    expect(ar.credit.toFixed(2)).toBe("50.00");
+  });
 });

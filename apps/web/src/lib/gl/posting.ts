@@ -314,6 +314,29 @@ export async function glPostFromEvent(
         actorId: payload.appliedById ? String(payload.appliedById) : null,
       });
     }
+    case 'InvoiceAdjustmentReversed': {
+      // CN/DN 反冲减（反向撤销已生效调整）：恢复应收余额 + 恢复收入/调整科目。
+      // 反向凭证 = InvoiceAdjustmentApplied 的镜像：CREDIT 反冲 → 借 1122 贷 6001；DEBIT 反冲 → 借 6001 贷 1122。
+      const amount = new Prisma.Decimal(String(payload.adjustmentTotal ?? '0')).abs();
+      if (amount.lte(0)) return { ok: false, code: 'GL_ZERO_AMOUNT', message: 'CN/DN 反冲金额为 0，跳过过账', httpStatus: 409 };
+      const isCredit = String(payload.noteType ?? '') === 'CREDIT';
+      return postGlEntry(tx, {
+        sourceType: 'InvoiceAdjustmentReversed',
+        sourceId: String(payload.noteId),
+        postingDate: payload.reversedAt ? new Date(String(payload.reversedAt)) : new Date(),
+        summary: '销售贷/借项反冲：' + String(payload.noteCode ?? ''),
+        lines: isCredit
+          ? [
+              { accountCode: '1122', debit: amount.toFixed(2), credit: '0', summary: '恢复应收账款（贷项反冲）', sourceRef: String(payload.noteId) },
+              { accountCode: '6001', debit: '0', credit: amount.toFixed(2), summary: '恢复销售调整（贷项反冲）', sourceRef: String(payload.noteId) },
+            ]
+          : [
+              { accountCode: '6001', debit: amount.toFixed(2), credit: '0', summary: '恢复销售调整（借项反冲）', sourceRef: String(payload.noteId) },
+              { accountCode: '1122', debit: '0', credit: amount.toFixed(2), summary: '冲减应收账款（借项反冲）', sourceRef: String(payload.noteId) },
+            ],
+        actorId: payload.reversedById ? String(payload.reversedById) : null,
+      });
+    }
     default:
       return { ok: false, code: 'UNSUPPORTED_EVENT', message: 'GL 未注册该事件类型：' + eventType, httpStatus: 409 };
   }

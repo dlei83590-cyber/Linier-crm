@@ -84,23 +84,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const invInfo = await tx.businessPartnerInvoiceInfo.findFirst({ where: { partnerId: customer.id, deletedAt: null } });
     if (!invInfo || !invInfo.title || !invInfo.uscc) return { error: "PARTNER_INVOICE_INFO_MISSING" as const };
     // 红字（R3 服务端取反 / R4 防超冲 / R2+R6 引用终态蓝票禁链式）
+    // 引用来源：请求体优先；红字 DRAFT（POST /red-invoice 创建时已预填 redInvoiceRefId）自动沿用 DB 预填值，
+    // 避免用户跳转详情后不重填引用而把红字草稿当蓝票开具（金额取正危险）
+    const effectiveRedRef = redInvoiceRefId ?? invoice.redInvoiceRefId ?? null;
     let redLetter = false;
     let redRefId: string | null = null;
     let issueSubtotal = invoice.subtotal;
     let issueTax = invoice.taxAmount;
     let issueTotal = invoice.invoiceTotal;
-    if (redInvoiceRefId) {
+    if (effectiveRedRef) {
       const origLocked = await tx.$queryRaw<Array<{ id: string }>>(
-        Prisma.sql`SELECT "id" FROM "Invoice" WHERE "id" = ${redInvoiceRefId} AND "deletedAt" IS NULL FOR UPDATE`,
+        Prisma.sql`SELECT "id" FROM "Invoice" WHERE "id" = ${effectiveRedRef} AND "deletedAt" IS NULL FOR UPDATE`,
       );
       if (origLocked.length === 0) return { error: "RED_INVOICE_REF_STATUS_INVALID" as const };
-      const original = await tx.invoice.findFirst({ where: { id: redInvoiceRefId, deletedAt: null } });
+      const original = await tx.invoice.findFirst({ where: { id: effectiveRedRef, deletedAt: null } });
       if (!original || original.redLetter || original.status !== "ISSUED") {
         return { error: "RED_INVOICE_REF_STATUS_INVALID" as const }; // R2：终态蓝票；R6：禁红字冲红字
       }
-      // R4：Σ|红字金额| ≤ |原票金额|（锁内累计，并发安全）
+      // R4：Σ|红字金额| ≤ |原票金额|（锁内累计，并发安全；排除本票自身——红字 DRAFT 已预填引用）
       const reds = await tx.invoice.findMany({
-        where: { redInvoiceRefId, deletedAt: null, redLetter: true },
+        where: { redInvoiceRefId: effectiveRedRef, deletedAt: null, redLetter: true, id: { not: id } },
         select: { invoiceTotal: true },
       });
       const sumRed = reds.reduce((acc, r) => acc.add(r.invoiceTotal.abs()), new Prisma.Decimal(0));
@@ -108,7 +111,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return { error: "RED_INVOICE_OVERFLOW" as const, originalTotal: original.invoiceTotal.toString() };
       }
       redLetter = true;
-      redRefId = redInvoiceRefId;
+      redRefId = effectiveRedRef;
       // R3：红字金额 = 服务端对原票金额取反（禁止客户端正数伪装）
       issueSubtotal = original.subtotal.negated();
       issueTax = original.taxAmount.negated();

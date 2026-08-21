@@ -233,3 +233,18 @@
 | O5 | 红字引用 | redInvoiceRefId 指向 DRAFT/红字 | 409 RED_INVOICE_REF_STATUS_INVALID（R2/R6） |
 | O6 | 红字金额取反+防超冲 | 红字 issue | 金额=原票取反（R3）；Σ超原票 → 409 RED_INVOICE_OVERFLOW（R4） |
 | O7 | 冻结 | ISSUED 后改 VAT 字段 | PATCH schema 不含 VAT 字段（I3 天然冻结） |
+
+## P. 红冲（Red Invoice——用户指令：销售发票应支持红冲，2026-08-20）
+
+| # | 用例 | 方法/路径 | 预期 |
+| --- | --- | --- | --- |
+| P1 | 蓝票一键红冲 | POST /api/invoices/:id/red-invoice（ISSUED 蓝票） | 200；创建红字 DRAFT（redLetter=true + redInvoiceRefId=原票 id，R1 一致）；复制 header+行（金额快照）；code=null |
+| P2 | 非 ISSUED 禁止红冲 | DRAFT/PAID/CANCELLED 原票 | 409 RED_INVOICE_REF_STATUS_INVALID（R2） |
+| P3 | 红字禁止再红冲 | redLetter=true 原票 | 409 RED_INVOICE_REF_STATUS_INVALID（R6 禁链式） |
+| P4 | 重复红冲 | 已有 ISSUED 红字 | 409 RED_INVOICE_OVERFLOW（R4 预检：全额红冲语义每票一张） |
+| P5 | 红字草稿不回写 delivery | red-invoice 后查 DeliveryLine | invoicedQty/remainingInvoiceQty 不变（红字不新增占用） |
+| P6 | 红字草稿 issue | 红字 DRAFT issue（不重填引用） | 成功：DB 预填 redInvoiceRefId 回退生效；金额=原票取反（R3）；R4 排除本票不误判 |
+| P7 | 红字草稿 issue 跳过 GL | 红字 issue 后查 Outbox | 无 InvoiceIssued Outbox（红字 GL = backlog） |
+| P8 | 权限 | 无 invoice:create | 403 |
+| P9 | 审计 | red-invoice 后 | AuditLog action=invoice.red-invoice + InvoiceCreated（含 redLetter/redInvoiceRefId/originalCode） |
+| P10 | 列表/详情红字标识 | GET 详情 | redLetter=true + redInvoiceRefId 返回；前端展示"红字"标记 |
