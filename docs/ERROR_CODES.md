@@ -274,5 +274,13 @@
 | GL_PERIOD_INVALID | 400 | 期间格式非法（须 YYYY-MM），400 |
 | GL_VOUCHER_TYPE_INVALID | 400 | 凭证字非法（记/收/付/转），400 |
 | GL_ATTACHMENT_COUNT_INVALID | 999 | 附件张数非法（0-999），400 |
+| PRODUCTION_INBOUND_NOT_FOUND | 404 | 生产入库单不存在或已删除，404 |
+| PRODUCTION_INBOUND_INVALID_STATE | 409 | 非 DRAFT 操作（PATCH/DELETE）/ 非 DRAFT/SUBMITTED 过账（post）/ 已 CANCELLED，409 |
+| PRODUCTION_INBOUND_ALREADY_POSTED | 409 | 幂等：已 POSTED 禁止重复 post，409 |
+| PRODUCTION_INBOUND_NO_LINES | 400 | 至少一条有效行，400 |
+| PRODUCTION_INBOUND_QUANTITY_INVALID | 400 | fromQty/toQty <= 0 或 unitCost < 0，400 |
+| PRODUCTION_INBOUND_ITEM_INVALID | 400 | item 不存在或已停用 / fromItemId == toItemId，400 |
+| PRODUCTION_INBOUND_WAREHOUSE_INVALID | 400 | 仓库不存在或已停用，400 |
+| PRODUCTION_INBOUND_SEQUENCE_MISSING | 500 | PIN DocumentSequence 缺失 = 部署配置错误（fail closed，禁 fallback），500 |
 
-> 合计：**269 个错误码**（自动统计）
+> 合计：**277 个错误码**（自动统计）
