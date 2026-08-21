@@ -106,7 +106,8 @@ export async function POST(request: NextRequest) {
     // 事件/审计失败不阻断主流程
   }
 
-  return ok({ receipt }, undefined, 201);
+  // 返回契约对齐其他创建路由：data 直接为 receipt（含 id/code）——前端 apiFetch 取 body.data.id 跳详情
+  return ok(receipt, undefined, 201);
 }
 
 /**
