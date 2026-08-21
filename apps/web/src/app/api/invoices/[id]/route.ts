@@ -29,10 +29,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     where: { id, deletedAt: null },
     include: {
       customer: { select: { id: true, code: true, name: true } },
-      // 来源交付摘要 + 经 Delivery 溯源 SalesOrder 摘要（Invoice.salesOrderId 为冗余投影，无直接 relation）
+      // 来源交付摘要 + 经 Delivery 溯源 SalesOrder 摘要（Invoice.salesOrderId 为冗余投影，无直接 relation；
+      // Prisma 禁止 relation 同时用 select+include → 嵌套用 select）
       delivery: {
-        select: { id: true, code: true, status: true, deliveryDate: true },
-        include: {
+        select: {
+          id: true,
+          code: true,
+          status: true,
+          deliveryDate: true,
           salesOrder: { select: { id: true, code: true, status: true, currency: true } },
         },
       },
