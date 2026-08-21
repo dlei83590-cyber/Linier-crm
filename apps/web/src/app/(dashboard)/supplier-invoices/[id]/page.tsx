@@ -22,7 +22,7 @@ import { useToast } from "@/components/ui/toast";
 import { PageLoading } from "@/components/ui/skeleton";
 import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
 import { useSession } from "@/lib/session-context";
-import { formatDateOnly, formatMoney, formatMoneyValue } from "@/lib/format";
+import { formatDateOnly, formatMoneyValue } from "@/lib/format";
 import { INVOICE_TYPE_LABELS, formatTaxInvoiceNumber } from "@/lib/vat-labels";
 
 const TONE_MAP: Record<string, StatusTone> = {
