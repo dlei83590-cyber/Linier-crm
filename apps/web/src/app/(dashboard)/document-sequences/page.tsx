@@ -113,13 +113,6 @@ function DocumentSequenceList() {
     <AppPage>
       <EntityListWorkspace<DocumentSequenceRow>
         title="单据序列"
-        headerActions={
-          canCreate ? (
-            <button type="button" onClick={() => router.push("/document-sequences/new")} className={BUTTON_PRIMARY_CLASS}>
-              新建序列
-            </button>
-          ) : null
-        }
         description="维护报价/订单/项目等单据编号序列规则（编号由系统引擎管理）"
         emptyMessage="暂无编号序列规则"
         headerActions={
