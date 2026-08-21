@@ -9,7 +9,6 @@
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
@@ -55,7 +54,6 @@ const TONE_MAP: Record<string, StatusTone> = {
 };
 
 function SalesOrderList() {
-  const router = useRouter();
   const toast = useToast();
   const { state } = useSession();
   const canDelete = hasPermission((state.user?.roles ?? []) as RoleCode[], actionPermission("sales-order", "delete"));
