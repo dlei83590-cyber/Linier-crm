@@ -51,7 +51,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
   const targetArIds = [...arIdAmount.keys()].sort();
 
-  let result: Awaited<ReturnType<typeof allocateTx>> | { error: "TX_FAILED" as const; message: string };
+  let result:
+    | Awaited<ReturnType<typeof allocateTx>>
+    | { error: "TX_FAILED"; message: string };
   try {
     result = await allocateTx();
   } catch (e) {
