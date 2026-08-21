@@ -203,8 +203,36 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   const { id } = await params;
   const meta = requestMeta(request);
 
-  const existing = await prisma.businessPartner.findFirst({ where: { id, deletedAt: null } });
+  const existing = await prisma.businessPartner.findFirst({
+    where: { id, deletedAt: null },
+    include: {
+      _count: {
+        select: {
+          suppliers: true,
+          customers: true,
+          opportunities: true,
+          projects: true,
+          partnerContacts: true,
+          partnerAddresses: true,
+          partnerBankAccounts: true,
+        },
+      },
+    },
+  });
   if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "往来单位不存在");
+
+  // 引用检查：被客户/供应商/项目/联系人等引用 → 不可删除（可编辑）
+  const referenced =
+    existing._count.suppliers +
+    existing._count.customers +
+    existing._count.opportunities +
+    existing._count.projects +
+    existing._count.partnerContacts +
+    existing._count.partnerAddresses +
+    existing._count.partnerBankAccounts;
+  if (referenced > 0) {
+    return failConflict(ERROR_CODES.CONFLICT, "往来单位已被客户/供应商/项目等引用，不能删除（可编辑）");
+  }
 
   await prisma.businessPartner.update({
     where: { id },
