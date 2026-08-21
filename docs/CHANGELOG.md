@@ -2,6 +2,20 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 报价单回退 + 红字发票删除修复（2026-08-21，PR #176）
+
+### 修复
+
+- **删除销售订单回退报价单**：删除 CANCELLED 订单时，关联报价单 CONVERTED → DRAFT（未确认），清空 salesOrderId/convertedAt/convertedById 投影 → 报价单恢复可编辑/可删除
+- **红字发票 CANCELLED 无关联可删**：删除门禁放宽 DRAFT/ISSUED/CANCELLED；红字 ISSUED 删除恢复原票 AR 改为尽力恢复（原票 AR 已不存在时跳过恢复直接软删）
+- 前端发票详情/列表红字删除条件同步扩展
+
+### 边界
+
+- 无 Schema/Migration；回退仅释放状态与投影，保留报价单行/快照
+
+---
+
 ## [Unreleased] - 红冲语义修正：反开票撤销错误开票（2026-08-21，PR #174）
 
 ### 修复
