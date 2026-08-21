@@ -46,8 +46,9 @@ function SupplierInvoiceCreateForm() {
   const [supplierInvoiceNo, setSupplierInvoiceNo] = useState("");
   const [invoiceDate, setInvoiceDate] = useState("");
   const [receivedDate, setReceivedDate] = useState("");
-  const [currency, setCurrency] = useState("CNY");
-  const [exchangeRate, setExchangeRate] = useState("1");
+  // 单币种 CNY 固定（表单无币种/汇率输入；setter 不暴露避免 lint unused）
+  const [currency] = useState("CNY");
+  const [exchangeRate] = useState("1");
   const [paymentDueDate, setPaymentDueDate] = useState("");
   const [remark, setRemark] = useState("");
   // VAT 要素（ADR-0043）：进项发票类型（默认普票）+ 税务号码
@@ -273,14 +274,7 @@ function SupplierInvoiceCreateForm() {
               </div>
             </>
           )}
-          <div>
-            <label className="block text-xs text-ink-secondary">币种</label>
-            <input value={currency} onChange={(e) => { setCurrency(e.target.value); markDirty(); }} maxLength={10} className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none" />
-          </div>
-          <div>
-            <label className="block text-xs text-ink-secondary">汇率</label>
-            <input type="number" min="0" step="any" value={exchangeRate} onChange={(e) => { setExchangeRate(e.target.value); markDirty(); }} className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none" />
-          </div>
+          {/* 单币种 CNY（ADR：中国市场单币种决策）——币种/汇率固定，不提供输入，避免汇率空值/0 导致金额口径漂移 */}
           <div>
             <label className="block text-xs text-ink-secondary">账期（可选）</label>
             <input type="date" value={paymentDueDate} onChange={(e) => { setPaymentDueDate(e.target.value); markDirty(); }} className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none" />
