@@ -29,7 +29,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // ① 读 header + lines（CAS：id + version + status∈{DRAFT,SUBMITTED} 同时命中）
       const inbound = await tx.productionInbound.findFirst({
         where: { id, deletedAt: null },
-        include: { lines: { where: { deletedAt: null } } },
+        include: { lines: true },
       });
       if (!inbound) throw new Error("NOT_FOUND");
       if (inbound.status === "POSTED") throw new Error("ALREADY_POSTED");

@@ -84,8 +84,21 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         ...(updates.remark !== undefined ? { remark: updates.remark } : {}),
         updatedById: actorId,
       };
+      let newLines:
+        | Array<{
+            inboundId: string;
+            fromItemId: string;
+            fromQty: Prisma.Decimal;
+            toItemId: string;
+            toQty: Prisma.Decimal;
+            unitCost: Prisma.Decimal;
+            amount: Prisma.Decimal;
+            remark: string | null;
+            createdById: string;
+          }>
+        | undefined;
 
-      // 行整体替换（仅 DRAFT）：先软删旧行，再建新行（金额服务端 canonical）
+      // 行整体替换（仅 DRAFT）：先删旧行，再建新行（金额服务端 canonical；行无软删设计）
       if (updates.lines) {
         const itemIds = new Set<string>();
         for (const l of updates.lines) {
@@ -103,6 +116,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           const unitCost = new Prisma.Decimal(l.unitCost);
           const toQty = new Prisma.Decimal(l.toQty);
           return {
+            inboundId: id,
             fromItemId: l.fromItemId,
             fromQty: new Prisma.Decimal(l.fromQty),
             toItemId: l.toItemId,
@@ -117,7 +131,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         const totalAmount = newLines.reduce((s, l) => s.plus(l.amount), new Prisma.Decimal(0));
         data.totalQty = totalQty;
         data.totalAmount = totalAmount;
-        data.lines = newLines;
       }
 
       // CAS header 更新（updateMany 不支持嵌套行写入 → 行单独处理）
@@ -130,10 +143,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         throw still ? new Error("VERSION_CONFLICT") : new Error("NOT_FOUND");
       }
       // 行整体替换（仅 DRAFT）：先物理删旧行再建新行（同事务；行无软删设计，直接 deleteMany）
-      if (updates.lines) {
+      if (newLines) {
         await tx.productionInboundLine.deleteMany({ where: { inboundId: id } });
         await tx.productionInboundLine.createMany({
-          data: data.lines as never,
+          data: newLines,
         });
       }
       return tx.productionInbound.findFirstOrThrow({

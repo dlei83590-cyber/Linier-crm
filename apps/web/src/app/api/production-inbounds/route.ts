@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
+import type { ProductionInboundStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failServer, parsePagination } from "@/lib/api/response";
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
 
   const where = {
     deletedAt: null,
-    ...(status ? { status: status as never } : {}),
+    ...(status ? { status: status as ProductionInboundStatus } : {}),
     ...(warehouseId ? { warehouseId } : {}),
     ...(dateFrom ? { inboundDate: { gte: new Date(dateFrom) } } : {}),
     ...(dateTo ? { inboundDate: { lte: new Date(dateTo) } } : {}),
