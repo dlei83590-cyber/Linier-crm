@@ -624,6 +624,14 @@ model BusinessPartner {
   suppliers           Supplier[]
   supplierItems       SupplierItem[]
   partnerPrices       PartnerPrice[]
+  quotations          Quotation[]
+  salesOrders         SalesOrder[]
+  deliveries          Delivery[]
+  invoices            Invoice[]
+  accountsReceivables AccountsReceivable[] // 应收余额（4E-1；余额事实源，BusinessPartner 对账用）
+  receipts            Receipt[] // 收款（4E-2；收款事实源）
+  creditDebitNotes    CreditDebitNote[] // 4E-3：发票调整单（CN/DN；CreditDebitNote.customerId 方向）
+  invoiceAdjustments  InvoiceAdjustment[] // 4E-3：调整事实（InvoiceAdjustment.customerId 方向）
   createdAt           DateTime       @default(now()) @db.Timestamptz(3)
   updatedAt           DateTime       @updatedAt @db.Timestamptz(3)
 
@@ -2553,14 +2561,6 @@ model Customer {
   addresses    CustomerAddress[]
   tags         CustomerTag[]
   credit       CustomerCredit?
-  quotations   Quotation[]
-  salesOrders  SalesOrder[]
-  deliveries   Delivery[]
-  invoices     Invoice[]
-  accountsReceivables AccountsReceivable[] // 应收余额（4E-1；余额事实源，Customer 对账用）
-  receipts     Receipt[] // 收款（4E-2；收款事实源）
-  creditDebitNotes CreditDebitNote[] // 4E-3：发票调整单（CN/DN；CreditDebitNote.customerId 方向）
-  invoiceAdjustments InvoiceAdjustment[] // 4E-3：调整事实（InvoiceAdjustment.customerId 方向）
   isActive     Boolean         @default(true)
   createdById  String?
   updatedById  String?
@@ -3302,7 +3302,7 @@ model Quotation {
   id           String   @id @default(cuid())
   code         String   @unique // 单据编号（DocumentSequence docType=QUOTATION，如 QT-2026-0001）
   customerId   String
-  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  customer     BusinessPartner @relation(fields: [customerId], references: [id], onDelete: Restrict)
   opportunityId String? // 关联项目机会（可空）
   opportunity  ProjectOpportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
   projectId    String? // 关联项目（可空）
@@ -3529,7 +3529,7 @@ model SalesOrder {
   quotationId  String   @unique // 来源报价单（必填；1:1；并发安全：真实锁定源 Quotation）
   quotation    Quotation @relation(fields: [quotationId], references: [id], onDelete: Restrict)
   customerId   String
-  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  customer     BusinessPartner @relation(fields: [customerId], references: [id], onDelete: Restrict)
   projectId    String?  // 关联项目（可空）
   project      Project? @relation(fields: [projectId], references: [id], onDelete: Restrict)
   status       SalesOrderStatus @default(DRAFT)
@@ -3745,7 +3745,7 @@ model Delivery {
   salesOrderId String   // 来源销售订单（必填 NOT NULL；唯一入口 POST /api/sales-orders/:id/deliveries）
   salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Restrict)
   customerId   String   // 收货客户（继承 SalesOrder.customerId）
-  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  customer     BusinessPartner @relation(fields: [customerId], references: [id], onDelete: Restrict)
   status       DeliveryStatus @default(DRAFT)
   deliveryDate DateTime @default(now()) @db.Timestamptz(3) // 交付日期（计划/实际）
   expectedArrivalDate DateTime? @db.Timestamptz(3) // 预计到达（DISPATCHED 后）
@@ -3876,7 +3876,7 @@ model Invoice {
   delivery     Delivery @relation(fields: [deliveryId], references: [id], onDelete: Restrict)
   salesOrderId String   // 冗余投影（经 Delivery 溯源 SalesOrder；便于 AR/对账）
   customerId   String   // 开票客户（继承 Delivery.customerId）
-  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  customer     BusinessPartner @relation(fields: [customerId], references: [id], onDelete: Restrict)
   status       InvoiceStatus @default(DRAFT)
   invoiceDate  DateTime @default(now()) @db.Timestamptz(3) // 开票日期
   dueDate      DateTime? @db.Timestamptz(3) // 到期日（4E AR 使用）
@@ -4068,7 +4068,7 @@ model AccountsReceivable {
   invoiceId    String   @unique // 1:1 绑定 Invoice（单据事实源）；Invoice 软删防御；有 AR 的发票禁止删除（CTO 必改③）
   invoice      Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
   customerId   String   // 客户（继承 Invoice.customerId；对账用）
-  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  customer     BusinessPartner @relation(fields: [customerId], references: [id], onDelete: Restrict)
   currency     String   @default("CNY") // 币种（继承 Invoice.currency）
 
   // 余额计算四输入（CTO 锁定：前端禁止 PATCH 这些金额；由 4E-2 Receipt/WriteOff、4E-3 CN/DN 动作或下游事实表驱动）
@@ -4203,7 +4203,7 @@ model Receipt {
   id           String   @id @default(cuid())
   code         String   @unique // 收款单编号（REC-2026-xxxx，DocumentSequence 创建即取号）
   customerId   String   // 收款客户（核销目标 AR.customerId 必须一致——硬规则）
-  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  customer     BusinessPartner @relation(fields: [customerId], references: [id], onDelete: Restrict)
   currency     String   @default("CNY") // 币种（核销目标 AR.currency 必须一致——硬规则，第一版禁止跨币种核销）
   amount       Decimal  @db.Decimal(18, 4) // 实收金额（收款事实）
   allocatedAmount   Decimal @default(0) @db.Decimal(18, 4) // 受控投影 = Σ ReceiptAllocation.allocatedAmount（非反向核销）
@@ -4416,7 +4416,7 @@ model CreditDebitNote {
   sourceInvoiceId String // 单票制（CTO 拍板①：必填且唯一；跨票 Consolidated 延后）
   sourceInvoice Invoice @relation(fields: [sourceInvoiceId], references: [id], onDelete: Restrict)
   customerId   String   // 客户（继承 sourceInvoice.customerId）
-  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  customer     BusinessPartner @relation(fields: [customerId], references: [id], onDelete: Restrict)
   currency     String   @default("CNY") // 币种（继承 sourceInvoice.currency）
   reason       String   // 调整原因（折让/退货/价差/更正/其他）
   adjustmentTotal Decimal @db.Decimal(18, 4) // 调整总额（= Σ lines；服务端计算，禁止直传头金额）
@@ -4506,7 +4506,7 @@ model InvoiceAdjustment {
   accountsReceivableId String
   accountsReceivable AccountsReceivable @relation(fields: [accountsReceivableId], references: [id], onDelete: Restrict)
   customerId   String // 冗余（Apply 事务校验与 AR 一致）
-  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  customer     BusinessPartner @relation(fields: [customerId], references: [id], onDelete: Restrict)
   currency     String   @default("CNY")
   adjustmentType CreditDebitNoteType // CREDIT 负向 / DEBIT 正向
   quantity     Decimal  @db.Decimal(18, 4) // 调整数量（累计防超调用）

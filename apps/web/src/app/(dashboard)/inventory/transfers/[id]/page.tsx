@@ -275,7 +275,7 @@ function TransferDetailPage() {
         }
         description={
           confirmAction === "submit"
-            ? "提交后进入审批流程（命中策略则需 APPROVED 后方可执行）。确认提交？"
+            ? "提交即生效（已自动批准），可继续执行。确认提交？"
             : confirmAction === "execute"
               ? "执行将产生双边库存流水（SOURCE_OUT + DESTINATION_IN，同事务原子提交），不可逆。确认执行？"
               : "取消该调拨单？仅 DRAFT/APPROVED 可取消。确认后不可恢复。"

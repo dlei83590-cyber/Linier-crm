@@ -137,7 +137,7 @@ function CnDnList() {
         await apiFetch(`/api/credit-debit-notes/${target.id}/submit`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ changeReason: "提交审批" }),
+          body: JSON.stringify({ changeReason: "提交生效" }),
         });
       } else {
         await apiFetch(`/api/credit-debit-notes/${target.id}/apply`, {
@@ -410,7 +410,7 @@ function CnDnList() {
             </h2>
             <p className="text-ink-secondary mt-2 text-sm">
               {confirmTarget.type === "submit"
-                ? `提交 ${confirmTarget.code}？提交后进入审批/可应用流程。`
+                ? `提交 ${confirmTarget.code}？提交即生效（已自动批准），可继续应用。`
                 : `将 ${confirmTarget.code} 应用到应收（产生不可逆财务事实，APPROVED ≠ APPLIED）？`}
             </p>
             <div className="mt-5 flex justify-end gap-2">

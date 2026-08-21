@@ -6,15 +6,13 @@ import { ok, fail, failValidation, failConflict, failNotFound } from '@/lib/api/
 import { ERROR_CODES } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
 import { inventoryAdjustmentSubmitSchema } from '@/lib/api/schemas';
-import { maybeTriggerInventoryAdjustmentApproval } from '@/lib/inventory-adjustment/workflow-sync';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * POST /api/inventory-adjustments/:id/submit —— DRAFT → SUBMITTED（CTO 6B-3 Adjustment API/Workflow）
  * - 校验：仅 DRAFT；至少一条有效 Line；quantity > 0；warehouse/location/item 有效（组合 FK）；来源一致性（Minor Hardening ②）
- * - 命中 ApprovalPolicy(module=INVENTORY_ADJUSTMENT) → 创建/复用 WorkflowInstance（单实例 + 多轮重提，对齐 PO/Transfer 模式）
- * - 未命中策略 → **直接完成审批投影**（status=APPROVED）——严格沿用项目既有 Workflow Policy 语义，不发明第二套审批规则；
+ * - **auto-approve（移除审核：提交即生效）**：DRAFT → APPROVED 同事务（跳过 ApprovalPolicy/Workflow）；
  *   **maker-checker（P9 Final + DB CHECK 兜底）**：approvedById 不得 = createdById——若提交人=创建人，
  *   approvedById 留空（无审批流 = 无具体审批人；Apply 时由 apply 人补录 approvedById=appliedById，且 apply 人 ≠ 创建人）
  * - **红线：APPROVED ≠ APPLIED（对齐 Transfer APPROVED ≠ EXECUTED）**——submit/approve 绝不自动落账，
@@ -81,36 +79,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (!item) return { error: 'ITEM_INVALID' as const };
     }
 
-    // ⑥ DRAFT → SUBMITTED（CAS：id + version + status=DRAFT 同时命中）
+    // ⑥ auto-approve（移除审核：提交即生效——DRAFT → APPROVED 同事务（CAS：id + version + status=DRAFT 同时命中）；
+    //    **绝不自动 APPLIED**——apply 门禁 status=APPROVED，只有显式 apply 才落账；
+    //    **maker-checker**：提交人=创建人时 approvedById 留空（无审批流则无具体审批人，Apply 时由 apply 人（≠创建人）补录））
     const submitted = await tx.inventoryAdjustment.updateMany({
       where: { id, version, status: 'DRAFT', deletedAt: null },
-      data: { status: 'SUBMITTED', updatedById: actorId, version: { increment: 1 } },
+      data: {
+        status: 'APPROVED',
+        // maker-checker：approvedById 不得 = createdById（DB CHECK 兜底）；提交人=创建人 → 留空
+        approvedById: actorId !== adjustment.createdById ? actorId : null,
+        updatedById: actorId,
+        version: { increment: 1 },
+      },
     });
     if (submitted.count !== 1) {
       return { error: 'VERSION_CONFLICT' as const };
     }
 
-    // ⑦ 条件触发审批（同事务；命中策略 → 回写 SUBMITTED + 创建实例；未命中 → skipped）
-    const wf = await maybeTriggerInventoryAdjustmentApproval({
-      adjustmentId: adjustment.id,
-      actorId,
-      meta,
-      tx,
-    });
-
-    // ⑧ 未命中策略/规则 → 直接完成审批投影（status=APPROVED；**maker-checker**：提交人=创建人时
-    //    approvedById 留空——无审批流则无具体审批人，Apply 时由 apply 人（≠创建人）补录；绝不自动 APPLIED）
-    if (wf.skipped === 'no-policy' || wf.skipped === 'no-rule-matched') {
-      await tx.inventoryAdjustment.update({
-        where: { id: adjustment.id },
-        data: {
-          status: 'APPROVED',
-          // maker-checker：approvedById 不得 = createdById（DB CHECK 兜底）；提交人=创建人 → 留空
-          approvedById: actorId !== adjustment.createdById ? actorId : null,
-          updatedById: actorId,
-        },
-      });
-    }
+    const wf = { skipped: 'no-policy' as const, resubmitted: false as const };
 
     const finalAdjustment = await tx.inventoryAdjustment.findFirstOrThrow({
       where: { id: adjustment.id, deletedAt: null },

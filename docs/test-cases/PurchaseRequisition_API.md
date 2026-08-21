@@ -3,7 +3,7 @@
 > 模块：Purchase Requisition（PR，采购需求事实源）
 > 关联：ADR-0023、Sprint5A_PurchaseRequisition_PO_Design.md、API_GUIDELINES.md、ERROR_CODES.md、EVENTS.md
 > 端点：`GET/POST /api/purchase-requisitions`、`GET/PATCH /api/purchase-requisitions/:id`、`POST /api/purchase-requisitions/:id/submit`、`POST /api/purchase-requisitions/:id/convert`
-> CTO 红线：PR 无金额事实；仅 DRAFT 可编辑；修改必留 Revision；Submit 只进入 Workflow、不创建 PO；审批通过后必须显式 Convert 才创建 PO；Convert 必须保留 PR Line → PO Line 溯源；同一 PR 并发/重复 Convert 只能成功一次。
+> CTO 红线：PR 无金额事实；仅 DRAFT 可编辑；修改必留 Revision；Submit（移除审核 auto-approve：DRAFT→APPROVED 提交即生效）不创建 PO；必须显式 Convert 才创建 PO（门禁 status=APPROVED）；Convert 必须保留 PR Line → PO Line 溯源；同一 PR 并发/重复 Convert 只能成功一次。
 
 ## A. 认证与权限（Permission）
 
@@ -80,24 +80,19 @@
 | D16 | 事件 | PATCH 成功 | 发布 PurchaseRequisitionUpdated，含 changeReason |
 | D17 | 审计 | PATCH 成功 | AuditLog 记录 fields/linesReplaced/version |
 
-## E. Submit：DRAFT → SUBMITTED（POST /api/purchase-requisitions/:id/submit）
+## E. Submit：DRAFT → APPROVED（auto-approve：移除审核，提交即生效——POST /api/purchase-requisitions/:id/submit）
 
 | # | 用例 | 场景 | 预期 |
 | --- | --- | --- | --- |
-| E1 | 正常提交 | DRAFT + 有行 + 有有效审批策略 | 200；status=SUBMITTED；返回 workflowInstanceId |
+| E1 | 正常提交 | DRAFT + 有行 | 200；status=APPROVED + approvalStatus=APPROVED + approvedAt/approvedById=提交人；workflowSkipped='no-policy' |
 | E2 | 非 DRAFT 提交 | SUBMITTED/APPROVED/CONVERTED/CANCELLED | 409 PURCHASE_REQUISITION_INVALID_STATE |
 | E3 | 无行提交 | DRAFT 但活动行=0 | 409 PURCHASE_REQUISITION_NO_LINES |
-| E4 | 无审批策略/规则 | module=PURCHASE_REQUISITION 无可匹配 rule | 409 PURCHASE_REQUISITION_APPROVAL_POLICY_NOT_FOUND |
-| E5 | WorkflowDefinition 无效 | rule 指向未发布/不存在定义 | 409 PURCHASE_REQUISITION_WORKFLOW_FAILED |
-| E6 | 首次实例创建 | 首次 Submit | 创建 WorkflowInstance + SUBMIT Action/History + 首步 PENDING Approver |
-| E7 | RUNNING 重复提交 | 已有 RUNNING instance | 409 WORKFLOW_INSTANCE_EXISTS，不重复创建实例/Approver |
-| E8 | REJECTED 后重提准备 | Workflow 驳回已将 PR 恢复到可重提 DRAFT | 复用同一 WorkflowInstance，不违反 businessType+businessId 单实例约束 |
-| E9 | 重提失效旧 Approver | 终态 instance 重启 | 旧 Approver isActive=false/deletedAt 非空，新轮创建 PENDING Approver |
-| E10 | 重提清审批投影 | 终态重启 | PR status=SUBMITTED、approvalStatus=PENDING、approvedAt/approvedById 清空 |
+| E4 | 无审批策略不再阻断 | module=PURCHASE_REQUISITION 未配置 | 200（auto-approve；不再报 PURCHASE_REQUISITION_APPROVAL_POLICY_NOT_FOUND） |
+| E5 | 不创建 WorkflowInstance | Submit 后查询 WorkflowInstance | 无 purchase-requisition 实例创建（workflowSkipped='no-policy'） |
 | E11 | PR 无 Snapshot | Submit 前后 | 不创建 PR Snapshot；PR 仅 Revision 模型 |
-| E12 | Submit 不创建 PO | Submit 成功后查询 PurchaseOrder | 不出现由 Submit 自动创建的 PO |
-| E13 | Submit 事件 | 成功 | PurchaseRequisitionSubmitted |
-| E14 | Submit 审计 | 成功 | action=`purchase-requisition.submit` |
+| E12 | Submit 不创建 PO | Submit 成功后查询 PurchaseOrder | 不出现由 Submit 自动创建的 PO（Convert 门禁 status=APPROVED 已满足，显式 convert 才建 PO） |
+| E13 | Submit 事件 | 成功 | PurchaseRequisitionSubmitted（workflowInstanceId=null） |
+| E14 | Submit 审计 | 成功 | action=`purchase-requisition.submit`；afterData.status=APPROVED |
 
 ## F. Workflow 审批投影（通过通用 Workflow Action API 验收）
 

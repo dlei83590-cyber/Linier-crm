@@ -6,16 +6,13 @@ import { ok, fail, failValidation, failConflict, failNotFound } from '@/lib/api/
 import { ERROR_CODES } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
 import { inventoryTransferSubmitSchema } from '@/lib/api/schemas';
-import { maybeTriggerInventoryTransferApproval } from '@/lib/inventory-transfer/workflow-sync';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * POST /api/inventory-transfers/:id/submit —— DRAFT → SUBMITTED（CTO 6B-2 Transfer Vertical Slice）
  * - 校验：仅 DRAFT；至少一条有效 Line；quantity > 0；源/目标 warehouse/location 有效（组合 FK）；自调拨防护
- * - 命中 ApprovalPolicy(module=INVENTORY_TRANSFER) → 创建/复用 WorkflowInstance（单实例 + 多轮重提，对齐 PO 模式）
- * - 未命中策略 → **直接完成审批投影**（status=APPROVED + approvedById=提交人）——严格沿用项目既有 Workflow Policy
- *   语义，不在 Transfer 单独发明第二套审批规则
+ * - **auto-approve（移除审核：提交即生效）**：DRAFT → APPROVED 同事务（approvedById=提交人）——跳过 ApprovalPolicy/Workflow；
  * - **红线：APPROVED ≠ EXECUTED（对齐 PO APPROVED ≠ CONFIRMED）**——submit/approve 绝不自动落账，
  *   只有显式 POST /api/inventory-transfers/{id}/execute 才经 Shared LedgerCommand 双 atom 落账
  * - **movementGroupId 只能在 EXECUTE 时生成**，submit 阶段绝不提前生成
@@ -95,34 +92,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return { error: 'SELF_TRANSFER' as const };
     }
 
-    // ⑥ DRAFT → SUBMITTED（CAS：id + version + status=DRAFT 同时命中）
+    // ⑥ auto-approve（移除审核：提交即生效——DRAFT → APPROVED 同事务（CAS：id + version + status=DRAFT 同时命中）；
+    //    **绝不 EXECUTED**——execute 门禁 status=APPROVED，只有显式 execute 才落账）
     const submitted = await tx.inventoryTransfer.updateMany({
       where: { id, version, status: 'DRAFT', deletedAt: null },
-      data: { status: 'SUBMITTED', updatedById: actorId, version: { increment: 1 } },
+      data: { status: 'APPROVED', approvedById: actorId, updatedById: actorId, version: { increment: 1 } },
     });
     if (submitted.count !== 1) {
       return { error: 'VERSION_CONFLICT' as const };
     }
 
-    // ⑦ 条件触发审批（同事务；命中策略 → 回写 SUBMITTED + 创建实例；未命中 → skipped）
-    const wf = await maybeTriggerInventoryTransferApproval({
-      transferId: transfer.id,
-      actorId,
-      meta,
-      tx,
-    });
-
-    // ⑧ 未命中策略/规则 → 直接完成审批投影（status=APPROVED + approvedById=提交人；**绝不 EXECUTED**）
-    if (wf.skipped === 'no-policy' || wf.skipped === 'no-rule-matched') {
-      await tx.inventoryTransfer.update({
-        where: { id: transfer.id },
-        data: {
-          status: 'APPROVED',
-          approvedById: actorId,
-          updatedById: actorId,
-        },
-      });
-    }
+    const wf = { skipped: 'no-policy' as const, resubmitted: false as const };
 
     const finalTransfer = await tx.inventoryTransfer.findFirstOrThrow({
       where: { id: transfer.id, deletedAt: null },

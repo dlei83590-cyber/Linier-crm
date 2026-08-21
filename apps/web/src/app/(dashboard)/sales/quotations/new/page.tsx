@@ -67,7 +67,7 @@ function QuotationCreateForm() {
     const controller = new AbortController();
     Promise.all([
       apiFetch<ItemOption[]>("/api/items?pageSize=100", { signal: controller.signal }),
-      apiFetch<CustomerOption[]>("/api/customers?pageSize=100", { signal: controller.signal }),
+      apiFetch<CustomerOption[]>("/api/business-partners?pageSize=100&type=CUSTOMER&isActive=true", { signal: controller.signal }),
     ])
       .then(([itemsBody, customersBody]) => {
         setItems(itemsBody.data);

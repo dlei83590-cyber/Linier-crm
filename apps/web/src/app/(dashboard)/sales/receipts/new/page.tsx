@@ -60,7 +60,7 @@ function ReceiptCreateForm() {
 
   useEffect(() => {
     const controller = new AbortController();
-    apiFetch<CustomerOption[]>("/api/customers?pageSize=100", { signal: controller.signal })
+    apiFetch<CustomerOption[]>("/api/business-partners?pageSize=100&type=CUSTOMER&isActive=true", { signal: controller.signal })
       .then((body) => setCustomers(body.data))
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;

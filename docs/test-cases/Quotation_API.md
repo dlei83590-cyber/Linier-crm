@@ -83,18 +83,17 @@
 
 | # | 用例 | 方法/路径 | 预期 |
 | --- | --- | --- | --- |
-| F1 | submit 成功 | POST /:id/submit | 200 {status:SUBMITTED, workflowInstanceId} |
-| F2 | submit 创建 WorkflowInstance | 查 workflow 实例 | RUNNING + SUBMIT action/history + 首步审批人 |
-| F3 | submit 生成 SUBMITTED 快照 | 查 snapshots | snapshotType=SUBMITTED |
-| F4 | submit 发布事件 | 查 AuditLog | action=QuotationSubmitted |
-| F5 | submit 无 ApprovalPolicy | 无策略配置 | 409 QUOTATION_APPROVAL_POLICY_NOT_FOUND |
-| F6 | submit 重复 | 二次 submit | 409 WORKFLOW_INSTANCE_EXISTS |
+| F1 | submit 成功（auto-approve） | POST /:id/submit | 200 {status:APPROVED, approvalStatus:APPROVED, workflowSkipped:'no-policy'} |
+| F2 | submit 不创建 WorkflowInstance | 查 workflow 实例 | 无 quotation 实例（移除审核，跳过 ApprovalPolicy 匹配） |
+| F3 | submit 生成 APPROVED 快照 | 查 snapshots | snapshotType=APPROVED（提交即生效） |
+| F4 | submit 发布事件 | 查 AuditLog | action=QuotationSubmitted（workflowInstanceId=null） |
+| F5 | submit 无 ApprovalPolicy 不阻断 | 无策略配置 | 200（不再报 QUOTATION_APPROVAL_POLICY_NOT_FOUND） |
+| F6 | submit 重复 | 二次 submit | 409 QUOTATION_INVALID_STATE（仅 DRAFT 可提交） |
 | F7 | submit 无行 | 空行报价 submit | 409 QUOTATION_NO_LINES |
-| F8 | submit 非 DRAFT | SUBMITTED 状态 submit | 409 QUOTATION_INVALID_STATE |
+| F8 | submit 非 DRAFT | APPROVED/SUBMITTED 状态 submit | 409 QUOTATION_INVALID_STATE |
 | F9 | submit 过期 | 过期报价 submit | 409 QUOTATION_EXPIRED |
-| F10 | 审批通过投影 | Workflow COMPLETED | quotation.status=APPROVED + approvalStatus/approvedAt/approvedById + QuotationApproved |
-| F11 | 审批驳回投影 | Workflow REJECTED | quotation.status=REJECTED + QuotationRejected |
-| F12 | accept 成功 | POST /:id/accept（APPROVED） | 200 {status:ACCEPTED} + ACCEPTED 快照 + QuotationAccepted |
+| F10 | 提交后 accept 直接可用 | POST /:id/accept（APPROVED） | 200 {status:ACCEPTED} + ACCEPTED 快照 + QuotationAccepted（accept 门禁 status=APPROVED/SENT 已满足） |
+| F11 | convert 前置 | accept 后 convert | 创建 SO（status=DRAFT）+ CONVERTED 快照（convert 门禁 status=ACCEPTED） |
 | F13 | accept 过期 | POST /:id/accept（EXPIRED） | 409 QUOTATION_EXPIRED |
 | F14 | accept 非 APPROVED/SENT | POST /:id/accept（DRAFT） | 409 QUOTATION_INVALID_STATE |
 | F15 | cancel 成功 | POST /:id/cancel（DRAFT） | 200 {status:CANCELLED} + QuotationCancelled |

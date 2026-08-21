@@ -262,7 +262,7 @@ function AdjustmentDetailPage() {
         }
         description={
           confirmAction === "submit"
-            ? "提交后进入审批流程（命中策略需 APPROVED 后方可应用）。确认提交？"
+            ? "提交即生效（已自动批准），可继续应用。确认提交？"
             : confirmAction === "apply"
               ? "应用将经 Shared LedgerCommand 追加库存流水（IN/OUT 同事务落账），不可逆。确认应用？"
               : "取消该调整单？仅 DRAFT/SUBMITTED/APPROVED 可取消（APPLIED 禁止取消）。"

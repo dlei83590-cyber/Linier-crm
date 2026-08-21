@@ -464,7 +464,7 @@ export const writeOffCreateSchema = z.object({
   changeReason: z.string().max(500).optional(),
 });
 
-/** WriteOff 提交审批：DRAFT → SUBMITTED（命中 WRITE_OFF 策略则 maybeTriggerWriteOffApproval 建/复用 Workflow；无策略可直接进入可 Apply 状态） */
+/** WriteOff 提交（移除审核 auto-approve）：DRAFT → SUBMITTED + approvalStatus=APPROVED（提交即生效，可直接 Apply） */
 export const writeOffSubmitSchema = z.object({
   changeReason: z.string().max(500).optional(),
 });
@@ -498,7 +498,7 @@ export const creditDebitNoteCreateSchema = z.object({
   changeReason: z.string().max(500).optional(),
 });
 
-/** CreditDebitNote 提交审批：DRAFT → SUBMITTED（命中 CREDIT_DEBIT_NOTE 策略则 maybeTriggerCreditDebitNoteApproval 建/复用 Workflow；无策略可直接进入可 Apply 状态） */
+/** CreditDebitNote 提交（移除审核 auto-approve）：DRAFT → SUBMITTED + approvalStatus=APPROVED（提交即生效，可直接 Apply） */
 export const creditDebitNoteSubmitSchema = z.object({
   changeReason: z.string().max(500).optional(),
 });

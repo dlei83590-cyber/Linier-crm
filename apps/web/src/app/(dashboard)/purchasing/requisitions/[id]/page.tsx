@@ -224,7 +224,7 @@ function RequisitionDetailPage() {
                   disabled={actionBusy}
                   className={BUTTON_PRIMARY_CLASS}
                 >
-                  {actionBusy ? "处理中…" : "提交审批"}
+                  {actionBusy ? "处理中…" : "提交生效"}
                 </button>
               </>
             )}
@@ -301,7 +301,7 @@ function RequisitionDetailPage() {
       <ConfirmActionDialog
         open={confirmSubmit}
         title="提交采购申请审批"
-        description="提交后进入审批流程（命中策略需 APPROVED 后才能转采购订单）。确认提交？"
+        description="提交即生效（已自动批准），可继续转采购订单。确认提交？"
         confirmLabel="确认提交"
         busy={actionBusy}
         onConfirm={() => {

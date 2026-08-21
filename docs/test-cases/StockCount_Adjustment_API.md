@@ -85,13 +85,13 @@
 | F10 | ADJ Sequence 缺失 | 删除 INVENTORY_ADJUSTMENT Sequence | **500 INVENTORY_ADJUSTMENT_SEQUENCE_MISSING（fail closed）** |
 | F11 | 行级 direction | 同一 Adjustment 同时含 IN + OUT 行 | 201（同一 maker-checker 审批事实下原子承载盘盈+盘亏——Blocking ①） |
 
-## G. Adjustment 提交/审批（Submit / Workflow）
+## G. Adjustment 提交（auto-approve：移除审核，提交即生效——Submit）
 
 | # | 用例 | 场景 | 预期 |
 | --- | --- | --- | --- |
-| G1 | 命中策略 | ApprovalPolicy(module=INVENTORY_ADJUSTMENT) 存在 | SUBMITTED + WorkflowInstance RUNNING；批准后 COMPLETED → APPROVED + approvedById=审批人（≠创建人，maker-checker） |
-| G2 | 未命中策略 | 无策略/无 rule | **直接 APPROVED 投影**；提交人≠创建人 → approvedById=提交人；提交人=创建人 → approvedById 留空（Apply 时由 apply 人补录，两 CHECK 满足） |
-| G3 | REJECTED | Workflow 驳回 | Adjustment → DRAFT（可重提）；清 approvedById |
+| G1 | 正常提交（有策略也不再建审批） | ApprovalPolicy(module=INVENTORY_ADJUSTMENT) 存在 | 200 status=APPROVED（auto-approve 跳过 Workflow；不再 SUBMITTED/PENDING） |
+| G2 | 正常提交 | 无策略/无 rule | 200 **直接 APPROVED**；提交人≠创建人 → approvedById=提交人；提交人=创建人 → approvedById 留空（Apply 时由 apply 人补录，两 CHECK 满足，maker-checker 保留） |
+| G3 | 不创建 WorkflowInstance | submit 后查询 | 无 inventory-adjustment 实例（workflowSkipped='no-policy'） |
 | G4 | 仅 DRAFT 提交 | 非 DRAFT submit | 409 INVENTORY_ADJUSTMENT_INVALID_STATE |
 | G5 | 无行提交 | 空行 submit | 400 INVENTORY_ADJUSTMENT_NO_LINES |
 
