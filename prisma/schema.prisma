@@ -27,6 +27,14 @@ enum ItemType {
   PACKAGING // 包装材料
 }
 
+/// 生产入库单状态：草稿 / 已提交 / 已过账（产生库存效应）/ 已取消
+enum ProductionInboundStatus {
+  DRAFT
+  SUBMITTED
+  POSTED
+  CANCELLED
+}
+
 /// 审核状态：草稿 / 待审核 / 已审核 / 已驳回
 enum ApprovalStatus {
   DRAFT
@@ -452,6 +460,7 @@ model Item {
   isSalable       Boolean @default(true) // 可销售
   isPurchasable   Boolean @default(true) // 可采购
   isManufacturable Boolean @default(false) // 可生产
+  standardCost  Decimal?       @db.Decimal(14, 4) // 标准成本（生产入库成本基数，P-1/ADR ProductionInbound）
   description   String?
   isActive      Boolean         @default(true)
   createdById   String?
@@ -463,6 +472,8 @@ model Item {
   linearGuide   LinearGuideSpecification?
   standards     ItemStandard[]
   priceListItems PriceListItem[]
+  productionInboundSources ProductionInboundLine[] @relation("ProdFromItem") // 作为半成品被消耗
+  productionInboundTargets ProductionInboundLine[] @relation("ProdToItem") // 作为产成品入库
   partnerPrices  PartnerPrice[]
   projectProducts ProjectProduct[]
   specifications ItemSpecification[]
@@ -6302,6 +6313,59 @@ model InventoryCostBalance {
   @@index([itemId])
 }
 
+
+/// 生产入库单（P-1/ProductionInbound，ADR：基于利尼尔生产入库表设计）
+/// 承载「半成品 → 产成品」生产入库事实；POSTED 时同事务产生库存效应（半成品 OUT + 产成品 IN）。
+model ProductionInbound {
+  id           String   @id @default(cuid())
+  inboundNo    String   @unique // 生产入库单号（按生产日期或流水）
+  inboundDate  DateTime // 生产日期
+  warehouseId  String // 入库仓库
+  warehouse    Warehouse @relation(fields: [warehouseId], references: [id])
+  batchNo      String? // 生产批次
+  totalQty     Decimal  @default(0) @db.Decimal(14, 3) // 入库总数量（Σ toQty）
+  totalAmount  Decimal  @default(0) @db.Decimal(14, 2) // 入库总金额（Σ amount）
+  status       ProductionInboundStatus @default(DRAFT)
+  remark       String?
+  createdById  String?
+  updatedById  String?
+  postedById   String? // 过账人（POSTED 时记录）
+  postedAt     DateTime?
+  version      Int      @default(1) // CAS 乐观锁
+  deletedAt    DateTime?
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  lines ProductionInboundLine[]
+
+  @@index([inboundDate])
+  @@index([warehouseId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+/// 生产入库行：半成品（fromItem）消耗 → 产成品（toItem）入库
+model ProductionInboundLine {
+  id        String   @id @default(cuid())
+  inboundId String
+  inbound   ProductionInbound @relation(fields: [inboundId], references: [id], onDelete: Cascade)
+  fromItemId String // 半成品（消耗源）
+  fromItem  Item     @relation("ProdFromItem", fields: [fromItemId], references: [id])
+  fromQty   Decimal  @db.Decimal(14, 3) // 半成品消耗数量
+  toItemId  String // 产成品（入库目标）
+  toItem    Item     @relation("ProdToItem", fields: [toItemId], references: [id])
+  toQty     Decimal  @db.Decimal(14, 3) // 产成品入库数量
+  unitCost  Decimal  @db.Decimal(14, 4) // 单位成本（standardCost 或移动加权）
+  amount    Decimal  @db.Decimal(14, 2) // 金额 = unitCost × toQty
+  remark    String?
+  createdById String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([inboundId])
+  @@index([fromItemId])
+  @@index([toItemId])
+}
 /// 库存成本幂等源（ADR-0038）：sourceKey @unique 防重复累计成本（与 GRIR ACCRUAL 同事务）
 model InventoryCostSource {
   id        String   @id @default(cuid())
