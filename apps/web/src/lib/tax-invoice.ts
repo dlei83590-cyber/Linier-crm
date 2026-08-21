@@ -36,7 +36,8 @@ export function validateUscc(raw: string): boolean {
     if (idx === -1) return false;
     sum += idx * USCC_WEIGHTS[i];
   }
-  const checkChar = USCC_CHARS[31 - (sum % 31)];
+  // GB 32100-2015：C18 = 字符集[(31 - (Σ mod 31)) mod 31]——余数为 0 时取字符集[0]='0'（原实现越界 → 合法 '0' 校验码误报）
+  const checkChar = USCC_CHARS[(31 - (sum % 31)) % 31];
   return uscc[17] === checkChar;
 }
 

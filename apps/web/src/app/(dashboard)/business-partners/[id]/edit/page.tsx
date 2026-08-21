@@ -141,9 +141,9 @@ function BusinessPartnerEditForm() {
         setWebsite(d.website ?? "");
         setIsActive(d.isActive);
         setVersion(d.version);
-        // 开票资料（ADR-0043，F3）
+        // 开票资料（ADR-0043，F3）：开票税号默认取往来单位主档 uscc（开票税号 = 统一社会信用代码，与往来单位一致）
         setInvTitle(d.invoiceInfoRecord?.title ?? "");
-        setInvUscc(d.invoiceInfoRecord?.uscc ?? "");
+        setInvUscc(d.invoiceInfoRecord?.uscc ?? d.uscc ?? "");
         setInvTaxpayerType(d.invoiceInfoRecord?.taxpayerType ?? "GENERAL_VAT_PAYER");
         setInvRegAddress(d.invoiceInfoRecord?.registeredAddress ?? "");
         setInvRegPhone(d.invoiceInfoRecord?.registeredPhone ?? "");
@@ -169,10 +169,22 @@ function BusinessPartnerEditForm() {
       setError(new ApiClientError(400, "名称为必填项", "VALIDATION"));
       return;
     }
-    // 开票资料 uscc 校验（ADR-0043，I1：GB 32100-2015）
-    if (invTitle.trim() && invUscc.trim() && !validateUscc(invUscc)) {
-      setError(new ApiClientError(400, "统一社会信用代码非法（GB 32100-2015，18 位含校验码）", "USCC_INVALID"));
-      return;
+    // 开票资料（ADR-0043）：开票抬头/开票税号必填（任一开始填写 → 两者必填）+ uscc GB 32100-2015 校验
+    const invTitleV = invTitle.trim();
+    const invUsccV = invUscc.trim();
+    if (invTitleV || invUsccV) {
+      if (!invTitleV) {
+        setError(new ApiClientError(400, "开票抬头为必填项（开票资料已开始填写）", "VALIDATION"));
+        return;
+      }
+      if (!invUsccV) {
+        setError(new ApiClientError(400, "开票税号为必填项（开票资料已开始填写）", "VALIDATION"));
+        return;
+      }
+      if (!validateUscc(invUsccV)) {
+        setError(new ApiClientError(400, "统一社会信用代码非法（GB 32100-2015，18 位含校验码）", "USCC_INVALID"));
+        return;
+      }
     }
     setSubmitting(true);
     setError(null);
@@ -199,8 +211,8 @@ function BusinessPartnerEditForm() {
       employeeCount: employeeCount ? Number(employeeCount) : null,
       website: website.trim() || null,
       isActive,
-      // 开票资料（ADR-0043，F3；仅当填写抬头时提交）
-      ...(invTitle.trim()
+      // 开票资料（ADR-0043，F3；抬头与税号同时填写才提交——必填已由上方校验保证）
+      ...(invTitle.trim() && invUscc.trim()
         ? {
             taxInvoiceInfo: {
               title: invTitle.trim(),
@@ -341,10 +353,10 @@ function BusinessPartnerEditForm() {
         </FormField>
       </Section>
       <Section title="开票资料">
-        <FormField label="开票抬头">
-          <input value={invTitle} onChange={(e) => setInvTitle(e.target.value)} className={inputClass} placeholder="填写后保存将创建开票资料" />
+        <FormField label="开票抬头" required>
+          <input value={invTitle} onChange={(e) => setInvTitle(e.target.value)} className={inputClass} placeholder="发票抬头（MUST = 营业执照企业全称）" />
         </FormField>
-        <FormField label="开票税号">
+        <FormField label="开票税号" required>
           <input value={invUscc} onChange={(e) => setInvUscc(e.target.value)} className={inputClass} placeholder="18 位统一社会信用代码（GB 32100-2015）" />
           {invUscc.trim() && !validateUscc(invUscc) && (
             <p className="mt-1 text-xs text-red-500">统一社会信用代码格式不正确（GB 32100-2015）</p>
