@@ -99,7 +99,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 /**
  * DELETE /api/warehouses/:id（软删除）
  * 业务规则：被库位/业务单据引用（WarehouseReceipt / PurchaseReceipt / InventoryTransfer /
- * StockProjection / InventoryMovement / 成本余额 等）→ 409 不可删除，但可编辑；无引用 → 软删除。
+ * StockProjection / InventoryMovement 等）→ 409 不可删除，但可编辑；无引用 → 软删除。
  */
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await authenticate(request);
@@ -114,16 +114,15 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (!warehouse) return failNotFound(ERROR_CODES.NOT_FOUND, "仓库不存在");
 
   // 引用检查：被库位或业务单据引用 → 不可删除（可编辑）
-  const [locations, receipts, purchaseReceipts, transfers, projections, movements, costBalances] = await Promise.all([
+  const [locations, receipts, purchaseReceipts, transfers, projections, movements] = await Promise.all([
     prisma.warehouseLocation.count({ where: { warehouseId: id, deletedAt: null } }),
     prisma.warehouseReceipt.count({ where: { warehouseId: id, deletedAt: null } }),
     prisma.purchaseReceipt.count({ where: { warehouseId: id, deletedAt: null } }),
     prisma.inventoryTransfer.count({ where: { OR: [{ sourceWarehouseId: id }, { destinationWarehouseId: id }], deletedAt: null } }),
     prisma.stockProjection.count({ where: { warehouseId: id } }),
     prisma.inventoryMovement.count({ where: { warehouseId: id } }),
-    prisma.inventoryCostBalance.count({ where: { warehouseId: id } }).catch(() => 0),
   ]);
-  const referenced = locations + receipts + purchaseReceipts + transfers + projections + movements + costBalances;
+  const referenced = locations + receipts + purchaseReceipts + transfers + projections + movements;
   if (referenced > 0) {
     return failConflict(ERROR_CODES.CONFLICT, "仓库已被库位或业务单据引用，不能删除（可编辑）");
   }
