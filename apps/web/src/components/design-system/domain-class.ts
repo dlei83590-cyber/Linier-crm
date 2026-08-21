@@ -19,7 +19,6 @@ const DOMAIN_CLASS: Record<string, DomainClassSet> = {
   sales: { dot: "bg-domain-sales-500", soft: "bg-domain-sales-50", text: "text-domain-sales-600", indicator: "bg-domain-sales-600", square: "bg-domain-sales-100 text-domain-sales-700" },
   purchasing: { dot: "bg-domain-purchasing-500", soft: "bg-domain-purchasing-50", text: "text-domain-purchasing-600", indicator: "bg-domain-purchasing-600", square: "bg-domain-purchasing-100 text-domain-purchasing-700" },
   inventory: { dot: "bg-domain-inventory-500", soft: "bg-domain-inventory-50", text: "text-domain-inventory-600", indicator: "bg-domain-inventory-600", square: "bg-domain-inventory-100 text-domain-inventory-700" },
-  "supplier-ap": { dot: "bg-domain-supplier-ap-500", soft: "bg-domain-supplier-ap-50", text: "text-domain-supplier-ap-600", indicator: "bg-domain-supplier-ap-600", square: "bg-domain-supplier-ap-100 text-domain-supplier-ap-700" },
   finance: { dot: "bg-domain-finance-500", soft: "bg-domain-finance-50", text: "text-domain-finance-600", indicator: "bg-domain-finance-600", square: "bg-domain-finance-100 text-domain-finance-700" },
   "master-data": { dot: "bg-domain-master-data-500", soft: "bg-domain-master-data-50", text: "text-domain-master-data-600", indicator: "bg-domain-master-data-600", square: "bg-domain-master-data-100 text-domain-master-data-700" },
   system: { dot: "bg-domain-system-500", soft: "bg-domain-system-50", text: "text-domain-system-600", indicator: "bg-domain-system-600", square: "bg-domain-system-100 text-domain-system-700" },
