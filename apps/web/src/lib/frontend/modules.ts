@@ -34,15 +34,14 @@ export type ModuleAvailability = 'ready' | 'preview' | 'hold';
 
 export type ModuleDomain =
   | 'workbench'
+  | 'customer-project'
   | 'sales'
   | 'purchasing'
   | 'inventory'
-  | 'supplier-ap'
   | 'finance'
   | 'master-data'
   | 'system'
-  | 'reports'
-  | 'customer-project';
+  | 'reports';
 
 export interface ModuleDomainDef {
   id: ModuleDomain;
@@ -278,11 +277,11 @@ export const MODULE_DOMAINS: ReadonlyArray<ModuleDomainDef> = [
   { id: 'sales', label: '销售管理', order: 3 },
   { id: 'purchasing', label: '采购管理', order: 4 },
   { id: 'inventory', label: '库存管理', order: 5 },
-  { id: 'supplier-ap', label: '采购财务', order: 6 },
-  { id: 'finance', label: '财务总账', order: 7 },
-  { id: 'master-data', label: '基础资料', order: 8 },
-  { id: 'system', label: '系统管理', order: 9 },
-  { id: 'reports', label: '分析与报表', order: 10 },
+  // 销售财务（应收/收款/贷借项）与采购财务（供应商发票/应付/付款）统一归口财务管理（用户指令 2026-08-21，为权限分配）
+  { id: 'finance', label: '财务管理', order: 6 },
+  { id: 'master-data', label: '基础资料', order: 7 },
+  { id: 'system', label: '系统管理', order: 8 },
+  { id: 'reports', label: '分析与报表', order: 9 },
 ];
 
 export const MODULES: ReadonlyArray<FrontendModule> = [
@@ -406,21 +405,21 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_LIST_DETAIL_EDIT_ACTIONS, ui: UI_LIST_DETAIL_ACTIONS },
     order: 4,
   },
-  // accounts-receivable：只读模型（list/detail/aging），无 create/edit
+  // accounts-receivable：只读模型（list/detail/aging），无 create/edit（财务域——用户指令 2026-08-21 移入财务管理）
   {
     id: 'accounts-receivable',
-    domain: 'sales',
+    domain: 'finance',
     label: '应收账款',
     route: '/sales/accounts-receivable',
     permission: PERMISSIONS.ACCOUNTS_RECEIVABLE_READ,
     availability: 'ready',
     capabilities: { contract: CONTRACT_LIST_DETAIL, ui: UI_LIST_DETAIL },
-    order: 5,
+    order: 2,
   },
-  // receipt-allocation：收款创建 + allocate/void/reverse 事实动作，无编辑（F2-6B 批 2 已交付）
+  // receipt-allocation：收款创建 + allocate/void/reverse 事实动作，无编辑（F2-6B 批 2 已交付；财务域）
   {
     id: 'receipt-allocation',
-    domain: 'sales',
+    domain: 'finance',
     label: '收款核销',
     route: '/sales/receipts',
     permission: PERMISSIONS.RECEIPT_READ,
@@ -428,13 +427,13 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_LIST_DETAIL_CREATE_ACTIONS, ui: UI_LIST_DETAIL_CREATE_ACTIONS },
     createRoute: '/sales/receipts/new',
     createPermission: actionPermission('receipt', 'create'),
-    order: 6,
+    order: 3,
   },
   // credit-debit-notes：F2-6-0 contract 基线修正——/api/credit-debit-notes/[id] 仅 submit/apply，无详情 GET/PATCH route → detail=false / edit=false；
-  // root 有 GET+POST（list/create），submit（workflow）+ apply（factAction）→ CONTRACT_LIST_CREATE_WORKFLOW_ACTIONS（不再用 CONTRACT_FULL）
+  // root 有 GET+POST（list/create），submit（workflow）+ apply（factAction）→ CONTRACT_LIST_CREATE_WORKFLOW_ACTIONS（不再用 CONTRACT_FULL；财务域）
   {
     id: 'credit-debit-notes',
-    domain: 'sales',
+    domain: 'finance',
     label: '贷项/借项通知单',
     route: '/sales/credit-debit-notes',
     permission: PERMISSIONS.CREDIT_DEBIT_NOTE_READ,
@@ -442,7 +441,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_LIST_CREATE_WORKFLOW_ACTIONS, ui: UI_LIST_CREATE_WORKFLOW_ACTIONS },
     createRoute: '/sales/credit-debit-notes/new',
     createPermission: actionPermission('credit-debit-note', 'create'),
-    order: 7,
+    order: 4,
   },
 
   // ===== 采购管理（现有最成熟工作台，ready）=====
@@ -601,10 +600,10 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     order: 6,
   },
 
-  // ===== 采购财务（5C-1 已 Accounting Baseline → Supplier Invoice hold/后续 ready；5C-2 CN/DN+Payment 继续 HOLD，菜单可出现在分类下但不可点击——F2-6）=====
+  // ===== 财务管理（采购侧；用户指令 2026-08-21：采购财务统一归口财务管理）=====
   {
     id: 'supplier-invoices',
-    domain: 'supplier-ap',
+    domain: 'finance',
     label: '供应商发票',
     route: '/supplier-invoices',
     permission: PERMISSIONS.SUPPLIER_INVOICE_READ,
@@ -613,24 +612,24 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CREATE_ACTIONS },
     createRoute: '/supplier-invoices/new',
     createPermission: actionPermission('supplier-invoice', 'create'),
-    order: 1,
+    order: 5,
   },
   // ap-open-items：Pending Pages — 只读查询（GET /api/ap-open-items，5C-1C1 POST 产生的会计投影；不提供 5C-2 写入口）
   {
     id: 'ap-open-items',
-    domain: 'supplier-ap',
+    domain: 'finance',
     label: '应付未结项',
     route: '/supplier-ap/open-items',
     permission: actionPermission('ap-open-item', 'view'),
     availability: 'ready',
     capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_LIST },
-    order: 2,
+    order: 6,
   },
   // supplier-cn-dn：5C-2（CTO 解锁 2026-08-19）——/api/supplier-credit-debit-notes CRUD + submit/apply
   // 权限码 supplier-credit-debit-note:view/create/edit/approve/close（apply→:edit，maker-checker 业务层强制）
   {
     id: 'supplier-cn-dn',
-    domain: 'supplier-ap',
+    domain: 'finance',
     label: '供应商贷项/借项',
     route: '/supplier-ap/credit-debit-notes',
     permission: actionPermission('supplier-credit-debit-note', 'view'),
@@ -638,12 +637,12 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD_ACTIONS },
     createRoute: '/supplier-ap/credit-debit-notes/new',
     createPermission: actionPermission('supplier-credit-debit-note', 'create'),
-    order: 3,
+    order: 7,
   },
   // payment-allocation：5C-2（CTO 解锁 2026-08-19）——/api/supplier-payments CRUD + apply/void + allocation reverse
   {
     id: 'payment-allocation',
-    domain: 'supplier-ap',
+    domain: 'finance',
     label: '付款核销',
     route: '/supplier-ap/payments',
     permission: actionPermission('supplier-payment', 'view'),
@@ -651,7 +650,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CREATE_ACTIONS },
     createRoute: '/supplier-ap/payments/new',
     createPermission: actionPermission('supplier-payment', 'create'),
-    order: 4,
+    order: 8,
   },
   // gl：Sprint 7 Finance 首块（CTO 解锁 2026-08-20，ADR-0033）——/api/gl/journal-entries 只读（事件驱动自动过账；无手工过账 UI）
   {
@@ -675,7 +674,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     permission: actionPermission('gl', 'view'),
     availability: 'ready',
     capabilities: { contract: CONTRACT_LIST_DETAIL, ui: UI_LIST_DETAIL_ACTIONS },
-    order: 2,
+    order: 9,
   },
   // inventory-costs：成本核算（CTO 授权解除 D9 HOLD 2026-08-20，ADR-0038）——移动加权平均成本只读
   {
@@ -697,7 +696,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     permission: actionPermission('gl', 'view'),
     availability: 'ready',
     capabilities: { contract: CONTRACT_LIST_DETAIL, ui: UI_LIST_DETAIL_ACTIONS },
-    order: 3,
+    order: 10,
   },
 
   // ===== 基础资料（F2-2 Wave 1 已交付 → ready；契约缺失项保持 hold）=====
