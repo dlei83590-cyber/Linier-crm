@@ -63,6 +63,8 @@ export const PERMISSIONS = {
   SUPPLIER_INVOICE_READ: "supplier-invoice:view",
   // Master-Data Read API（D1）：warehouse / warehouse-location 主数据只读（read API 用 warehouse:view / warehouse-location:view）
   WAREHOUSE_READ: "warehouse:view",
+  // 生产入库（P-1/ProductionInbound）：view 只读；create/edit/delete/post 由 PERMISSION_MODULES × ACTIONS 生成
+  PRODUCTION_INBOUND_READ: "production-inbound:view",
   WAREHOUSE_LOCATION_READ: "warehouse-location:view",
   // Sprint 6A/6B：库存工作台（前端消费层对齐 FINAL 契约）
   // Sprint 6A Read Model（Inventory Read Model Gate FINAL，2026-08-18）：新增只读 Query API
@@ -296,6 +298,8 @@ export const PERMISSION_MODULES = [
   "inventory-adjustment",
   // Sprint 6B-4：Inventory Conversion 同 item Repack/UOM Conversion（动作映射：create→inventory-conversion:create（创建即取号 CVT）；submit→inventory-conversion:edit；execute→inventory-conversion:edit（对齐 5B post→:edit 先例）；cancel→inventory-conversion:close；line 仅 view/edit——见 SEED_RESTRICTED_ACTION_PERMISSIONS；**首版无审批状态机（DRAFT→SUBMITTED→EXECUTED/CANCELLED），计量事实不发明审批流**）
   "inventory-conversion",
+  // P-1 生产入库（ProductionInbound）：create→production-inbound:create；submit/post→:edit（post→:edit 对齐 supplier-invoice 先例）；cancel→:close；line 仅 view/edit——与 seed.ts SEED_ACTION_MODULES 保持一致
+  "production-inbound",
   // Sprint 6A Read Model：库存只读查询模块（stock-projection / inventory-movement——只读 Query API 用 :view；
   // 与 prisma/seed.ts SEED_ACTION_MODULES 保持一致，避免 static RBAC 与 DB permission catalog 漂移（ADR-0028））
   "stock-projection",

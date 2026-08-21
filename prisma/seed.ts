@@ -137,6 +137,8 @@ const SEED_ACTION_MODULES = [
   "inventory-adjustment",
   // Sprint 6B-4：Inventory Conversion 转换模块（动作映射：create→inventory-conversion:create（创建即取号 CVT）；submit→inventory-conversion:edit；execute→inventory-conversion:edit（对齐 5B post→:edit 先例）；cancel→inventory-conversion:close；line 仅 view/edit——见 SEED_RESTRICTED_ACTION_PERMISSIONS；**Conversion 状态机无 APPROVED（DRAFT/SUBMITTED/EXECUTED/CANCELLED——同 item Repack/UOM 计量事实，不发明审批流）**）
   "inventory-conversion",
+  // P-1 生产入库（ProductionInbound）：create→production-inbound:create；submit/post→:edit（post→:edit 对齐 supplier-invoice 先例）；cancel→:close；line 仅 view/edit
+  "production-inbound",
   // Sprint 6A Read Model：库存只读查询模块（stock-projection / inventory-movement——只读 Query API 用 :view；
   // 与 shared PERMISSION_MODULES 保持一致，避免 static RBAC 与 DB permission catalog 漂移（ADR-0028））
   "stock-projection",
@@ -933,6 +935,22 @@ async function main() {
       create: u,
     });
     unitMap.set(u.code, saved.id);
+  }
+
+  // Master data: production item categories（P-1：滑块 / 直线导轨 / 丝杆螺母，基于利尼尔生产入库表）
+  const productionCategories = [
+    { code: "SLIDER", name: "滑块", categoryPath: "001", level: 1, sort: 1 },
+    { code: "SLIDER.MACHINE", name: "机床滑块", categoryPath: "001.001", level: 2, sort: 1 },
+    { code: "SLIDER.BEARING", name: "轴承滑块", categoryPath: "001.002", level: 2, sort: 2 },
+    { code: "SLIDER.LINEAR", name: "线性滑块", categoryPath: "001.003", level: 2, sort: 3 },
+    { code: "SLIDER.GENERAL", name: "通用设备滑块", categoryPath: "001.004", level: 2, sort: 4 },
+    { code: "LINEAR_GUIDE", name: "直线导轨", categoryPath: "002", level: 1, sort: 2 },
+    { code: "LINEAR_GUIDE.MACHINE", name: "机床直线导轨", categoryPath: "002.001", level: 2, sort: 1 },
+    { code: "SCREW_NUT", name: "丝杆螺母", categoryPath: "003", level: 1, sort: 3 },
+    { code: "SCREW_NUT.METAL", name: "金属制品丝杆螺母", categoryPath: "003.001", level: 2, sort: 1 },
+  ];
+  for (const c of productionCategories) {
+    await prisma.itemCategory.upsert({ where: { code: c.code }, update: {}, create: c });
   }
 
   // Master data: items (linear guide series)
