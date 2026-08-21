@@ -99,7 +99,7 @@ function DeliveryDetailPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selections, setSelections] = useState<Record<string, InvoiceSelection>>({});
   const [dialogError, setDialogError] = useState<string | null>(null);
-  const [confirmAction, setConfirmAction] = useState<"ready" | "cancel" | null>(null);
+  const [confirmAction, setConfirmAction] = useState<"ready" | "cancel" | "unconfirm" | "delete" | null>(null);
   const [dispatchOpen, setDispatchOpen] = useState(false);
   const [dispatchCarrier, setDispatchCarrier] = useState("");
   const [dispatchTrackingNo, setDispatchTrackingNo] = useState("");
@@ -111,6 +111,7 @@ function DeliveryDetailPage() {
   const canEdit = hasPermission(roles, actionPermission("delivery", "edit"));
   const canApprove = hasPermission(roles, actionPermission("delivery", "approve"));
   const canClose = hasPermission(roles, actionPermission("delivery", "close"));
+  const canDelete = hasPermission(roles, actionPermission("delivery", "delete"));
   const canInvoice = detail !== null && detail.status === "DELIVERED";
   const invoicableLines = (detail?.lines ?? []).filter(
     (l) => Number(l.remainingInvoiceQty ?? l.quantity) > 0,
@@ -193,17 +194,30 @@ function DeliveryDetailPage() {
     }
   };
 
-  // ── 就绪 / 取消（简单确认动作） ──
-  const runAction = async (action: "ready" | "cancel") => {
+  // ── 就绪 / 取消 / 反签收 / 删除 ──
+  const runAction = async (action: "ready" | "cancel" | "unconfirm" | "delete") => {
     if (!detail || actionBusy) return;
     setActionBusy(true);
     setActionError(null);
     try {
-      await apiFetch(`/api/deliveries/${id}/${action}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ changeReason: action === "ready" ? "交付单就绪" : "取消交付单" }),
-      });
+      if (action === "delete") {
+        await apiFetch(`/api/deliveries/${id}`, {
+          method: "DELETE",
+        });
+      } else {
+        await apiFetch(`/api/deliveries/${id}/${action}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            changeReason:
+              action === "ready"
+                ? "交付单就绪"
+                : action === "cancel"
+                  ? "取消交付单"
+                  : "送货单反签收",
+          }),
+        });
+      }
       await refreshDetail();
     } catch (err: unknown) {
       setActionError(
@@ -370,6 +384,26 @@ function DeliveryDetailPage() {
                 className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-status-danger-bg disabled:cursor-not-allowed disabled:opacity-50"
               >
                 取消
+              </button>
+            )}
+            {detail.status === "DELIVERED" && canApprove && (
+              <button
+                type="button"
+                onClick={() => setConfirmAction("unconfirm")}
+                disabled={actionBusy}
+                className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {actionBusy ? "处理中…" : "反签收"}
+              </button>
+            )}
+            {(detail.status === "CANCELLED" || detail.status === "DISPATCHED") && canDelete && (
+              <button
+                type="button"
+                onClick={() => setConfirmAction("delete")}
+                disabled={actionBusy}
+                className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-status-danger-bg disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {actionBusy ? "处理中…" : "删除"}
               </button>
             )}
             {canInvoice && canCreateInvoice && (
@@ -568,14 +602,34 @@ function DeliveryDetailPage() {
 
       <ConfirmActionDialog
         open={confirmAction !== null}
-        title={confirmAction === "ready" ? "交付单就绪" : "取消交付单"}
+        title={
+          confirmAction === "ready"
+            ? "交付单就绪"
+            : confirmAction === "cancel"
+              ? "取消交付单"
+              : confirmAction === "unconfirm"
+                ? "反签收送货单"
+                : "删除送货单"
+        }
         description={
           confirmAction === "ready"
             ? "就绪后交付行将彻底冻结（不再可编辑）；就绪是发运的前置步骤。确认就绪？"
-            : "取消该交付单？仅 DRAFT/READY 可取消（DISPATCHED 及以后禁止）。确认后不可恢复。"
+            : confirmAction === "cancel"
+              ? "取消该交付单？仅 DRAFT/READY 可取消（DISPATCHED 及以后禁止）。确认后不可恢复。"
+              : confirmAction === "unconfirm"
+                ? "反签收该送货单（DELIVERED → DISPATCHED）？将撤销确认收货、POD 回退 PENDING，并重算销售订单交付状态（订单可回未发货）。仅无已开票发票时可反签收。"
+                : "删除该送货单？仅 CANCELLED 或反签收后（DISPATCHED）状态可删除；删除后订单交付状态将重算（回未发货）。确认后不可恢复。"
         }
-        confirmLabel={confirmAction === "ready" ? "确认就绪" : "确认取消"}
-        tone={confirmAction === "cancel" ? "danger" : "primary"}
+        confirmLabel={
+          confirmAction === "ready"
+            ? "确认就绪"
+            : confirmAction === "cancel"
+              ? "确认取消"
+              : confirmAction === "unconfirm"
+                ? "确认反签收"
+                : "确认删除"
+        }
+        tone={confirmAction === "ready" ? "primary" : "danger"}
         busy={actionBusy}
         onConfirm={() => {
           const a = confirmAction;

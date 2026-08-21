@@ -178,6 +178,24 @@
 | L7 | 无 /complete | 尝试 POST /complete | 路由不存在（COMPLETED 仅枚举） |
 | L8 | POD 表不存在 | 查询 DeliveryPOD | 无该模型/表（最小投影方案） |
 
+## N. 反签收 + 删除（用户指令 2026-08-21：层层回退、层层可删除）
+
+| # | 用例 | 方法/路径 | 预期 |
+| --- | --- | --- | --- |
+| N1 | DELIVERED 反签收成功 | POST /api/deliveries/:id/unconfirm（DELIVERED） | 200；status=DISPATCHED；POD 回退 PENDING（podReceivedAt/podConfirmedById 清空）；SO 交付投影重算 |
+| N2 | 非 DELIVERED 反签收 | DRAFT/READY/DISPATCHED/CANCELLED unconfirm | 409 DELIVERY_INVALID_STATE |
+| N3 | 未红冲蓝票阻止反签收 | delivery 有 ISSUED 蓝票（无红字） | 409 DELIVERY_INVALID_STATE（先红冲发票） |
+| N4 | 已红冲蓝票允许反签收 | delivery 有 ISSUED 蓝票 + 对应红字发票 | 200（应收已回退，视为已处理） |
+| N5 | 反签收后 SO 回未发货 | 唯一 delivery 反签收 | SO status=CONFIRMED（deliveredQty 归零）；deliveredAt=null |
+| N6 | 部分反签收 SO 回部分交付 | 多 delivery 之一反签收 | SO status=PARTIALLY_DELIVERED（剩余行仍有交付） |
+| N7 | 反签收快照留痕 | unconfirm 后查 DeliverySnapshot | 新增 DELIVERED 类型快照（status=UNCONFIRMED + previousStatus + changeReason） |
+| N8 | CANCELLED 删除 | DELETE（CANCELLED，无发票） | 200 软删（header+lines+revisions+snapshots） |
+| N9 | DISPATCHED（反签收后）删除 | DELETE（DISPATCHED，无未红冲发票） | 200 软删 + SO 交付投影重算 |
+| N10 | DELIVERED 禁止删除 | DELETE（DELIVERED） | 409 DELIVERY_INVALID_STATE（先反签收） |
+| N11 | DRAFT/READY 禁止直接删除 | DELETE（DRAFT/READY） | 409 DELIVERY_INVALID_STATE（先取消） |
+| N12 | 未红冲发票阻止删除 | DELETE（有 ISSUED 蓝票未红冲） | 409 DELIVERY_INVALID_STATE |
+| N13 | 反签收/删除事件 | unconfirm 后 AuditLog | action=delivery.unconfirm + DeliveryUnconfirmed 事件（EVENTS v1.44） |
+
 ## M. 错误码映射（ERROR_CODES.md 对齐）
 
 | 错误码 | 场景 | HTTP |

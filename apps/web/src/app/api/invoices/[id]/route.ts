@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { casUpdate } from "@/lib/api/cas";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
@@ -9,6 +10,12 @@ import { invoiceUpdateSchema } from "@/lib/api/schemas";
 import { createInvoiceRevision } from "@/lib/invoice/helpers";
 import { publishInvoiceEvent } from "@/lib/invoice/events";
 import { maybeTriggerInvoiceApproval } from "@/lib/invoice/workflow-sync";
+import { computeBalance } from "@/lib/accounts-receivable/projection";
+import {
+  createAccountsReceivableRevision,
+  createAccountsReceivableSnapshot,
+  latestAccountsReceivableRevisionNo,
+} from "@/lib/accounts-receivable/helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -152,7 +159,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   return ok(updated);
 }
 
-/** DELETE /api/invoices/:id（层层回退-层层可删除：仅 CANCELLED 且无应收引用可软删除） */
+/** DELETE /api/invoices/:id（层层回退-层层可删除）
+ * - 蓝票：仅 CANCELLED 且无应收引用可软删除（现状保持）
+ * - 红字发票（redLetter=true，用户指令 2026-08-21）：
+ *     DRAFT 红字 → 直接软删（未生效无应收影响）
+ *     ISSUED 红字 → 删除 = 撤销红冲：恢复原票 AR（adjustedAmount += |红字| + balanceAmount 重算
+ *       + 原票 Invoice.balanceAmount 同步 + AR Revision/Snapshot），然后软删红字发票
+ */
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await authenticate(request);
   const denied = requirePermission(user, "invoice:delete");
@@ -164,17 +177,81 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   const invoice = await prisma.invoice.findFirst({ where: { id, deletedAt: null } });
   if (!invoice) return failNotFound(ERROR_CODES.INVOICE_NOT_FOUND, "发票不存在");
-  if (invoice.status !== "CANCELLED") {
-    return failConflict(ERROR_CODES.INVOICE_INVALID_STATE, "仅 CANCELLED 状态可删除（回退后清理列表）；已开票/已收款发票禁止删除");
-  }
-  // 引用防御：已生成应收（AR.invoiceId）禁止删除——保持应收溯源链（CTO 必改③：有 AR 的发票禁止删除）
-  const arCount = await prisma.accountsReceivable.count({ where: { invoiceId: id, deletedAt: null } });
-  if (arCount > 0) {
-    return failConflict(ERROR_CODES.INVOICE_INVALID_STATE, "发票已生成应收，禁止删除（保持应收溯源）");
+
+  const isRed = invoice.redLetter;
+  if (!isRed) {
+    // 蓝票：仅 CANCELLED 可删
+    if (invoice.status !== "CANCELLED") {
+      return failConflict(ERROR_CODES.INVOICE_INVALID_STATE, "仅 CANCELLED 状态可删除（回退后清理列表）；已开票/已收款发票禁止删除");
+    }
+    const arCount = await prisma.accountsReceivable.count({ where: { invoiceId: id, deletedAt: null } });
+    if (arCount > 0) {
+      return failConflict(ERROR_CODES.INVOICE_INVALID_STATE, "发票已生成应收，禁止删除（保持应收溯源）");
+    }
+  } else if (invoice.status !== "DRAFT" && invoice.status !== "ISSUED") {
+    return failConflict(ERROR_CODES.INVOICE_INVALID_STATE, "红字发票仅 DRAFT/ISSUED 状态可删除");
   }
 
   const now = new Date();
   await prisma.$transaction(async (tx) => {
+    // 红字 ISSUED 删除 = 撤销红冲：恢复原票 AR（仅当红字已生效且原票 AR 存在）
+    if (isRed && invoice.status === "ISSUED" && invoice.redInvoiceRefId) {
+      const origArLocked = await tx.$queryRaw<Array<{ id: string }>>(
+        Prisma.sql`SELECT "id" FROM "AccountsReceivable" WHERE "invoiceId" = ${invoice.redInvoiceRefId} AND "deletedAt" IS NULL FOR UPDATE`,
+      );
+      if (origArLocked.length === 0) return { error: "ORIGINAL_AR_NOT_FOUND" as const };
+      const origAr = await tx.accountsReceivable.findFirst({
+        where: { invoiceId: invoice.redInvoiceRefId, deletedAt: null },
+      });
+      if (!origAr) return { error: "ORIGINAL_AR_NOT_FOUND" as const };
+      {
+        const redAbs = invoice.invoiceTotal.abs();
+        const newAdjusted = origAr.adjustedAmount.plus(redAbs);
+        const newBalance = new Prisma.Decimal(
+          computeBalance(origAr.originalAmount, newAdjusted, origAr.paidAmount, origAr.writeOffAmount),
+        );
+        await tx.accountsReceivable.update({
+          where: { id: origAr.id },
+          data: { adjustedAmount: newAdjusted, balanceAmount: newBalance, updatedById: user!.id },
+        });
+        await tx.invoice.update({
+          where: { id: invoice.redInvoiceRefId },
+          data: { balanceAmount: newBalance, updatedById: user!.id },
+        });
+        await createAccountsReceivableRevision(
+          tx,
+          origAr.id,
+          "红字发票删除撤销红冲（恢复应收）",
+          {
+            invoiceId: invoice.redInvoiceRefId,
+            redInvoiceId: id,
+            redInvoiceCode: invoice.code,
+            redAmount: redAbs.toString(),
+            adjustedAmount: newAdjusted.toString(),
+            balanceAmount: newBalance.toString(),
+          },
+          user?.id,
+        );
+        const revNo = await latestAccountsReceivableRevisionNo(tx, origAr.id);
+        await createAccountsReceivableSnapshot(
+          tx,
+          origAr.id,
+          "ADJUSTED",
+          "ADJUSTMENT",
+          revNo,
+          {
+            invoiceId: invoice.redInvoiceRefId,
+            redInvoiceId: id,
+            redInvoiceCode: invoice.code,
+            redAmount: redAbs.toString(),
+            adjustedAmount: newAdjusted.toString(),
+            balanceAmount: newBalance.toString(),
+            deletedAt: now.toISOString(),
+          },
+          user?.id,
+        );
+      }
+    }
     await tx.invoice.update({ where: { id }, data: { deletedAt: now, isActive: false, updatedById: user!.id } });
     await tx.invoiceLine.updateMany({ where: { invoiceId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
     await tx.invoiceRevision.updateMany({ where: { invoiceId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
@@ -186,7 +263,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     action: "invoice.delete",
     entityType: "invoice",
     entityId: id,
-    afterData: { code: invoice.code },
+    afterData: { code: invoice.code, redLetter: invoice.redLetter, status: invoice.status },
     ...meta,
   });
 

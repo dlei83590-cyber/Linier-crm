@@ -85,7 +85,7 @@ interface InvoiceDetail {
   createdAt: string;
 }
 
-type ConfirmAction = "issue" | "cancel";
+type ConfirmAction = "issue" | "cancel" | "delete-red";
 
 function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -121,9 +121,12 @@ function InvoiceDetailPage() {
   const canApprove = hasPermission(roles, actionPermission("invoice", "approve"));
   const canClose = hasPermission(roles, actionPermission("invoice", "close"));
   const canCreate = hasPermission(roles, actionPermission("invoice", "create"));
+  const canDelete = hasPermission(roles, actionPermission("invoice", "delete"));
   const isDraft = detail !== null && detail.status === "DRAFT";
   // 蓝票（ISSUED 且非红字）可红冲；红字草稿自动预填引用
   const isIssuedBlue = detail !== null && detail.status === "ISSUED" && !detail.redLetter;
+  // 红字发票（redLetter）DRAFT/ISSUED 可删除（ISSUED 删除 = 撤销红冲恢复应收）
+  const isRedDeletable = detail !== null && detail.redLetter === true && (detail.status === "DRAFT" || detail.status === "ISSUED");
 
   const loadDetail = async () => {
     try {
@@ -183,15 +186,22 @@ function InvoiceDetailPage() {
             redInvoiceRefId: issueForm.redInvoiceRefId || null,
           }),
         });
-      } else {
+      } else if (action === "cancel") {
         await apiFetch(`/api/invoices/${id}/cancel`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ changeReason: "取消草稿发票" }),
         });
+      } else {
+        // delete-red：删除红字发票（ISSUED 删除 = 撤销红冲恢复应收）
+        await apiFetch(`/api/invoices/${id}`, {
+          method: "DELETE",
+        });
       }
       await loadDetail();
-      toast.success(action === "issue" ? "开票成功" : "发票已取消");
+      toast.success(
+        action === "issue" ? "开票成功" : action === "cancel" ? "发票已取消" : "红字发票已删除",
+      );
     } catch (err: unknown) {
       toast.error("操作失败", err instanceof ApiClientError ? err.message : "网络错误");
       setActionError(
@@ -260,7 +270,7 @@ function InvoiceDetailPage() {
         statusLabel={STATUS_LABELS[detail.status] ?? detail.status}
         statusTone={TONE_MAP[detail.status] ?? "neutral"}
         actions={
-          (isDraft && (canApprove || canClose)) || (isIssuedBlue && canCreate) ? (
+          (isDraft && (canApprove || canClose)) || (isIssuedBlue && canCreate) || (isRedDeletable && canDelete) ? (
             <>
               {isDraft && canApprove && (
                 <button
@@ -290,6 +300,16 @@ function InvoiceDetailPage() {
                   className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-status-danger-bg disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {actionBusy ? "创建中…" : "红冲（生成红字发票）"}
+                </button>
+              )}
+              {isRedDeletable && canDelete && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmAction("delete-red")}
+                  disabled={actionBusy}
+                  className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-status-danger-bg disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {actionBusy ? "处理中…" : "删除红字发票"}
                 </button>
               )}
             </>
@@ -500,6 +520,24 @@ function InvoiceDetailPage() {
         onConfirm={() => {
           setConfirmAction(null);
           void runAction("cancel");
+        }}
+        onCancel={() => setConfirmAction(null)}
+      />
+
+      <ConfirmActionDialog
+        open={confirmAction === "delete-red"}
+        title="删除红字发票"
+        description={
+          detail?.status === "ISSUED"
+            ? "删除已开票红字发票 = 撤销红冲：将恢复原票应收账款余额（原票应收回到红冲前）。确定删除？"
+            : "删除红字发票草稿（未生效，无应收影响）。确定删除？"
+        }
+        confirmLabel="确认删除"
+        tone="danger"
+        busy={actionBusy}
+        onConfirm={() => {
+          setConfirmAction(null);
+          void runAction("delete-red");
         }}
         onCancel={() => setConfirmAction(null)}
       />

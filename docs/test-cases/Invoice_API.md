@@ -248,3 +248,15 @@
 | P8 | 权限 | 无 invoice:create | 403 |
 | P9 | 审计 | red-invoice 后 | AuditLog action=invoice.red-invoice + InvoiceCreated（含 redLetter/redInvoiceRefId/originalCode） |
 | P10 | 列表/详情红字标识 | GET 详情 | redLetter=true + redInvoiceRefId 返回；前端展示"红字"标记 |
+
+## Q. 红冲应收回退 + 红字删除（用户指令 2026-08-21）
+
+| # | 用例 | 方法/路径 | 预期 |
+| --- | --- | --- | --- |
+| Q1 | 红字 ISSUE 回退原票应收 | 红字发票 ISSUE | 不创建独立负 AR；原票 AR.adjustedAmount -= |红字|；balanceAmount=computeBalance 重算；原票 Invoice.balanceAmount 同步；AR Revision+Snapshot(ADJUSTED/ADJUSTMENT) |
+| Q2 | 原票应收归零 | 蓝票 113 红冲 113 | 原票 AR.balanceAmount = 0（113 + (-113)） |
+| Q3 | 原票 AR 不存在 | 红字 ISSUE 但原票无 AR | 409 CN_DN_SOURCE_NOT_COMPATIBLE（ORIGINAL_AR_NOT_FOUND） |
+| Q4 | 红字 DRAFT 删除 | DELETE 红字（DRAFT） | 200 软删；无应收影响 |
+| Q5 | 红字 ISSUED 删除=撤销红冲 | DELETE 红字（ISSUED） | 200；原票 AR.adjustedAmount += |红字|（恢复）；原票 Invoice.balanceAmount 恢复；AR Revision+Snapshot |
+| Q6 | 蓝票删除保持现状 | DELETE 蓝票（ISSUED） | 409（仅 CANCELLED 可删；红冲只回退应收不改蓝票状态） |
+| Q7 | 红字重复删除 | 删除后再次 DELETE | 404 INVOICE_NOT_FOUND（deletedAt 过滤） |

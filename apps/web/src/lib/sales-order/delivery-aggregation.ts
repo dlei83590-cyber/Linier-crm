@@ -10,7 +10,7 @@ import { Prisma } from "@prisma/client";
  */
 
 export interface SalesOrderDeliveryAggregation {
-  soStatus: "PARTIALLY_DELIVERED" | "DELIVERED";
+  soStatus: "PARTIALLY_DELIVERED" | "DELIVERED" | "CONFIRMED";
   allFulfilled: boolean;
   lineProjections: Array<{ salesOrderLineId: string; deliveredQty: string; remainingQty: string }>;
 }
@@ -60,7 +60,8 @@ export async function recalcSalesOrderDeliveryProjections(
     if (remainingQty.greaterThan(0)) allFulfilled = false;
   }
 
-  // 聚合 SO：全部行 fulfilled 且至少有 confirmed → DELIVERED；否则有 confirmed → PARTIALLY_DELIVERED
+  // 聚合 SO：全部行 fulfilled 且至少有 confirmed → DELIVERED；否则有 confirmed → PARTIALLY_DELIVERED；
+  // 无任何 confirmed（全部反签收/删除 → deliveredQty 归零）→ CONFIRMED（订单返回未发货状态，用户指令 2026-08-21）
   if (allFulfilled && hasConfirmed) {
     await tx.salesOrder.update({
       where: { id: salesOrderId },
@@ -78,12 +79,22 @@ export async function recalcSalesOrderDeliveryProjections(
       where: { id: salesOrderId },
       data: {
         status: "PARTIALLY_DELIVERED",
+        deliveredAt: null,
         version: { increment: 1 },
         updatedById: actorId ?? null,
       },
     });
     return { soStatus: "PARTIALLY_DELIVERED", allFulfilled: false, lineProjections };
   }
-  // 无 confirmed（理论不会发生：confirm 自身即产生交付）→ 保持现状
-  return { soStatus: "PARTIALLY_DELIVERED", allFulfilled: false, lineProjections };
+  // 无 confirmed（反签收/删除后 deliveredQty 归零）→ 回 CONFIRMED（未发货）
+  await tx.salesOrder.update({
+    where: { id: salesOrderId },
+    data: {
+      status: "CONFIRMED",
+      deliveredAt: null,
+      version: { increment: 1 },
+      updatedById: actorId ?? null,
+    },
+  });
+  return { soStatus: "CONFIRMED", allFulfilled: false, lineProjections };
 }
