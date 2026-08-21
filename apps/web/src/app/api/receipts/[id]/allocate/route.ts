@@ -51,7 +51,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
   const targetArIds = [...arIdAmount.keys()].sort();
 
-  const result = await prisma.$transaction(async (tx) => {
+  let result: Awaited<ReturnType<typeof allocateTx>> | { error: "TX_FAILED" as const; message: string };
+  try {
+    result = await allocateTx();
+  } catch (e) {
+    // 全局异常映射（未捕获 Prisma/业务错误 → 结构化 500 + 日志定位；不泄露 stack）
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[receipt.allocate] 事务异常:", e);
+    result = { error: "TX_FAILED" as const, message: msg };
+  }
+
+  async function allocateTx() {
+    return prisma.$transaction(async (tx) => {
     // ── 1. Lock Receipt（FOR UPDATE） ────────────────────────────────────────
     const lockedReceipt = await tx.$queryRaw<Array<{ id: string }>>(
       Prisma.sql`SELECT "id" FROM "Receipt" WHERE "id" = ${receiptId} AND "deletedAt" IS NULL FOR UPDATE`,
@@ -279,10 +290,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       receiptStatus: newReceiptStatus,
       arIds: targetArIds,
     };
-  });
+    });
+  }
 
   if ("error" in result) {
     switch (result.error) {
+      case "TX_FAILED":
+        return fail(ERROR_CODES.INTERNAL_ERROR, "核销失败（系统故障）", 500);
       case "RECEIPT_NOT_FOUND":
         return failNotFound(ERROR_CODES.RECEIPT_NOT_FOUND, "收款单不存在");
       case "RECEIPT_VOIDED":
