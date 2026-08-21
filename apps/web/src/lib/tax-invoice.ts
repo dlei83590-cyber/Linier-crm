@@ -7,10 +7,12 @@ import type { InvoiceInvoiceType } from '@prisma/client';
  * - normalizeUscc / normalizeTaxNo：存储前归一化（去空格/全角转半角/统一大写）
  */
 
-/** GB 32100-2015 字符映射表（31 字符，剔除 I/O/S/V/Z） */
-const USCC_CHARS = '0123456789ABCDEFGHJKLMNPQRTUWXY';
-/** GB 32100-2015 加权因子（18 位中前 17 位） */
-const USCC_WEIGHTS = [1, 3, 9, 27, 19, 26, 16, 17, 20, 29, 25, 13, 8, 24, 10, 30, 28];
+/**
+ * GB 32100-2015 统一社会信用代码格式：18 位，字符集 0-9+A-Z（剔除 I/O/S/V/Z）。
+ * 注：**不做模 31 校验码强校验**——兼容历史/旧代码（如真实登记税号 91310000MA1K123456
+ * 校验码与 GB 算法不符但为有效登记代码；税局实际按登记校验，非严格 GB 校验码）。
+ * 仅校验：18 位 + 字符集合法（防位数/非法字符误录）。
+ */
 const USCC_FORMAT = /^[0-9A-HJ-NPQRTUWXY]{18}$/;
 
 /** 归一化：全角→半角、去空白、统一大写 */
@@ -22,23 +24,14 @@ export function normalizeUscc(raw: string): string {
 }
 
 /**
- * 校验统一社会信用代码（GB 32100-2015）：
- * 1) 格式：18 位，字符集 0-9+A-Z（剔除 I/O/S/V/Z），末位允许 X；
- * 2) 校验码：前 17 位按加权因子模 31，与第 18 位比对。
- * 返回 true = 合法。
+ * 校验统一社会信用代码（GB 32100-2015 格式）：
+ * - 18 位，字符集 0-9+A-Z（剔除 I/O/S/V/Z），末位允许 X；
+ * - 兼容旧代码：不做模 31 校验码强校验（真实登记税号存在校验码与 GB 算法不符的历史数据）。
+ * 返回 true = 格式合法。
  */
 export function validateUscc(raw: string): boolean {
   const uscc = normalizeUscc(raw);
-  if (!USCC_FORMAT.test(uscc)) return false;
-  let sum = 0;
-  for (let i = 0; i < 17; i++) {
-    const idx = USCC_CHARS.indexOf(uscc[i]);
-    if (idx === -1) return false;
-    sum += idx * USCC_WEIGHTS[i];
-  }
-  // GB 32100-2015：C18 = 字符集[(31 - (Σ mod 31)) mod 31]——余数为 0 时取字符集[0]='0'（原实现越界 → 合法 '0' 校验码误报）
-  const checkChar = USCC_CHARS[(31 - (sum % 31)) % 31];
-  return uscc[17] === checkChar;
+  return USCC_FORMAT.test(uscc);
 }
 
 /** 归一化税务发票号码（去空格/连字符/全角转半角） */

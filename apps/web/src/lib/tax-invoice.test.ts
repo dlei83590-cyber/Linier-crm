@@ -3,27 +3,30 @@ import { validateUscc, validateTaxInvoiceFields } from '@/lib/tax-invoice';
 
 /**
  * Sprint 7 VAT 发票管理（ADR-0043）校验单测
- * 覆盖：uscc GB 32100-2015（合法/校验码错误/字符集非法/长度边界）、税务号码格式（12+8/数电 20/EXPORT 可空）。
+ * 覆盖：uscc GB 32100-2015 格式（18 位 + 字符集；**不校验模31校验码**——兼容旧代码/历史登记税号）、
+ *      字符集非法/长度边界、税务号码格式（12+8/数电 20/EXPORT 可空）。
  */
 
-// 合法示例（GB 32100-2015 校验码计算通过）：91110000MA01B8KX49（校验码 9）
+// 合法示例（GB 32100-2015）：91110000MA01B8KX49
 const VALID_USCC = '91110000MA01B8KX49';
+// 历史旧代码（校验码与 GB 算法不符但为真实登记税号，seed 数据）——格式校验应放行
+const LEGACY_USCC = '91310000MA1K123456';
 
-describe('validateUscc — GB 32100-2015', () => {
+describe('validateUscc — GB 32100-2015 格式（放宽校验码）', () => {
   it('合法 18 位通过', () => {
     expect(validateUscc(VALID_USCC)).toBe(true);
   });
   it('小写/带空格归一化后通过', () => {
     expect(validateUscc(' ' + VALID_USCC.toLowerCase() + ' ')).toBe(true);
   });
-  it('校验码错误拒绝', () => {
-    expect(validateUscc('91110000MA01B8KX40')).toBe(false); // 末位 0 ≠ 校验码 9
+  it('旧代码（校验码不符但格式合法）放行', () => {
+    expect(validateUscc(LEGACY_USCC)).toBe(true); // 91310000MA1K123456：18 位字符集合法 → 通过
   });
-  it('校验码错误拒绝（旧示例）', () => {
-    expect(validateUscc('91110000MA01B8KX4Y')).toBe(false); // 末位改 Y
+  it('校验码不符但格式合法 → 通过（放宽语义）', () => {
+    expect(validateUscc('91110000MA01B8KX40')).toBe(true); // 末位 0 ≠ GB 校验码 9，但格式合法
   });
   it('字符集非法（含 I/O/S/V/Z）拒绝', () => {
-    expect(validateUscc('91110000SA01B8KX4X')).toBe(false);
+    expect(validateUscc('91110000SA01B8KX4X')).toBe(false); // 含 S
   });
   it('长度边界：17 位 / 19 位拒绝', () => {
     expect(validateUscc('91110000MA01B8KX4')).toBe(false);
