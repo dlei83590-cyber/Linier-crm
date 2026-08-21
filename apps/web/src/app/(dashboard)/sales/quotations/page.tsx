@@ -9,13 +9,16 @@
  */
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { useSession } from "@/lib/session-context";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
 import { formatDate, formatMoney } from "@/lib/format";
 
 interface QuotationRow {
@@ -58,12 +61,18 @@ const TONE_MAP: Record<string, StatusTone> = {
   EXPIRED: "warning",
 };
 
+/** 可删除状态（回退管理：废弃终态清理列表） */
+const DELETABLE_STATUSES = ["DRAFT", "REJECTED", "CANCELLED"] as const;
+
 function QuotationList() {
+  const router = useRouter();
+  const toast = useToast();
   const { state } = useSession();
-  const canCreate =
-    state.status === "authenticated" &&
-    state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("quotation", "create"));
+  const roles = (state.user?.roles ?? []) as RoleCode[];
+  const canCreate = hasPermission(roles, actionPermission("quotation", "create"));
+  const canDelete = hasPermission(roles, actionPermission("quotation", "delete"));
+  const [deleting, setDeleting] = useState<QuotationRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [codeInput, setCodeInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ code?: string; status?: string }>({});
@@ -85,6 +94,27 @@ function QuotationList() {
     setFilters({});
     setPage(1);
   };
+
+  const runDelete = async () => {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      await apiFetch("/api/quotations/" + deleting.id, { method: "DELETE" });
+      toast.success("报价单已删除");
+      setDeleting(null);
+      refresh();
+    } catch (err) {
+      const e = err instanceof ApiClientError ? err : new ApiClientError(0, "删除失败", "NETWORK_ERROR");
+      toast.error("删除失败", e.message);
+      setDeleting(null);
+      refresh();
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
+  const isDeletable = (row: QuotationRow) =>
+    canDelete && (DELETABLE_STATUSES as readonly string[]).includes(row.status);
 
   return (
     <AppPage>
@@ -205,6 +235,28 @@ function QuotationList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        rowActions={(row) =>
+          isDeletable(row) ? (
+            <div className="flex justify-end gap-1">
+              <button type="button" onClick={() => router.push("/sales/quotations/" + row.id)} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary transition-colors hover:bg-slate-100">
+                详情
+              </button>
+              <button type="button" onClick={() => setDeleting(row)} className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text transition-colors hover:bg-red-50">
+                删除
+              </button>
+            </div>
+          ) : undefined
+        }
+      />
+      <ConfirmActionDialog
+        open={deleting !== null}
+        title={"删除报价单「" + (deleting?.code ?? "") + "」？"}
+        description="仅草稿/已拒绝/已取消的报价单可删除（清理列表）；已提交/已生效/已转订单的报价单不可删除。"
+        confirmLabel="删除"
+        tone="danger"
+        busy={deleteBusy}
+        onConfirm={runDelete}
+        onCancel={() => setDeleting(null)}
       />
     </AppPage>
   );

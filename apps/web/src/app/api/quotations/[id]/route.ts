@@ -120,8 +120,13 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   const quotation = await prisma.quotation.findFirst({ where: { id, deletedAt: null } });
   if (!quotation) return failNotFound(ERROR_CODES.QUOTATION_NOT_FOUND, "报价单不存在");
-  if (quotation.status !== "DRAFT") {
-    return failConflict(ERROR_CODES.QUOTATION_NOT_EDITABLE, "仅 DRAFT 状态可删除");
+  // 回退管理：仅废弃终态可删除（草稿/已拒绝/已取消——清理列表）；进行中/已生效（提交/批准/发送/接受/已转订单）禁止删除
+  if (!["DRAFT", "REJECTED", "CANCELLED"].includes(quotation.status)) {
+    return failConflict(ERROR_CODES.QUOTATION_NOT_EDITABLE, "仅 DRAFT/REJECTED/CANCELLED 状态可删除（进行中或已生效报价禁止删除）");
+  }
+  // 防御：已转换为销售订单（salesOrderId 非空）禁止删除——避免破坏 SO 溯源链
+  if (quotation.salesOrderId) {
+    return failConflict(ERROR_CODES.QUOTATION_NOT_EDITABLE, "报价已转换为销售订单，禁止删除（保持 SO 溯源）");
   }
 
   const now = new Date();
