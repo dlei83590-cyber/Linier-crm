@@ -358,3 +358,51 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   return ok(updated);
 }
+/** DELETE /api/purchase-orders/:id（层层回退-层层可删除，用户指令 2026-08-21）
+ * 可删状态：DRAFT/CANCELLED（未生效/已取消）；CONFIRMED+ 禁止（已下单/已收货）。
+ * 引用防御：已生成收货单（purchaseReceipts）或退货单（purchaseReturns）禁止删除——保持溯源链。
+ * 软删 header + lines + revisions + snapshots。
+ */
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await authenticate(request);
+  const denied = requirePermission(user, "purchase-order:delete");
+  if (denied) return denied;
+  requestLog(request, user?.id, "purchase-order.delete");
+
+  const { id } = await params;
+  const meta = requestMeta(request);
+
+  const existing = await prisma.purchaseOrder.findFirst({ where: { id, deletedAt: null } });
+  if (!existing) return failNotFound(ERROR_CODES.PURCHASE_ORDER_NOT_FOUND, "采购订单不存在");
+  if (!["DRAFT", "CANCELLED"].includes(existing.status)) {
+    return failConflict(ERROR_CODES.PURCHASE_ORDER_INVALID_STATE, "仅 DRAFT/CANCELLED 状态可删除（已下单/已收货禁止删除）");
+  }
+  const grCount = await prisma.purchaseReceipt.count({ where: { purchaseOrderId: id, deletedAt: null } });
+  if (grCount > 0) {
+    return failConflict(ERROR_CODES.PURCHASE_ORDER_INVALID_STATE, "采购订单已生成收货单，禁止删除（保持收货溯源）");
+  }
+  const rtCount = await prisma.purchaseReturn.count({ where: { purchaseOrderId: id, deletedAt: null } });
+  if (rtCount > 0) {
+    return failConflict(ERROR_CODES.PURCHASE_ORDER_INVALID_STATE, "采购订单已生成退货单，禁止删除（保持退货溯源）");
+  }
+
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.purchaseOrder.update({ where: { id }, data: { deletedAt: now, isActive: false, updatedById: user!.id } });
+    await tx.purchaseOrderLine.updateMany({ where: { purchaseOrderId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+    await tx.purchaseOrderRevision.updateMany({ where: { purchaseOrderId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+    await tx.purchaseOrderSnapshot.updateMany({ where: { purchaseOrderId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+  });
+
+  await writeAuditLog({
+    actorId: user?.id,
+    action: "purchase-order.delete",
+    entityType: "purchase-order",
+    entityId: id,
+    afterData: { code: existing.code },
+    ...meta,
+  });
+
+  return ok({ id, deleted: true });
+}
+

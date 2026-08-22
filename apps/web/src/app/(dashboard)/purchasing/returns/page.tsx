@@ -12,10 +12,12 @@ import Link from "next/link";
 import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
 
 interface ReturnRow {
   id: string;
@@ -38,13 +40,18 @@ const STATUS_LABELS: Record<string, string> = {
 
 function ReturnList() {
   const { state } = useSession();
+  const toast = useToast();
+  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
   const canCreate =
     state.status === "authenticated" &&
     state.user !== null &&
     hasPermission(state.user.roles as RoleCode[], actionPermission("purchase-return", "create"));
+  const canDelete = hasPermission(roles, actionPermission("purchase-return", "delete"));
   const [codeInput, setCodeInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ code?: string; status?: string }>({});
+  const [deleting, setDeleting] = useState<ReturnRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const { items, total, page, pageSize, loading, error, setPage, refresh } =
     useListQuery<ReturnRow>("/api/purchase-returns", filters);
@@ -62,6 +69,24 @@ function ReturnList() {
     setStatusInput("");
     setFilters({});
     setPage(1);
+  };
+
+  const runDelete = async () => {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      await apiFetch("/api/purchase-returns/" + deleting.id, { method: "DELETE" });
+      toast.success("退货单已删除");
+      setDeleting(null);
+      refresh();
+    } catch (err) {
+      const e = err instanceof ApiClientError ? err : new ApiClientError(0, "删除失败", "NETWORK_ERROR");
+      toast.error("删除失败", e.message);
+      setDeleting(null);
+      refresh();
+    } finally {
+      setDeleteBusy(false);
+    }
   };
 
   return (
@@ -163,6 +188,24 @@ function ReturnList() {
             header: "退货日期",
             render: (row) => formatDate(row.returnedAt),
           },
+          {
+            key: "actions",
+            header: "操作",
+            render: (row) => (
+              <div className="flex items-center gap-2">
+                {["DRAFT", "CANCELLED"].includes(row.status) && canDelete && (
+                  <button
+                    type="button"
+                    onClick={() => setDeleting(row)}
+                    disabled={deleteBusy}
+                    className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text hover:bg-status-danger-bg/10 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    删除
+                  </button>
+                )}
+              </div>
+            ),
+          },
         ]}
         rows={items}
         rowKey={(row) => row.id}
@@ -173,6 +216,17 @@ function ReturnList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+      />
+
+      <ConfirmActionDialog
+        open={deleting !== null}
+        title={"删除退货单「" + (deleting?.code ?? "") + "」？"}
+        description="仅草稿/已取消状态的退货单可删除；删除后列表不再展示。"
+        confirmLabel="确认删除"
+        tone="danger"
+        busy={deleteBusy}
+        onConfirm={runDelete}
+        onCancel={() => setDeleting(null)}
       />
     </AppPage>
   );

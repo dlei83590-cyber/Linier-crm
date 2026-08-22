@@ -252,3 +252,51 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   return ok(updated);
 }
+/** DELETE /api/purchase-receipts/:id（层层回退-层层可删除，用户指令 2026-08-21）
+ * 可删状态：DRAFT/CANCELLED；RECEIVED 禁止直接删除（先反收货）。
+ * 引用防御：已生成入库单（warehouseReceipts）或检验单（inspections）禁止删除。
+ * 软删 header + lines。
+ */
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await authenticate(request);
+  const denied = requirePermission(user, "purchase-receipt:delete");
+  if (denied) return denied;
+  requestLog(request, user?.id, "purchase-receipt.delete");
+
+  const { id } = await params;
+  const meta = requestMeta(request);
+
+  const existing = await prisma.purchaseReceipt.findFirst({ where: { id, deletedAt: null } });
+  if (!existing) return failNotFound(ERROR_CODES.PURCHASE_RECEIPT_NOT_FOUND, "收货单不存在");
+  if (!["DRAFT", "CANCELLED"].includes(existing.status)) {
+    return failConflict(ERROR_CODES.PURCHASE_RECEIPT_INVALID_STATE, "仅 DRAFT/CANCELLED 状态可删除（已收货请先反收货）");
+  }
+  const whrCount = await prisma.warehouseReceipt.count({ where: { purchaseReceiptId: id, deletedAt: null } });
+  if (whrCount > 0) {
+    return failConflict(ERROR_CODES.PURCHASE_RECEIPT_INVALID_STATE, "收货单已生成入库单，禁止删除（保持入库溯源）");
+  }
+  const inspCount = await prisma.inspection.count({
+    where: { purchaseReceiptLine: { purchaseReceiptId: id }, deletedAt: null },
+  });
+  if (inspCount > 0) {
+    return failConflict(ERROR_CODES.PURCHASE_RECEIPT_INVALID_STATE, "收货单已生成检验单，禁止删除（保持检验溯源）");
+  }
+
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.purchaseReceipt.update({ where: { id }, data: { deletedAt: now, isActive: false, updatedById: user!.id } });
+    await tx.purchaseReceiptLine.updateMany({ where: { purchaseReceiptId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+  });
+
+  await writeAuditLog({
+    actorId: user?.id,
+    action: "purchase-receipt.delete",
+    entityType: "purchase-receipt",
+    entityId: id,
+    afterData: { code: existing.code },
+    ...meta,
+  });
+
+  return ok({ id, deleted: true });
+}
+

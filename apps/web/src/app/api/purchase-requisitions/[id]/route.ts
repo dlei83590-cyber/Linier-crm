@@ -220,3 +220,46 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   return ok(updated);
 }
+/** DELETE /api/purchase-requisitions/:id（层层回退-层层可删除，用户指令 2026-08-21）
+ * 可删状态：DRAFT/SUBMITTED/CANCELLED（未生效/已取消）；APPROVED/CONVERTED 禁止（已生效/已转 PO）。
+ * 引用防御：已生成 PO（purchaseOrders）禁止删除——保持 PO 溯源链。
+ * 软删 header + lines + revisions（deletedAt 置位，列表不再展示）。
+ */
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await authenticate(request);
+  const denied = requirePermission(user, "purchase-requisition:delete");
+  if (denied) return denied;
+  requestLog(request, user?.id, "purchase-requisition.delete");
+
+  const { id } = await params;
+  const meta = requestMeta(request);
+
+  const existing = await prisma.purchaseRequisition.findFirst({ where: { id, deletedAt: null } });
+  if (!existing) return failNotFound(ERROR_CODES.PURCHASE_REQUISITION_NOT_FOUND, "采购申请不存在");
+  if (!["DRAFT", "SUBMITTED", "CANCELLED"].includes(existing.status)) {
+    return failConflict(ERROR_CODES.PURCHASE_REQUISITION_INVALID_STATE, "仅 DRAFT/SUBMITTED/CANCELLED 状态可删除（已批准/已转订单禁止删除）");
+  }
+  const poCount = await prisma.purchaseOrder.count({ where: { requisitionId: id, deletedAt: null } });
+  if (poCount > 0) {
+    return failConflict(ERROR_CODES.PURCHASE_REQUISITION_INVALID_STATE, "采购申请已生成采购订单，禁止删除（保持 PO 溯源）");
+  }
+
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.purchaseRequisition.update({ where: { id }, data: { deletedAt: now, isActive: false, updatedById: user!.id } });
+    await tx.purchaseRequisitionLine.updateMany({ where: { purchaseRequisitionId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+    await tx.purchaseRequisitionRevision.updateMany({ where: { purchaseRequisitionId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+  });
+
+  await writeAuditLog({
+    actorId: user?.id,
+    action: "purchase-requisition.delete",
+    entityType: "purchase-requisition",
+    entityId: id,
+    afterData: { code: existing.code },
+    ...meta,
+  });
+
+  return ok({ id, deleted: true });
+}
+
