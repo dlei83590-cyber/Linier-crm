@@ -275,7 +275,9 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (whrCount > 0) {
     return failConflict(ERROR_CODES.PURCHASE_RECEIPT_INVALID_STATE, "收货单已生成入库单，禁止删除（保持入库溯源）");
   }
-  const inspCount = await prisma.inspection.count({ where: { purchaseReceiptId: id, deletedAt: null } });
+  const inspCount = await prisma.inspection.count({
+    where: { purchaseReceiptLine: { purchaseReceiptId: id }, deletedAt: null },
+  });
   if (inspCount > 0) {
     return failConflict(ERROR_CODES.PURCHASE_RECEIPT_INVALID_STATE, "收货单已生成检验单，禁止删除（保持检验溯源）");
   }

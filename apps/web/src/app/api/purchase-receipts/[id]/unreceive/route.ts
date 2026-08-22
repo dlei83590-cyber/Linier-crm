@@ -42,7 +42,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (whrCount > 0) {
     return failConflict(ERROR_CODES.PURCHASE_RECEIPT_INVALID_STATE, `关联 ${whrCount} 张入库单，禁止反收货（请先处理入库）`);
   }
-  const inspCount = await prisma.inspection.count({ where: { purchaseReceiptId: id, deletedAt: null } });
+  const inspCount = await prisma.inspection.count({
+    where: { purchaseReceiptLine: { purchaseReceiptId: id }, deletedAt: null },
+  });
   if (inspCount > 0) {
     return failConflict(ERROR_CODES.PURCHASE_RECEIPT_INVALID_STATE, `关联 ${inspCount} 张检验单，禁止反收货（请先处理检验）`);
   }
