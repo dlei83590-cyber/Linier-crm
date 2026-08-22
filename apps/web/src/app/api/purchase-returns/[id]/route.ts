@@ -335,3 +335,40 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   return ok(updated);
 }
+/** DELETE /api/purchase-returns/:id（层层回退-层层可删除，用户指令 2026-08-21）
+ * 可删状态：DRAFT/CANCELLED；RETURNED 禁止直接删除（先反退货/冲销）。
+ * 软删 header + lines + revisions。
+ */
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await authenticate(request);
+  const denied = requirePermission(user, "purchase-return:delete");
+  if (denied) return denied;
+  requestLog(request, user?.id, "purchase-return.delete");
+
+  const { id } = await params;
+  const meta = requestMeta(request);
+
+  const existing = await prisma.purchaseReturn.findFirst({ where: { id, deletedAt: null } });
+  if (!existing) return failNotFound(ERROR_CODES.PURCHASE_RETURN_NOT_FOUND, "退货单不存在");
+  if (!["DRAFT", "CANCELLED"].includes(existing.status)) {
+    return failConflict(ERROR_CODES.PURCHASE_RETURN_INVALID_STATE, "仅 DRAFT/CANCELLED 状态可删除（已退货请先冲销）");
+  }
+
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.purchaseReturn.update({ where: { id }, data: { deletedAt: now, isActive: false, updatedById: user!.id } });
+    await tx.purchaseReturnLine.updateMany({ where: { purchaseReturnId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+  });
+
+  await writeAuditLog({
+    actorId: user?.id,
+    action: "purchase-return.delete",
+    entityType: "purchase-return",
+    entityId: id,
+    afterData: { code: existing.code },
+    ...meta,
+  });
+
+  return ok({ id, deleted: true });
+}
+
