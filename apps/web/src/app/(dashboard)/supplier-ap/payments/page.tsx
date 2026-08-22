@@ -6,11 +6,12 @@ import Link from "next/link";
 import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { formatDate, formatMoney } from "@/lib/format";
+import { useToast } from "@/components/ui/toast";
 
 interface PaymentRow {
   id: string;
@@ -30,16 +31,21 @@ const STATUS_TONE_MAP: Record<string, "neutral" | "info" | "success" | "warning"
 
 function PaymentList() {
   const { state } = useSession();
+  const toast = useToast();
+  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
   const canCreate =
     state.status === "authenticated" &&
     state.user !== null &&
     hasPermission(state.user.roles as RoleCode[], actionPermission("supplier-payment", "create"));
+  const canDelete = hasPermission(roles, actionPermission("supplier-payment", "delete"));
   const [suppliers, setSuppliers] = useState<Array<{ id: string; name: string | null }>>([]);
   const [supplierInput, setSupplierInput] = useState("");
   const [dateFromInput, setDateFromInput] = useState("");
   const [dateToInput, setDateToInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ supplierId?: string; dateFrom?: string; dateTo?: string; status?: string }>({});
+  const [deleting, setDeleting] = useState<PaymentRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   useEffect(() => {
     apiFetch<Array<{ id: string; name: string | null }>>("/api/suppliers?pageSize=100")
@@ -59,6 +65,24 @@ function PaymentList() {
     setFilters(next); setPage(1);
   };
   const resetFilter = () => { setSupplierInput(""); setDateFromInput(""); setDateToInput(""); setStatusInput(""); setFilters({}); setPage(1); };
+
+  const runDelete = async () => {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      await apiFetch("/api/supplier-payments/" + deleting.id, { method: "DELETE" });
+      toast.success("付款单已删除");
+      setDeleting(null);
+      refresh();
+    } catch (err) {
+      const e = err instanceof ApiClientError ? err : new ApiClientError(0, "删除失败", "NETWORK_ERROR");
+      toast.error("删除失败", e.message);
+      setDeleting(null);
+      refresh();
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
 
   return (
     <AppPage>
@@ -103,6 +127,24 @@ function PaymentList() {
           { key: "paymentDate", header: "付款日期", render: (row) => formatDate(row.paymentDate) },
           { key: "status", header: "状态", render: (row) => (<StatusBadge status={row.status} label={STATUS_LABELS[row.status] ?? row.status} toneMap={STATUS_TONE_MAP} />) },
           { key: "voidedAt", header: "作废", render: (row) => (row.voidedAt ? "已作废" : "—") },
+          {
+            key: "actions",
+            header: "操作",
+            render: (row) => (
+              <div className="flex items-center gap-2">
+                {(row.status === "UNALLOCATED" || row.voidedAt) && canDelete && (
+                  <button
+                    type="button"
+                    onClick={() => setDeleting(row)}
+                    disabled={deleteBusy}
+                    className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text hover:bg-status-danger-bg/10 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    删除
+                  </button>
+                )}
+              </div>
+            ),
+          },
         ]}
         rows={items}
         rowKey={(row) => row.id}
@@ -113,6 +155,17 @@ function PaymentList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+      />
+
+      <ConfirmActionDialog
+        open={deleting !== null}
+        title={"删除付款单「" + (deleting?.code ?? "") + "」？"}
+        description="仅未核销或已作废的付款单可删除；删除后列表不再展示。"
+        confirmLabel="确认删除"
+        tone="danger"
+        busy={deleteBusy}
+        onConfirm={runDelete}
+        onCancel={() => setDeleting(null)}
       />
     </AppPage>
   );

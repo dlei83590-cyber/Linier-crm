@@ -13,8 +13,9 @@ import Link from "next/link";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
-import { apiFetch } from "@/lib/api-client";
+import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { useSession } from "@/lib/session-context";
@@ -54,10 +55,13 @@ const TONE_MAP: Record<string, StatusTone> = {
 
 function SupplierInvoiceList() {
   const { state } = useSession();
+  const toast = useToast();
+  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
   const canCreate =
     state.status === "authenticated" &&
     state.user !== null &&
     hasPermission(state.user.roles as RoleCode[], actionPermission("supplier-invoice", "create"));
+  const canDelete = hasPermission(roles, actionPermission("supplier-invoice", "delete"));
   const [suppliers, setSuppliers] = useState<Array<{ id: string; name: string | null }>>([]);
   const [supplierInput, setSupplierInput] = useState("");
   const [dateFromInput, setDateFromInput] = useState("");
@@ -65,6 +69,8 @@ function SupplierInvoiceList() {
   const [noInput, setNoInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ invoiceNo?: string; supplierId?: string; documentStatus?: string; dateFrom?: string; dateTo?: string }>({});
+  const [deleting, setDeleting] = useState<SupplierInvoiceRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   useEffect(() => {
     apiFetch<Array<{ id: string; name: string | null }>>("/api/suppliers?pageSize=100")
@@ -94,6 +100,24 @@ function SupplierInvoiceList() {
     setStatusInput("");
     setFilters({});
     setPage(1);
+  };
+
+  const runDelete = async () => {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      await apiFetch("/api/supplier-invoices/" + deleting.id, { method: "DELETE" });
+      toast.success("供应商发票已删除");
+      setDeleting(null);
+      refresh();
+    } catch (err) {
+      const e = err instanceof ApiClientError ? err : new ApiClientError(0, "删除失败", "NETWORK_ERROR");
+      toast.error("删除失败", e.message);
+      setDeleting(null);
+      refresh();
+    } finally {
+      setDeleteBusy(false);
+    }
   };
 
   return (
@@ -215,6 +239,24 @@ function SupplierInvoiceList() {
             header: "行数",
             render: (row) => String(row._count?.lines ?? 0),
           },
+          {
+            key: "actions",
+            header: "操作",
+            render: (row) => (
+              <div className="flex items-center gap-2">
+                {["DRAFT", "SUBMITTED", "CANCELLED"].includes(row.documentStatus) && canDelete && (
+                  <button
+                    type="button"
+                    onClick={() => setDeleting(row)}
+                    disabled={deleteBusy}
+                    className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text hover:bg-status-danger-bg/10 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    删除
+                  </button>
+                )}
+              </div>
+            ),
+          },
         ]}
         rows={items}
         rowKey={(row) => row.id}
@@ -225,6 +267,17 @@ function SupplierInvoiceList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+      />
+
+      <ConfirmActionDialog
+        open={deleting !== null}
+        title={"删除供应商发票「" + (deleting?.invoiceNo ?? "") + "」？"}
+        description="仅草稿/已提交/已取消状态的供应商发票可删除；删除后列表不再展示。"
+        confirmLabel="确认删除"
+        tone="danger"
+        busy={deleteBusy}
+        onConfirm={runDelete}
+        onCancel={() => setDeleting(null)}
       />
     </AppPage>
   );
