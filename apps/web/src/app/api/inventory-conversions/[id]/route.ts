@@ -208,3 +208,40 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   return ok({ conversion: result.conversion });
 }
+/** DELETE /api/inventory-conversions/:id（层层回退-层层可删除，用户指令 2026-08-21）
+ * 可删状态：DRAFT/CANCELLED；SUBMITTED/EXECUTED 禁止（已执行转换）。
+ * 软删 header + lines。
+ */
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await authenticate(request);
+  const denied = requirePermission(user, "inventory-conversion:delete");
+  if (denied) return denied;
+  requestLog(request, user?.id, "inventory-conversion.delete");
+
+  const { id } = await params;
+  const meta = requestMeta(request);
+
+  const existing = await prisma.inventoryConversion.findFirst({ where: { id, deletedAt: null } });
+  if (!existing) return failNotFound(ERROR_CODES.INVENTORY_CONVERSION_NOT_FOUND, "库存转换单不存在");
+  if (!["DRAFT", "CANCELLED"].includes(existing.status)) {
+    return failConflict(ERROR_CODES.INVENTORY_CONVERSION_INVALID_STATE, "仅 DRAFT/CANCELLED 状态可删除（已执行转换禁止删除）");
+  }
+
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.inventoryConversion.update({ where: { id }, data: { deletedAt: now, isActive: false, updatedById: user!.id } });
+    await tx.inventoryConversionLine.updateMany({ where: { conversionHeaderId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+  });
+
+  await writeAuditLog({
+    actorId: user?.id,
+    action: "inventory-conversion.delete",
+    entityType: "inventory-conversion",
+    entityId: id,
+    afterData: { conversionNo: existing.conversionNo },
+    ...meta,
+  });
+
+  return ok({ id, deleted: true });
+}
+

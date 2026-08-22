@@ -236,3 +236,43 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   return ok({ transfer: result.transfer });
 }
+/** DELETE /api/inventory-transfers/:id（层层回退-层层可删除，用户指令 2026-08-21）
+ * 可删状态：DRAFT/CANCELLED；EXECUTED 禁止（已产生库存双边 Movement）。
+ * 防御：movementGroupId 非空（已执行）禁止删除。软删 header + lines。
+ */
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await authenticate(request);
+  const denied = requirePermission(user, "inventory-transfer:delete");
+  if (denied) return denied;
+  requestLog(request, user?.id, "inventory-transfer.delete");
+
+  const { id } = await params;
+  const meta = requestMeta(request);
+
+  const existing = await prisma.inventoryTransfer.findFirst({ where: { id, deletedAt: null } });
+  if (!existing) return failNotFound(ERROR_CODES.INVENTORY_TRANSFER_NOT_FOUND, "调拨单不存在");
+  if (!["DRAFT", "CANCELLED"].includes(existing.status)) {
+    return failConflict(ERROR_CODES.INVENTORY_TRANSFER_INVALID_STATE, "仅 DRAFT/CANCELLED 状态可删除（已执行调拨禁止删除）");
+  }
+  if (existing.movementGroupId) {
+    return failConflict(ERROR_CODES.INVENTORY_TRANSFER_INVALID_STATE, "调拨单已执行（已产生库存移动），禁止删除");
+  }
+
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.inventoryTransfer.update({ where: { id }, data: { deletedAt: now, isActive: false, updatedById: user!.id } });
+    await tx.inventoryTransferLine.updateMany({ where: { transferHeaderId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+  });
+
+  await writeAuditLog({
+    actorId: user?.id,
+    action: "inventory-transfer.delete",
+    entityType: "inventory-transfer",
+    entityId: id,
+    afterData: { transferNo: existing.transferNo },
+    ...meta,
+  });
+
+  return ok({ id, deleted: true });
+}
+

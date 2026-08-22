@@ -106,3 +106,40 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return fail(ERROR_CODES.INTERNAL_ERROR, '更新盘点单失败', 500);
   }
 }
+/** DELETE /api/stock-counts/:id（层层回退-层层可删除，用户指令 2026-08-21）
+ * 可删状态：DRAFT/CANCELLED；COUNTING/COMPLETED/ADJUSTED 禁止（已盘点/已生成调整）。
+ * 软删 header + lines。
+ */
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await authenticate(request);
+  const denied = requirePermission(user, "stock-count:delete");
+  if (denied) return denied;
+  requestLog(request, user?.id, "stock-count.delete");
+
+  const { id } = await params;
+  const meta = requestMeta(request);
+
+  const existing = await prisma.stockCount.findFirst({ where: { id, deletedAt: null } });
+  if (!existing) return failNotFound(ERROR_CODES.STOCK_COUNT_NOT_FOUND, "盘点单不存在");
+  if (!["DRAFT", "CANCELLED"].includes(existing.status)) {
+    return failConflict(ERROR_CODES.STOCK_COUNT_INVALID_STATE, "仅 DRAFT/CANCELLED 状态可删除（已盘点/已生成调整禁止删除）");
+  }
+
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.stockCount.update({ where: { id }, data: { deletedAt: now, isActive: false, updatedById: user!.id } });
+    await tx.stockCountLine.updateMany({ where: { countHeaderId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+  });
+
+  await writeAuditLog({
+    actorId: user?.id,
+    action: "stock-count.delete",
+    entityType: "stock-count",
+    entityId: id,
+    afterData: { countNo: existing.countNo },
+    ...meta,
+  });
+
+  return ok({ id, deleted: true });
+}
+
