@@ -2,6 +2,37 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 全页面回退+删除（用户指令 2026-08-21，批次 2：供应商财务）
+
+### 新增
+
+- **供应商发票 SINV**：DELETE（DRAFT/SUBMITTED/CANCELLED 可删，未 POSTED；无 MatchRun 引用）
+- **付款单 PAY**：DELETE（UNALLOCATED 未核销 或 已作废；无 active allocations）
+- **供应商贷/借项 SCND**：DELETE（DRAFT/SUBMITTED/CANCELLED 可删，未 APPLIED）
+- **前端**：SINV/PAY/SCND 列表加删除按钮（状态+权限 Gate + 确认对话框）
+
+### 边界
+
+- 已生效（POSTED/APPLIED/已核销）禁止删除；POSTED/APPLIED 回退（GRIR/AP 回滚）属高风险单独 Gate
+
+---
+
+## [Unreleased] - 全页面回退+删除（用户指令 2026-08-21，批次 1：采购链）
+
+### 新增
+
+- **采购申请 PR**：DELETE（DRAFT/SUBMITTED/CANCELLED，无 PO 引用）+ unconvert（CONVERTED→APPROVED）
+- **采购订单 PO**：DELETE（DRAFT/CANCELLED，无收货/退货）+ unconvert（CONFIRMED→APPROVED，清 confirmedAt）
+- **收货单 GR**：DELETE（DRAFT/CANCELLED，无入库/检验）+ unreceive（RECEIVED→DRAFT，回滚 PO line receivedQty/remainingReceiveQty）
+- **退货单 PRT**：DELETE（DRAFT/CANCELLED）
+- **前端**：PR/PO/GR/PRT 列表加回退/删除按钮（状态+权限 Gate + 确认对话框）
+
+### 边界
+
+- 已生效（已收货/已入库/已转单）禁止回退；删除要求无关联引用；无 Schema/Migration
+
+---
+
 ## [Unreleased] - 财务模块统一归口（2026-08-21，PR #178）
 
 ### 新增
