@@ -218,3 +218,40 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   return ok({ adjustment: result.adjustment });
 }
+/** DELETE /api/inventory-adjustments/:id（层层回退-层层可删除，用户指令 2026-08-21）
+ * 可删状态：DRAFT/CANCELLED；SUBMITTED/APPROVED/APPLIED 禁止（已生效/已产生库存调整）。
+ * 软删 header + lines。
+ */
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await authenticate(request);
+  const denied = requirePermission(user, "inventory-adjustment:delete");
+  if (denied) return denied;
+  requestLog(request, user?.id, "inventory-adjustment.delete");
+
+  const { id } = await params;
+  const meta = requestMeta(request);
+
+  const existing = await prisma.inventoryAdjustment.findFirst({ where: { id, deletedAt: null } });
+  if (!existing) return failNotFound(ERROR_CODES.INVENTORY_ADJUSTMENT_NOT_FOUND, "库存调整单不存在");
+  if (!["DRAFT", "CANCELLED"].includes(existing.status)) {
+    return failConflict(ERROR_CODES.INVENTORY_ADJUSTMENT_INVALID_STATE, "仅 DRAFT/CANCELLED 状态可删除（已生效调整禁止删除）");
+  }
+
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.inventoryAdjustment.update({ where: { id }, data: { deletedAt: now, isActive: false, updatedById: user!.id } });
+    await tx.inventoryAdjustmentLine.updateMany({ where: { adjustmentHeaderId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+  });
+
+  await writeAuditLog({
+    actorId: user?.id,
+    action: "inventory-adjustment.delete",
+    entityType: "inventory-adjustment",
+    entityId: id,
+    afterData: { adjustmentNo: existing.adjustmentNo },
+    ...meta,
+  });
+
+  return ok({ id, deleted: true });
+}
+
