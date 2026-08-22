@@ -12,10 +12,12 @@ import Link from "next/link";
 import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
 
 interface OrderRow {
   id: string;
@@ -54,9 +56,17 @@ function OrderList() {
     state.status === "authenticated" &&
     state.user !== null &&
     hasPermission(state.user.roles as RoleCode[], actionPermission("purchase-order", "create"));
+  const toast = useToast();
+  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
+  const canEdit = hasPermission(roles, actionPermission("purchase-order", "edit"));
+  const canDelete = hasPermission(roles, actionPermission("purchase-order", "delete"));
   const [codeInput, setCodeInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ code?: string; status?: string }>({});
+  const [deleting, setDeleting] = useState<OrderRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [unconverting, setUnconverting] = useState<OrderRow | null>(null);
+  const [unconvertBusy, setUnconvertBusy] = useState(false);
 
   const { items, total, page, pageSize, loading, error, setPage, refresh } =
     useListQuery<OrderRow>("/api/purchase-orders", filters);
@@ -74,6 +84,46 @@ function OrderList() {
     setStatusInput("");
     setFilters({});
     setPage(1);
+  };
+
+  const runDelete = async () => {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      await apiFetch("/api/purchase-orders/" + deleting.id, { method: "DELETE" });
+      toast.success("采购订单已删除");
+      setDeleting(null);
+      refresh();
+    } catch (err) {
+      const e = err instanceof ApiClientError ? err : new ApiClientError(0, "删除失败", "NETWORK_ERROR");
+      toast.error("删除失败", e.message);
+      setDeleting(null);
+      refresh();
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
+  const runUnconvert = async () => {
+    if (!unconverting || unconvertBusy) return;
+    setUnconvertBusy(true);
+    try {
+      await apiFetch("/api/purchase-orders/" + unconverting.id + "/unconvert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ changeReason: "回退（取消下单）" }),
+      });
+      toast.success("已回退（下单取消，可重新下单/编辑）");
+      setUnconverting(null);
+      refresh();
+    } catch (err) {
+      const e = err instanceof ApiClientError ? err : new ApiClientError(0, "回退失败", "NETWORK_ERROR");
+      toast.error("回退失败", e.message);
+      setUnconverting(null);
+      refresh();
+    } finally {
+      setUnconvertBusy(false);
+    }
   };
 
   return (
@@ -175,6 +225,34 @@ function OrderList() {
             header: "下单日期",
             render: (row) => formatDate(row.orderDate),
           },
+          {
+            key: "actions",
+            header: "操作",
+            render: (row) => (
+              <div className="flex items-center gap-2">
+                {row.status === "CONFIRMED" && canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => setUnconverting(row)}
+                    disabled={unconvertBusy || deleteBusy}
+                    className="rounded-md border border-border px-2 py-1 text-xs text-ink-primary hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {unconvertBusy && unconverting?.id === row.id ? "回退中…" : "回退"}
+                  </button>
+                )}
+                {["DRAFT", "CANCELLED"].includes(row.status) && canDelete && (
+                  <button
+                    type="button"
+                    onClick={() => setDeleting(row)}
+                    disabled={unconvertBusy || deleteBusy}
+                    className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text hover:bg-status-danger-bg/10 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    删除
+                  </button>
+                )}
+              </div>
+            ),
+          },
         ]}
         rows={items}
         rowKey={(row) => row.id}
@@ -185,6 +263,28 @@ function OrderList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+      />
+
+      <ConfirmActionDialog
+        open={deleting !== null}
+        title={"删除采购订单「" + (deleting?.code ?? "") + "」？"}
+        description="仅草稿/已取消状态的采购订单可删除；删除后列表不再展示。"
+        confirmLabel="确认删除"
+        tone="danger"
+        busy={deleteBusy}
+        onConfirm={runDelete}
+        onCancel={() => setDeleting(null)}
+      />
+
+      <ConfirmActionDialog
+        open={unconverting !== null}
+        title={"回退采购订单「" + (unconverting?.code ?? "") + "」？"}
+        description="回退（取消下单）：取消下单标记，可重新确认/编辑。"
+        confirmLabel="确认回退"
+        tone="danger"
+        busy={unconvertBusy}
+        onConfirm={runUnconvert}
+        onCancel={() => setUnconverting(null)}
       />
     </AppPage>
   );

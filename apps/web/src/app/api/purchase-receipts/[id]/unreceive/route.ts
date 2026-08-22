@@ -73,7 +73,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     action: "purchase-receipt.unreceive",
     entityType: "purchase-receipt",
     entityId: id,
-    afterData: { code: existing.code, status: "DRAFT" },
+    afterData: { code: existing.code, status: "DRAFT", changeReason: changeReason ?? "反收货" },
     ...meta,
   });
 

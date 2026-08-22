@@ -12,10 +12,12 @@ import Link from "next/link";
 import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
 
 interface ReceiptRow {
   id: string;
@@ -39,13 +41,21 @@ const STATUS_LABELS: Record<string, string> = {
 
 function ReceiptList() {
   const { state } = useSession();
+  const toast = useToast();
+  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
   const canCreate =
     state.status === "authenticated" &&
     state.user !== null &&
     hasPermission(state.user.roles as RoleCode[], actionPermission("purchase-receipt", "create"));
+  const canEdit = hasPermission(roles, actionPermission("purchase-receipt", "edit"));
+  const canDelete = hasPermission(roles, actionPermission("purchase-receipt", "delete"));
   const [codeInput, setCodeInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ code?: string; status?: string }>({});
+  const [deleting, setDeleting] = useState<ReceiptRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [unreceiving, setUnreceiving] = useState<ReceiptRow | null>(null);
+  const [unreceiveBusy, setUnreceiveBusy] = useState(false);
 
   const { items, total, page, pageSize, loading, error, setPage, refresh } =
     useListQuery<ReceiptRow>("/api/purchase-receipts", filters);
@@ -63,6 +73,46 @@ function ReceiptList() {
     setStatusInput("");
     setFilters({});
     setPage(1);
+  };
+
+  const runDelete = async () => {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      await apiFetch("/api/purchase-receipts/" + deleting.id, { method: "DELETE" });
+      toast.success("收货单已删除");
+      setDeleting(null);
+      refresh();
+    } catch (err) {
+      const e = err instanceof ApiClientError ? err : new ApiClientError(0, "删除失败", "NETWORK_ERROR");
+      toast.error("删除失败", e.message);
+      setDeleting(null);
+      refresh();
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
+  const runUnreceive = async () => {
+    if (!unreceiving || unreceiveBusy) return;
+    setUnreceiveBusy(true);
+    try {
+      await apiFetch("/api/purchase-receipts/" + unreceiving.id + "/unreceive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ changeReason: "反收货" }),
+      });
+      toast.success("已反收货");
+      setUnreceiving(null);
+      refresh();
+    } catch (err) {
+      const e = err instanceof ApiClientError ? err : new ApiClientError(0, "反收货失败", "NETWORK_ERROR");
+      toast.error("反收货失败", e.message);
+      setUnreceiving(null);
+      refresh();
+    } finally {
+      setUnreceiveBusy(false);
+    }
   };
 
   return (
@@ -169,6 +219,34 @@ function ReceiptList() {
             header: "收货日期",
             render: (row) => formatDate(row.receivedAt),
           },
+          {
+            key: "actions",
+            header: "操作",
+            render: (row) => (
+              <div className="flex items-center gap-2">
+                {row.status === "RECEIVED" && canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => setUnreceiving(row)}
+                    disabled={unreceiveBusy || deleteBusy}
+                    className="rounded-md border border-border px-2 py-1 text-xs text-ink-primary hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {unreceiveBusy && unreceiving?.id === row.id ? "反收货中…" : "反收货"}
+                  </button>
+                )}
+                {["DRAFT", "CANCELLED"].includes(row.status) && canDelete && (
+                  <button
+                    type="button"
+                    onClick={() => setDeleting(row)}
+                    disabled={unreceiveBusy || deleteBusy}
+                    className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text hover:bg-status-danger-bg/10 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    删除
+                  </button>
+                )}
+              </div>
+            ),
+          },
         ]}
         rows={items}
         rowKey={(row) => row.id}
@@ -179,6 +257,28 @@ function ReceiptList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+      />
+
+      <ConfirmActionDialog
+        open={deleting !== null}
+        title={"删除收货单「" + (deleting?.code ?? "") + "」？"}
+        description="仅草稿/已取消状态的收货单可删除；删除后列表不再展示。"
+        confirmLabel="确认删除"
+        tone="danger"
+        busy={deleteBusy}
+        onConfirm={runDelete}
+        onCancel={() => setDeleting(null)}
+      />
+
+      <ConfirmActionDialog
+        open={unreceiving !== null}
+        title={"反收货「" + (unreceiving?.code ?? "") + "」？"}
+        description="反收货（RECEIVED → 草稿）：撤销本次收货，回滚库存与 GRIR 入账，可重新编辑/收货。"
+        confirmLabel="确认反收货"
+        tone="danger"
+        busy={unreceiveBusy}
+        onConfirm={runUnreceive}
+        onCancel={() => setUnreceiving(null)}
       />
     </AppPage>
   );
