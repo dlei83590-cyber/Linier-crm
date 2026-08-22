@@ -63,7 +63,9 @@ export async function GET() {
   if (checks.database) {
     try {
       const rows = await prisma.$queryRaw<{ migration_name: string }[]>`
-        SELECT migration_name FROM _prisma_migrations ORDER BY finished_at DESC LIMIT 1
+        SELECT migration_name FROM _prisma_migrations
+        WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL
+        ORDER BY finished_at DESC LIMIT 1
       `;
       appliedMigration = rows[0]?.migration_name ?? null;
       checks.migrationBaseline =
