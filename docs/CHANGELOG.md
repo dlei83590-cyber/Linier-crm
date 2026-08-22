@@ -2,6 +2,22 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 全页面回退+删除（用户指令 2026-08-21，批次 3：库存）
+
+### 新增
+
+- **调拨单 TRF**：DELETE（DRAFT/CANCELLED 可删；movementGroupId 非空=已执行禁止）
+- **盘点单 CNT**：DELETE（DRAFT/CANCELLED 可删；COUNTING/COMPLETED/ADJUSTED 禁止）
+- **库存调整 ADJ**：DELETE（DRAFT/CANCELLED 可删；SUBMITTED/APPROVED/APPLIED 禁止）
+- **转换单 CVT**：DELETE（DRAFT/CANCELLED 可删；SUBMITTED/EXECUTED 禁止）
+- **前端**：TRF/CNT/ADJ/CVT 列表加删除按钮
+
+### 边界
+
+- 已生效（EXECUTED/APPLIED/COMPLETED）禁止删除——保持库存事实；GL 会计视图保持只读（POSTED 终态不可删）
+
+---
+
 ## [Unreleased] - 全页面回退+删除（用户指令 2026-08-21，批次 2：供应商财务）
 
 ### 新增
