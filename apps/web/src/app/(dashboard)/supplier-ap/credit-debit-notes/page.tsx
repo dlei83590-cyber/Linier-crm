@@ -6,10 +6,12 @@ import Link from "next/link";
 import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate, formatMoney } from "@/lib/format";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
 
 interface CnDnRow {
   id: string;
@@ -42,13 +44,18 @@ const STATUS_TONE_MAP: Record<string, "neutral" | "info" | "success" | "warning"
 
 function CnDnList() {
   const { state } = useSession();
+  const toast = useToast();
+  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
   const canCreate =
     state.status === "authenticated" &&
     state.user !== null &&
     hasPermission(state.user.roles as RoleCode[], actionPermission("supplier-credit-debit-note", "create"));
+  const canDelete = hasPermission(roles, actionPermission("supplier-credit-debit-note", "delete"));
   const [typeInput, setTypeInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ noteType?: string; status?: string }>({});
+  const [deleting, setDeleting] = useState<CnDnRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const { items, total, page, pageSize, loading, error, setPage, refresh } =
     useListQuery<CnDnRow>("/api/supplier-credit-debit-notes", filters);
@@ -61,6 +68,24 @@ function CnDnList() {
     setPage(1);
   };
   const resetFilter = () => { setTypeInput(""); setStatusInput(""); setFilters({}); setPage(1); };
+
+  const runDelete = async () => {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      await apiFetch("/api/supplier-credit-debit-notes/" + deleting.id, { method: "DELETE" });
+      toast.success("贷/借项通知单已删除");
+      setDeleting(null);
+      refresh();
+    } catch (err) {
+      const e = err instanceof ApiClientError ? err : new ApiClientError(0, "删除失败", "NETWORK_ERROR");
+      toast.error("删除失败", e.message);
+      setDeleting(null);
+      refresh();
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
 
   return (
     <AppPage>
@@ -106,6 +131,24 @@ function CnDnList() {
           { key: "adjustmentTotal", header: "调整金额", align: "right", render: (row) => formatMoney(row.adjustmentTotal, row.currency) },
           { key: "status", header: "状态", render: (row) => (<StatusBadge status={row.status} label={STATUS_LABELS[row.status] ?? row.status} toneMap={STATUS_TONE_MAP} />) },
           { key: "appliedAt", header: "应用日期", render: (row) => formatDate(row.appliedAt) },
+          {
+            key: "actions",
+            header: "操作",
+            render: (row) => (
+              <div className="flex items-center gap-2">
+                {["DRAFT", "SUBMITTED", "CANCELLED"].includes(row.status) && canDelete && (
+                  <button
+                    type="button"
+                    onClick={() => setDeleting(row)}
+                    disabled={deleteBusy}
+                    className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text hover:bg-status-danger-bg/10 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    删除
+                  </button>
+                )}
+              </div>
+            ),
+          },
         ]}
         rows={items}
         rowKey={(row) => row.id}
@@ -116,6 +159,17 @@ function CnDnList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+      />
+
+      <ConfirmActionDialog
+        open={deleting !== null}
+        title={"删除贷/借项通知单「" + (deleting?.code ?? "") + "」？"}
+        description="仅草稿/已提交/已取消状态的贷/借项通知单可删除；删除后列表不再展示。"
+        confirmLabel="确认删除"
+        tone="danger"
+        busy={deleteBusy}
+        onConfirm={runDelete}
+        onCancel={() => setDeleting(null)}
       />
     </AppPage>
   );

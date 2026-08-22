@@ -164,3 +164,39 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return failConflict(ERROR_CODES.INTERNAL_ERROR, '更新失败（事务已回滚）');
   }
 }
+/** DELETE /api/supplier-credit-debit-notes/:id（层层回退-层层可删除，用户指令 2026-08-21）
+ * 可删状态：DRAFT/SUBMITTED/CANCELLED（未 APPLIED）；APPLIED 禁止（已调整 AP Open Item）。
+ * 软删 header + lines + 跨票关联。
+ */
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await authenticate(request);
+  const denied = requirePermission(user, "supplier-credit-debit-note:delete");
+  if (denied) return denied;
+  requestLog(request, user?.id, "supplier-cn-dn.delete");
+
+  const { id } = await params;
+  const meta = requestMeta(request);
+
+  const existing = await prisma.supplierCreditDebitNote.findFirst({ where: { id, deletedAt: null } });
+  if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "供应商贷/借项通知单不存在");
+  if (!["DRAFT", "SUBMITTED", "CANCELLED"].includes(existing.status)) {
+    return failConflict(ERROR_CODES.NOT_FOUND, "仅 DRAFT/SUBMITTED/CANCELLED 状态可删除（已 APPLIED 禁止删除）");
+  }
+
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    // 主表软删；lines/invoices 关联表无软删字段（保留溯源，onDelete Cascade 仅在主表硬删时级联）
+    await tx.supplierCreditDebitNote.update({ where: { id }, data: { deletedAt: now, isActive: false, updatedById: user!.id } });
+  });
+
+  await writeAuditLog({
+    actorId: user?.id,
+    action: "supplier-cn-dn.delete",
+    entityType: "supplier-credit-debit-note",
+    entityId: id,
+    afterData: { code: existing.code },
+    ...meta,
+  });
+
+  return ok({ id, deleted: true });
+}

@@ -286,3 +286,45 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   return ok({ invoice });
 }
+/** DELETE /api/supplier-invoices/:id（层层回退-层层可删除，用户指令 2026-08-21）
+ * 可删状态：DRAFT/SUBMITTED/CANCELLED（未 POSTED）；MATCHED/APPROVED/POSTED 禁止（已匹配/已过账）。
+ * 引用防御：已有匹配 Run（currentMatchRun）禁止删除。
+ * 软删 header + lines。
+ */
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await authenticate(request);
+  const denied = requirePermission(user, "supplier-invoice:delete");
+  if (denied) return denied;
+  requestLog(request, user?.id, "supplier-invoice.delete");
+
+  const { id } = await params;
+  const meta = requestMeta(request);
+
+  const existing = await prisma.supplierInvoice.findFirst({ where: { id, deletedAt: null } });
+  if (!existing) return failNotFound(ERROR_CODES.SUPPLIER_INVOICE_NOT_FOUND, "供应商发票不存在");
+  if (!["DRAFT", "SUBMITTED", "CANCELLED"].includes(existing.documentStatus)) {
+    return failConflict(ERROR_CODES.SUPPLIER_INVOICE_INVALID_STATE, "仅 DRAFT/SUBMITTED/CANCELLED 状态可删除（已匹配/已过账禁止删除）");
+  }
+  const matchRunCount = await prisma.supplierInvoiceMatchRun.count({ where: { supplierInvoiceId: id } });
+  if (matchRunCount > 0) {
+    return failConflict(ERROR_CODES.SUPPLIER_INVOICE_INVALID_STATE, "供应商发票已有匹配记录，禁止删除（保持匹配溯源）");
+  }
+
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.supplierInvoice.update({ where: { id }, data: { deletedAt: now, isActive: false, updatedById: user!.id } });
+    await tx.supplierInvoiceLine.updateMany({ where: { supplierInvoiceId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+  });
+
+  await writeAuditLog({
+    actorId: user?.id,
+    action: "supplier-invoice.delete",
+    entityType: "supplier-invoice",
+    entityId: id,
+    afterData: { invoiceNo: existing.invoiceNo },
+    ...meta,
+  });
+
+  return ok({ id, deleted: true });
+}
+
