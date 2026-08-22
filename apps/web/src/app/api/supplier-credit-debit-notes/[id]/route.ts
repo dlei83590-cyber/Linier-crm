@@ -185,9 +185,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   const now = new Date();
   await prisma.$transaction(async (tx) => {
+    // 主表软删；lines/invoices 关联表无软删字段（保留溯源，onDelete Cascade 仅在主表硬删时级联）
     await tx.supplierCreditDebitNote.update({ where: { id }, data: { deletedAt: now, isActive: false, updatedById: user!.id } });
-    await tx.supplierCreditDebitNoteLine.updateMany({ where: { creditDebitNoteId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
-    await tx.supplierCreditDebitNoteInvoice.updateMany({ where: { creditDebitNoteId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
   });
 
   await writeAuditLog({

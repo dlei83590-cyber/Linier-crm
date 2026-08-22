@@ -305,7 +305,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (!["DRAFT", "SUBMITTED", "CANCELLED"].includes(existing.documentStatus)) {
     return failConflict(ERROR_CODES.SUPPLIER_INVOICE_INVALID_STATE, "仅 DRAFT/SUBMITTED/CANCELLED 状态可删除（已匹配/已过账禁止删除）");
   }
-  const matchRunCount = await prisma.supplierInvoiceMatchRun.count({ where: { supplierInvoiceId: id, deletedAt: null } });
+  const matchRunCount = await prisma.supplierInvoiceMatchRun.count({ where: { supplierInvoiceId: id } });
   if (matchRunCount > 0) {
     return failConflict(ERROR_CODES.SUPPLIER_INVOICE_INVALID_STATE, "供应商发票已有匹配记录，禁止删除（保持匹配溯源）");
   }
