@@ -51,7 +51,29 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   });
   if (!receipt) return failNotFound(ERROR_CODES.WAREHOUSE_RECEIPT_NOT_FOUND, '入库单不存在');
 
-  return ok(receipt);
+  // 核销闭环（用户指令 2026-08-21）：每行已 RETURNED 退货量（WAREHOUSE_RECEIPT_LINE 来源；可退余额 = quantity - 已退）
+  const lineIds = receipt.lines.map((l) => l.id);
+  const returnedRows = await prisma.purchaseReturnLine.groupBy({
+    by: ['sourceWarehouseReceiptLineId'],
+    where: {
+      sourceRefType: 'WAREHOUSE_RECEIPT_LINE',
+      sourceWarehouseReceiptLineId: { in: lineIds },
+      purchaseReturn: { status: 'RETURNED', deletedAt: null },
+      deletedAt: null,
+    },
+    _sum: { quantity: true },
+  });
+  const returnedMap = new Map(returnedRows.map((r) => [r.sourceWarehouseReceiptLineId ?? '', r._sum.quantity ?? new Prisma.Decimal(0)]));
+  const linesWithBalance = receipt.lines.map((l) => ({
+    ...l,
+    returnedQty: (returnedMap.get(l.id) ?? new Prisma.Decimal(0)).toString(),
+    returnableQty: Prisma.Decimal.max(
+      new Prisma.Decimal(l.quantity.toString()).minus(returnedMap.get(l.id) ?? new Prisma.Decimal(0)),
+      new Prisma.Decimal(0),
+    ).toString(),
+  }));
+
+  return ok({ ...receipt, lines: linesWithBalance });
 }
 
 /**

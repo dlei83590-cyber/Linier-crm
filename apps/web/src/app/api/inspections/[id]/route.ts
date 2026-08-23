@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from '@/lib/api-helpers';
 import { ok, failValidation, failConflict, failNotFound } from '@/lib/api/response';
@@ -41,7 +42,42 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   });
   if (!inspection) return failNotFound(ERROR_CODES.INSPECTION_NOT_FOUND, '质检记录不存在');
 
-  return ok(inspection);
+  // 核销闭环（用户指令 2026-08-21）：已 POSTED 入库占用 + 已 RETURNED 退货占用
+  const [usedRow, returnedRow] = await Promise.all([
+    prisma.warehouseReceiptLine.aggregate({
+      where: {
+        inspectionId: id,
+        warehouseReceipt: { status: 'POSTED', deletedAt: null },
+        deletedAt: null,
+      },
+      _sum: { quantity: true },
+    }),
+    prisma.purchaseReturnLine.aggregate({
+      where: {
+        sourceRefType: 'INSPECTION',
+        sourceInspectionId: id,
+        purchaseReturn: { status: 'RETURNED', deletedAt: null },
+        deletedAt: null,
+      },
+      _sum: { quantity: true },
+    }),
+  ]);
+  const usedQty = usedRow._sum.quantity ?? new Prisma.Decimal(0);
+  const returnedQty = returnedRow._sum.quantity ?? new Prisma.Decimal(0);
+
+  return ok({
+    ...inspection,
+    usedQty: usedQty.toString(),
+    returnedQty: returnedQty.toString(),
+    availableQty: Prisma.Decimal.max(
+      new Prisma.Decimal(inspection.qualifiedQty.toString()).minus(usedQty),
+      new Prisma.Decimal(0),
+    ).toString(),
+    returnableQty: Prisma.Decimal.max(
+      new Prisma.Decimal(inspection.rejectedQty.toString()).minus(returnedQty),
+      new Prisma.Decimal(0),
+    ).toString(),
+  });
 }
 
 /**

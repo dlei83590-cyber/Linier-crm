@@ -138,26 +138,32 @@ function PurchaseReturnCreateForm() {
       return;
     }
     if (refType === "RECEIPT_LINE") {
-      apiFetch<{ lines?: Array<{ id: string; lineNo: number; quantity: string; item?: { code: string | null; name: string | null } | null; uom?: { symbol: string | null } | null }> }>(
+      apiFetch<{ lines?: Array<{ id: string; lineNo: number; quantity: string; returnableQty?: string; item?: { code: string | null; name: string | null } | null; uom?: { symbol: string | null } | null }> }>(
         `/api/purchase-receipts/${docId}`,
       )
         .then((body) => {
-          const rows = (body.data.lines ?? []).map((l) => ({
-            id: l.id,
-            label: `L${l.lineNo} ${l.item?.code ?? ""} ${l.item?.name ?? ""}（数量 ${l.quantity}${l.uom?.symbol ? ` ${l.uom.symbol}` : ""}）`.trim(),
-          }));
+          // 核销闭环：只显示可退余额 > 0 的收货行（已退完的不再出现）
+          const rows = (body.data.lines ?? [])
+            .filter((l) => Number(l.returnableQty ?? l.quantity ?? 0) > 0)
+            .map((l) => ({
+              id: l.id,
+              label: `L${l.lineNo} ${l.item?.code ?? ""} ${l.item?.name ?? ""}（可退 ${l.returnableQty ?? l.quantity ?? 0}）`.trim(),
+            }));
           updateLine(idx, { sourceDocLines: rows, docLoading: false, sourcePurchaseReceiptLineId: "" });
         })
         .catch(() => updateLine(idx, { sourceDocLines: [], docLoading: false }));
     } else if (refType === "WAREHOUSE_RECEIPT_LINE") {
-      apiFetch<{ lines?: Array<{ id: string; lineNo: number; quantity: string; item?: { code: string | null; name: string | null } | null; uom?: { symbol: string | null } | null }> }>(
+      apiFetch<{ lines?: Array<{ id: string; lineNo: number; quantity: string; returnableQty?: string; item?: { code: string | null; name: string | null } | null; uom?: { symbol: string | null } | null }> }>(
         `/api/warehouse-receipts/${docId}`,
       )
         .then((body) => {
-          const rows = (body.data.lines ?? []).map((l) => ({
-            id: l.id,
-            label: `L${l.lineNo} ${l.item?.code ?? ""} ${l.item?.name ?? ""}（数量 ${l.quantity}${l.uom?.symbol ? ` ${l.uom.symbol}` : ""}）`.trim(),
-          }));
+          // 核销闭环：只显示可退余额 > 0 的入库行（已退完的不再出现）
+          const rows = (body.data.lines ?? [])
+            .filter((l) => Number(l.returnableQty ?? l.quantity ?? 0) > 0)
+            .map((l) => ({
+              id: l.id,
+              label: `L${l.lineNo} ${l.item?.code ?? ""} ${l.item?.name ?? ""}（可退 ${l.returnableQty ?? l.quantity ?? 0}）`.trim(),
+            }));
           updateLine(idx, { sourceDocLines: rows, docLoading: false, sourceWarehouseReceiptLineId: "" });
         })
         .catch(() => updateLine(idx, { sourceDocLines: [], docLoading: false }));
@@ -166,6 +172,7 @@ function PurchaseReturnCreateForm() {
       apiFetch<{
         result?: string;
         qualifiedQty?: string;
+        returnableQty?: string;
         inspectionMode?: string;
         purchaseReceiptLine?: { lineNo: number; quantity: string; item?: { code: string | null; name: string | null } | null } | null;
       }>(`/api/inspections/${docId}`)
@@ -173,7 +180,7 @@ function PurchaseReturnCreateForm() {
           const d = body.data;
           const rows = [{
             id: docId,
-            label: `质检 ${d.inspectionMode ?? ""} ${d.result ?? ""}（合格 ${d.qualifiedQty ?? 0}）${d.purchaseReceiptLine?.item ? ` ${d.purchaseReceiptLine.item.code ?? ""} ${d.purchaseReceiptLine.item.name ?? ""}`.trim() : ""}`.trim(),
+            label: `质检 ${d.inspectionMode ?? ""} ${d.result ?? ""}（可退 ${d.returnableQty ?? "0"}）${d.purchaseReceiptLine?.item ? ` ${d.purchaseReceiptLine.item.code ?? ""} ${d.purchaseReceiptLine.item.name ?? ""}`.trim() : ""}`.trim(),
           }];
           updateLine(idx, { sourceDocLines: rows, docLoading: false, sourceInspectionId: "" });
         })
