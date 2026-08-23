@@ -84,6 +84,9 @@ function WarehouseReceiptDetailPage() {
   const [returnOpen, setReturnOpen] = useState(false);
   const [returnDisposition, setReturnDisposition] = useState("REPLACE_REQUIRED");
   const [returnBusy, setReturnBusy] = useState(false);
+  // 一键回退整链（退货成功后，用户指令 2026-08-21）
+  const [confirmUnwind, setConfirmUnwind] = useState(false);
+  const [unwindBusy, setUnwindBusy] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -191,6 +194,23 @@ function WarehouseReceiptDetailPage() {
       setReturnBusy(false);
     }
   };
+
+  /** 一键回退整链（删退货→反质检→反收货→删收货→删PO→回退并删PR；全程回收单号） */
+  const handleUnwind = async () => {
+    if (!detail || unwindBusy) return;
+    setUnwindBusy(true);
+    setActionError(null);
+    try {
+      await apiFetch(`/api/warehouse-receipts/${id}/unwind`, { method: "POST" });
+      setConfirmUnwind(false);
+      await refreshDetail();
+    } catch (err: unknown) {
+      setActionError(err instanceof ApiClientError ? err : new ApiClientError(0, "回退失败", "NETWORK_ERROR"));
+    } finally {
+      setUnwindBusy(false);
+    }
+  };
+
   if (loading) {
     return (
       <AppPage>
@@ -243,17 +263,26 @@ function WarehouseReceiptDetailPage() {
                 {actionBusy ? "处理中…" : "过账"}
               </button>
             </>
-          ) : detail.status === "POSTED" &&
-            canEdit &&
+          ) : detail.status === "POSTED" && canEdit ? (
             (detail.lines ?? []).some((l) => Number(l.returnableQty ?? l.quantity ?? 0) > 0) ? (
-            <button
-              type="button"
-              onClick={() => setReturnOpen(true)}
-              disabled={actionBusy || returnBusy}
-              className="rounded-md border border-status-danger-border bg-status-danger-bg/10 px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-status-danger-bg/20 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {returnBusy ? "退货中…" : "退货（一键）"}
-            </button>
+              <button
+                type="button"
+                onClick={() => setReturnOpen(true)}
+                disabled={actionBusy || returnBusy || unwindBusy}
+                className="rounded-md border border-status-danger-border bg-status-danger-bg/10 px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-status-danger-bg/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {returnBusy ? "退货中…" : "退货（一键）"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmUnwind(true)}
+                disabled={actionBusy || unwindBusy}
+                className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {unwindBusy ? "回退中…" : "回退整链"}
+              </button>
+            )
           ) : undefined
         }
         summary={
@@ -315,6 +344,17 @@ function WarehouseReceiptDetailPage() {
           </div>
         </section>
       </EntityDetailWorkspace>
+
+      <ConfirmActionDialog
+        open={confirmUnwind}
+        title="回退整链"
+        description="一键全链条回退：删除退货单 → 反质检 → 反收货（回滚履约）→ 删除收货单 → 删除采购订单 → 回退并删除采购申请；全程回收单号（GRIR/库存/财务历史保留）。"
+        confirmLabel="确认回退整链"
+        tone="danger"
+        busy={unwindBusy}
+        onConfirm={handleUnwind}
+        onCancel={() => setConfirmUnwind(false)}
+      />
 
       <ConfirmActionDialog
         open={confirmPost}

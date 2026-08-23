@@ -65,6 +65,9 @@ function WarehouseReceiptList() {
   const [returnDisposition, setReturnDisposition] = useState("REPLACE_REQUIRED");
   const [returnBusy, setReturnBusy] = useState(false);
   const [returnError, setReturnError] = useState<string | null>(null);
+  // 一键回退整链（退货成功后，用户指令 2026-08-21）
+  const [unwindTarget, setUnwindTarget] = useState<WarehouseReceiptRow | null>(null);
+  const [unwindBusy, setUnwindBusy] = useState(false);
   const [codeInput, setCodeInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ code?: string; status?: string }>({});
@@ -165,6 +168,24 @@ function WarehouseReceiptList() {
       setReturnBusy(false);
     }
   };
+  /** 一键回退整链：删退货 → 反质检 → 反收货 → 删收货 → 删 PO → 回退并删 PR（全程回收单号） */
+  const handleUnwind = async () => {
+    if (!unwindTarget || unwindBusy) return;
+    setUnwindBusy(true);
+    setReturnError(null);
+    try {
+      await apiFetch(`/api/warehouse-receipts/${unwindTarget.id}/unwind`, { method: "POST" });
+      toast.success("全链条回退完成（退货→质检→收货→订单→申请，单号已回收）");
+      setUnwindTarget(null);
+      refresh();
+    } catch (err: unknown) {
+      const e = err instanceof ApiClientError ? err : new ApiClientError(0, "回退失败", "NETWORK_ERROR");
+      toast.error("回退失败", e.message);
+    } finally {
+      setUnwindBusy(false);
+    }
+  };
+
   const applyFilter = () => {
     const next: { code?: string; status?: string } = {};
     if (codeInput.trim()) next.code = codeInput.trim();
@@ -309,10 +330,20 @@ function WarehouseReceiptList() {
                   <button
                     type="button"
                     onClick={() => void openReturn(row)}
-                    disabled={returnBusy || deleteBusy}
+                    disabled={returnBusy || deleteBusy || unwindBusy}
                     className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text hover:bg-status-danger-bg/10 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     退货
+                  </button>
+                )}
+                {canEdit && row.status === "POSTED" && Number(row.returnableQty ?? 0) === 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setUnwindTarget(row)}
+                    disabled={unwindBusy || returnBusy}
+                    className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-ink-primary hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    回退整链
                   </button>
                 )}
                 {canDelete && ["DRAFT", "CANCELLED"].includes(row.status) && (
@@ -349,6 +380,17 @@ function WarehouseReceiptList() {
         busy={deleteBusy}
         onConfirm={runDelete}
         onCancel={() => setDeleting(null)}
+      />
+
+      <ConfirmActionDialog
+        open={unwindTarget !== null}
+        title={"回退整链「" + (unwindTarget?.code ?? "") + "」？"}
+        description="一键全链条回退：删除退货单 → 反质检 → 反收货（回滚履约）→ 删除收货单 → 删除采购订单 → 回退并删除采购申请；全程回收单号（GRIR/库存/财务历史保留）。"
+        confirmLabel="确认回退整链"
+        tone="danger"
+        busy={unwindBusy}
+        onConfirm={handleUnwind}
+        onCancel={() => setUnwindTarget(null)}
       />
 
       {/* ── 一键退货对话框（列表操作区；全退/部分退；用户指令 2026-08-21） ── */}

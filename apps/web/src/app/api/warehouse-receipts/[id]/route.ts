@@ -5,6 +5,7 @@ import { authenticate, requirePermission, requestMeta, writeAuditLog } from '@/l
 import { ok, fail, failValidation, failConflict, failNotFound } from '@/lib/api/response';
 import { ERROR_CODES } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
+import { recycleDocumentSequence } from '@/lib/document-sequence/recycle';
 import { warehouseReceiptUpdateSchema } from '@/lib/api/schemas';
 import {
   computeInspectionUsedQty,
@@ -405,6 +406,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       where: { warehouseReceiptId: id, deletedAt: null },
       data: { deletedAt: now, updatedById: user!.id },
     });
+    // 单号回收（用户指令 2026-08-21 全程回收单号）
+    await recycleDocumentSequence(tx, "WAREHOUSE_RECEIPT", existing.code);
   });
 
   await writeAuditLog({

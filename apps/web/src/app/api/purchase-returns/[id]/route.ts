@@ -5,6 +5,7 @@ import { authenticate, requirePermission, requestMeta, writeAuditLog } from '@/l
 import { ok, fail, failValidation, failConflict, failNotFound } from '@/lib/api/response';
 import { ERROR_CODES } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
+import { recycleDocumentSequence } from '@/lib/document-sequence/recycle';
 import { purchaseReturnUpdateSchema } from '@/lib/api/schemas';
 import { computeSourceReturnedQty, computeSourceAvailableQty } from '@/lib/purchase-return/helpers';
 
@@ -350,14 +351,17 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   const existing = await prisma.purchaseReturn.findFirst({ where: { id, deletedAt: null } });
   if (!existing) return failNotFound(ERROR_CODES.PURCHASE_RETURN_NOT_FOUND, "退货单不存在");
-  if (!["DRAFT", "CANCELLED"].includes(existing.status)) {
-    return failConflict(ERROR_CODES.PURCHASE_RETURN_INVALID_STATE, "仅 DRAFT/CANCELLED 状态可删除（已退货请先冲销）");
+  // 全链条回退（用户指令 2026-08-21）：RETURNED 也可删除（回退整链时软删退货记录并回收单号；GRIR/库存事实保留历史）
+  if (existing.status !== "DRAFT" && existing.status !== "CANCELLED" && existing.status !== "RETURNED") {
+    return failConflict(ERROR_CODES.PURCHASE_RETURN_INVALID_STATE, `当前状态（${existing.status}）不可删除`);
   }
 
   const now = new Date();
   await prisma.$transaction(async (tx) => {
     await tx.purchaseReturn.update({ where: { id }, data: { deletedAt: now, isActive: false, updatedById: user!.id } });
     await tx.purchaseReturnLine.updateMany({ where: { purchaseReturnId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+    // 单号回收（对齐报价单先例）
+    await recycleDocumentSequence(tx, "PURCHASE_RETURN", existing.code);
   });
 
   await writeAuditLog({
