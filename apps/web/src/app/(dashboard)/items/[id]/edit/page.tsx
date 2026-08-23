@@ -297,7 +297,6 @@ function ItemEditForm() {
     })
       .then(async () => {
         // 供应商与采购价同步（SupplierItem 增删改；删除被移除行 → 新增行 → 修改行 CAS）
-        const origIds = new Set(originalSupplierItems.map((s) => s.id));
         const curIds = new Set(supplierRows.map((r) => r.id).filter((v): v is string => Boolean(v)));
         for (const orig of originalSupplierItems) {
           if (!curIds.has(orig.id)) {
