@@ -163,12 +163,13 @@ function WhrCreateForm() {
   // 加载某收货行的合法 Inspections（已验收且 qualifiedQty>0 的可入库候选）
   const loadInspections = useCallback((receiptLineId: string) => {
     const controller = new AbortController();
-    apiFetch<InspectionOption[]>(
+    apiFetch<{ items?: InspectionOption[] }>(
       `/api/inspections?purchaseReceiptLineId=${encodeURIComponent(receiptLineId)}&pageSize=100`,
       { signal: controller.signal },
     )
       .then((body) => {
-        const list = body.data ?? [];
+        // GET /api/inspections 返回分页对象 { total, page, pageSize, items }（非数组）——修复候选为空
+        const list = body.data.items ?? [];
         const usable = list.filter(
           (i) => i.result !== "PENDING" && Number(i.qualifiedQty ?? 0) > 0,
         );

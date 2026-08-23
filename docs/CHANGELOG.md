@@ -2,6 +2,14 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 仓库收货质检引用修复（用户指令 2026-08-21 反馈）
+
+### 修复
+
+- **质检结论/入库数量未正确引用（根因）**：`GET /api/inspections` 返回分页对象 `{ total, page, pageSize, items }`，但仓库收货新建/编辑页把 `body.data` 当数组 `.filter(...)`——运行时报错导致候选恒为空；现改为读取 `body.data.items`
+- 修复后：新建入库单选择收货单后，质检结论候选正确加载；唯一质检结论自动选中，入库数量自动引用上级合规数量；编辑页回显质检结论正常
+
+---
 ## [Unreleased] - 质检默认采购数量 + 仓库收货引用质检结论（用户指令 2026-08-21）
 
 ### 新增
