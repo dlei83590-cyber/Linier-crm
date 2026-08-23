@@ -59,6 +59,10 @@ interface OrderDetail {
     unitPrice?: string | null;
     totalAmount?: string | null;
     priceSource?: string | null;
+    // 核销闭环（用户指令 2026-08-21）：行级下游聚合——已收(accepted)/已入库/已退
+    receivedAcceptedQty?: string | null;
+    stockInQty?: string | null;
+    returnedQty?: string | null;
     item?: { code: string | null; name: string | null } | null;
     uom?: { symbol: string | null } | null;
   }>;
@@ -242,6 +246,9 @@ function OrderDetailPage() {
                   <th className="px-3 py-2 font-medium">单位</th>
                   <th className="px-3 py-2 font-medium">单价</th>
                   <th className="px-3 py-2 font-medium">价格来源</th>
+                  <th className="px-3 py-2 font-medium">已收</th>
+                  <th className="px-3 py-2 font-medium">已入</th>
+                  <th className="px-3 py-2 font-medium">已退</th>
                 </tr>
               </thead>
               <tbody className="divide-border divide-y">
@@ -256,11 +263,14 @@ function OrderDetailPage() {
                     <td className="px-3 py-2 text-ink-secondary">{line.uom?.symbol ?? "—"}</td>
                     <td className="px-3 py-2 text-ink-primary">{line.unitPrice ?? "—"}</td>
                     <td className="px-3 py-2 text-ink-secondary">{line.priceSource ?? "—"}</td>
+                    <td className="px-3 py-2 text-ink-primary">{line.receivedAcceptedQty ?? "0"}</td>
+                    <td className="px-3 py-2 text-ink-primary">{line.stockInQty ?? "0"}</td>
+                    <td className="px-3 py-2 text-ink-primary">{line.returnedQty ?? "0"}</td>
                   </tr>
                 ))}
                 {(detail.lines ?? []).length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-3 py-8 text-center text-sm text-ink-muted">
+                    <td colSpan={10} className="px-3 py-8 text-center text-sm text-ink-muted">
                       暂无明细行
                     </td>
                   </tr>

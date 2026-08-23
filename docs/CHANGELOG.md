@@ -2,6 +2,25 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 采购全链核销闭环：已核销来源不再出现 + 订单全量信息（用户指令 2026-08-21）
+
+### 修复
+
+- **核销过后再次出现（多次应用）**：各环节候选现在按"可核销余额 > 0"过滤，已核销完的来源不再出现——
+  - 仓库收货：质检候选按**可入库余额**（合格量 − 已 POSTED 入库占用）过滤并显示"可入库 X"；入库数量默认带出可入库余额
+  - 采购退货：收货行/入库行/质检候选按**可退余额**（rejectedOnReceiptQty − 已退 / rejectedQty − 已退 / POSTED 入库行 quantity − 已退）过滤并显示"可退 X"
+- **退货冲销正确应用**：退货来源候选口径与 Return Gate 一致（只显示可退余额>0），避免重复/多次冲销
+
+### 新增
+
+- **拉选订单后显示订单全量信息（闭环）**：PO 详情行级聚合——已收(accepted)/已入(POSTED 入库)/已退(RETURNED)，表格新增三列，全链路核销进度一目了然
+- 服务端余额扩展：`GET /api/inspections`（列表+详情）返回 `usedQty/returnedQty/availableQty/returnableQty`；收货/入库详情行返回 `returnedQty/returnableQty`
+
+### 边界
+
+- 服务端最终校验不变（WHR Post 可入库余额锁内重算；Return Gate 可退余额锁内重算 + GRIR REVERSAL + PO 履约 reopen）；前端余额为预显示
+
+---
 ## [Unreleased] - 采购退货字段优化：按单拉取退货信息（用户指令 2026-08-21）
 
 ### 新增

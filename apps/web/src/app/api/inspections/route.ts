@@ -58,7 +58,46 @@ export async function GET(request: NextRequest) {
     }),
   ]);
 
-  return ok({ total, page, pageSize, items });
+  // 核销闭环（用户指令 2026-08-21）：已 POSTED 入库占用 + 已 RETURNED 退货占用，供前端过滤可核销余额
+  const [usedRows, returnedRows] = await Promise.all([
+    prisma.warehouseReceiptLine.groupBy({
+      by: ['inspectionId'],
+      where: {
+        warehouseReceipt: { status: 'POSTED', deletedAt: null },
+        deletedAt: null,
+      },
+      _sum: { quantity: true },
+    }),
+    prisma.purchaseReturnLine.groupBy({
+      by: ['sourceInspectionId'],
+      where: {
+        sourceRefType: 'INSPECTION',
+        sourceInspectionId: { not: null },
+        purchaseReturn: { status: 'RETURNED', deletedAt: null },
+        deletedAt: null,
+      },
+      _sum: { quantity: true },
+    }),
+  ]);
+  const usedMap = new Map(usedRows.map((r) => [r.inspectionId, r._sum.quantity ?? new Prisma.Decimal(0)]));
+  const returnedMap = new Map(returnedRows.map((r) => [r.sourceInspectionId ?? "", r._sum.quantity ?? new Prisma.Decimal(0)]));
+
+  const enriched = items.map((i) => ({
+    ...i,
+    usedQty: (usedMap.get(i.id) ?? new Prisma.Decimal(0)).toString(),
+    returnedQty: (returnedMap.get(i.id) ?? new Prisma.Decimal(0)).toString(),
+    // 可入库余额 = 合格量 - 已 POSTED 入库占用；可退余额 = 拒收量 - 已退占用
+    availableQty: Prisma.Decimal.max(
+      new Prisma.Decimal(i.qualifiedQty.toString()).minus(usedMap.get(i.id) ?? new Prisma.Decimal(0)),
+      new Prisma.Decimal(0),
+    ).toString(),
+    returnableQty: Prisma.Decimal.max(
+      new Prisma.Decimal(i.rejectedQty.toString()).minus(returnedMap.get(i.id) ?? new Prisma.Decimal(0)),
+      new Prisma.Decimal(0),
+    ).toString(),
+  }));
+
+  return ok({ total, page, pageSize, items: enriched });
 }
 
 /**

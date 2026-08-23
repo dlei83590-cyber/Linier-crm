@@ -47,6 +47,8 @@ interface InspectionOption {
   inspectionMode?: string | null;
   result?: string | null;
   qualifiedQty?: string | null;
+  // 核销闭环（用户指令 2026-08-21）：可入库余额 = 合格量 - 已 POSTED 入库占用
+  availableQty?: string | null;
 }
 
 interface WhrDetail {
@@ -132,8 +134,11 @@ function WhrEditForm() {
       .then((body) => {
         // GET /api/inspections 返回分页对象 { total, page, pageSize, items }（非数组）——修复候选为空
         const list = body.data.items ?? [];
+        // 核销闭环：只显示还有可入库余额的质检（已核销完的不再出现，避免多次应用）
         const usable = list.filter(
-          (i) => i.result !== "PENDING" && Number(i.qualifiedQty ?? 0) > 0,
+          (i) =>
+            i.result !== "PENDING" &&
+            Number(i.availableQty ?? i.qualifiedQty ?? 0) > 0,
         );
         setInspectionMap((prev) => ({ ...prev, [receiptLineId]: usable }));
       })
@@ -321,7 +326,7 @@ function WhrEditForm() {
             {usable.map((ins) => (
               <option key={ins.id} value={ins.id}>
                 {ins.inspectionMode ?? ins.result ?? ins.id}
-                {`（合格 ${ins.qualifiedQty ?? 0}）`}
+                {`（可入库 ${ins.availableQty ?? ins.qualifiedQty ?? 0}）`}
               </option>
             ))}
           </select>

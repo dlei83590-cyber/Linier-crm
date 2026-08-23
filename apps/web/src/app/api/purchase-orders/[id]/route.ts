@@ -49,7 +49,70 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   });
   if (!po) return failNotFound(ERROR_CODES.PURCHASE_ORDER_NOT_FOUND, '采购订单不存在');
 
-  return ok(po);
+  // 核销闭环（用户指令 2026-08-21）：PO 行级下游聚合（收货 accepted / 已入库 / 已退）——订单全量信息
+  const poLineIds = po.lines.map((l) => l.id);
+  const [receiptLines, whrLines, retLines] = await Promise.all([
+    prisma.purchaseReceiptLine.findMany({
+      where: {
+        purchaseOrderLineId: { in: poLineIds },
+        purchaseReceipt: { status: 'RECEIVED', deletedAt: null },
+        deletedAt: null,
+      },
+      select: { purchaseOrderLineId: true, quantity: true, rejectedOnReceiptQty: true },
+    }),
+    prisma.warehouseReceiptLine.findMany({
+      where: {
+        purchaseReceiptLine: { purchaseOrderLineId: { in: poLineIds } },
+        warehouseReceipt: { status: 'POSTED', deletedAt: null },
+        deletedAt: null,
+      },
+      select: { purchaseReceiptLine: { select: { purchaseOrderLineId: true } }, quantity: true },
+    }),
+    prisma.purchaseReturnLine.findMany({
+      where: {
+        purchaseReturn: { status: 'RETURNED', deletedAt: null, purchaseOrderId: po.id },
+        deletedAt: null,
+      },
+      select: {
+        quantity: true,
+        sourcePurchaseReceiptLine: { select: { purchaseOrderLineId: true } },
+        sourceWarehouseReceiptLine: {
+          select: { purchaseReceiptLine: { select: { purchaseOrderLineId: true } } },
+        },
+        sourceInspection: {
+          select: { purchaseReceiptLine: { select: { purchaseOrderLineId: true } } },
+        },
+      },
+    }),
+  ]);
+  const zero = new Prisma.Decimal(0);
+  const receivedMap = new Map<string, Prisma.Decimal>();
+  for (const l of receiptLines) {
+    const accepted = new Prisma.Decimal(l.quantity.toString()).minus(new Prisma.Decimal(l.rejectedOnReceiptQty.toString()));
+    receivedMap.set(l.purchaseOrderLineId, (receivedMap.get(l.purchaseOrderLineId) ?? zero).plus(accepted));
+  }
+  const stockInMap = new Map<string, Prisma.Decimal>();
+  for (const l of whrLines) {
+    const polId = l.purchaseReceiptLine?.purchaseOrderLineId ?? '';
+    stockInMap.set(polId, (stockInMap.get(polId) ?? zero).plus(new Prisma.Decimal(l.quantity.toString())));
+  }
+  const returnedMap = new Map<string, Prisma.Decimal>();
+  for (const l of retLines) {
+    const polId =
+      l.sourcePurchaseReceiptLine?.purchaseOrderLineId ??
+      l.sourceWarehouseReceiptLine?.purchaseReceiptLine?.purchaseOrderLineId ??
+      l.sourceInspection?.purchaseReceiptLine?.purchaseOrderLineId ??
+      '';
+    if (polId) returnedMap.set(polId, (returnedMap.get(polId) ?? zero).plus(new Prisma.Decimal(l.quantity.toString())));
+  }
+  const linesWithChain = po.lines.map((l) => ({
+    ...l,
+    receivedAcceptedQty: (receivedMap.get(l.id) ?? zero).toString(),
+    stockInQty: (stockInMap.get(l.id) ?? zero).toString(),
+    returnedQty: (returnedMap.get(l.id) ?? zero).toString(),
+  }));
+
+  return ok({ ...po, lines: linesWithChain });
 }
 
 /**
