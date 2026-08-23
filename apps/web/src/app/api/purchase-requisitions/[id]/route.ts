@@ -5,6 +5,7 @@ import { authenticate, requirePermission, requestMeta, writeAuditLog } from '@/l
 import { ok, fail, failValidation, failConflict, failNotFound } from '@/lib/api/response';
 import { ERROR_CODES } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
+import { recycleDocumentSequence } from '@/lib/document-sequence/recycle';
 import { purchaseRequisitionUpdateSchema } from '@/lib/api/schemas';
 import {
   createPurchaseRequisitionRevision,
@@ -236,8 +237,9 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   const existing = await prisma.purchaseRequisition.findFirst({ where: { id, deletedAt: null } });
   if (!existing) return failNotFound(ERROR_CODES.PURCHASE_REQUISITION_NOT_FOUND, "采购申请不存在");
-  if (!["DRAFT", "SUBMITTED", "CANCELLED"].includes(existing.status)) {
-    return failConflict(ERROR_CODES.PURCHASE_REQUISITION_INVALID_STATE, "仅 DRAFT/SUBMITTED/CANCELLED 状态可删除（已批准/已转订单禁止删除）");
+  // 全链条回退（用户指令 2026-08-21）：APPROVED 且无 PO 引用（已回退）也可删除
+  if (!["DRAFT", "SUBMITTED", "CANCELLED", "APPROVED"].includes(existing.status)) {
+    return failConflict(ERROR_CODES.PURCHASE_REQUISITION_INVALID_STATE, "仅 DRAFT/SUBMITTED/CANCELLED/APPROVED（无PO）状态可删除");
   }
   const poCount = await prisma.purchaseOrder.count({ where: { requisitionId: id, deletedAt: null } });
   if (poCount > 0) {
@@ -249,6 +251,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     await tx.purchaseRequisition.update({ where: { id }, data: { deletedAt: now, isActive: false, updatedById: user!.id } });
     await tx.purchaseRequisitionLine.updateMany({ where: { purchaseRequisitionId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
     await tx.purchaseRequisitionRevision.updateMany({ where: { purchaseRequisitionId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+    // 单号回收（用户指令 2026-08-21 全程回收单号）
+    await recycleDocumentSequence(tx, "PURCHASE_REQUISITION", existing.code);
   });
 
   await writeAuditLog({

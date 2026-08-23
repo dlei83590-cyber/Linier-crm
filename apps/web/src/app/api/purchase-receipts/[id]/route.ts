@@ -5,6 +5,7 @@ import { authenticate, requirePermission, requestMeta, writeAuditLog } from '@/l
 import { ok, fail, failValidation, failConflict, failNotFound } from '@/lib/api/response';
 import { ERROR_CODES } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
+import { recycleDocumentSequence } from '@/lib/document-sequence/recycle';
 import { purchaseReceiptUpdateSchema } from '@/lib/api/schemas';
 
 export const dynamic = 'force-dynamic';
@@ -308,6 +309,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   await prisma.$transaction(async (tx) => {
     await tx.purchaseReceipt.update({ where: { id }, data: { deletedAt: now, isActive: false, updatedById: user!.id } });
     await tx.purchaseReceiptLine.updateMany({ where: { purchaseReceiptId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+    // 单号回收（用户指令 2026-08-21 全程回收单号）
+    await recycleDocumentSequence(tx, "PURCHASE_RECEIPT", existing.code);
   });
 
   await writeAuditLog({
