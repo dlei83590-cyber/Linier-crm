@@ -48,6 +48,7 @@
 | C13 | 数量非法 | quantity <= 0 | 400 WAREHOUSE_RECEIPT_QUANTITY_INVALID |
 | C14 | 无行 | lines 空 | 400 WAREHOUSE_RECEIPT_NO_LINES |
 | C15 | DRAFT 创建不发领域事件 | 创建后查 Audit | 仅 AuditLog，无 WarehouseReceiptPosted |
+| C16 | 入库数量默认上级合规数量（用户指令 2026-08-21） | 行选择质检结论（qualifiedQty=80） | 前端入库数量自动填 80（已手填则保留）；唯一质检结论自动选中并带出 |
 
 ## D. 更新（PATCH /api/warehouse-receipts/:id）
 

@@ -2,6 +2,18 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 质检默认采购数量 + 仓库收货引用质检结论（用户指令 2026-08-21）
+
+### 新增
+
+- **质检完成对话框**：打开时"合格数量"默认 = 可检数量（收货数量 - 现场拒收，即采购数量在质检环节的流转）、"拒收数量"默认 0——质检数量/合规数量默认采购数量（SPOT/FULL 默认全合格，可改；SKIP 仍由服务端强制 QUALIFIED）
+- **仓库收货质检结论正确引用**：WHR 新建页某收货行仅一个可用质检结论时自动选中（避免漏引用）；行选择质检结论后**入库数量默认引用上级合规数量**（qualifiedQty，已手填则保留）
+
+### 边界
+
+- 数量恒等式不变：`qualifiedQty + rejectedQty === inspectableQty`（服务端强制，前端默认值仅为减少手工输入）；入库数量 ≤ 质检合格量（backend 兜底）
+
+---
 ## [Unreleased] - 收货默认数量 + 全站日期默认今天（用户指令 2026-08-21）
 
 ### 新增

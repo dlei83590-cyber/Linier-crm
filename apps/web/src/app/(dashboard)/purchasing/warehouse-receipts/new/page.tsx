@@ -173,6 +173,20 @@ function WhrCreateForm() {
           (i) => i.result !== "PENDING" && Number(i.qualifiedQty ?? 0) > 0,
         );
         setInspectionMap((prev) => ({ ...prev, [receiptLineId]: usable }));
+        // 唯一质检结论自动引用（用户指令 2026-08-21：质检结论正确引用）+ 入库数量默认上级合规数量
+        if (usable.length === 1) {
+          setLines((prev) =>
+            prev.map((l) =>
+              l.purchaseReceiptLineId === receiptLineId
+                ? {
+                    ...l,
+                    inspectionId: usable[0].id,
+                    quantity: l.quantity || String(usable[0].qualifiedQty ?? ""),
+                  }
+                : l,
+            ),
+          );
+        }
       })
       .catch(() => {
         setInspectionMap((prev) => ({ ...prev, [receiptLineId]: [] }));
@@ -276,9 +290,15 @@ function WhrCreateForm() {
         return (
           <select
             value={row.inspectionId}
-            onChange={(e) =>
-              updateLine(lines.findIndex((l) => l.id === row.id), { inspectionId: e.target.value })
-            }
+            onChange={(e) => {
+              const idx = lines.findIndex((l) => l.id === row.id);
+              const ins = usable.find((i) => i.id === e.target.value);
+              // 入库数量默认引用上级合规数量（用户指令 2026-08-21；已手填则保留）
+              updateLine(idx, {
+                inspectionId: e.target.value,
+                ...(ins && !row.quantity ? { quantity: String(ins.qualifiedQty ?? "") } : {}),
+              });
+            }}
             className="w-full rounded-md border border-border px-3 py-1 text-sm focus:border-brand-500 focus:outline-none"
           >
             <option value="">请选择质检结论</option>
