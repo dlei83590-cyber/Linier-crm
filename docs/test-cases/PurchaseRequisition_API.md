@@ -151,6 +151,10 @@
 | S8 | 权限 | 非 approve 用户 | 403（与 convert 对齐） |
 | S9 | 行序 | PR 行 lineNo 升序 | 返回顺序与 PR Line 一致（前端按序回传 override） |
 | S10 | 一致性 | 建议命中快照后直接 convert | convert 用同一解析语义，不再 409 PRICE_NOT_FOUND |
+| S11 | 商品优选供应商行 | 商品配置 SupplierItem（用户指令 2026-08-21） | 每行返回 itemSupplierId/itemPurchasePrice/itemPaymentTerm（优选行 take 1） |
+| S12 | 无快照预填商品采购价 | snapshot=null + itemPurchasePrice | 前端 MANUAL 预填 unitPrice + priceReason="商品默认采购价" |
+| S13 | 默认供应商预选 | 对话框未选供应商 + itemSupplierId | 自动预选对应 Supplier（BP→Supplier.partner 映射） |
+| S14 | 付款条款带出 | 对话框未设置 + itemPaymentTerm | 付款条件下拉自动带出商业条款 code |
 
 ## H. Convert 并发与幂等
 

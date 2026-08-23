@@ -68,6 +68,10 @@
 | D11 | Revision 来源 | Direct 创建 | Revision 使用实际落库行（含真实 snapshot price），非请求 body 占位 |
 | D12 | CREATED Snapshot | Direct 创建 | Decimal 金额以字符串写 snapshot JSON |
 | D13 | Created Event 金额 | 创建 | PurchaseOrderCreated.totalAmount 为真实落库金额字符串，非 placeholder |
+| D14 | 商品采购价自动带出（用户指令 2026-08-21） | PO 行选商品（商品有优选 SupplierItem.purchasePrice） | 行自动切 MANUAL + 预填 unitPrice + priceReason="商品默认采购价"（可改） |
+| D15 | 默认供应商自动带出 | PO 头未选供应商 && 商品优选 SupplierItem | 自动填供应商（SupplierItem.supplierId=BP → Supplier.partner 映射）+ 带出币种 |
+| D16 | 默认付款条款自动带出 | PO 头未设置 && 商品优选 SupplierItem.paymentTerm | paymentTerm 自动带出（商业条款 code） |
+| D17 | 付款条件引用商业条款 | PO 创建/编辑/转单表单 | paymentTerm 下拉来自 /api/commercial-terms（code 快照），非自由文本 |
 
 ## E. REQUISITION 来源约束（经 PR Convert 创建）
 

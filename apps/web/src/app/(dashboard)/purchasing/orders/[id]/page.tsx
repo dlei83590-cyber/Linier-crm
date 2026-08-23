@@ -41,6 +41,7 @@ interface OrderDetail {
   sourceType?: string | null;
   status: string;
   currency?: string | null;
+  paymentTerm?: string | null;
   orderDate?: string | null;
   expectedDeliveryDate?: string | null;
   subtotal?: string | null;
@@ -215,6 +216,7 @@ function OrderDetailPage() {
             <InfoItem label="供应商" value={detail.supplier?.name} />
             <InfoItem label="来源申请" value={detail.requisition?.code} />
             <InfoItem label="币种" value={detail.currency} />
+            <InfoItem label="付款条款" value={detail.paymentTerm} />
             <InfoItem label="下单日期" value={formatDate(detail.orderDate)} />
             <InfoItem label="期望交期" value={formatDate(detail.expectedDeliveryDate)} />
             <InfoItem label="未税合计" value={formatMoney(detail.subtotal ?? "0", detail.currency ?? "CNY")} />

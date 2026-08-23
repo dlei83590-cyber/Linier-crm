@@ -42,6 +42,7 @@
 - **价格双通道**：`SUPPLIER_PRICE_SNAPSHOT`（优先，PartnerPrice priceSource=SUPPLIER 快照复制）｜`MANUAL`（授权手工，**必须记录 priceReason / priceSetById(actor) / priceSetAt——audit 留痕**）
 - Supplier 价格 → PO Line 单价快照 → PO.totalAmount（Σ 行，**服务端 Decimal 聚合，客户端不可直接传总额**）
 - **PO 不调 Pricing Engine、不重算**；税率 taxRate 快照复制（拍板④）
+- **商品默认采购信息（2026-08-21 用户指令，ADR-0012 §9 SupplierItem）**：商品表单维护 SupplierItem（多供应商行：采购价/付款条款/优选），`isPreferred=true` 行为采购默认；采购单据选商品时前端自动带出——① 优选行采购价 → 行预填 `MANUAL`（priceReason="商品默认采购价"，可改，审计不变）② 优选行供应商（SupplierItem.supplierId=BP → Supplier.partner 映射，PO 头未选时自动带出）③ 优选行付款条款（商业条款 code，PO 头未设置时带出）；**商品采购价是预填参考，不参与服务端价格解析**（PartnerPrice 快照语义不变）
 
 ### D7：红线（本阶段无越界实现）
 

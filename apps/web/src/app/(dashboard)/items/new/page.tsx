@@ -22,6 +22,30 @@ interface ItemOption {
   name: string | null;
 }
 
+interface SupplierOption {
+  id: string;
+  code: string | null;
+  name: string | null;
+  partner?: { id: string } | null;
+}
+
+/** 商品供应商行（SupplierItem；supplierId = BusinessPartner.id；ADR-0012 §9 多供应商，优选=采购默认） */
+interface SupplierRow {
+  key: string;
+  supplierId: string;
+  purchasePrice: string;
+  paymentTerm: string;
+  isPreferred: boolean;
+}
+
+const emptySupplierRow = (): SupplierRow => ({
+  key: crypto.randomUUID(),
+  supplierId: "",
+  purchasePrice: "",
+  paymentTerm: "",
+  isPreferred: false,
+});
+
 const ITEM_TYPE_OPTIONS = [
   { value: "FINISHED_GOOD", label: "成品" },
   { value: "RAW_MATERIAL", label: "原材料" },
@@ -95,6 +119,10 @@ function ItemCreateForm() {
   const [isPurchasable, setIsPurchasable] = useState(true);
   const [isManufacturable, setIsManufacturable] = useState(false);
   const [description, setDescription] = useState("");
+  // 供应商与采购价（用户指令 2026-08-21：商品设置采购价/供应商/付款条款；SupplierItem 存储，ADR-0012 §9 多供应商）
+  const [supplierRows, setSupplierRows] = useState<SupplierRow[]>([emptySupplierRow()]);
+  const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
+  const [commercialTerms, setCommercialTerms] = useState<Array<{ id: string; code: string; name: string }>>([]);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiClientError | null>(null);
@@ -107,10 +135,14 @@ function ItemCreateForm() {
     Promise.all([
       apiFetch<ItemOption[]>("/api/item-categories?pageSize=100", { signal: controller.signal }),
       apiFetch<ItemOption[]>("/api/unit-of-measures?pageSize=100", { signal: controller.signal }),
+      apiFetch<SupplierOption[]>("/api/suppliers?pageSize=100", { signal: controller.signal }),
+      apiFetch<Array<{ id: string; code: string; name: string }>>("/api/commercial-terms?pageSize=100", { signal: controller.signal }),
     ])
-      .then(([catBody, uomBody]) => {
+      .then(([catBody, uomBody, supBody, termBody]) => {
         setCategories(catBody.data);
         setUoms(uomBody.data);
+        setSuppliers(supBody.data);
+        setCommercialTerms(termBody.data);
         setSelectorsLoading(false);
       })
       .catch((err: unknown) => {
@@ -160,11 +192,34 @@ function ItemCreateForm() {
       method: "POST",
       body: JSON.stringify(payload),
     })
-      .then((body) => router.push(`/items/${body.data.id}`))
+      .then(async (body) => {
+        // 供应商与采购价：创建 Item 后逐行写入 SupplierItem（ADR-0012 §9；isPreferred 唯一由服务端处理）
+        const itemId = body.data.id;
+        for (const row of supplierRows.filter((r) => r.supplierId)) {
+          await apiFetch(`/api/items/${itemId}/supplier-items`, {
+            method: "POST",
+            body: JSON.stringify({
+              supplierId: row.supplierId,
+              ...(row.purchasePrice ? { purchasePrice: Number(row.purchasePrice) } : {}),
+              ...(row.paymentTerm ? { paymentTerm: row.paymentTerm } : {}),
+              isPreferred: row.isPreferred,
+            }),
+          });
+        }
+        router.push(`/items/${itemId}`);
+      })
       .catch((err: unknown) => {
         setError(err instanceof ApiClientError ? err : new ApiClientError(0, "网络错误", "NETWORK_ERROR"));
         setSubmitting(false);
       });
+  };
+
+  const updateSupplierRow = (index: number, patch: Partial<SupplierRow>) => {
+    setSupplierRows((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+  };
+
+  const removeSupplierRow = (index: number) => {
+    setSupplierRows((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
   };
 
   return (
@@ -300,6 +355,82 @@ function ItemCreateForm() {
         </FormField>
       </Section>
 
+      <Section title="供应商与采购价">
+        <div className="col-span-full space-y-2">
+          <p className="text-xs text-ink-muted">
+            一个商品可配置多个供应商（ADR-0012 §9）；「优选」供应商为采购单据选商品时自动带出的默认供应商。
+          </p>
+          {supplierRows.map((row, i) => (
+            <div key={row.key} className="border-border flex flex-wrap items-end gap-3 rounded-md border p-3">
+              <div className="min-w-[180px] flex-1">
+                <label className="block text-xs text-ink-secondary">供应商</label>
+                <select
+                  value={row.supplierId}
+                  onChange={(e) => updateSupplierRow(i, { supplierId: e.target.value })}
+                  className={inputClass}
+                >
+                  <option value="">请选择供应商</option>
+                  {suppliers.map((s) => (
+                    <option key={s.partner?.id ?? s.id} value={s.partner?.id ?? ""}>
+                      {s.name ?? s.code ?? ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-ink-secondary">采购价</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={row.purchasePrice}
+                  onChange={(e) => updateSupplierRow(i, { purchasePrice: e.target.value })}
+                  className={`${inputClass} w-28`}
+                  placeholder="> 0"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-ink-secondary">付款条款</label>
+                <select
+                  value={row.paymentTerm}
+                  onChange={(e) => updateSupplierRow(i, { paymentTerm: e.target.value })}
+                  className={inputClass}
+                >
+                  <option value="">不设置</option>
+                  {commercialTerms.map((t) => (
+                    <option key={t.id} value={t.code}>
+                      {t.code} {t.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <label className="flex items-center gap-1 text-xs text-ink-secondary">
+                <input
+                  type="checkbox"
+                  checked={row.isPreferred}
+                  onChange={(e) => updateSupplierRow(i, { isPreferred: e.target.checked })}
+                />
+                优选（默认）
+              </label>
+              <button
+                type="button"
+                onClick={() => removeSupplierRow(i)}
+                disabled={supplierRows.length <= 1}
+                className="border-border text-ink-secondary rounded-md border px-2 py-1 text-xs hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                删除
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setSupplierRows((prev) => [...prev, emptySupplierRow()])}
+            className="border-border bg-surface text-ink-primary rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-slate-50"
+          >
+            + 添加供应商
+          </button>
+        </div>
+      </Section>
       <Section title="采购 / 销售标记">
         <label className="flex items-center gap-2 text-sm text-ink-secondary">
           <input type="checkbox" checked={isPurchasable} onChange={(e) => setIsPurchasable(e.target.checked)} />

@@ -33,6 +33,7 @@ interface SupplierOption {
   code: string | null;
   name: string | null;
   currency?: string | null;
+  partner?: { id: string } | null;
 }
 
 interface ItemOption {
@@ -40,6 +41,13 @@ interface ItemOption {
   code: string | null;
   name: string | null;
   model: string | null;
+  // 商品采购信息（优选供应商行；items GET include supplierItems take 1；用户指令 2026-08-21）
+  supplierItems?: Array<{
+    supplierId: string;
+    purchasePrice?: string | number | null;
+    paymentTerm?: string | null;
+    isPreferred: boolean;
+  }>;
 }
 
 interface UomOption {
@@ -91,6 +99,8 @@ function PurchaseOrderCreateForm() {
 
   const [supplierId, setSupplierId] = useState("");
   const [currency, setCurrency] = useState("");
+  const [paymentTerm, setPaymentTerm] = useState("");
+  const [commercialTerms, setCommercialTerms] = useState<Array<{ id: string; code: string; name: string }>>([]);
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
   const [remark, setRemark] = useState("");
   const [lines, setLines] = useState<POItemOptionRow[]>([emptyLine()]);
@@ -106,11 +116,13 @@ function PurchaseOrderCreateForm() {
       apiFetch<SupplierOption[]>("/api/suppliers?pageSize=100", { signal: controller.signal }),
       apiFetch<ItemOption[]>("/api/items?pageSize=100", { signal: controller.signal }),
       apiFetch<UomOption[]>("/api/unit-of-measures?pageSize=100", { signal: controller.signal }),
+      apiFetch<Array<{ id: string; code: string; name: string }>>("/api/commercial-terms?pageSize=100", { signal: controller.signal }),
     ])
-      .then(([supBody, itemBody, uomBody]) => {
+      .then(([supBody, itemBody, uomBody, termBody]) => {
         setSuppliers(supBody.data);
         setItems(itemBody.data);
         setUoms(uomBody.data);
+        setCommercialTerms(termBody.data);
         setSelectorsLoading(false);
       })
       .catch((err: unknown) => {
@@ -140,6 +152,43 @@ function PurchaseOrderCreateForm() {
     return null;
   };
 
+  /** 供应商选择/自动带出：币种跟随供应商默认（原有逻辑收敛为共用函数） */
+  const applySupplier = (sid: string) => {
+    setSupplierId(sid);
+    const s = suppliers.find((it) => it.id === sid);
+    if (s?.currency) setCurrency(s.currency);
+  };
+
+  /** 行编辑：选商品时自动引用商品默认采购信息（默认供应商/采购价/付款条款；用户可改） */
+  const handleLinesChange = (next: POItemOptionRow[]) => {
+    for (let i = 0; i < next.length; i += 1) {
+      const prevRow = lines[i];
+      const nextRow = next[i];
+      if (!prevRow || !nextRow || prevRow.itemId === nextRow.itemId) continue;
+      const item = items.find((it) => it.id === nextRow.itemId);
+      if (!item) continue;
+      // 商品优选供应商行（SupplierItem；items GET 已取 take 1 isPreferred desc）
+      const pref = item.supplierItems?.[0];
+      // ① 默认供应商：PO 头未选供应商时自动带出（SupplierItem.supplierId=BP → Supplier.partner 映射）
+      if (!supplierId && pref?.supplierId) {
+        const s = suppliers.find((it) => it.partner?.id === pref.supplierId);
+        if (s) applySupplier(s.id);
+      }
+      // ② 默认采购价：行仍为快照通道且未手填时，预填 MANUAL（依据自动；用户可改回快照）
+      if (pref?.purchasePrice && nextRow.priceSource === "SUPPLIER_PRICE_SNAPSHOT" && !nextRow.unitPrice) {
+        nextRow.priceSource = "MANUAL";
+        nextRow.unitPrice = String(pref.purchasePrice);
+        nextRow.priceReason = "商品默认采购价";
+      }
+      // ③ 默认付款条款：PO 头未设置时自动带出
+      if (!paymentTerm && pref?.paymentTerm) {
+        setPaymentTerm(pref.paymentTerm);
+      }
+    }
+    setLines(next);
+    setDirty(true);
+  };
+
   const handleSave = () => {
     if (submitting) return;
     const firstError = validate();
@@ -154,6 +203,7 @@ function PurchaseOrderCreateForm() {
       body: JSON.stringify({
         supplierId,
         ...(currency.trim() ? { currency: currency.trim() } : {}),
+        ...(paymentTerm ? { paymentTerm } : {}),
         ...(expectedDeliveryDate ? { expectedDeliveryDate: new Date(expectedDeliveryDate).toISOString() } : {}),
         ...(remark.trim() ? { remark: remark.trim() } : {}),
         lines: lines.map((l) => ({
@@ -228,9 +278,7 @@ function PurchaseOrderCreateForm() {
             <ReferenceSelector
               value={supplierId}
               onChange={(v) => {
-                setSupplierId(v);
-                const s = suppliers.find((it) => it.id === v);
-                if (s?.currency) setCurrency(s.currency);
+                applySupplier(v);
                 setDirty(true);
               }}
               options={suppliers.map((s) => ({
@@ -255,6 +303,23 @@ function PurchaseOrderCreateForm() {
               {CURRENCY_OPTIONS.map((c) => (
                 <option key={c} value={c}>
                   {c}
+                </option>
+              ))}
+            </select>
+          </FormField>
+          <FormField label="付款条件">
+            <select
+              value={paymentTerm}
+              onChange={(e) => {
+                setPaymentTerm(e.target.value);
+                setDirty(true);
+              }}
+              className={inputClass}
+            >
+              <option value="">不设置</option>
+              {commercialTerms.map((t) => (
+                <option key={t.id} value={t.code}>
+                  {t.code} {t.name}
                 </option>
               ))}
             </select>
@@ -287,10 +352,7 @@ function PurchaseOrderCreateForm() {
       <LineEditor<POItemOptionRow>
         columns={lineColumns}
         lines={lines}
-        onChange={(next) => {
-          setLines(next);
-          setDirty(true);
-        }}
+        onChange={handleLinesChange}
         onAdd={emptyLine}
         addLabel="添加行"
       />

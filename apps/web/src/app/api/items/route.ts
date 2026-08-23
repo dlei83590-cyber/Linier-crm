@@ -75,6 +75,20 @@ export async function GET(request: NextRequest) {
         include: {
           category: { select: { id: true, code: true, name: true, level: true } },
           stockUom: { select: { id: true, code: true, name: true, symbol: true } },
+          // 商品采购信息（用户指令 2026-08-21：采购单据选商品自动引用；取优选供应商行）
+          supplierItems: {
+            where: { deletedAt: null },
+            orderBy: [{ isPreferred: "desc" }, { createdAt: "desc" }],
+            take: 1,
+            select: {
+              id: true,
+              supplierId: true,
+              supplierCode: true,
+              purchasePrice: true,
+              paymentTerm: true,
+              isPreferred: true,
+            },
+          },
           _count: {
             select: {
               specifications: { where: { deletedAt: null } },
