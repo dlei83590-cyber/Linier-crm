@@ -55,7 +55,52 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    return ok({ total, page, pageSize, items });
+    // 核销闭环（用户指令 2026-08-21）：每项返回可退余额（POSTED 行 quantity - 已 RETURNED 退货），供列表操作区退货按钮
+    const postedIds = items.filter((i) => i.status === "POSTED").map((i) => i.id);
+    let returnableMap = new Map<string, Prisma.Decimal>();
+    if (postedIds.length > 0) {
+      const [lineRows, returnedRows] = await Promise.all([
+        prisma.warehouseReceiptLine.groupBy({
+          by: ["warehouseReceiptId"],
+          where: { warehouseReceiptId: { in: postedIds }, deletedAt: null },
+          _sum: { quantity: true },
+        }),
+        prisma.purchaseReturnLine.groupBy({
+          by: ["sourceWarehouseReceiptLineId"],
+          where: {
+            sourceRefType: "WAREHOUSE_RECEIPT_LINE",
+            sourceWarehouseReceiptLineId: { not: null },
+            purchaseReturn: { status: "RETURNED", deletedAt: null },
+            deletedAt: null,
+          },
+          _sum: { quantity: true },
+        }),
+      ]);
+      const totalByWhr = new Map(lineRows.map((r) => [r.warehouseReceiptId, r._sum.quantity ?? new Prisma.Decimal(0)]));
+      const returnedByLine = new Map(returnedRows.map((r) => [r.sourceWarehouseReceiptLineId ?? "", r._sum.quantity ?? new Prisma.Decimal(0)]));
+      const lines = await prisma.warehouseReceiptLine.findMany({
+        where: { warehouseReceiptId: { in: postedIds }, deletedAt: null },
+        select: { id: true, warehouseReceiptId: true, quantity: true },
+      });
+      const zero = new Prisma.Decimal(0);
+      for (const whrId of postedIds) {
+        const lineTotal = lines
+          .filter((l) => l.warehouseReceiptId === whrId)
+          .reduce((s, l) => {
+            const ret = returnedByLine.get(l.id) ?? zero;
+            return s.plus(new Prisma.Decimal(l.quantity.toString()).minus(ret).isNegative()
+              ? zero
+              : new Prisma.Decimal(l.quantity.toString()).minus(ret));
+          }, zero);
+        returnableMap.set(whrId, lineTotal);
+      }
+    }
+    const enriched = items.map((i) => ({
+      ...i,
+      returnableQty: (returnableMap.get(i.id) ?? new Prisma.Decimal(0)).toString(),
+    }));
+
+    return ok({ total, page, pageSize, items: enriched });
   } catch (error) {
     return handleServerError(request, user?.id, "warehouse-receipt.list", error);
   }
