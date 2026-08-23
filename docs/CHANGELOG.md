@@ -2,6 +2,20 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 收货默认数量 + 全站日期默认今天（用户指令 2026-08-21）
+
+### 新增
+
+- **到货收货行明细**：新建收货单选择 PO 后，每行"收货数量"默认 = PO 行剩余可收数量（`remainingReceiveQty`，未收货时 = 采购订单数量；用户可改）
+- **全站日期默认当前日期**：新建单据页日期字段预填今天（本地 YYYY-MM-DD）——PO 期望交期、PR 期望日期（头+行）、销售收款日期、供应商发票开票/收票/到期日、付款日期、凭证过账日期、价目表生效日、转单对话框期望交期等
+- **全部取消分钟格式**：全站 `datetime-local` 输入 → `date`（YYYY-MM-DD）——销售订单/发货/采购申请编辑回显、项目子资源（走访/提醒/进度记录/验收计划与实际日期）等 20 处统一去除时分
+
+### 边界
+
+- 列表页筛选日期（dateFrom/dateTo）保持手动选择，不默认今天；调拨单行级生产日期/有效期（mfgDate/expDate）为业务事实不默认
+- 后端日期存储语义不变（UTC ISO）；前端 date 值提交时经 `new Date(v).toISOString()` / `toIso` 转换
+
+---
 ## [Unreleased] - 商品价格逻辑整理：商品采购价+默认供应商+付款条款（用户指令 2026-08-21）
 
 ### 新增

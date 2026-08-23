@@ -548,7 +548,7 @@ export function VisitFields({
       <div>
         <label className="text-ink-secondary block text-xs font-medium">走访时间</label>
         <input
-          type="datetime-local"
+          type="date"
           value={value.visitedAt}
           onChange={(e) => set({ visitedAt: e.target.value })}
           className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
@@ -582,7 +582,7 @@ export function VisitFields({
       <div>
         <label className="text-ink-secondary block text-xs font-medium">提醒时间</label>
         <input
-          type="datetime-local"
+          type="date"
           value={value.reminderAt}
           onChange={(e) => set({ reminderAt: e.target.value })}
           className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
@@ -911,7 +911,7 @@ export function ExpenseFields({
  * 前端不据 history 计算当前/平均/最大/最新进度。
  */
 export interface ProgressFormValue {
-  recordedAt: string; // datetime-local（空 = 不提供）
+  recordedAt: string; // date（YYYY-MM-DD，空 = 不提供；用户指令 2026-08-21 取消分钟）
   progressPercent: string;
   summary: string;
 }
@@ -948,7 +948,7 @@ export function ProgressFields({
       <div>
         <label className="text-ink-secondary block text-xs font-medium">记录时间（可选，默认当前时间）</label>
         <input
-          type="datetime-local"
+          type="date"
           value={value.recordedAt}
           onChange={(e) => set({ recordedAt: e.target.value })}
           className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
@@ -976,8 +976,8 @@ export function ProgressFields({
  */
 export interface AcceptanceFormValue {
   name: string;
-  expectedDate: string; // datetime-local（空 = 不提供）
-  actualDate: string; // datetime-local（空 = 不提供）
+  expectedDate: string; // date（YYYY-MM-DD，空 = 不提供）
+  actualDate: string; // date（YYYY-MM-DD，空 = 不提供）
   result: "PASSED" | "CONDITIONAL_PASS" | "FAILED" | "PENDING";
   resultNote: string;
 }
@@ -1015,7 +1015,7 @@ export function AcceptanceFields({
       <div>
         <label className="text-ink-secondary block text-xs font-medium">计划日期（可选）</label>
         <input
-          type="datetime-local"
+          type="date"
           value={value.expectedDate}
           onChange={(e) => set({ expectedDate: e.target.value })}
           className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
@@ -1024,7 +1024,7 @@ export function AcceptanceFields({
       <div>
         <label className="text-ink-secondary block text-xs font-medium">实际日期（可选）</label>
         <input
-          type="datetime-local"
+          type="date"
           value={value.actualDate}
           onChange={(e) => set({ actualDate: e.target.value })}
           className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"

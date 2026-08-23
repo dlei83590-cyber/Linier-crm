@@ -32,18 +32,29 @@ const EMPTY_LINE: LineForm = {
   remark: '',
 };
 
+const EMPTY_LINE_TODAY: LineForm = {
+  ...EMPTY_LINE,
+  needDate: todayInput(),
+};
+
 function toIso(value: string): string | undefined {
   if (!value) return undefined;
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
 }
 
+/** 本地今日 YYYY-MM-DD（date 输入默认值；用户指令 2026-08-21：全站日期默认今天） */
+function todayInput(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function RequisitionCreateForm() {
   const router = useRouter();
   const [items, setItems] = useState<ItemOption[]>([]);
-  const [needDate, setNeedDate] = useState('');
+  const [needDate, setNeedDate] = useState(todayInput);
   const [remark, setRemark] = useState('');
-  const [lines, setLines] = useState<LineForm[]>([{ ...EMPTY_LINE }]);
+  const [lines, setLines] = useState<LineForm[]>([{ ...EMPTY_LINE_TODAY }]);
   const [dirty, setDirty] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiClientError | null>(null);
@@ -176,7 +187,7 @@ function RequisitionCreateForm() {
           <div>
             <label className="block text-xs text-ink-secondary">期望日期（可选）</label>
             <input
-              type="datetime-local"
+              type="date"
               value={needDate}
               onChange={(e) => {
                 setNeedDate(e.target.value);
@@ -276,7 +287,7 @@ function RequisitionCreateForm() {
                   </td>
                   <td className="px-3 py-2">
                     <input
-                      type="datetime-local"
+                      type="date"
                       value={line.needDate}
                       onChange={(e) => updateLine(idx, { needDate: e.target.value })}
                       className="focus:border-brand-500 rounded-md border border-border px-2 py-1.5 focus:outline-none"

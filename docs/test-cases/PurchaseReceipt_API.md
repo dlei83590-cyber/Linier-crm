@@ -48,6 +48,7 @@
 | C10 | 数量非法 | quantity<=0 或 rejectedOnReceiptQty>quantity 或 <0 | 400 PURCHASE_RECEIPT_QUANTITY_INVALID |
 | C11 | 无行 | lines 空 | 400 PURCHASE_RECEIPT_NO_LINES |
 | C12 | DRAFT 创建不发领域事件 | 创建后查 Audit | 仅 AuditLog（PurchaseReceiptCreated），无 PurchaseReceiptReceived |
+| C13 | 收货数量默认 PO 剩余可收（用户指令 2026-08-21） | 新建收货单选择 PO（PO 行 quantity=100 / remainingReceiveQty=100） | 前端行"收货数量"默认 100（未收货时 = 采购订单数量）；部分收货后默认剩余可收 |
 
 ## D. 更新（PATCH /api/purchase-receipts/:id）
 

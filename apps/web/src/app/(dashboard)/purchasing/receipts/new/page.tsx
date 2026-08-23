@@ -48,6 +48,7 @@ interface PoLineOption {
   id: string;
   lineNo: number;
   quantity: string;
+  remainingReceiveQty?: string;
   item?: { id: string; code: string | null; name: string | null } | null;
   uom?: { id: string; code: string | null; symbol: string | null } | null;
 }
@@ -114,7 +115,8 @@ function ReceiptCreateForm() {
             id: `${l.id}-receipt-row`,
             purchaseOrderLineId: l.id,
             lineLabel: `L${l.lineNo} ${l.item?.code ?? ""} ${l.item?.name ?? ""} (${l.uom?.symbol ?? ""})`.trim(),
-            quantity: "",
+            // 收货数量默认 PO 行剩余可收数量（未收货时 = 采购订单数量；用户指令 2026-08-21）
+            quantity: l.remainingReceiveQty ?? l.quantity ?? "",
             visibleDamageQty: "0",
             rejectedOnReceiptQty: "0",
           })),

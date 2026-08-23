@@ -32,7 +32,10 @@ function PaymentCreateForm() {
   const [supplierId, setSupplierId] = useState("");
   const [currency, setCurrency] = useState("CNY");
   const [amount, setAmount] = useState("");
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
+  const [paymentDate, setPaymentDate] = useState(() => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+});
   const [paymentMethod, setPaymentMethod] = useState("BANK_TRANSFER");
   const [referenceNo, setReferenceNo] = useState("");
   const [submitting, setSubmitting] = useState(false);

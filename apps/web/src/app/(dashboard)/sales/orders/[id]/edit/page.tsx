@@ -49,7 +49,8 @@ function toLocalInput(iso?: string | null): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  // 用户指令 2026-08-21：全站取消分钟格式 → date（YYYY-MM-DD）
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 function toIso(value: string): string | null {
@@ -266,7 +267,7 @@ function SalesOrderEditForm() {
           <div>
             <label className="block text-xs text-ink-secondary">要求交货日期（可选，清空即置空）</label>
             <input
-              type="datetime-local"
+              type="date"
               value={requestedDeliveryDate}
               onChange={(e) => setRequestedDeliveryDate(e.target.value)}
               className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"

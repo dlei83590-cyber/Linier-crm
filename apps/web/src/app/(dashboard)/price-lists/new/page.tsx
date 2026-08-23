@@ -60,6 +60,12 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 
+/** 本地今日 YYYY-MM-DD（date 输入默认值；用户指令 2026-08-21：全站日期默认今天） */
+function todayInput(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function PriceListCreateForm() {
   const router = useRouter();
   const [policies, setPolicies] = useState<PolicyOption[]>([]);
@@ -77,7 +83,7 @@ function PriceListCreateForm() {
   const [status, setStatus] = useState("DRAFT");
   const [priceSource, setPriceSource] = useState("");
   const [freightIncluded, setFreightIncluded] = useState(false);
-  const [effectiveFrom, setEffectiveFrom] = useState("");
+  const [effectiveFrom, setEffectiveFrom] = useState(todayInput);
   const [effectiveTo, setEffectiveTo] = useState("");
   // validFrom/validTo 兼容旧字段——不提供输入，提交时以 effectiveFrom/effectiveTo 为准
   const [validFrom] = useState("");

@@ -405,15 +405,15 @@ function EmptyRow({ colSpan, text }: { colSpan: number; text: string }) {
   );
 }
 
-/** B2-2B：datetime-local 时区转换纪律（不 slice UTC ISO 冒充本地时间）
- * toLocalInput：ISO UTC → 本地 datetime-local（YYYY-MM-DDTHH:mm）
- * toIso：datetime-local 本地时间 → Date → ISO UTC
+/** B2-2B：date 时区转换纪律（用户指令 2026-08-21：全站取消分钟格式 → date YYYY-MM-DD）
+ * toLocalInput：ISO UTC → 本地 date（YYYY-MM-DD）
+ * toIso：date 本地时间 → Date → ISO UTC
  */
 function toLocalInput(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 function toIso(value: string): string {
@@ -782,11 +782,11 @@ function ProjectDetailPage() {
   const openVisitEdit = (v: VisitRow) => {
     setVisitForm({
       visitType: v.visitType as VisitFormValue["visitType"],
-      visitedAt: v.visitedAt ? v.visitedAt.slice(0, 16) : "",
+      visitedAt: v.visitedAt ? v.visitedAt.slice(0, 10) : "",
       contactName: v.contactName ?? "",
       summary: v.summary ?? "",
       nextAction: v.nextAction ?? "",
-      reminderAt: v.reminderAt ? v.reminderAt.slice(0, 16) : "",
+      reminderAt: v.reminderAt ? v.reminderAt.slice(0, 10) : "",
     });
     setDialogError(null);
     setVisitDialog({ open: true, mode: "edit", id: v.id, version: v.version });
@@ -1290,11 +1290,11 @@ function ProjectDetailPage() {
       const v = body.data;
       setVisitForm({
         visitType: v.visitType as VisitFormValue["visitType"],
-        visitedAt: v.visitedAt ? v.visitedAt.slice(0, 16) : "",
+        visitedAt: v.visitedAt ? v.visitedAt.slice(0, 10) : "",
         contactName: v.contactName ?? "",
         summary: v.summary ?? "",
         nextAction: v.nextAction ?? "",
-        reminderAt: v.reminderAt ? v.reminderAt.slice(0, 16) : "",
+        reminderAt: v.reminderAt ? v.reminderAt.slice(0, 10) : "",
       });
       setVisitDialog({ open: true, mode: "edit", id: v.id, version: v.version });
       setDialogError(null);
