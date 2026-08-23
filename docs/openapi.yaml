@@ -9537,6 +9537,37 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/purchase-requisitions/{id}/price-suggestions:
+    get:
+      tags: [Purchase Requisitions]
+      summary: Price channel suggestions for PR to PO convert (server-authoritative supplier price snapshot resolution)
+      description: |
+        PR → PO 转单价格通道建议（修复无供应商价格快照时 409 死胡同——前端据此引导 MANUAL 通道录入）。
+        服务端权威解析（与 convert / PO PATCH 完全同语义，复用 resolveSupplierPriceSnapshot）：
+        partnerId=supplier.partnerId + itemId + priceSource=SUPPLIER + isActive + deletedAt=null，priority asc。
+        命中 → snapshot={partnerPriceId, unitPrice, taxRate}（走 SUPPLIER_PRICE_SNAPSHOT）；未命中 / 行无 itemId / supplier 无 partnerId → snapshot=null（前端强制 MANUAL：unitPrice + priceReason）。
+        只读、无副作用；权限：purchase-requisition:approve（与 convert 一致）。
+      operationId: getPurchaseRequisitionPriceSuggestions
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: supplierId, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK（每行价格通道建议）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseRequisitionPriceSuggestionsResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   # ==========================================================================
   # Sprint 5A — Purchase Order（PO = 对供应商的采购承诺事实源）
   # 红线：APPROVED ≠ CONFIRMED；只有 CONFIRMED PO 才是 5B Goods Receipt 合法来源
@@ -19209,6 +19240,38 @@ components:
             status: { type: string, enum: [DRAFT] }
             requisitionId: { type: string, description: 来源 PR id }
 
+    PurchaseRequisitionPriceSuggestionsResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          required: [supplierId, lines]
+          properties:
+            supplierId: { type: string, description: 目标供应商 id }
+            lines:
+              type: array
+              description: 按 PR Line lineNo 升序（前端按序回传 convert lines override）
+              items:
+                type: object
+                required: [lineId, lineNo, description, quantity, snapshot]
+                properties:
+                  lineId: { type: string, description: PR Line id }
+                  lineNo: { type: integer }
+                  itemId: { type: [string, "null"] }
+                  itemCode: { type: [string, "null"] }
+                  itemName: { type: [string, "null"] }
+                  description: { type: string }
+                  quantity: { type: string, description: Decimal 字符串（避免精度丢失） }
+                  uomSymbol: { type: [string, "null"] }
+                  snapshot:
+                    type: [object, "null"]
+                    description: 供应商价格快照解析结果；null=未配置（前端强制 MANUAL 通道）
+                    properties:
+                      partnerPriceId: { type: string }
+                      unitPrice: { type: string, description: Decimal 字符串 }
+                      taxRate: { type: string, description: Decimal 字符串（税档 rate，无税档=0） }
     PurchaseOrderLine:
       type: object
       required: [id, purchaseOrderId, itemId, quantity, priceSource, unitPrice]

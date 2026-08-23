@@ -42,10 +42,33 @@ interface RequisitionDetail {
     description: string;
     quantity: string;
     needDate?: string | null;
-    item?: { code: string | null; name: string | null } | null;
+    item?: { id: string; code: string | null; name: string | null } | null;
     uom?: { symbol: string | null } | null;
   }>;
 }
+
+/** 价格通道（对齐 PO 双通道枚举；无供应商快照时强制 MANUAL） */
+type ConvertPriceSource = "SUPPLIER_PRICE_SNAPSHOT" | "MANUAL";
+
+/** 转单对话框每行价格状态 */
+interface ConvertLineRow {
+  lineId: string;
+  lineNo: number;
+  description: string;
+  quantity: string;
+  itemLabel: string;
+  uomSymbol: string;
+  hasItem: boolean;
+  snapshot: { partnerPriceId: string; unitPrice: string; taxRate: string } | null;
+  priceSource: ConvertPriceSource;
+  unitPrice: string;
+  priceReason: string;
+}
+
+const PRICE_SOURCE_OPTIONS: Array<{ value: ConvertPriceSource; label: string }> = [
+  { value: "SUPPLIER_PRICE_SNAPSHOT", label: "供应商价格快照" },
+  { value: "MANUAL", label: "手工定价" },
+];
 
 function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -76,6 +99,8 @@ function RequisitionDetailPage() {
   const [convertPaymentTerm, setConvertPaymentTerm] = useState("");
   const [convertRemark, setConvertRemark] = useState("");
   const [convertError, setConvertError] = useState<string | null>(null);
+  const [convertLines, setConvertLines] = useState<ConvertLineRow[]>([]);
+  const [suggestLoading, setSuggestLoading] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -129,6 +154,7 @@ function RequisitionDetailPage() {
     setConvertDeliveryDate("");
     setConvertPaymentTerm("");
     setConvertRemark("");
+    setConvertLines([]);
     try {
       const body = await apiFetch<Array<{ id: string; code: string | null; name: string | null }>>("/api/suppliers?pageSize=100");
       setSuppliers(body.data);
@@ -137,16 +163,79 @@ function RequisitionDetailPage() {
     }
   };
 
+  /** 按供应商解析每行价格通道（服务端权威：resolveSupplierPriceSnapshot 语义） */
+  const loadConvertSuggestions = async (supplierId: string) => {
+    setSuggestLoading(true);
+    setConvertError(null);
+    try {
+      const body = await apiFetch<{
+        lines: Array<{
+          lineId: string;
+          lineNo: number;
+          itemId: string | null;
+          itemCode: string | null;
+          itemName: string | null;
+          description: string;
+          quantity: string;
+          uomSymbol: string | null;
+          snapshot: { partnerPriceId: string; unitPrice: string; taxRate: string } | null;
+        }>;
+      }>(`/api/purchase-requisitions/${id}/price-suggestions?supplierId=${encodeURIComponent(supplierId)}`);
+      setConvertLines(
+        body.data.lines.map((l) => ({
+          lineId: l.lineId,
+          lineNo: l.lineNo,
+          description: l.description,
+          quantity: l.quantity,
+          itemLabel: [l.itemCode, l.itemName].filter(Boolean).join(" ") || "—",
+          uomSymbol: l.uomSymbol ?? "—",
+          hasItem: Boolean(l.itemId),
+          snapshot: l.snapshot,
+          // 有快照默认快照通道；无快照 / 无 itemId → 强制 MANUAL（避免 convert 409 PURCHASE_ORDER_PRICE_NOT_FOUND 死胡同）
+          priceSource: l.snapshot ? "SUPPLIER_PRICE_SNAPSHOT" : "MANUAL",
+          unitPrice: "",
+          priceReason: "",
+        })),
+      );
+    } catch (err: unknown) {
+      setConvertError(err instanceof ApiClientError ? err.message : "加载价格通道建议失败");
+    } finally {
+      setSuggestLoading(false);
+    }
+  };
+
+  const updateConvertLine = (index: number, patch: Partial<ConvertLineRow>) => {
+    setConvertLines((prev) => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)));
+  };
+
   const handleConvert = async () => {
     if (!detail || actionBusy) return;
     if (!convertSupplierId) {
       setConvertError("请选择供应商");
       return;
     }
+    if (convertLines.length === 0) {
+      setConvertError("请选择供应商并等待价格通道加载完成");
+      return;
+    }
+    // UX 层校验（领域事实以服务端为准；MANUAL 必填 unitPrice>0 + priceReason；priceSetBy/priceSetAt 由 convert 服务端写入审计）
+    for (let i = 0; i < convertLines.length; i += 1) {
+      const l = convertLines[i];
+      if (l.priceSource === "MANUAL") {
+        const p = Number(l.unitPrice);
+        if (!l.unitPrice || !Number.isFinite(p) || p <= 0) {
+          setConvertError(`第 ${i + 1} 行：手工定价单价必须 > 0`);
+          return;
+        }
+        if (!l.priceReason.trim()) {
+          setConvertError(`第 ${i + 1} 行：手工定价必须填写价格依据`);
+          return;
+        }
+      }
+    }
     setActionBusy(true);
     setActionError(null);
     setConvertError(null);
-    setConvertOpen(false);
     try {
       const body = await apiFetch<{ id: string; code: string; status: string }>(
         `/api/purchase-requisitions/${id}/convert`,
@@ -158,17 +247,24 @@ function RequisitionDetailPage() {
             ...(convertDeliveryDate ? { expectedDeliveryDate: new Date(convertDeliveryDate).toISOString() } : {}),
             ...(convertPaymentTerm.trim() ? { paymentTerm: convertPaymentTerm.trim() } : {}),
             ...(convertRemark.trim() ? { remark: convertRemark.trim() } : {}),
+            // 价格双通道：按 PR 行序传 per-line 通道（快照服务端解析 / MANUAL 授权录入 + priceReason 审计）
+            lines: convertLines.map((l) => ({
+              priceSource: l.priceSource,
+              ...(l.priceSource === "MANUAL"
+                ? { unitPrice: Number(l.unitPrice), priceReason: l.priceReason.trim() }
+                : {}),
+            })),
           }),
         },
       );
+      setConvertOpen(false);
       await refreshDetail();
       if (body.data.id) {
         window.location.href = `/purchasing/orders/${body.data.id}`;
       }
     } catch (err: unknown) {
-      setActionError(
-        err instanceof ApiClientError ? err : new ApiClientError(0, "转单失败", "NETWORK_ERROR"),
-      );
+      // 失败保留在对话框内展示（含 409 PURCHASE_ORDER_PRICE_NOT_FOUND 等业务冲突）
+      setConvertError(err instanceof ApiClientError ? err.message : "转单失败");
     } finally {
       setActionBusy(false);
     }
@@ -311,7 +407,7 @@ function RequisitionDetailPage() {
         onCancel={() => setConfirmSubmit(false)}
       />
 
-      {/* ── 转采购订单对话框（选择供应商 + 可选头字段；行自动复制 PR 行） ── */}
+      {/* ── 转采购订单对话框（选择供应商 + 可选头字段 + 按行价格通道：有快照自动采用 / 无快照强制 MANUAL 手工录入） ── */}
       {convertOpen && (
         <div
           role="dialog"
@@ -320,11 +416,13 @@ function RequisitionDetailPage() {
           onClick={() => setConvertOpen(false)}
         >
           <div
-            className="border-border bg-surface shadow-elevation-lg w-full max-w-md rounded-lg border p-5"
+            className="border-border bg-surface shadow-elevation-lg w-full max-w-2xl rounded-lg border p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-ink-primary text-base font-semibold">转采购订单</h2>
-            <p className="text-ink-secondary mt-2 text-xs">将采购申请行复制为采购订单（DRAFT）；请选择供应商。</p>
+            <p className="text-ink-secondary mt-2 text-xs">
+              将采购申请行复制为采购订单（DRAFT）。选择供应商后按行确认价格通道：有供应商价格快照自动采用；未配置的行必须手工录入单价与价格依据。
+            </p>
             {convertError && (
               <div className="border-status-danger-border mt-3 rounded-md border bg-status-danger-bg p-2 text-sm text-status-danger-text">{convertError}</div>
             )}
@@ -333,7 +431,15 @@ function RequisitionDetailPage() {
                 <label className="block text-xs text-ink-secondary">供应商 *</label>
                 <select
                   value={convertSupplierId}
-                  onChange={(e) => setConvertSupplierId(e.target.value)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setConvertSupplierId(v);
+                    if (v) {
+                      void loadConvertSuggestions(v);
+                    } else {
+                      setConvertLines([]);
+                    }
+                  }}
                   className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
                 >
                   <option value="">选择供应商</option>
@@ -370,6 +476,85 @@ function RequisitionDetailPage() {
                 />
               </div>
             </div>
+
+            <div className="mt-4">
+              <h3 className="text-ink-primary text-sm font-medium">行价格通道</h3>
+              <p className="text-ink-secondary mt-1 text-xs">
+                SUPPLIER_PRICE_SNAPSHOT：服务端从供应商专属价解析（priority 升序）；MANUAL：手工定价 + 价格依据（审计留痕）。
+              </p>
+              {suggestLoading ? (
+                <p className="text-ink-muted mt-2 text-xs">正在加载价格通道建议…</p>
+              ) : convertLines.length === 0 ? (
+                <p className="text-ink-muted mt-2 text-xs">请先选择供应商，加载各行的价格通道建议。</p>
+              ) : (
+                <div className="mt-2 max-h-72 space-y-3 overflow-y-auto pr-1">
+                  {convertLines.map((l, i) => (
+                    <div key={l.lineId} className="border-border rounded-md border p-3">
+                      <div className="text-xs">
+                        <span className="font-medium text-ink-primary">第 {i + 1} 行</span>
+                        <span className="text-ink-secondary"> · {l.itemLabel}</span>
+                        <span className="text-ink-secondary"> · {l.description}</span>
+                        <span className="text-ink-secondary">
+                          {" "}· 数量 {l.quantity}{l.uomSymbol !== "—" ? ` ${l.uomSymbol}` : ""}
+                        </span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-start gap-3">
+                        <div>
+                          <label className="text-ink-secondary block text-xs">价格通道</label>
+                          <select
+                            value={l.priceSource}
+                            disabled={!l.snapshot}
+                            onChange={(e) => updateConvertLine(i, { priceSource: e.target.value as ConvertPriceSource })}
+                            className="focus:border-brand-500 mt-1 rounded-md border border-border px-3 py-1.5 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {PRICE_SOURCE_OPTIONS.map((o) => (
+                              <option key={o.value} value={o.value}>{o.label}</option>
+                            ))}
+                          </select>
+                          {!l.snapshot && (
+                            <p className="border-status-warning-border bg-status-warning-bg text-status-warning-text mt-1 rounded border px-2 py-1 text-xs">
+                              未配置供应商价格快照，请手工录入
+                            </p>
+                          )}
+                        </div>
+                        {l.priceSource === "SUPPLIER_PRICE_SNAPSHOT" && l.snapshot && (
+                          <div className="text-ink-secondary mt-4 text-xs">
+                            快照价 ¥{l.snapshot.unitPrice}（税率 {l.snapshot.taxRate}%）
+                          </div>
+                        )}
+                        {l.priceSource === "MANUAL" && (
+                          <>
+                            <div>
+                              <label className="text-ink-secondary block text-xs">手工单价 *</label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={l.unitPrice}
+                                onChange={(e) => updateConvertLine(i, { unitPrice: e.target.value })}
+                                placeholder="> 0"
+                                className="focus:border-brand-500 mt-1 w-28 rounded-md border border-border px-3 py-1.5 focus:outline-none"
+                              />
+                            </div>
+                            <div className="min-w-[180px] flex-1">
+                              <label className="text-ink-secondary block text-xs">价格依据 *</label>
+                              <input
+                                type="text"
+                                value={l.priceReason}
+                                maxLength={500}
+                                onChange={(e) => updateConvertLine(i, { priceReason: e.target.value })}
+                                placeholder="如：供应商报价单 / 询价记录 / 上次采购价"
+                                className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+                              />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
@@ -382,7 +567,7 @@ function RequisitionDetailPage() {
               <button
                 type="button"
                 onClick={handleConvert}
-                disabled={actionBusy}
+                disabled={actionBusy || suggestLoading}
                 className="bg-brand-600 hover:bg-brand-700 rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {actionBusy ? "转单中…" : "确认转单"}
