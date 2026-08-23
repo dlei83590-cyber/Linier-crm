@@ -16040,6 +16040,19 @@ components:
         deletedAt: { type: [string, "null"], format: date-time }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+        supplierItems:
+          type: array
+          description: 商品优选供应商行（take 1，isPreferred desc；采购单据选商品自动引用采购价/默认供应商/付款条款；用户指令 2026-08-21）
+          items:
+            type: object
+            required: [supplierId, isPreferred]
+            properties:
+              id: { type: string }
+              supplierId: { type: string, description: BusinessPartner id（SupplierItem 既有语义） }
+              supplierCode: { type: [string, "null"] }
+              purchasePrice: { type: [string, "null"], description: 采购参考价（Decimal 字符串） }
+              paymentTerm: { type: [string, "null"], description: 付款条款（商业条款 code） }
+              isPreferred: { type: boolean, description: 优选=采购默认供应商 }
     ItemCreate:
       type: object
       required: [code, name]
@@ -19272,6 +19285,9 @@ components:
                       partnerPriceId: { type: string }
                       unitPrice: { type: string, description: Decimal 字符串 }
                       taxRate: { type: string, description: Decimal 字符串（税档 rate，无税档=0） }
+                  itemSupplierId: { type: [string, "null"], description: 商品优选供应商行 supplierId（BusinessPartner id；采购自动引用默认供应商） }
+                  itemPurchasePrice: { type: [string, "null"], description: 商品优选供应商行采购价（Decimal 字符串；无快照时前端预填 MANUAL） }
+                  itemPaymentTerm: { type: [string, "null"], description: 商品优选供应商行付款条款（商业条款 code；自动带出） }
     PurchaseOrderLine:
       type: object
       required: [id, purchaseOrderId, itemId, quantity, priceSource, unitPrice]

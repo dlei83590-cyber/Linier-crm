@@ -53,7 +53,20 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     where: { purchaseRequisitionId: id, deletedAt: null },
     orderBy: { lineNo: "asc" },
     include: {
-      item: { select: { id: true, code: true, name: true } },
+      item: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          // 商品优选供应商行（SupplierItem；ADR-0012 §9；采购自动引用采购价/供应商/付款条款）
+          supplierItems: {
+            where: { deletedAt: null },
+            orderBy: [{ isPreferred: "desc" }, { createdAt: "desc" }],
+            take: 1,
+            select: { supplierId: true, purchasePrice: true, paymentTerm: true },
+          },
+        },
+      },
       uom: { select: { symbol: true } },
     },
   });
@@ -84,6 +97,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       quantity: line.quantity.toString(),
       uomSymbol: line.uom?.symbol ?? null,
       snapshot,
+      // 商品优选供应商行采购信息（用户指令 2026-08-21：无快照时预填采购价；供应商/付款条款自动带出）
+      itemSupplierId: line.item?.supplierItems?.[0]?.supplierId ?? null,
+      itemPurchasePrice: line.item?.supplierItems?.[0]?.purchasePrice?.toString() ?? null,
+      itemPaymentTerm: line.item?.supplierItems?.[0]?.paymentTerm ?? null,
     });
   }
 

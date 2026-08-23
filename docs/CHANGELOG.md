@@ -2,6 +2,24 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 商品价格逻辑整理：商品采购价+默认供应商+付款条款（用户指令 2026-08-21）
+
+### 新增
+
+- **商品表单「供应商与采购价」区块**（new/edit）：一个商品可配置多个供应商行（SupplierItem，ADR-0012 §9），每行含供应商/采购价/付款条款/优选标记；优选=采购单据自动带出的默认供应商（服务端 isPreferred 唯一）
+- **付款条件引用商业条款列表**：商品表单、PO 创建/编辑、PR 转单对话框的付款条件统一改为 `/api/commercial-terms` 下拉（存 code 快照），不再自由文本
+- **采购选商品自动引用**：
+  - PO 创建页：行选商品 → 未选供应商时自动带出优选供应商（SupplierItem.supplierId=BP → Supplier.partner 映射）+ 币种；有优选采购价时行自动切 MANUAL 预填单价+依据"商品默认采购价"（可改）；PO 头付款条款自动带出
+  - PO 编辑页（DIRECT 行）：同价/付款条款自动带出（供应商为承诺事实锁定）
+  - PR→PO 转单：price-suggestions 每行返回优选供应商行信息（itemSupplierId/itemPurchasePrice/itemPaymentTerm）——无快照行预填商品采购价（MANUAL）；对话框自动预选默认供应商、付款条款自动带出
+- **展示**：商品详情（默认供应商/默认采购价/默认付款条款，取优选行）、PO 详情（付款条款）
+
+### 边界
+
+- 商品采购价是**采购单据预填参考**（MANUAL 通道，可改、可审计），不参与服务端价格解析（PartnerPrice 快照通道语义不变）；价格事实仍由服务端决定
+- SupplierItem.supplierId 为 BusinessPartner（既有语义）；采购单据供应商为 Supplier 记录，通过 partnerId 映射
+
+---
 ## [Unreleased] - 商品价格通道整理：采购转订单 MANUAL 通道（用户指令 2026-08-21）
 
 ### 修复

@@ -60,6 +60,10 @@ interface ConvertLineRow {
   uomSymbol: string;
   hasItem: boolean;
   snapshot: { partnerPriceId: string; unitPrice: string; taxRate: string } | null;
+  // 商品优选供应商行采购信息（用户指令 2026-08-21：无快照时预填商品采购价；供应商/付款条款自动带出）
+  itemSupplierId: string | null;
+  itemPurchasePrice: string | null;
+  itemPaymentTerm: string | null;
   priceSource: ConvertPriceSource;
   unitPrice: string;
   priceReason: string;
@@ -93,7 +97,7 @@ function RequisitionDetailPage() {
   const [actionError, setActionError] = useState<ApiClientError | null>(null);
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
-  const [suppliers, setSuppliers] = useState<Array<{ id: string; code: string | null; name: string | null }>>([]);
+  const [suppliers, setSuppliers] = useState<Array<{ id: string; code: string | null; name: string | null; partner?: { id: string } | null }>>([]);
   const [convertSupplierId, setConvertSupplierId] = useState("");
   const [convertDeliveryDate, setConvertDeliveryDate] = useState("");
   const [convertPaymentTerm, setConvertPaymentTerm] = useState("");
@@ -101,6 +105,7 @@ function RequisitionDetailPage() {
   const [convertError, setConvertError] = useState<string | null>(null);
   const [convertLines, setConvertLines] = useState<ConvertLineRow[]>([]);
   const [suggestLoading, setSuggestLoading] = useState(false);
+  const [commercialTerms, setCommercialTerms] = useState<Array<{ id: string; code: string; name: string }>>([]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -156,10 +161,12 @@ function RequisitionDetailPage() {
     setConvertRemark("");
     setConvertLines([]);
     try {
-      const body = await apiFetch<Array<{ id: string; code: string | null; name: string | null }>>("/api/suppliers?pageSize=100");
+      const body = await apiFetch<Array<{ id: string; code: string | null; name: string | null; partner?: { id: string } | null }>>("/api/suppliers?pageSize=100");
       setSuppliers(body.data);
+      const termBody = await apiFetch<Array<{ id: string; code: string; name: string }>>("/api/commercial-terms?pageSize=100");
+      setCommercialTerms(termBody.data);
     } catch {
-      setConvertError("加载供应商失败");
+      setConvertError("加载供应商/商业条款失败");
     }
   };
 
@@ -179,6 +186,9 @@ function RequisitionDetailPage() {
           quantity: string;
           uomSymbol: string | null;
           snapshot: { partnerPriceId: string; unitPrice: string; taxRate: string } | null;
+          itemSupplierId: string | null;
+          itemPurchasePrice: string | null;
+          itemPaymentTerm: string | null;
         }>;
       }>(`/api/purchase-requisitions/${id}/price-suggestions?supplierId=${encodeURIComponent(supplierId)}`);
       setConvertLines(
@@ -191,12 +201,30 @@ function RequisitionDetailPage() {
           uomSymbol: l.uomSymbol ?? "—",
           hasItem: Boolean(l.itemId),
           snapshot: l.snapshot,
+          itemSupplierId: l.itemSupplierId,
+          itemPurchasePrice: l.itemPurchasePrice,
+          itemPaymentTerm: l.itemPaymentTerm,
           // 有快照默认快照通道；无快照 / 无 itemId → 强制 MANUAL（避免 convert 409 PURCHASE_ORDER_PRICE_NOT_FOUND 死胡同）
           priceSource: l.snapshot ? "SUPPLIER_PRICE_SNAPSHOT" : "MANUAL",
-          unitPrice: "",
-          priceReason: "",
+          // 无快照且有商品默认采购价 → 预填单价+依据（自动引用商品采购价）
+          unitPrice: l.snapshot || !l.itemPurchasePrice ? "" : String(l.itemPurchasePrice),
+          priceReason: l.snapshot || !l.itemPurchasePrice ? "" : "商品默认采购价",
         })),
       );
+      // 付款条款自动带出：对话框未设置 && 某行商品有默认付款条款（用户指令 2026-08-21）
+      setConvertPaymentTerm((prev) => {
+        if (prev) return prev;
+        const first = body.data.lines.find((l) => l.itemPaymentTerm);
+        return first?.itemPaymentTerm ?? "";
+      });
+      // 默认供应商自动预选：对话框未选 && 某行商品优选供应商（SupplierItem.supplierId=BP → Supplier.partner 映射）
+      setConvertSupplierId((prev) => {
+        if (prev) return prev;
+        const first = body.data.lines.find((l) => l.itemSupplierId);
+        if (!first?.itemSupplierId) return prev;
+        const s = suppliers.find((it) => it.partner?.id === first.itemSupplierId);
+        return s?.id ?? prev;
+      });
     } catch (err: unknown) {
       setConvertError(err instanceof ApiClientError ? err.message : "加载价格通道建议失败");
     } finally {
@@ -458,13 +486,19 @@ function RequisitionDetailPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs text-ink-secondary">付款条件（可选，≤100）</label>
-                <input
+                <label className="block text-xs text-ink-secondary">付款条件（商业条款，可选）</label>
+                <select
                   value={convertPaymentTerm}
                   onChange={(e) => setConvertPaymentTerm(e.target.value)}
-                  maxLength={100}
                   className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
-                />
+                >
+                  <option value="">不设置</option>
+                  {commercialTerms.map((t) => (
+                    <option key={t.id} value={t.code}>
+                      {t.code} {t.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-xs text-ink-secondary">备注（可选，≤1000）</label>

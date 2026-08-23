@@ -32,6 +32,11 @@ interface ItemOption {
   id: string;
   code: string | null;
   name: string | null;
+  // 商品采购信息（优选供应商行；items GET include supplierItems take 1；用户指令 2026-08-21）
+  supplierItems?: Array<{
+    purchasePrice?: string | number | null;
+    paymentTerm?: string | null;
+  }>;
 }
 
 interface UomOption {
@@ -47,6 +52,7 @@ interface PODetail {
   sourceType?: string | null;
   status: string;
   currency?: string | null;
+  paymentTerm?: string | null;
   expectedDeliveryDate?: string | null;
   remark?: string | null;
   version: number;
@@ -112,6 +118,8 @@ function PurchaseOrderEditForm() {
   const [loadError, setLoadError] = useState<ApiClientError | null>(null);
 
   const [remark, setRemark] = useState("");
+  const [paymentTerm, setPaymentTerm] = useState("");
+  const [commercialTerms, setCommercialTerms] = useState<Array<{ id: string; code: string; name: string }>>([]);
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
   const [changeReason, setChangeReason] = useState("");
   const [lines, setLines] = useState<POEditLineRow[]>([]);
@@ -138,6 +146,7 @@ function PurchaseOrderEditForm() {
         setNotEditable(false);
         setVersion(d.version);
         setRemark(d.remark ?? "");
+        setPaymentTerm(d.paymentTerm ?? "");
         // type=date 需要 YYYY-MM-DD（API 返回 ISO datetime）
         setExpectedDeliveryDate(d.expectedDeliveryDate ? d.expectedDeliveryDate.slice(0, 10) : "");
         setLines(
@@ -174,10 +183,12 @@ function PurchaseOrderEditForm() {
     Promise.all([
       apiFetch<ItemOption[]>("/api/items?pageSize=100", { signal: controller.signal }),
       apiFetch<UomOption[]>("/api/unit-of-measures?pageSize=100", { signal: controller.signal }),
+      apiFetch<Array<{ id: string; code: string; name: string }>>("/api/commercial-terms?pageSize=100", { signal: controller.signal }),
     ])
-      .then(([itemBody, uomBody]) => {
+      .then(([itemBody, uomBody, termBody]) => {
         setItems(itemBody.data);
         setUoms(uomBody.data);
+        setCommercialTerms(termBody.data);
       })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -215,6 +226,30 @@ function PurchaseOrderEditForm() {
     return null;
   };
 
+  /** 行编辑：选商品自动引用商品默认采购价/付款条款（供应商/币种为承诺事实锁定不可自动改） */
+  const handleLinesChange = (next: POEditLineRow[]) => {
+    for (let i = 0; i < next.length; i += 1) {
+      const prevRow = lines[i];
+      const nextRow = next[i];
+      if (!prevRow || !nextRow || prevRow.itemId === nextRow.itemId) continue;
+      const item = items.find((it) => it.id === nextRow.itemId);
+      if (!item) continue;
+      const pref = item.supplierItems?.[0];
+      // 商品优选供应商行采购价：行仍为快照通道且未手填时，预填 MANUAL（依据自动；用户可改回快照）
+      if (pref?.purchasePrice && nextRow.priceSource === "SUPPLIER_PRICE_SNAPSHOT" && !nextRow.unitPrice) {
+        nextRow.priceSource = "MANUAL";
+        nextRow.unitPrice = String(pref.purchasePrice);
+        nextRow.priceReason = "商品默认采购价";
+      }
+      // 商品优选供应商行付款条款：PO 头未设置时自动带出
+      if (!paymentTerm && pref?.paymentTerm) {
+        setPaymentTerm(pref.paymentTerm);
+      }
+    }
+    setLines(next);
+    setDirty(true);
+  };
+
   const handleSave = () => {
     if (submitting) return;
     const firstError = validate();
@@ -229,6 +264,7 @@ function PurchaseOrderEditForm() {
       body: JSON.stringify({
         version,
         remark: remark.trim() || null,
+        paymentTerm: paymentTerm || null,
         ...(expectedDeliveryDate ? { expectedDeliveryDate: new Date(expectedDeliveryDate).toISOString() } : { expectedDeliveryDate: null }),
         lines: lines.map((l) => ({
           itemId: l.itemId,
@@ -345,6 +381,23 @@ function PurchaseOrderEditForm() {
         <section className="border-border rounded-md border p-4">
           <h2 className="text-ink-primary mb-3 text-sm font-semibold">基本信息</h2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <FormField label="付款条件（商业条款）">
+              <select
+                value={paymentTerm}
+                onChange={(e) => {
+                  setPaymentTerm(e.target.value);
+                  setDirty(true);
+                }}
+                className={inputClass}
+              >
+                <option value="">不设置</option>
+                {commercialTerms.map((t) => (
+                  <option key={t.id} value={t.code}>
+                    {t.code} {t.name}
+                  </option>
+                ))}
+              </select>
+            </FormField>
             <FormField label="期望交货日期">
               <input
                 type="date"
@@ -384,10 +437,7 @@ function PurchaseOrderEditForm() {
         <LineEditor<POEditLineRow>
           columns={lineColumns}
           lines={lines}
-          onChange={(next) => {
-            setLines(next);
-            setDirty(true);
-          }}
+          onChange={handleLinesChange}
           onAdd={emptyLine}
           addLabel="添加行"
           disableAdd={isRequisition}

@@ -83,6 +83,9 @@
 | G5 | 供应商物料列表（含 supplier 信息） | GET .../supplier-items | 200 |
 | G6 | 更新（MOQ/LeadTime/Currency/PurchasePrice/Incoterm/PaymentTerm） | PATCH .../supplier-items/:id | 200 |
 | G7 | 删除供应商关联 | DELETE .../supplier-items/:id | 200 |
+| G8 | 商品列表带优选供应商行 | GET /api/items（用户指令 2026-08-21） | 200；每项 supplierItems=take 1（isPreferred desc，采购自动引用） |
+| G9 | 优选唯一 | 商品多个供应商行标 isPreferred | 服务端 updateMany 取消其余行，仅一行 isPreferred=true（POST/PATCH 均处理） |
+| G10 | 商品表单维护 | 创建商品时随行 POST supplier-items；编辑时增删改 diff | 采购选商品自动带出优选行采购价/付款条款/供应商 |
 
 ## H. ItemRevision（版本发布）
 

@@ -49,6 +49,15 @@ interface ItemDetail {
   isManufacturable?: boolean | null;
   version: number;
   createdAt: string;
+  // 供应商与采购价（SupplierItem；详情 GET 已 include supplierItems）
+  supplierItems?: Array<{
+    id: string;
+    supplierId: string;
+    purchasePrice?: string | number | null;
+    paymentTerm?: string | null;
+    isPreferred: boolean;
+    supplier?: { id: string; code: string | null; name: string | null } | null;
+  }>;
   updatedAt: string;
   category?: { id: string; code: string | null; name: string | null } | null;
   stockUom?: { id: string; code: string | null; name: string | null; symbol: string | null } | null;
@@ -202,6 +211,33 @@ function ItemDetailPage() {
             <InfoItem label="分类" value={detail.category?.name ?? null} />
             <InfoItem label="品牌" value={detail.brand} />
             <InfoItem label="制造商" value={detail.manufacturer} />
+            <InfoItem
+              label="默认供应商"
+              value={
+                (() => {
+                  const pref = (detail.supplierItems ?? []).find((s) => s.isPreferred) ?? (detail.supplierItems ?? [])[0];
+                  return pref?.supplier ? `${pref.supplier.name ?? ""}${pref.supplier.code ? `（${pref.supplier.code}）` : ""}`.trim() : null;
+                })()
+              }
+            />
+            <InfoItem
+              label="默认采购价"
+              value={
+                (() => {
+                  const pref = (detail.supplierItems ?? []).find((s) => s.isPreferred) ?? (detail.supplierItems ?? [])[0];
+                  return pref?.purchasePrice == null ? null : `¥${String(pref.purchasePrice)}`;
+                })()
+              }
+            />
+            <InfoItem
+              label="默认付款条款"
+              value={
+                (() => {
+                  const pref = (detail.supplierItems ?? []).find((s) => s.isPreferred) ?? (detail.supplierItems ?? [])[0];
+                  return pref?.paymentTerm ?? null;
+                })()
+              }
+            />
           </div>
         }
         audit={
