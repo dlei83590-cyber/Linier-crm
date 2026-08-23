@@ -168,8 +168,15 @@ function InspectionDetailPage() {
               <button
                 type="button"
                 onClick={() => {
-                  setQualifiedQty(detail.qualifiedQty);
-                  setRejectedQty(detail.rejectedQty);
+                  // 质检数量/合规数量默认采购数量（可检数量 = 收货数量 - 现场拒收；用户指令 2026-08-21）
+                  // SKIP 免检由服务端强制全合格；SPOT/FULL 默认全合格，用户可改
+                  const line = detail.purchaseReceiptLine;
+                  const inspectable = Math.max(
+                    Number(line?.quantity ?? 0) - Number(line?.rejectedOnReceiptQty ?? 0),
+                    0,
+                  );
+                  setQualifiedQty(String(inspectable));
+                  setRejectedQty("0");
                   setCompleteOpen(true);
                 }}
                 disabled={actionBusy}

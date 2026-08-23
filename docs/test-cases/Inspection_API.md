@@ -64,6 +64,7 @@
 | E9 | 版本冲突 | CAS 未命中 | 409 VERSION_CONFLICT |
 | E10 | 事件 | complete 成功后 | InspectionCompleted 事务后发布（载荷含检验行/模式/结论/数量/操作人，**不含库存余额**） |
 | E11 | 5B 边界 | complete 全流程 | **无 Stock / InventoryMovement 写入**（6A 唯一事实源） |
+| E12 | 默认全合格（用户指令 2026-08-21） | SPOT/FULL 打开完成对话框（inspectableQty=100） | 前端合格数量默认 100、拒收默认 0（质检数量/合规数量默认采购数量，可改） |
 
 ## F. 事件（EVENTS.md v1.22 终态）
 
