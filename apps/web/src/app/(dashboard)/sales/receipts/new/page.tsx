@@ -43,13 +43,19 @@ function toIso(value: string): string | undefined {
   return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
 }
 
+/** 本地今日 YYYY-MM-DD（date 输入默认值；用户指令 2026-08-21：全站日期默认今天） */
+function todayInput(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function ReceiptCreateForm() {
   const router = useRouter();
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [customerId, setCustomerId] = useState("");
   const [currency, setCurrency] = useState("CNY");
   const [amount, setAmount] = useState("");
-  const [receiptDate, setReceiptDate] = useState("");
+  const [receiptDate, setReceiptDate] = useState(todayInput);
   const [paymentMethod, setPaymentMethod] = useState<string>("BANK_TRANSFER");
   const [referenceNo, setReferenceNo] = useState("");
   const [changeReason, setChangeReason] = useState("");
@@ -203,7 +209,7 @@ function ReceiptCreateForm() {
           <div>
             <label className="block text-xs text-ink-secondary">收款日期（可选）</label>
             <input
-              type="datetime-local"
+              type="date"
               value={receiptDate}
               onChange={(e) => {
                 setReceiptDate(e.target.value);

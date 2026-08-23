@@ -29,6 +29,12 @@ interface LineForm {
   vatRecoverable: boolean;
 }
 
+/** 本地今日 YYYY-MM-DD（date 输入默认值；用户指令 2026-08-21：全站日期默认今天） */
+function todayInput(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 const EMPTY_LINE: LineForm = {
   purchaseOrderLineId: "",
   warehouseReceiptLineId: "",
@@ -44,12 +50,12 @@ function SupplierInvoiceCreateForm() {
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [supplierId, setSupplierId] = useState("");
   const [supplierInvoiceNo, setSupplierInvoiceNo] = useState("");
-  const [invoiceDate, setInvoiceDate] = useState("");
-  const [receivedDate, setReceivedDate] = useState("");
+  const [invoiceDate, setInvoiceDate] = useState(todayInput);
+  const [receivedDate, setReceivedDate] = useState(todayInput);
   // 单币种 CNY 固定（表单无币种/汇率输入；setter 不暴露避免 lint unused）
   const [currency] = useState("CNY");
   const [exchangeRate] = useState("1");
-  const [paymentDueDate, setPaymentDueDate] = useState("");
+  const [paymentDueDate, setPaymentDueDate] = useState(todayInput);
   const [remark, setRemark] = useState("");
   // VAT 要素（ADR-0043）：进项发票类型（默认普票）+ 税务号码
   const [invoiceType, setInvoiceType] = useState("ORDINARY_VAT");

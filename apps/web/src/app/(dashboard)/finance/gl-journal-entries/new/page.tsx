@@ -21,7 +21,10 @@ function ManualEntryForm() {
   const toast = useToast();
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
   const [accountsLoaded, setAccountsLoaded] = useState(false);
-  const [postingDate, setPostingDate] = useState(new Date().toISOString().slice(0, 10));
+  const [postingDate, setPostingDate] = useState(() => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+});
   const [summary, setSummary] = useState("");
   // 凭证字 + 附件张数（ADR-0044）
   const [voucherType, setVoucherType] = useState("GENERAL");

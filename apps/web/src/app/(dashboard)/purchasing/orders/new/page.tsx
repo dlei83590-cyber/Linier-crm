@@ -86,6 +86,12 @@ const PRICE_SOURCE_OPTIONS = [
   { value: "MANUAL", label: "手工定价" },
 ];
 
+/** 本地今日 YYYY-MM-DD（date 输入默认值；用户指令 2026-08-21：全站日期默认今天） */
+function todayInput(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 const inputClass = INPUT_CLASS;
 
 
@@ -101,7 +107,7 @@ function PurchaseOrderCreateForm() {
   const [currency, setCurrency] = useState("");
   const [paymentTerm, setPaymentTerm] = useState("");
   const [commercialTerms, setCommercialTerms] = useState<Array<{ id: string; code: string; name: string }>>([]);
-  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
+  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState(todayInput);
   const [remark, setRemark] = useState("");
   const [lines, setLines] = useState<POItemOptionRow[]>([emptyLine()]);
 

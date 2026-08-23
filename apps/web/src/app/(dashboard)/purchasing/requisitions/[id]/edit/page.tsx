@@ -62,7 +62,8 @@ function toLocalInput(iso: string | null | undefined): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  // 用户指令 2026-08-21：全站取消分钟格式 → date（YYYY-MM-DD）
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 function RequisitionEditForm() {
@@ -310,7 +311,7 @@ function RequisitionEditForm() {
           <div>
             <label className="block text-xs text-ink-secondary">期望日期（可选）</label>
             <input
-              type="datetime-local"
+              type="date"
               value={needDate}
               onChange={(e) => {
                 setNeedDate(e.target.value);
@@ -410,7 +411,7 @@ function RequisitionEditForm() {
                   </td>
                   <td className="px-3 py-2">
                     <input
-                      type="datetime-local"
+                      type="date"
                       value={line.needDate}
                       onChange={(e) => updateLine(idx, { needDate: e.target.value })}
                       className="focus:border-brand-500 rounded-md border border-border px-2 py-1.5 focus:outline-none"

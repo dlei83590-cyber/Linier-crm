@@ -74,6 +74,12 @@ const PRICE_SOURCE_OPTIONS: Array<{ value: ConvertPriceSource; label: string }> 
   { value: "MANUAL", label: "手工定价" },
 ];
 
+/** 本地今日 YYYY-MM-DD（date 输入默认值；用户指令 2026-08-21：全站日期默认今天） */
+function todayInput(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
@@ -99,7 +105,7 @@ function RequisitionDetailPage() {
   const [convertOpen, setConvertOpen] = useState(false);
   const [suppliers, setSuppliers] = useState<Array<{ id: string; code: string | null; name: string | null; partner?: { id: string } | null }>>([]);
   const [convertSupplierId, setConvertSupplierId] = useState("");
-  const [convertDeliveryDate, setConvertDeliveryDate] = useState("");
+  const [convertDeliveryDate, setConvertDeliveryDate] = useState(todayInput);
   const [convertPaymentTerm, setConvertPaymentTerm] = useState("");
   const [convertRemark, setConvertRemark] = useState("");
   const [convertError, setConvertError] = useState<string | null>(null);
@@ -479,7 +485,7 @@ function RequisitionDetailPage() {
               <div>
                 <label className="block text-xs text-ink-secondary">期望交期（可选）</label>
                 <input
-                  type="datetime-local"
+                  type="date"
                   value={convertDeliveryDate}
                   onChange={(e) => setConvertDeliveryDate(e.target.value)}
                   className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
