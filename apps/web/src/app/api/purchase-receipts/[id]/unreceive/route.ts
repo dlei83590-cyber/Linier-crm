@@ -40,7 +40,33 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
   const whrCount = await prisma.warehouseReceipt.count({ where: { purchaseReceiptId: id, deletedAt: null } });
   if (whrCount > 0) {
-    return failConflict(ERROR_CODES.PURCHASE_RECEIPT_INVALID_STATE, `关联 ${whrCount} 张入库单，禁止反收货（请先处理入库）`);
+    // 集成在仓库收货中退货（用户指令 2026-08-21）：入库行已全部 RETURNED 退货 → 允许反收货（退货+反收货一键完成）
+    const whrLines = await prisma.warehouseReceiptLine.findMany({
+      where: { warehouseReceipt: { purchaseReceiptId: id, deletedAt: null }, deletedAt: null },
+      select: { id: true, quantity: true },
+    });
+    if (whrLines.length > 0) {
+      const totalWhr = whrLines.reduce((s, l) => s.plus(l.quantity), new Prisma.Decimal(0));
+      const returnedAgg = await prisma.purchaseReturnLine.aggregate({
+        where: {
+          sourceRefType: "WAREHOUSE_RECEIPT_LINE",
+          sourceWarehouseReceiptLineId: { in: whrLines.map((l) => l.id) },
+          purchaseReturn: { status: "RETURNED", deletedAt: null },
+          deletedAt: null,
+        },
+        _sum: { quantity: true },
+      });
+      const totalReturned = returnedAgg._sum.quantity ?? new Prisma.Decimal(0);
+      if (totalReturned.lt(totalWhr)) {
+        return failConflict(
+          ERROR_CODES.PURCHASE_RECEIPT_INVALID_STATE,
+          `关联 ${whrCount} 张入库单且未全部退货，禁止反收货（请在仓库收货中完成退货）`,
+        );
+      }
+      // 全部已退货 → 允许反收货（回滚履约投影）
+    } else {
+      return failConflict(ERROR_CODES.PURCHASE_RECEIPT_INVALID_STATE, `关联 ${whrCount} 张入库单，禁止反收货（请先处理入库）`);
+    }
   }
   const inspCount = await prisma.inspection.count({
     where: { purchaseReceiptLine: { purchaseReceiptId: id }, deletedAt: null },

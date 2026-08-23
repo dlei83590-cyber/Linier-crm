@@ -33,13 +33,21 @@ interface WarehouseReceiptDetail {
   postedAt?: string | null;
   remark?: string | null;
   createdAt: string;
-  purchaseReceipt?: { code: string | null; status: string | null; receivedAt?: string | null } | null;
+  purchaseReceipt?: {
+    id?: string | null;
+    code: string | null;
+    status: string | null;
+    receivedAt?: string | null;
+    purchaseOrder?: { id?: string | null; code?: string | null } | null;
+  } | null;
   warehouse?: { name: string | null } | null;
   location?: { name: string | null } | null;
   postedBy?: { name: string | null } | null;
   lines?: Array<{
     id: string;
     quantity: string;
+    // 核销闭环：可退余额 = quantity - 已退（一键退货使用）
+    returnableQty?: string;
     batchNo?: string | null;
     serialNos?: string[];
     mfgDate?: string | null;
@@ -72,6 +80,10 @@ function WarehouseReceiptDetailPage() {
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiClientError | null>(null);
   const [confirmPost, setConfirmPost] = useState(false);
+  // 一键退货（集成在仓库收货中退货，用户指令 2026-08-21）：退货 + 反收货
+  const [returnOpen, setReturnOpen] = useState(false);
+  const [returnDisposition, setReturnDisposition] = useState("REPLACE_REQUIRED");
+  const [returnBusy, setReturnBusy] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -122,6 +134,63 @@ function WarehouseReceiptDetailPage() {
     }
   };
 
+  /** 一键退货（集成在仓库收货中）：创建退货（全部可退行）→ 完成退货（GRIR REVERSAL + PO reopen）→ 反收货（回滚收货投影） */
+  const handleReturn = async () => {
+    if (!detail || returnBusy || actionBusy) return;
+    const poId = detail.purchaseReceipt?.purchaseOrder?.id;
+    const rcId = detail.purchaseReceipt?.id;
+    if (!poId || !rcId) {
+      setActionError(new ApiClientError(0, "缺少来源采购订单/收货单信息", "INVALID"));
+      return;
+    }
+    const rows = (detail.lines ?? []).filter((l) => Number(l.returnableQty ?? l.quantity ?? 0) > 0);
+    if (rows.length === 0) {
+      setActionError(new ApiClientError(0, "该入库单无可退行（已全部退货）", "INVALID"));
+      return;
+    }
+    setReturnBusy(true);
+    setActionError(null);
+    try {
+      // ① 创建退货单（DRAFT；全部可退行，数量=可退余额）
+      const created = await apiFetch<{ id: string }>("/api/purchase-returns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          purchaseOrderId: poId,
+          returnType: "RETURN_AFTER_STOCK_IN",
+          remark: `仓库收货一键退货（入库单 ${detail.code}）`,
+          lines: rows.map((l) => ({
+            sourceRefType: "WAREHOUSE_RECEIPT_LINE",
+            sourceWarehouseReceiptLineId: l.id,
+            quantity: Number(l.returnableQty ?? l.quantity),
+            disposition: returnDisposition,
+            returnReason: "仓库收货一键退货",
+          })),
+        }),
+      });
+      // ② 完成退货（RETURNED：GRIR REVERSAL + PO 履约 reopen）
+      await apiFetch(`/api/purchase-returns/${created.data.id}/return`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ version: 1 }),
+      });
+      // ③ 反收货（收货单全部入库行已退货 → 回滚履约投影）
+      await apiFetch(`/api/purchase-receipts/${rcId}/unreceive`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ changeReason: "仓库收货一键退货（含反收货）" }),
+      });
+      setReturnOpen(false);
+      await refreshDetail();
+      setActionError(null);
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "退货失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setReturnBusy(false);
+    }
+  };
   if (loading) {
     return (
       <AppPage>
@@ -174,6 +243,17 @@ function WarehouseReceiptDetailPage() {
                 {actionBusy ? "处理中…" : "过账"}
               </button>
             </>
+          ) : detail.status === "POSTED" &&
+            canEdit &&
+            (detail.lines ?? []).some((l) => Number(l.returnableQty ?? l.quantity ?? 0) > 0) ? (
+            <button
+              type="button"
+              onClick={() => setReturnOpen(true)}
+              disabled={actionBusy || returnBusy}
+              className="rounded-md border border-status-danger-border bg-status-danger-bg/10 px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-status-danger-bg/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {returnBusy ? "退货中…" : "退货（一键）"}
+            </button>
           ) : undefined
         }
         summary={
@@ -249,6 +329,58 @@ function WarehouseReceiptDetailPage() {
         }}
         onCancel={() => setConfirmPost(false)}
       />
+
+      {/* ── 一键退货对话框（集成在仓库收货中退货 + 反收货；用户指令 2026-08-21） ── */}
+      {returnOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          onClick={() => setReturnOpen(false)}
+        >
+          <div
+            className="border-border bg-surface shadow-elevation-lg w-full max-w-md rounded-lg border p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-ink-primary text-base font-semibold">退货并反收货（一键）</h2>
+            <p className="text-ink-secondary mt-2 text-xs">
+              对全部可退入库行创建退货并完成（GRIR 冲销 + PO 履约 reopen），同时反收货回滚收货投影（收货单回草稿、入库单可删）。
+            </p>
+            <div className="mt-4 text-sm">
+              <label className="block text-xs text-ink-secondary">处置方式（必填）</label>
+              <select
+                value={returnDisposition}
+                onChange={(e) => setReturnDisposition(e.target.value)}
+                className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+              >
+                <option value="REPLACE_REQUIRED">补货（供应商仍欠货，重开 PO 待交）</option>
+                <option value="CREDIT_ONLY">仅退款（不重开待交）</option>
+              </select>
+              <p className="text-ink-muted mt-2 text-xs">
+                将退货 {detail.lines?.length ?? 0} 行、数量按各可退余额自动带出。
+              </p>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setReturnOpen(false)}
+                disabled={returnBusy}
+                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleReturn}
+                disabled={returnBusy}
+                className="rounded-md bg-status-danger-bg/10 border border-status-danger-border px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-status-danger-bg/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {returnBusy ? "退货中…" : "确认退货并反收货"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppPage>
   );
 }

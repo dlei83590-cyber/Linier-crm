@@ -24,7 +24,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const receipt = await prisma.warehouseReceipt.findFirst({
     where: { id, deletedAt: null },
     include: {
-      purchaseReceipt: { select: { id: true, code: true, status: true, receivedAt: true } },
+      purchaseReceipt: {
+        select: {
+          id: true,
+          code: true,
+          status: true,
+          receivedAt: true,
+          // 一键退货需要 PO id（集成在仓库收货中退货，用户指令 2026-08-21）
+          purchaseOrder: { select: { id: true, code: true } },
+        },
+      },
       warehouse: { select: { id: true, code: true, name: true } },
       location: { select: { id: true, code: true, name: true } },
       postedBy: { select: { id: true, name: true, email: true } },
@@ -354,7 +363,33 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   const existing = await prisma.warehouseReceipt.findFirst({ where: { id, deletedAt: null } });
   if (!existing) return failNotFound(ERROR_CODES.WAREHOUSE_RECEIPT_NOT_FOUND, "入库单不存在");
   if (existing.status === "POSTED") {
-    return failConflict(ERROR_CODES.WAREHOUSE_RECEIPT_INVALID_STATE, "已过账入库单禁止删除（已形成库存/GRIR 事实；请先回退过账）");
+    // 集成在仓库收货中退货（用户指令 2026-08-21）：全部入库行已 RETURNED 退货 → GRIR 已 REVERSAL，允许删除（退货+反收货一键完成）
+    const whrLines = await prisma.warehouseReceiptLine.findMany({
+      where: { warehouseReceiptId: id, deletedAt: null },
+      select: { id: true, quantity: true },
+    });
+    if (whrLines.length > 0) {
+      const totalWhr = whrLines.reduce((s, l) => s.plus(l.quantity), new Prisma.Decimal(0));
+      const returnedAgg = await prisma.purchaseReturnLine.aggregate({
+        where: {
+          sourceRefType: "WAREHOUSE_RECEIPT_LINE",
+          sourceWarehouseReceiptLineId: { in: whrLines.map((l) => l.id) },
+          purchaseReturn: { status: "RETURNED", deletedAt: null },
+          deletedAt: null,
+        },
+        _sum: { quantity: true },
+      });
+      const totalReturned = returnedAgg._sum.quantity ?? new Prisma.Decimal(0);
+      if (totalReturned.lt(totalWhr)) {
+        return failConflict(
+          ERROR_CODES.WAREHOUSE_RECEIPT_INVALID_STATE,
+          "已过账且未全部退货，禁止删除（请在仓库收货中完成退货）",
+        );
+      }
+      // 全部已退货 → 允许删除
+    } else {
+      return failConflict(ERROR_CODES.WAREHOUSE_RECEIPT_INVALID_STATE, "已过账入库单禁止删除（已形成库存/GRIR 事实）");
+    }
   }
   if (existing.status !== "DRAFT" && existing.status !== "CANCELLED") {
     return failConflict(ERROR_CODES.WAREHOUSE_RECEIPT_INVALID_STATE, `仅 DRAFT/CANCELLED 状态可删除（当前 ${existing.status}）`);
