@@ -118,7 +118,8 @@ function PurchaseReturnCreateForm() {
         ? `/api/purchase-receipts?pageSize=100&purchaseOrderId=${encodeURIComponent(purchaseOrderId)}`
         : "/api/purchase-receipts?pageSize=100";
     } else if (refType === "WAREHOUSE_RECEIPT_LINE") {
-      url = "/api/warehouse-receipts?pageSize=100";
+      // 已入库退货：只显示 POSTED（已过账）入库单——DRAFT/CANCELLED 不可退（核销闭环）
+      url = "/api/warehouse-receipts?pageSize=100&status=POSTED";
     } else {
       url = "/api/inspections?pageSize=100";
     }
@@ -433,6 +434,11 @@ function PurchaseReturnCreateForm() {
                         ))}
                       </select>
                       {line.docLoading && <p className="text-xs text-ink-muted">加载中…</p>}
+                      {!line.docLoading && line.sourceDocId && line.sourceDocLines.length === 0 && (
+                        <p className="text-xs text-status-warning-text">
+                          该来源无可退余额（现场拒收/质检拒收为 0）；已入库退货请选择来源类型「入库行」
+                        </p>
+                      )}
                       {fieldErrors[`lines.${idx}.source`] && (
                         <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors[`lines.${idx}.source`]}</p>
                       )}

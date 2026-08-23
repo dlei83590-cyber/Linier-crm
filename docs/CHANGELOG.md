@@ -2,6 +2,21 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 采购层层回退打通 + 退货可用（用户指令 2026-08-21 反馈）
+
+### 修复
+
+- **采购退货可用**：入库行来源只显示 POSTED（已过账）入库单（DRAFT/CANCELLED 不可退）；来源行无可退余额时明确提示"现场拒收/质检拒收为 0 时请选择来源类型「入库行」"——修复"退货完全不能用"（RECEIPT_LINE/INSPECTION 余额通常为 0，正确路径是已入库退货）
+- **层层回退链条打通**：补上质检/入库两个缺失环节——
+  - **质检 DELETE**（列表删除按钮）：PENDING 取消检验 / COMPLETE 回退结论；有入库/退货下链禁止删除（软删）
+  - **入库 DELETE**（列表删除按钮）：DRAFT/CANCELLED 可删；POSTED 禁止（已形成库存/GRIR 事实，回退过账属高风险单独 Gate）
+  - 链条完整：删入库 → 删质检 → 反收货 → 删收货 → 删 PO → 回退 PR（此前质检/入库删不掉导致 PR 永远无法回退——"一窍不通"根因）
+
+### 边界
+
+- POSTED 入库回退过账（库存/GRIR 回滚）不在本次范围（高风险单独 Gate）；发票红冲/付款冲销已有
+
+---
 ## [Unreleased] - 采购全链核销闭环：已核销来源不再出现 + 订单全量信息（用户指令 2026-08-21）
 
 ### 修复

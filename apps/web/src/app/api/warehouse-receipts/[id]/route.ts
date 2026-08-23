@@ -338,3 +338,48 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   return ok(updated);
 }
+
+/** DELETE /api/warehouse-receipts/:id（层层回退-无下链可删，用户指令 2026-08-21）
+ * 可删：DRAFT/CANCELLED（未过账）；POSTED 禁止删除（已形成库存/GRIR 事实——回退过账属高风险单独 Gate）。
+ * 软删 header + lines。 */
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await authenticate(request);
+  const denied = requirePermission(user, "warehouse-receipt:delete");
+  if (denied) return denied;
+  requestLog(request, user?.id, "warehouse-receipt.delete");
+
+  const { id } = await params;
+  const meta = requestMeta(request);
+
+  const existing = await prisma.warehouseReceipt.findFirst({ where: { id, deletedAt: null } });
+  if (!existing) return failNotFound(ERROR_CODES.WAREHOUSE_RECEIPT_NOT_FOUND, "入库单不存在");
+  if (existing.status === "POSTED") {
+    return failConflict(ERROR_CODES.WAREHOUSE_RECEIPT_INVALID_STATE, "已过账入库单禁止删除（已形成库存/GRIR 事实；请先回退过账）");
+  }
+  if (existing.status !== "DRAFT" && existing.status !== "CANCELLED") {
+    return failConflict(ERROR_CODES.WAREHOUSE_RECEIPT_INVALID_STATE, `仅 DRAFT/CANCELLED 状态可删除（当前 ${existing.status}）`);
+  }
+
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.warehouseReceipt.update({
+      where: { id },
+      data: { deletedAt: now, isActive: false, updatedById: user!.id },
+    });
+    await tx.warehouseReceiptLine.updateMany({
+      where: { warehouseReceiptId: id, deletedAt: null },
+      data: { deletedAt: now, updatedById: user!.id },
+    });
+  });
+
+  await writeAuditLog({
+    actorId: user?.id,
+    action: "warehouse-receipt.delete",
+    entityType: "warehouse-receipt",
+    entityId: id,
+    afterData: { warehouseReceiptId: id, deleted: true },
+    ...meta,
+  });
+
+  return ok({ id, deleted: true });
+}

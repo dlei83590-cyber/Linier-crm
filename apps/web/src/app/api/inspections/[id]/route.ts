@@ -169,3 +169,47 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   return ok(updated);
 }
+
+/** DELETE /api/inspections/:id（层层回退-无下链可删，用户指令 2026-08-21）
+ * 可删：PENDING（取消检验）/ COMPLETE（回退质检结论）；有入库或退货下链禁止删除。
+ * 软删。 */
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await authenticate(request);
+  const denied = requirePermission(user, "inspection:delete");
+  if (denied) return denied;
+  requestLog(request, user?.id, "inspection.delete");
+
+  const { id } = await params;
+  const meta = requestMeta(request);
+
+  const existing = await prisma.inspection.findFirst({ where: { id, deletedAt: null } });
+  if (!existing) return failNotFound(ERROR_CODES.INSPECTION_NOT_FOUND, "质检记录不存在");
+
+  // 下链防御：已入库（WHR line 引用）、已退货（Return line 引用）禁止删除
+  const whrCount = await prisma.warehouseReceiptLine.count({ where: { inspectionId: id, deletedAt: null } });
+  if (whrCount > 0) {
+    return failConflict(ERROR_CODES.INSPECTION_INVALID_STATE, `该质检已生成 ${whrCount} 条入库行，禁止删除（请先回退入库环节）`);
+  }
+  const retCount = await prisma.purchaseReturnLine.count({
+    where: { sourceRefType: "INSPECTION", sourceInspectionId: id, deletedAt: null },
+  });
+  if (retCount > 0) {
+    return failConflict(ERROR_CODES.INSPECTION_INVALID_STATE, "该质检已被退货引用，禁止删除（请先回退退货环节）");
+  }
+
+  await prisma.inspection.update({
+    where: { id },
+    data: { deletedAt: new Date(), isActive: false, updatedById: user!.id },
+  });
+
+  await writeAuditLog({
+    actorId: user?.id,
+    action: "inspection.delete",
+    entityType: "inspection",
+    entityId: id,
+    afterData: { inspectionId: id, deleted: true },
+    ...meta,
+  });
+
+  return ok({ id, deleted: true });
+}
