@@ -371,7 +371,7 @@ function PurchaseReturnCreateForm() {
                           sourcePurchaseReceiptLineId: "",
                           sourceWarehouseReceiptLineId: "",
                           sourceInspectionId: "",
-                        }),
+                        })
                       }
                       className="w-full rounded-md border border-border px-2 py-1.5 focus:border-brand-500 focus:outline-none"
                     >
