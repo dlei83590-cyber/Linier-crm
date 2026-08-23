@@ -12,10 +12,12 @@ import Link from "next/link";
 import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
 
 interface WarehouseReceiptRow {
   id: string;
@@ -43,6 +45,10 @@ function WarehouseReceiptList() {
     state.status === "authenticated" &&
     state.user !== null &&
     hasPermission(state.user.roles as RoleCode[], actionPermission("warehouse-receipt", "create"));
+  const canDelete = hasPermission(state.user?.roles as RoleCode[], actionPermission("warehouse-receipt", "delete"));
+  const toast = useToast();
+  const [deleting, setDeleting] = useState<WarehouseReceiptRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [codeInput, setCodeInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ code?: string; status?: string }>({});
@@ -63,6 +69,22 @@ function WarehouseReceiptList() {
     setStatusInput("");
     setFilters({});
     setPage(1);
+  };
+
+  const runDelete = async () => {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      await apiFetch("/api/warehouse-receipts/" + deleting.id, { method: "DELETE" });
+      toast.success("入库单已删除");
+      setDeleting(null);
+      refresh();
+    } catch (err: unknown) {
+      const e = err instanceof ApiClientError ? err : new ApiClientError(0, "删除失败", "NETWORK_ERROR");
+      toast.error("删除失败", e.message);
+    } finally {
+      setDeleteBusy(false);
+    }
   };
 
   return (
@@ -169,6 +191,21 @@ function WarehouseReceiptList() {
             header: "过账日期",
             render: (row) => formatDate(row.postedAt),
           },
+          {
+            key: "actions",
+            header: "操作",
+            render: (row) =>
+              canDelete && ["DRAFT", "CANCELLED"].includes(row.status) ? (
+                <button
+                  type="button"
+                  onClick={() => setDeleting(row)}
+                  disabled={deleteBusy}
+                  className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text hover:bg-status-danger-bg/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  删除
+                </button>
+              ) : null,
+          },
         ]}
         rows={items}
         rowKey={(row) => row.id}
@@ -179,6 +216,17 @@ function WarehouseReceiptList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+      />
+
+      <ConfirmActionDialog
+        open={deleting !== null}
+        title={"删除入库单「" + (deleting?.code ?? "") + "」？"}
+        description="仅未过账（草稿/已取消）入库单可删除；已过账（POSTED）已形成库存/GRIR 事实，禁止删除。"
+        confirmLabel="确认删除"
+        tone="danger"
+        busy={deleteBusy}
+        onConfirm={runDelete}
+        onCancel={() => setDeleting(null)}
       />
     </AppPage>
   );

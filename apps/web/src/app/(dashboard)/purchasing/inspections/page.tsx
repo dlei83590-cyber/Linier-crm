@@ -12,10 +12,12 @@ import Link from "next/link";
 import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
 
 interface InspectionRow {
   id: string;
@@ -49,6 +51,10 @@ function InspectionList() {
     state.status === "authenticated" &&
     state.user !== null &&
     hasPermission(state.user.roles as RoleCode[], actionPermission("inspection", "create"));
+  const canDelete = hasPermission(state.user?.roles as RoleCode[], actionPermission("inspection", "delete"));
+  const toast = useToast();
+  const [deleting, setDeleting] = useState<InspectionRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [modeInput, setModeInput] = useState("");
   const [resultInput, setResultInput] = useState("");
   const [filters, setFilters] = useState<{ inspectionMode?: string; result?: string }>({});
@@ -69,6 +75,22 @@ function InspectionList() {
     setResultInput("");
     setFilters({});
     setPage(1);
+  };
+
+  const runDelete = async () => {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      await apiFetch("/api/inspections/" + deleting.id, { method: "DELETE" });
+      toast.success("质检记录已删除（无下链引用）");
+      setDeleting(null);
+      refresh();
+    } catch (err: unknown) {
+      const e = err instanceof ApiClientError ? err : new ApiClientError(0, "删除失败", "NETWORK_ERROR");
+      toast.error("删除失败", e.message);
+    } finally {
+      setDeleteBusy(false);
+    }
   };
 
   return (
@@ -177,6 +199,21 @@ function InspectionList() {
             header: "质检时间",
             render: (row) => formatDate(row.inspectedAt),
           },
+          {
+            key: "actions",
+            header: "操作",
+            render: (row) =>
+              canDelete ? (
+                <button
+                  type="button"
+                  onClick={() => setDeleting(row)}
+                  disabled={deleteBusy}
+                  className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text hover:bg-status-danger-bg/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  删除
+                </button>
+              ) : null,
+          },
         ]}
         rows={items}
         rowKey={(row) => row.id}
@@ -187,6 +224,17 @@ function InspectionList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+      />
+
+      <ConfirmActionDialog
+        open={deleting !== null}
+        title={"删除质检记录？"}
+        description="删除质检（无入库/退货下链时）：PENDING 取消检验；已完成回退质检结论。有入库/退货引用时后端拒绝。"
+        confirmLabel="确认删除"
+        tone="danger"
+        busy={deleteBusy}
+        onConfirm={runDelete}
+        onCancel={() => setDeleting(null)}
       />
     </AppPage>
   );
