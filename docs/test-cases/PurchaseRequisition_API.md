@@ -131,6 +131,26 @@
 | G21 | PR 回写 | Convert 成功 | PR.status=CONVERTED；仅状态投影变化 |
 | G22 | 双事件 | Convert 成功 | PurchaseOrderCreated + PurchaseRequisitionConverted |
 | G23 | 审计 | Convert 成功 | PR convert AuditLog 含 purchaseOrderId/code |
+| G24 | MANUAL 逃生路径 | Snapshot 无价 + 前端已解析建议 | 对话框行强制 MANUAL，录入 unitPrice+priceReason 后转单成功（priceSetById=actor） |
+| G25 | 无 itemId 行 | PR 行缺 Item | 建议端点 snapshot=null；转单 MANUAL 通道仍可成功 |
+
+## G.6 价格通道建议（GET /api/purchase-requisitions/:id/price-suggestions?supplierId=）
+
+> 服务端权威解析（与 convert/PO PATCH 同语义，复用 `resolveSupplierPriceSnapshot`）：`partnerId + itemId + priceSource=SUPPLIER + isActive + deletedAt=null`，`priority asc`。
+> 权限：`purchase-requisition:approve`（与 convert 一致）。只读、无副作用。
+
+| # | 用例 | 请求/场景 | 预期 |
+| --- | --- | --- | --- |
+| S1 | 正常解析 | APPROVED PR + 有效 supplier + 行有快照 | 200；每行 snapshot={partnerPriceId, unitPrice, taxRate}（Decimal 字符串） |
+| S2 | 无快照 | supplier 未配置该物料 SUPPLIER 价 | snapshot=null；前端引导 MANUAL 通道（修复 409 死胡同） |
+| S3 | 无 itemId 行 | PR 行缺 Item | snapshot 恒为 null（MANUAL 仍可转单） |
+| S4 | supplier 无 partnerId | 供应商未关联 BusinessPartner | 所有行 snapshot=null（转单走 MANUAL） |
+| S5 | 缺 supplierId | 未传参数 | 400 VALIDATION_ERROR |
+| S6 | supplier 无效 | supplierId 不存在/软删 | 400 PURCHASE_ORDER_SUPPLIER_NOT_FOUND |
+| S7 | PR 不存在 | id 无效/软删 | 404 PURCHASE_REQUISITION_NOT_FOUND |
+| S8 | 权限 | 非 approve 用户 | 403（与 convert 对齐） |
+| S9 | 行序 | PR 行 lineNo 升序 | 返回顺序与 PR Line 一致（前端按序回传 override） |
+| S10 | 一致性 | 建议命中快照后直接 convert | convert 用同一解析语义，不再 409 PRICE_NOT_FOUND |
 
 ## H. Convert 并发与幂等
 

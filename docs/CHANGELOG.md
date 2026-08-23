@@ -2,6 +2,19 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 商品价格通道整理：采购转订单 MANUAL 通道（用户指令 2026-08-21）
+
+### 修复
+
+- **PR → PO 转单 409 死胡同**：无供应商价格快照时提示"请改用 MANUAL 通道"但对话框无入口——转单对话框现按行解析价格通道
+- **新增** `GET /api/purchase-requisitions/:id/price-suggestions?supplierId=`：服务端权威解析每行供应商价格快照（与 convert/PO 同语义，复用 `resolveSupplierPriceSnapshot`），未命中返回 snapshot=null
+- **转单对话框**：选择供应商后按行展示价格通道——有快照自动采用并显示快照价/税率（可切换手工定价）；无快照或行缺 itemId 强制"手工定价"，必填单价+价格依据（审计 priceSetBy/priceSetAt 由 convert 服务端写入）；提交按 PR 行序回传 `lines` override，失败保留在对话框内展示
+
+### 边界
+
+- 价格事实仍由服务端决定：SUPPLIER_PRICE_SNAPSHOT 未命中时后端仍返回 409（防伪造价格），前端通过建议端点避免死胡同；MANUAL 通道 audit 三件套（priceReason/priceSetBy/priceSetAt）不变
+
+---
 ## [Unreleased] - 全页面回退+删除（用户指令 2026-08-21，批次 3：库存）
 
 ### 新增
