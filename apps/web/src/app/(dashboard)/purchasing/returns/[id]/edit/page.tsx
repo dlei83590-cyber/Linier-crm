@@ -20,8 +20,8 @@ interface ReturnDetailLine {
   batchNo?: string | null;
   serialNos?: string[] | null;
   remark?: string | null;
-  sourcePurchaseReceiptLine?: { id: string | null } | null;
-  sourceWarehouseReceiptLine?: { id: string | null } | null;
+  sourcePurchaseReceiptLine?: { id: string | null; purchaseReceipt?: { id: string | null } | null } | null;
+  sourceWarehouseReceiptLine?: { id: string | null; warehouseReceipt?: { id: string | null } | null } | null;
   sourceInspection?: { id: string | null } | null;
 }
 
@@ -36,8 +36,23 @@ interface ReturnDetail {
   lines?: ReturnDetailLine[];
 }
 
+interface SourceDocOption {
+  id: string;
+  code: string | null;
+  status?: string | null;
+}
+
+interface SourceLineOption {
+  id: string;
+  label: string;
+}
+
 interface LineForm {
   sourceRefType: string;
+  /** 来源单据 id（按单拉取退货信息） */
+  sourceDocId: string;
+  sourceDocLines: SourceLineOption[];
+  docLoading: boolean;
   sourcePurchaseReceiptLineId: string;
   sourceWarehouseReceiptLineId: string;
   sourceInspectionId: string;
@@ -51,6 +66,9 @@ interface LineForm {
 
 const EMPTY_LINE: LineForm = {
   sourceRefType: "RECEIPT_LINE",
+  sourceDocId: "",
+  sourceDocLines: [],
+  docLoading: false,
   sourcePurchaseReceiptLineId: "",
   sourceWarehouseReceiptLineId: "",
   sourceInspectionId: "",
@@ -75,6 +93,8 @@ function PurchaseReturnEditForm() {
   const [returnType, setReturnType] = useState("REJECTED_ON_RECEIPT");
   const [remark, setRemark] = useState("");
   const [lines, setLines] = useState<LineForm[]>([]);
+  // 按单拉取：来源单据列表缓存（按 sourceRefType）
+  const [docMap, setDocMap] = useState<Record<string, SourceDocOption[]>>({});
   const [version, setVersion] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -100,6 +120,15 @@ function PurchaseReturnEditForm() {
         setLines(
           (d.lines ?? []).map((l) => ({
             sourceRefType: l.sourceRefType ?? "RECEIPT_LINE",
+            // 按单拉取回显：来源单据 id 从父单据详情反查（收货单/入库单/质检）
+            sourceDocId:
+              l.sourceRefType === "RECEIPT_LINE"
+                ? (l.sourcePurchaseReceiptLine?.purchaseReceipt?.id ?? "")
+                : l.sourceRefType === "WAREHOUSE_RECEIPT_LINE"
+                  ? (l.sourceWarehouseReceiptLine?.warehouseReceipt?.id ?? "")
+                  : (l.sourceInspection?.id ?? ""),
+            sourceDocLines: [],
+            docLoading: false,
             sourcePurchaseReceiptLineId: l.sourcePurchaseReceiptLine?.id ?? "",
             sourceWarehouseReceiptLineId: l.sourceWarehouseReceiptLine?.id ?? "",
             sourceInspectionId: l.sourceInspection?.id ?? "",
@@ -111,6 +140,20 @@ function PurchaseReturnEditForm() {
             remark: l.remark ?? "",
           })),
         );
+        // 回显后拉取各行的来源行候选（按单拉取退货信息）
+        (d.lines ?? []).forEach((l, i) => {
+          const refType = l.sourceRefType ?? "RECEIPT_LINE";
+          const docId =
+            refType === "RECEIPT_LINE"
+              ? (l.sourcePurchaseReceiptLine?.purchaseReceipt?.id ?? "")
+              : refType === "WAREHOUSE_RECEIPT_LINE"
+                ? (l.sourceWarehouseReceiptLine?.warehouseReceipt?.id ?? "")
+                : (l.sourceInspection?.id ?? "");
+          if (docId) {
+            if (docMap[refType] === undefined) loadDocs(refType);
+            loadDocLines(i, docId, refType);
+          }
+        });
         setDirty(false);
       })
       .catch((err: unknown) => {
@@ -143,6 +186,90 @@ function PurchaseReturnEditForm() {
     markDirty();
   };
 
+  /** 按来源类型加载单据列表（按单拉取退货信息；收货单按当前 PO 过滤，入库/质检全量） */
+  const loadDocs = (refType: string) => {
+    if (docMap[refType] !== undefined) return; // 已缓存
+    const poId = detail?.purchaseOrder?.id;
+    let url = "";
+    if (refType === "RECEIPT_LINE") {
+      url = poId
+        ? `/api/purchase-receipts?pageSize=100&purchaseOrderId=${encodeURIComponent(poId)}`
+        : "/api/purchase-receipts?pageSize=100";
+    } else if (refType === "WAREHOUSE_RECEIPT_LINE") {
+      url = "/api/warehouse-receipts?pageSize=100";
+    } else {
+      url = "/api/inspections?pageSize=100";
+    }
+    apiFetch<SourceDocOption[] | { total: number; page: number; pageSize: number; items: SourceDocOption[] }>(url)
+      .then((body) => {
+        const arr = Array.isArray(body.data) ? body.data : (body.data?.items ?? []);
+        setDocMap((prev) => ({ ...prev, [refType]: arr }));
+      })
+      .catch(() => setDocMap((prev) => ({ ...prev, [refType]: [] })));
+  };
+
+  /** 选择来源单据 → 拉取该单据可退行（按单拉取退货信息） */
+  const loadDocLines = (idx: number, docId: string, refType: string, clearSource = false) => {
+    updateLine(idx, { sourceDocId: docId, sourceDocLines: [], docLoading: true });
+    if (!docId) {
+      updateLine(idx, { docLoading: false });
+      return;
+    }
+    if (refType === "RECEIPT_LINE") {
+      apiFetch<{ lines?: Array<{ id: string; lineNo: number; quantity: string; item?: { code: string | null; name: string | null } | null; uom?: { symbol: string | null } | null }> }>(
+        `/api/purchase-receipts/${docId}`,
+      )
+        .then((body) => {
+          const rows = (body.data.lines ?? []).map((l) => ({
+            id: l.id,
+            label: `L${l.lineNo} ${l.item?.code ?? ""} ${l.item?.name ?? ""}（数量 ${l.quantity}${l.uom?.symbol ? ` ${l.uom.symbol}` : ""}）`.trim(),
+          }));
+          updateLine(idx, {
+            sourceDocLines: rows,
+            docLoading: false,
+            ...(clearSource ? { sourcePurchaseReceiptLineId: "" } : {}),
+          });
+        })
+        .catch(() => updateLine(idx, { sourceDocLines: [], docLoading: false }));
+    } else if (refType === "WAREHOUSE_RECEIPT_LINE") {
+      apiFetch<{ lines?: Array<{ id: string; lineNo: number; quantity: string; item?: { code: string | null; name: string | null } | null; uom?: { symbol: string | null } | null }> }>(
+        `/api/warehouse-receipts/${docId}`,
+      )
+        .then((body) => {
+          const rows = (body.data.lines ?? []).map((l) => ({
+            id: l.id,
+            label: `L${l.lineNo} ${l.item?.code ?? ""} ${l.item?.name ?? ""}（数量 ${l.quantity}${l.uom?.symbol ? ` ${l.uom.symbol}` : ""}）`.trim(),
+          }));
+          updateLine(idx, {
+            sourceDocLines: rows,
+            docLoading: false,
+            ...(clearSource ? { sourceWarehouseReceiptLineId: "" } : {}),
+          });
+        })
+        .catch(() => updateLine(idx, { sourceDocLines: [], docLoading: false }));
+    } else {
+      // INSPECTION：质检记录本身即行级候选（选中即填 sourceInspectionId）
+      apiFetch<{
+        result?: string;
+        qualifiedQty?: string;
+        inspectionMode?: string;
+        purchaseReceiptLine?: { lineNo: number; quantity: string; item?: { code: string | null; name: string | null } | null } | null;
+      }>(`/api/inspections/${docId}`)
+        .then((body) => {
+          const d = body.data;
+          const rows = [{
+            id: docId,
+            label: `质检 ${d.inspectionMode ?? ""} ${d.result ?? ""}（合格 ${d.qualifiedQty ?? 0}）${d.purchaseReceiptLine?.item ? ` ${d.purchaseReceiptLine.item.code ?? ""} ${d.purchaseReceiptLine.item.name ?? ""}`.trim() : ""}`.trim(),
+          }];
+          updateLine(idx, {
+            sourceDocLines: rows,
+            docLoading: false,
+            ...(clearSource ? { sourceInspectionId: "" } : {}),
+          });
+        })
+        .catch(() => updateLine(idx, { sourceDocLines: [], docLoading: false }));
+    }
+  };
   const addLine = () => {
     setLines((prev) => [...prev, { ...EMPTY_LINE }]);
     markDirty();
@@ -347,7 +474,7 @@ function PurchaseReturnEditForm() {
             <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
               <tr>
                 <th className="px-3 py-2">来源类型</th>
-                <th className="px-3 py-2">来源 ID（exactly-one）</th>
+                <th className="px-3 py-2">来源单据 / 来源行（按单拉取）</th>
                 <th className="px-3 py-2">数量</th>
                 <th className="px-3 py-2">处置</th>
                 <th className="px-3 py-2">退货原因</th>
@@ -362,7 +489,16 @@ function PurchaseReturnEditForm() {
                   <td className="px-3 py-2">
                     <select
                       value={line.sourceRefType}
-                      onChange={(e) => updateLine(idx, { sourceRefType: e.target.value })}
+                      onChange={(e) =>
+                        updateLine(idx, {
+                          sourceRefType: e.target.value,
+                          sourceDocId: "",
+                          sourceDocLines: [],
+                          sourcePurchaseReceiptLineId: "",
+                          sourceWarehouseReceiptLineId: "",
+                          sourceInspectionId: "",
+                        })
+                      }
                       className="w-full rounded-md border border-border px-2 py-1.5 focus:border-brand-500 focus:outline-none"
                     >
                       {SOURCE_REF_TYPES.map((t) => (
@@ -373,33 +509,53 @@ function PurchaseReturnEditForm() {
                     </select>
                   </td>
                   <td className="px-3 py-2">
-                    {line.sourceRefType === "RECEIPT_LINE" && (
-                      <input
-                        value={line.sourcePurchaseReceiptLineId}
-                        onChange={(e) => updateLine(idx, { sourcePurchaseReceiptLineId: e.target.value })}
-                        placeholder="收货行 ID"
+                    <div className="space-y-1">
+                      <select
+                        value={line.sourceDocId}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (docMap[line.sourceRefType] === undefined) loadDocs(line.sourceRefType);
+                          loadDocLines(idx, v, line.sourceRefType, true);
+                        }}
                         className="w-full rounded-md border border-border px-2 py-1.5 focus:border-brand-500 focus:outline-none"
-                      />
-                    )}
-                    {line.sourceRefType === "WAREHOUSE_RECEIPT_LINE" && (
-                      <input
-                        value={line.sourceWarehouseReceiptLineId}
-                        onChange={(e) => updateLine(idx, { sourceWarehouseReceiptLineId: e.target.value })}
-                        placeholder="入库行 ID"
+                      >
+                        <option value="">选择来源单据</option>
+                        {(docMap[line.sourceRefType] ?? []).map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.code ?? d.id}（{d.status ?? ""}）
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={
+                          line.sourceRefType === "RECEIPT_LINE"
+                            ? line.sourcePurchaseReceiptLineId
+                            : line.sourceRefType === "WAREHOUSE_RECEIPT_LINE"
+                              ? line.sourceWarehouseReceiptLineId
+                              : line.sourceInspectionId
+                        }
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          const patch: Partial<LineForm> = {};
+                          if (line.sourceRefType === "RECEIPT_LINE") patch.sourcePurchaseReceiptLineId = v;
+                          else if (line.sourceRefType === "WAREHOUSE_RECEIPT_LINE") patch.sourceWarehouseReceiptLineId = v;
+                          else patch.sourceInspectionId = v;
+                          updateLine(idx, patch);
+                        }}
                         className="w-full rounded-md border border-border px-2 py-1.5 focus:border-brand-500 focus:outline-none"
-                      />
-                    )}
-                    {line.sourceRefType === "INSPECTION" && (
-                      <input
-                        value={line.sourceInspectionId}
-                        onChange={(e) => updateLine(idx, { sourceInspectionId: e.target.value })}
-                        placeholder="质检 ID"
-                        className="w-full rounded-md border border-border px-2 py-1.5 focus:border-brand-500 focus:outline-none"
-                      />
-                    )}
-                    {fieldErrors[`lines.${idx}.source`] && (
-                      <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors[`lines.${idx}.source`]}</p>
-                    )}
+                      >
+                        <option value="">选择来源行</option>
+                        {line.sourceDocLines.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.label}
+                          </option>
+                        ))}
+                      </select>
+                      {line.docLoading && <p className="text-xs text-ink-muted">加载中…</p>}
+                      {fieldErrors[`lines.${idx}.source`] && (
+                        <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors[`lines.${idx}.source`]}</p>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-2">
                     <input
