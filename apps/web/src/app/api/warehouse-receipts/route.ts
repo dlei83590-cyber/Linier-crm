@@ -57,26 +57,18 @@ export async function GET(request: NextRequest) {
 
     // 核销闭环（用户指令 2026-08-21）：每项返回可退余额（POSTED 行 quantity - 已 RETURNED 退货），供列表操作区退货按钮
     const postedIds = items.filter((i) => i.status === "POSTED").map((i) => i.id);
-    let returnableMap = new Map<string, Prisma.Decimal>();
+    const returnableMap = new Map<string, Prisma.Decimal>();
     if (postedIds.length > 0) {
-      const [lineRows, returnedRows] = await Promise.all([
-        prisma.warehouseReceiptLine.groupBy({
-          by: ["warehouseReceiptId"],
-          where: { warehouseReceiptId: { in: postedIds }, deletedAt: null },
-          _sum: { quantity: true },
-        }),
-        prisma.purchaseReturnLine.groupBy({
-          by: ["sourceWarehouseReceiptLineId"],
-          where: {
-            sourceRefType: "WAREHOUSE_RECEIPT_LINE",
-            sourceWarehouseReceiptLineId: { not: null },
-            purchaseReturn: { status: "RETURNED", deletedAt: null },
-            deletedAt: null,
-          },
-          _sum: { quantity: true },
-        }),
-      ]);
-      const totalByWhr = new Map(lineRows.map((r) => [r.warehouseReceiptId, r._sum.quantity ?? new Prisma.Decimal(0)]));
+      const returnedRows = await prisma.purchaseReturnLine.groupBy({
+        by: ["sourceWarehouseReceiptLineId"],
+        where: {
+          sourceRefType: "WAREHOUSE_RECEIPT_LINE",
+          sourceWarehouseReceiptLineId: { not: null },
+          purchaseReturn: { status: "RETURNED", deletedAt: null },
+          deletedAt: null,
+        },
+        _sum: { quantity: true },
+      });
       const returnedByLine = new Map(returnedRows.map((r) => [r.sourceWarehouseReceiptLineId ?? "", r._sum.quantity ?? new Prisma.Decimal(0)]));
       const lines = await prisma.warehouseReceiptLine.findMany({
         where: { warehouseReceiptId: { in: postedIds }, deletedAt: null },
