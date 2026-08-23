@@ -23,11 +23,16 @@ export async function nextPurchaseOrderCode(tx: Prisma.TransactionClient): Promi
   const prefix = seq?.prefix ?? 'PO';
   const padLength = seq?.padLength ?? 6;
   if (seq) {
-    const updated = await tx.documentSequence.update({
-      where: { id: seq.id },
-      data: { nextNo: { increment: 1 } },
-    });
-    return `${prefix}${String(updated.nextNo - 1).padStart(padLength, '0')}`;
+    // 占用校验（单号回收回退后软删记录仍占 unique → 跳过已占用编号，防 P2002 500；对齐 #192 quotation 先例）
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const updated = await tx.documentSequence.update({
+        where: { id: seq.id },
+        data: { nextNo: { increment: 1 } },
+      });
+      const code = `${prefix}${String(updated.nextNo - 1).padStart(padLength, '0')}`;
+      const exists = await tx.purchaseOrder.findUnique({ where: { code } });
+      if (!exists) return code;
+    }
   }
   return `${prefix}${String(1).padStart(padLength, '0')}`;
 }

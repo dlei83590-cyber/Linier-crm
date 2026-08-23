@@ -18,11 +18,16 @@ export async function nextPurchaseRequisitionCode(tx: Prisma.TransactionClient):
   const prefix = seq?.prefix ?? 'PR';
   const padLength = seq?.padLength ?? 6;
   if (seq) {
-    const updated = await tx.documentSequence.update({
-      where: { id: seq.id },
-      data: { nextNo: { increment: 1 } },
-    });
-    return `${prefix}${String(updated.nextNo - 1).padStart(padLength, '0')}`;
+    // 占用校验（防 P2002 500）
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const updated = await tx.documentSequence.update({
+        where: { id: seq.id },
+        data: { nextNo: { increment: 1 } },
+      });
+      const code = `${prefix}${String(updated.nextNo - 1).padStart(padLength, '0')}`;
+      const exists = await tx.purchaseRequisition.findUnique({ where: { code } });
+      if (!exists) return code;
+    }
   }
   return `${prefix}${String(1).padStart(padLength, '0')}`;
 }
