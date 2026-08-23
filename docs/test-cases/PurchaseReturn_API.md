@@ -51,6 +51,7 @@
 | C15 | sourceRefType 与 FK 不匹配 | RECEIPT_LINE 却传 sourceInspectionId | 400 校验拒绝（exactly-one） |
 | C16 | 无行 | lines 空 | 400 PURCHASE_RETURN_NO_LINES |
 | C17 | DRAFT 创建不发领域事件 | 创建后查 Audit | 仅 AuditLog（PurchaseReturnCreated），无 PurchaseReturned |
+| C18 | 按单拉取退货信息（用户指令 2026-08-21） | 新建退货：选来源类型 → 来源单据（收货单按 PO 过滤；入库单/质检全量）→ 拉取该单据可退行 | 前端两级下拉自动拉取（收货行/入库行/质检结论），不再手填来源 ID；编辑页回显反查来源单据 |
 
 ## D. 更新（PATCH /api/purchase-returns/:id）
 
