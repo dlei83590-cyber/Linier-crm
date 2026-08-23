@@ -14,21 +14,31 @@ export function effectiveStatusOf(q: { status: string; validUntil: Date | null }
     : { status: q.status, effectiveStatus: q.status, isExpired: false };
 }
 
-/** DocumentSequence 原子取号（docType=QUOTATION，前缀 QT，位数 6） */
+/** DocumentSequence 原子取号（docType=QUOTATION，前缀 QT，位数 6）
+ * 修复（2026-08-23）：单号回收后 nextNo 可能指向已被软删记录占用的编号（P2002 唯一冲突）——
+ * 取号后校验编号未被占用，冲突则继续递增（循环最多 100 次防死循环）。
+ */
 export async function nextQuotationCode(tx: Prisma.TransactionClient): Promise<string> {
   const seq = await tx.documentSequence.findFirst({
     where: { docType: "QUOTATION", isActive: true, deletedAt: null },
   });
   const prefix = seq?.prefix ?? "QT";
   const padLength = seq?.padLength ?? 6;
-  if (seq) {
-    const updated = await tx.documentSequence.update({
-      where: { id: seq.id },
-      data: { nextNo: { increment: 1 } },
-    });
-    return `${prefix}${String(updated.nextNo - 1).padStart(padLength, "0")}`;
+  let nextNo = seq?.nextNo ?? 1;
+  if (!seq) {
+    return `${prefix}${String(nextNo).padStart(padLength, "0")}`;
   }
-  return `${prefix}${String(1).padStart(padLength, "0")}`;
+  for (let i = 0; i < 100; i++) {
+    const code = `${prefix}${String(nextNo).padStart(padLength, "0")}`;
+    // 校验编号未被占用（含软删记录——软删仍占唯一键）
+    const exists = await tx.quotation.findUnique({ where: { code }, select: { id: true } });
+    if (!exists) {
+      await tx.documentSequence.update({ where: { id: seq.id }, data: { nextNo: nextNo + 1 } });
+      return code;
+    }
+    nextNo += 1;
+  }
+  throw new Error("QUOTATION_CODE_EXHAUSTED");
 }
 
 /** 重算报价头合计（subtotal/taxAmount/totalAmount，全程 Decimal） */
