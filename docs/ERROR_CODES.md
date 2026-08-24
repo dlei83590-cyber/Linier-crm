@@ -312,5 +312,17 @@
 | CONTACT_SPECIAL_DATE_INVALID | 400 | 特殊日期非法/提醒天数越界，400 |
 | DUPLICATE_EXACT | 409 | 强重复（USCC 全库命中，含 soft-deleted），创建阻断，409 |
 | DUPLICATE_REQUIRES_ACK | 409 | POTENTIAL 命中但未 duplicateAcknowledged=true，409 |
+| POOL_NOT_FOUND | 404 | 公海池不存在，404 |
+| POOL_CODE_EXISTS | 409 | 池编码已存在，409 |
+| POOL_SCOPE_INVALID | 400 | scopeType/scopeValue 组合非法（GLOBAL 必须 null 等），400 |
+| POOL_RULE_NOT_FOUND | 404 | 规则不存在，404 |
+| POOL_RULE_INVALID | 400 | 规则 condition 非法/字段不在白名单/operator 非 EQ｜IN，400 |
+| POOL_RULE_SOURCE_UNAVAILABLE | 400 | INACTIVITY 规则 Phase 3 前禁用（无 Activity 事实源），400 |
+| POOL_ENTRY_NOT_FOUND | 404 | 池条目不存在，404 |
+| POOL_ENTRY_NOT_ALLOWED | 400 | 客户类型不允许入池（须 CUSTOMER/BOTH 且 deletedAt=null），400 |
+| POOL_ENTRY_NOT_CLAIMABLE | 409 | 条目不在可 claim 状态（非 IN_POOL/已删除），409 |
+| POOL_CLAIM_CONFLICT | 200 | 并发 claim 撞唯一约束（partial unique P2002），409 |
+| CUSTOMER_ALREADY_OWNED | 409 | 已有有效归属（active ownership），409 |
+| CUSTOMER_ALREADY_IN_POOL | 409 | 已有有效池条目（active entry），409 |
 
-> 合计：**307 个错误码**（自动统计）
+> 合计：**319 个错误码**（自动统计）

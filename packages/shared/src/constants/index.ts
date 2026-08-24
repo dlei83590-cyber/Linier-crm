@@ -322,6 +322,10 @@ export const PERMISSION_MODULES = [
   "inventory-cost",
   // Sprint 7 Finance 首块（CTO 解锁 2026-08-20，ADR-0033）：GL 会计科目/记账凭证（view/create/edit/close——过账动作映射 create→gl:create；会计敏感仅 SUPER_ADMIN/ADMIN 静态授权，与 supplier-invoice 一致；MANAGER 无）
   "gl",
+  // Phase 2C 客户公海（ADR-0053 APPROVED + CTO OQ 裁决；Migration 0049）：customer-pool 模块
+  // 动作映射：池/规则配置→:create/:edit/:delete；查看池/条目→:view；claim/release/reclaim→:assign（PERMISSION_ACTIONS 已有 assign，不塞进 :edit）；
+  // 后台 sweep→customer-pool:consume（SYSTEM_PERMISSIONS，仅 SUPER_ADMIN/ADMIN）；与 prisma/seed.ts SEED_ACTION_MODULES 保持同步（ADR-0028 防漂移）
+  "customer-pool",
 ] as const;
 
 /** 生成模块×动作权限码（如 "item:view"） */
@@ -341,6 +345,8 @@ export const SYSTEM_PERMISSIONS = [
   "domain-event:consume",
   // Sprint 6B-3：Inventory Adjustment Apply 受限系统权限（P8/P9 Final：Adjustment 直接动库存账且 Manual 高风险——apply 仅 SUPER_ADMIN/ADMIN 静态授权（见 rbac SYSTEM_PERMISSIONS）；Manager/Member/Viewer 默认无权限 → 403；seed 同步注册（见 prisma/seed.ts SEED_SYSTEM_ACTION_PERMISSIONS））
   "inventory-adjustment:apply",
+  // Phase 2C：Customer Pool 后台 sweep / 规则回流执行（后台动作不进通用 PERMISSION_ACTIONS；仅 SUPER_ADMIN/ADMIN 静态授权，seed 同步注册）
+  "customer-pool:consume",
 ] as const;
 
 export const DEFAULT_PAGE_SIZE = 20;

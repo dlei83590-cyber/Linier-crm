@@ -2,6 +2,30 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Phase 2C-1：客户公海 Pool Foundation（ADR-0053 APPROVED + CTO OQ 裁决；Migration 0049）
+
+### 新增
+
+- Migration 0049 四模型：CustomerPool / CustomerPoolRule / CustomerPoolEntry / CustomerOwnership
+  （Entry → Ownership **1:N**，entryId 不 unique；**Entry/Ownership 无 isActive**——status/releasedAt + deletedAt 为权威；
+  手写 partial unique：CustomerOwnership_one_active_per_partner + CustomerPoolEntry_one_active_per_partner；
+  **不建 (poolId, businessPartnerId) 重复 index**；OQ-5：无 approvalStatus）
+- RBAC：customer-pool:view/create/edit/delete/assign（claim/release/reclaim → **assign**）+ customer-pool:consume（SYSTEM_PERMISSIONS）；
+  同一 PR 同步 PERMISSION_MODULES + seed SEED_ACTION_MODULES + SEED_SYSTEM_ACTION_PERMISSIONS（ADR-0028 防漂移）
+- 错误码 POOL_* 12 个（含 POOL_RULE_SOURCE_UNAVAILABLE——INACTIVITY 规则 Phase 3 前启用即 400，fail closed）
+- API：GET/POST /api/customer-pools；GET/PATCH/DELETE /api/customer-pools/:id（version CAS）；GET/POST .../rules；PATCH/DELETE .../rules/:ruleId；
+  GET .../entries；POST .../entries（手工入池全校验：BP 存在/未删/CUSTOMER|BOTH → 无 active ownership → 无 active entry → pool active → scope compatible → 事务 + Outbox CustomerPoolEntryEntered 同事务）
+- 共享校验器 lib/customer-pool/validators.ts（scope 组合校验 + rule 白名单/operator EQ|IN + isPartnerPoolEligible；纯函数单测）
+- Outbox 事件注册：CustomerPoolEntryEntered（EVENTS.md 2.5；2C-2 将注册 Claimed/Released）
+- 文档：docs/test-cases/CustomerPool_API.md（CP-01~20）+ docs/qa/Phase2C_Pool_QA.md（RC-01~18，Runtime 未勾选）
+
+### 边界
+
+- 零修改 BusinessPartner（禁 ownerId/customerStatus）；零 Legacy Customer；零 INACTIVITY 实现；零 approval workflow（OQ-5）；零 quota/cooldown（OQ-2）；零 Region/Team 模型（OQ-1 字符串 EQ/IN）
+- 客户级 owner 唯一权威 = CustomerOwnership（SSOT 红线）
+
+---
+
 ## [Unreleased] - Phase 2B：客户查重 Vertical Slice（CTO FAST TRACK Directive；零 Schema / 零 Migration）
 
 ### 新增
