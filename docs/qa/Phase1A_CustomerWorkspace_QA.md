@@ -16,6 +16,20 @@
 - [ ] 活动/跟进、公海 tab 显示 Coming-by-contract 占位（无 mock）
 - [ ] 列表页「详情」进入 360 页；编辑仍走 /edit
 
+## Runtime Acceptance 执行记录（待人工，CTO Blocker 1）
+
+> ⚠️ 本仓库 CI-First / No Local Server：AI 代理无浏览器、禁止启动本地服务器，无法执行运行时页面验证。
+> 以下由人工登录系统逐项执行并回填结果；**未机械勾选**。
+
+| 项 | 验证内容 | 结果 |
+|---|---|---|
+| 环境 / build SHA | （待填：部署环境 + commit SHA） | [ ] |
+| 执行人 / 日期 | （待填） | [ ] |
+| RA-1 商机新建 | 选择 BusinessPartner Customer → 创建成功 → customerId 正确 | [ ] |
+| RA-2 项目新建 | 同上 | [ ] |
+| RA-3 Customer 360 | 选已有客户，验证主档 + 至少一个业务 tab（商机/项目/报价/SO/AR） | [ ] |
+| RA-4 无权限/无数据 | 无权限 403 / 无数据 Empty 如实记录 | [ ] |
+
 ## 边界
 
 - 零 Schema / 零 Migration；零平行模型；零业务字段复制（只读聚合既有权威模型）

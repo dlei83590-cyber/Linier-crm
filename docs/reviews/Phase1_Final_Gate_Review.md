@@ -14,7 +14,7 @@
 | 3 | Customer 360 Workspace 可从客户主体追到销售/项目/财务事实 | ✅ | Phase 1A（#214）：/business-partners/[id] 14 tab（概览/工商/开票/联系人/地址/信用/标签 + 商机/项目/报价/销售订单/应收回款按 customerId 聚合） |
 | 4 | 产品/原料 Workspace 完全复用 Item SSOT | ✅ | Phase 1B（#215）：items 详情「产品/原料合同视图」（配方/供应商/库存/成本/生产外协/配方使用）+ GET 只读聚合；零 Product/RawMaterial 表 |
 | 5 | Legacy Customer 有完整 Retirement Decision，无未经分析删除 | ✅ | Phase 1C（#216）：ADR-0051 = DEPRECATE（保留兼容窗口，禁止 DROP，删除另开 Migration Gate）+ Dependency Matrix |
-| 6 | GitHub CI 全绿 + QA/Test Cases/CHANGELOG/ROADMAP 同步 | ✅ | 每 PR CI 全绿（Quality/Secret/Build）；QA Phase1A/Phase1B；CHANGELOG；ROADMAP v1.43 Contract Track |
+| 6 | GitHub CI 全绿 + QA/Test Cases/CHANGELOG/ROADMAP 同步 | ✅（CI）/ ⚠️（Test Case 本 PR 补齐） | 每 PR CI 全绿（Quality/Secret/Build）；QA Phase1A/Phase1B；CHANGELOG；ROADMAP v1.43；**Test Case：BusinessPartner_API.md 新建 + Item_API.md 契约 + Customer_API.md LEGACY 标记（Phase 1.5 Evidence Closure PR 补齐，原 Final Gate 结论在此项证据不足）** |
 
 ---
 
@@ -42,6 +42,28 @@
 - 附件未接入往来单位（FileAttachment 无 BusinessPartner 关联）
 - /api/customers 遗留路由保留（DEPRECATE 兼容窗口，观察后 Drop-Later）
 
-## Gate 结论
+## CTO Final Review 阻断项与纠正（Phase 1.5 Evidence Closure）
 
-**Phase 1 完成，6 项事实全部满足。提交 CTO Final Gate Review，等待 APPROVED 后发 Phase 2 START（联系人增强 + 客户查重 + 客户公海）。**
+> CTO Final Review（2026-08-24）结论：代码主体 PASS，3 个 blocker → Phase 2 HOLD。本段为纠正记录。
+
+### Blocker 1 — Runtime QA（待人工）
+- 仓库 CI-First / No Local Server：AI 代理无浏览器、禁止启动本地服务器，**无法执行运行时页面验证**。
+- 已在 QA 文档（Phase1A / Phase1B）建立「Runtime Acceptance 执行记录」清单（环境/build SHA/执行人/日期/结果字段），**待人工逐项执行并回填，未机械勾选**。
+- 状态：**PENDING（需人工 Runtime Acceptance）**
+
+### Blocker 2 — Test Case Closure（本 PR 完成）
+- 新建 docs/test-cases/BusinessPartner_API.md（锁定 Phase 1A detail aggregate contract）
+- 更新 docs/test-cases/Item_API.md（锁定 Phase 1B 聚合字段契约）
+- docs/test-cases/Customer_API.md 顶部加 LEGACY/DEPRECATED — ADR-0051 标记
+
+### Blocker 3 — Contract Evidence（结构 FINAL / 原文 PENDING）
+- docs/contracts/README.md 已建立不可变归档清单（来源/版本/日期/SHA-256 校验值/页码字段）；合同原文 PDF 工作目录不存在，**待 CTO/业务方提供后归档并锁定校验值**。
+
+### Governance Finding（CLOSED-BY-CORRECTIVE-ACTION）
+- PR #217（Phase 1 Final Gate Review）在 CTO Final Review 之前被 merge——**第二次 Gate 顺序倒置**。
+- 纠正：从本 PR 起，任何名称含 Final Gate / Gate Review / Release Gate 的 PR，CTO 明确 APPROVED 前禁止 merge。
+- 状态：**CLOSED-BY-CORRECTIVE-ACTION**（不回退 #217，内容为治理文档且 CI 通过）
+
+## Gate 结论（更新）
+
+**Phase 1 Implementation ✅ ACCEPTED；Evidence/Runtime/Governance Gate 🟡 REQUEST CHANGES → 本 PR 补齐 Test Case + Contract Evidence 结构 + Governance Finding；Runtime QA 待人工执行。Phase 2 仍 HOLD，待 CTO 复核 3 blocker 后下发 START。**
