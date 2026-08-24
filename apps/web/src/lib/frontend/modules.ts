@@ -238,6 +238,15 @@ const UI_LIST_DETAIL_CREATE_ACTIONS: CapabilityFlags = {
   workflow: false,
   factActions: true,
 };
+/** 列表 + 详情 + Create（报销申请 MVP：无 Edit 页、无审批流/事实动作；创建走既有项目费用 API） */
+const UI_LIST_DETAIL_CREATE: CapabilityFlags = {
+  list: true,
+  detail: true,
+  create: true,
+  edit: false,
+  workflow: false,
+  factActions: false,
+};
 /** 列表 + Create + 提交流 + 事实动作（F2-6B 批 2 贷项/借项通知单：无详情 GET 端点，submit/apply 内联在列表） */
 const UI_LIST_CREATE_WORKFLOW_ACTIONS: CapabilityFlags = {
   list: true,
@@ -359,6 +368,21 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     createRoute: '/customer-pools/new',
     createPermission: actionPermission('customer-pool', 'create'),
     order: 5,
+  },
+  // 报销申请（feat(crm) 报销申请 MVP）：复用 ProjectExpense 事实——客户归属直接走 Project → BusinessPartner，
+  // 不新造平行 Reimbursement/ExpenseClaim 模型；列表/详情消费只读 GET /api/expenses(+ /:id)，
+  // 创建复用既有 POST /api/projects/:id/expenses（单一写入源）。权限复用 project-expense:view/create。
+  {
+    id: 'expenses',
+    domain: 'customer-project',
+    label: '报销申请',
+    route: '/expenses',
+    permission: actionPermission('project-expense', 'view'),
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_DETAIL_CREATE },
+    createRoute: '/expenses/new',
+    createPermission: actionPermission('project-expense', 'create'),
+    order: 6,
   },
 
   // ===== 销售管理（F2-6A：List/Detail 只读产品化 → ready；create 严格按来源链，F2-6B 开放）=====
@@ -913,7 +937,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     permission: null,
     availability: 'hold',
     capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
-    order: 1,
+    order: 2,
   },
 ];
 
