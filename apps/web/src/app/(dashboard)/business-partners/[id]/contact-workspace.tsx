@@ -171,7 +171,11 @@ export function ContactWorkspace({ partnerId }: { partnerId: string }) {
     catch (err) { const e = err instanceof ApiClientError ? err : new ApiClientError(0, "删除失败", "NETWORK_ERROR"); toast.error("删除关系失败", e.message); }
   };
 
-  const relationTargets = useMemo(() => excludeSelf(contacts, expandedId ?? ""), [contacts, expandedId]);
+  // 2A-3：target selector 仅其他有效联系人（id !== self && isActive === true）
+  const relationTargets = useMemo(
+    () => excludeSelf(contacts, expandedId ?? "").filter((c) => c.isActive),
+    [contacts, expandedId],
+  );
 
   if (!canView) { return <p className="text-sm text-ink-muted">无查看联系人权限。</p>; }
 

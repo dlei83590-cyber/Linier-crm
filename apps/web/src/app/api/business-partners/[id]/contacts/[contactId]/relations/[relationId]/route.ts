@@ -13,10 +13,13 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   const denied = requirePermission(user, "partner-contact:edit");
   if (denied) return denied;
   requestLog(request, user?.id, "partner-contact.relations.delete");
-  const { relationId } = await params;
+  const { id, contactId, relationId } = await params;
   const meta = requestMeta(request);
   try {
-    const existing = await prisma.contactRelation.findFirst({ where: { id: relationId, deletedAt: null } });
+    // 2A-3 Scope Hardening：relation 必须属于 :contactId 且 sourceContact 属于 BusinessPartner :id（fail-closed 404）
+    const existing = await prisma.contactRelation.findFirst({
+      where: { id: relationId, deletedAt: null, sourceContactId: contactId, sourceContact: { partnerId: id } },
+    });
     if (!existing) return failNotFound(ERROR_CODES.CONTACT_RELATION_NOT_FOUND, "联系人关系不存在");
     await prisma.contactRelation.update({
       where: { id: relationId },

@@ -27,8 +27,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const denied = requirePermission(user, "partner-contact:view");
   if (denied) return denied;
   requestLog(request, user?.id, "partner-contact.special-dates.list");
-  const { contactId } = await params;
-  const items = await prisma.contactSpecialDate.findMany({ where: { contactId, deletedAt: null }, orderBy: { date: "asc" } });
+  const { id, contactId } = await params;
+  // 2A-3 Scope Hardening：contactId 必须属于 BusinessPartner :id（fail-closed 404）
+  const contact = await prisma.partnerContact.findFirst({ where: { id: contactId, partnerId: id, deletedAt: null } });
+  if (!contact) return failNotFound(ERROR_CODES.CONTACT_NOT_FOUND, "联系人不存在");
+  const items = await prisma.contactSpecialDate.findMany({ where: { contactId: contact.id, deletedAt: null }, orderBy: { date: "asc" } });
   return ok(items);
 }
 

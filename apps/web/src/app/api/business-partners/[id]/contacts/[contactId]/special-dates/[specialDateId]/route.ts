@@ -13,10 +13,13 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   const denied = requirePermission(user, "partner-contact:edit");
   if (denied) return denied;
   requestLog(request, user?.id, "partner-contact.special-dates.delete");
-  const { specialDateId } = await params;
+  const { id, contactId, specialDateId } = await params;
   const meta = requestMeta(request);
   try {
-    const existing = await prisma.contactSpecialDate.findFirst({ where: { id: specialDateId, deletedAt: null } });
+    // 2A-3 Scope Hardening：specialDate 必须属于 :contactId 且 contact 属于 BusinessPartner :id（fail-closed 404）
+    const existing = await prisma.contactSpecialDate.findFirst({
+      where: { id: specialDateId, deletedAt: null, contact: { id: contactId, partnerId: id } },
+    });
     if (!existing) return failNotFound(ERROR_CODES.CONTACT_NOT_FOUND, "特殊日期不存在");
     await prisma.contactSpecialDate.update({
       where: { id: specialDateId },
