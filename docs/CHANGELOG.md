@@ -2,6 +2,35 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Phase 2C-2：客户公海生产测试 MVP（CTO 纠偏：底座冻结，只做前端闭环最小集）
+
+### 新增
+
+- **导航入口**：/customer-pools 注册进 frontend/modules.ts（客户与项目 → 客户公海，customer-pool:view；生产可点击）
+- **Customer Pool Workspace**：/customer-pools 列表 + 新建（GLOBAL/REGION/DEPARTMENT scope）+ 详情
+  （公海名称/范围/当前客户列表/**加入客户**（选择 BusinessPartner ID）/ **领取**（领给自己））
+- **手工入池**：POST /api/customer-pools/:id/entries（#228 已有；UI 直连：选择客户 → 加入公海）
+- **领取**：POST .../claim（customer-pool:assign；默认领给自己；事务：FOR UPDATE 锁 entry → create ownership → entry=CLAIMED →
+  并发/已领取 → 409（POOL_ENTRY_NOT_CLAIMABLE / POOL_CLAIM_CONFLICT）；页面提示「已被领取」）
+- **释放回公海**：POST .../release（单一语义：ownership.releasedAt=now + entry=IN_POOL；无 REMOVE 双 mode）
+- **Customer 360 公海 Tab**：PoolStatusCard 显示 是否在公海 / 公海名称 / 当前状态 / 当前领取人（第一轮**不显示归属历史**）
+- 新增只读端点 GET /api/business-partners/:id/pool-status（customer-pool:view；无 history）
+- Audit：customer-pool-entry.enter / customer-ownership.claim / customer-ownership.release（沿用 #228 已注册动作）
+
+### HOLD（CTO 纠偏冻结，从本 PR 移除；需求从真实使用产生后再加）
+
+- rule-evaluator / evaluate-and-sync / sweep / BP create·update 自动联动 / priority·ambiguous / 自动入池 Outbox /
+  ownership history UI / 管理员 ownerId 代领 / REMOVE release mode / 规则编辑器 UI —— 全部移除或 HOLD
+- 合同「自动流入」：待第一轮生产 Smoke 后按真实流程补最简单版本（如「按区域刷新客户」按钮）
+
+### 边界
+
+- 零 INACTIVITY 实现；零 quota/cooldown（OQ-2）；零 approval workflow（OQ-5）；零新 Region/Team 模型（OQ-1）；
+  零给 BusinessPartner 加 ownerId（SSOT 红线：客户级 owner 唯一权威 = CustomerOwnership）
+- CustomerPool / CustomerPoolRule 模型保留（#228 已合并，冻结不删），但不围绕其继续建设框架
+
+---
+
 ## [Unreleased] - Phase 2C-1：客户公海 Pool Foundation（ADR-0053 APPROVED + CTO OQ 裁决；Migration 0049）
 
 ### 新增

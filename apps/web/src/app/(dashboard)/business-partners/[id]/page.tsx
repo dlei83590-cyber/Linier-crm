@@ -17,6 +17,7 @@ import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, ErrorPanel } from "@/components/workspace";
 import { ContactWorkspace } from "./contact-workspace";
+import { PoolStatusCard } from "./pool-status-card";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { formatDate, formatMoney } from "@/lib/format";
 
@@ -453,7 +454,7 @@ function PartnerDetailPage() {
         )}
 
         {tab === "activity" && <ComingByContract title="活动 / 跟进 / 拜访 / 签到" phase="3" />}
-        {tab === "pool" && <ComingByContract title="客户公海" phase="2" />}
+        {tab === "pool" && <PoolStatusCard partnerId={id} />}
 
         <Link href="/business-partners" className="text-sm text-brand-600 hover:underline">← 返回往来单位列表</Link>
       </div>

@@ -347,6 +347,19 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
     order: 4,
   },
+  // Phase 2C 客户公海（CTO 生产测试 MVP：列表/新建/加入客户/领取；入口注册优先级高于规则引擎/sweep）
+  {
+    id: 'customer-pools',
+    domain: 'customer-project',
+    label: '客户公海',
+    route: '/customer-pools',
+    permission: actionPermission('customer-pool', 'view'),
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_CRUD },
+    createRoute: '/customer-pools/new',
+    createPermission: actionPermission('customer-pool', 'create'),
+    order: 5,
+  },
 
   // ===== 销售管理（F2-6A：List/Detail 只读产品化 → ready；create 严格按来源链，F2-6B 开放）=====
   // 权限码为真实 endpoint 码（quotation:view / sales-order:view / delivery:view / invoice:view / accounts-receivable:view / receipt:view / credit-debit-note:view）
