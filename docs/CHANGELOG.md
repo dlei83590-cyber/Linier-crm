@@ -2,6 +2,14 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - P0-2：合同证据归档索引（CTO Directive Phase 1，docs/contracts/）
+
+### 治理
+
+- 建立 docs/contracts/README.md：合同 Evidence 归档规则（原文不可变，需求解释走 ADR/Review）+ 归档清单 + 待归档说明 + 与审计矩阵引用关系
+- 如实记录：合同原文文件尚未入库（待 CTO/业务方提供）；原文归档前验收范围以 CTO Directive 与审计矩阵为准
+
+---
 ## [Unreleased] - P0-1：商机/项目客户选择器对齐 BusinessPartner SSOT（CTO Directive Phase 1）
 
 ### 修复
