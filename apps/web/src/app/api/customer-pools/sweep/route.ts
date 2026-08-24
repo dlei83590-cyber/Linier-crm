@@ -2,7 +2,6 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission } from "@/lib/api-helpers";
 import { ok, failValidation } from "@/lib/api/response";
-import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { syncPartnerToPool, type SyncOutcome } from "@/lib/customer-pool/evaluate-and-sync";
 import { z } from "zod";
