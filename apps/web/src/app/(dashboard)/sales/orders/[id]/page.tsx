@@ -19,7 +19,7 @@ import { useParams, useRouter } from "next/navigation";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
+import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel, StatusBadge } from "@/components/workspace";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { useSession } from "@/lib/session-context";
@@ -56,6 +56,16 @@ interface SalesOrderLine {
   item?: { id: string; code: string | null; name: string | null; model?: string | null } | null;
 }
 
+/** 履约回显：本订单已创建的送货单（GET /api/sales-orders/:id 的 deliveries 投影） */
+interface SalesOrderDelivery {
+  id: string;
+  code: string;
+  status: string;
+  deliveryDate: string;
+  createdAt: string;
+  _count?: { lines: number };
+}
+
 interface DeliveryCreatedResponse {
   id: string;
   code: string;
@@ -76,8 +86,28 @@ interface SalesOrderDetail {
   customer?: { id: string; code: string | null; name: string | null } | null;
   quotation?: { id: string; code: string | null; status: string | null } | null;
   lines?: SalesOrderLine[];
+  deliveries?: SalesOrderDelivery[];
   createdAt: string;
 }
+
+/** 送货单状态展示（与 Delivery 列表页一致） */
+const DELIVERY_TONE_MAP: Record<string, StatusTone> = {
+  DRAFT: "neutral",
+  READY: "info",
+  DISPATCHED: "info",
+  DELIVERED: "success",
+  COMPLETED: "success",
+  CANCELLED: "danger",
+};
+
+const DELIVERY_STATUS_LABELS: Record<string, string> = {
+  DRAFT: "草稿",
+  READY: "待发运",
+  DISPATCHED: "已发运",
+  DELIVERED: "已送达",
+  COMPLETED: "已完成",
+  CANCELLED: "已取消",
+};
 
 /** dialog 选择状态：行 id → 是否勾选 + 交付数量 */
 interface DeliverySelection {
@@ -396,6 +426,59 @@ function SalesOrderDetailPage() {
                   <tr>
                     <td colSpan={8} className="px-3 py-8 text-center text-sm text-ink-muted">
                       暂无明细行
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {/* ── 履约回显：本订单创建的送货单及最新状态（confirm-delivery 聚合回写后刷新可见） ── */}
+        <section className="border-border rounded-md border p-4">
+          <h2 className="text-ink-primary mb-3 text-sm font-semibold">
+            相关送货单（{detail.deliveries?.length ?? 0}）
+          </h2>
+          <div className="overflow-x-auto">
+            <table className="divide-border min-w-full divide-y text-sm">
+              <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
+                <tr>
+                  <th className="px-3 py-2 font-medium">送货单号</th>
+                  <th className="px-3 py-2 font-medium">状态</th>
+                  <th className="px-3 py-2 text-right font-medium">行数</th>
+                  <th className="px-3 py-2 font-medium">交付日期</th>
+                  <th className="px-3 py-2 font-medium">创建时间</th>
+                </tr>
+              </thead>
+              <tbody className="divide-border divide-y">
+                {(detail.deliveries ?? []).map((dlv) => (
+                  <tr key={dlv.id}>
+                    <td className="px-3 py-2">
+                      <Link
+                        href={`/sales/deliveries/${dlv.id}`}
+                        className="font-medium text-brand-600 hover:underline"
+                      >
+                        {dlv.code}
+                      </Link>
+                    </td>
+                    <td className="px-3 py-2">
+                      <StatusBadge
+                        status={dlv.status}
+                        label={DELIVERY_STATUS_LABELS[dlv.status] ?? dlv.status}
+                        toneMap={DELIVERY_TONE_MAP}
+                      />
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-ink-primary">
+                      {dlv._count?.lines ?? 0}
+                    </td>
+                    <td className="px-3 py-2 text-ink-secondary">{formatDate(dlv.deliveryDate)}</td>
+                    <td className="px-3 py-2 text-ink-secondary">{formatDate(dlv.createdAt)}</td>
+                  </tr>
+                ))}
+                {(detail.deliveries ?? []).length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-3 py-8 text-center text-sm text-ink-muted">
+                      暂无送货单——确认订单后可从本页「创建送货单」生成
                     </td>
                   </tr>
                 )}

@@ -6,6 +6,8 @@
  * 依据 Contract Card（project-opportunities.md）：backend CRUD FINAL + convert。
  * 结构：AppPage + EntityDetailWorkspace（Header Summary → Status → Actions → Sections）。
  * 不改 backend / 状态机 / action；convert（Tier 3 factAction）保持 HOLD。
+ * 商机→报价→订单 MVP：新增「创建报价」入口（→ /sales/quotations/new?opportunityId=…）与
+ * 关联报价只读区块（GET 详情 include quotations 投影，数据真实、零 mock）。
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -14,9 +16,10 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { AppPage, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
+import { StatusBadge } from "@/components/workspace/status-badge";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatMoney } from "@/lib/format";
 
 interface OpportunityDetail {
   id: string;
@@ -38,6 +41,17 @@ interface OpportunityDetail {
   createdAt: string;
   customer?: { id: string; code: string | null; name: string | null; type: string | null } | null;
   project?: { id: string; code: string | null; name: string | null; stage: string | null } | null;
+  /** 关联报价（商机→报价→订单 MVP：详情只读投影，GET API 已 include） */
+  quotations?: Array<{
+    id: string;
+    code: string;
+    status: string;
+    quoteDate: string;
+    currency: string;
+    totalAmount: string;
+    convertedAt: string | null;
+    salesOrderId: string | null;
+  }>;
 }
 
 const STAGE_LABELS: Record<string, string> = {
@@ -75,6 +89,30 @@ const PAYMENT_LABELS: Record<string, string> = {
   OVERDUE: "逾期",
 };
 
+const QUOTATION_STATUS_LABELS: Record<string, string> = {
+  DRAFT: "草稿",
+  SUBMITTED: "已提交",
+  APPROVED: "已批准",
+  SENT: "已发送",
+  ACCEPTED: "客户已接受",
+  REJECTED: "已拒绝",
+  CANCELLED: "已取消",
+  CONVERTED: "已转订单",
+  EXPIRED: "已过期",
+};
+
+const QUOTATION_TONE_MAP: Record<string, "neutral" | "info" | "success" | "danger" | "warning"> = {
+  DRAFT: "neutral",
+  SUBMITTED: "info",
+  APPROVED: "success",
+  SENT: "info",
+  ACCEPTED: "success",
+  REJECTED: "danger",
+  CANCELLED: "danger",
+  CONVERTED: "info",
+  EXPIRED: "warning",
+};
+
 function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
@@ -90,6 +128,11 @@ function OpportunityDetailPage() {
     state.status === "authenticated" &&
     state.user !== null &&
     hasPermission(state.user.roles as RoleCode[], actionPermission("project-opportunity", "edit"));
+  // 商机→报价 MVP：创建报价入口（quotation:create，与 POST /api/quotations 对齐；无权限不渲染）
+  const canCreateQuotation =
+    state.status === "authenticated" &&
+    state.user !== null &&
+    hasPermission(state.user.roles as RoleCode[], actionPermission("quotation", "create"));
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
   const [detail, setDetail] = useState<OpportunityDetail | null>(null);
@@ -144,13 +187,25 @@ function OpportunityDetailPage() {
         statusLabel={STAGE_LABELS[detail.stage] ?? detail.stage}
         statusTone={STAGE_TONE_MAP[detail.stage] ?? "neutral"}
         actions={
-          canEdit ? (
-            <Link
-              href={`/project-opportunities/${id}/edit`}
-              className={BUTTON_PRIMARY_CLASS}
-            >
-              编辑
-            </Link>
+          canEdit || canCreateQuotation ? (
+            <>
+              {canCreateQuotation && (
+                <Link
+                  href={"/sales/quotations/new?opportunityId=" + encodeURIComponent(id)}
+                  className={BUTTON_PRIMARY_CLASS}
+                >
+                  创建报价
+                </Link>
+              )}
+              {canEdit && (
+                <Link
+                  href={"/project-opportunities/" + id + "/edit"}
+                  className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-canvas"
+                >
+                  编辑
+                </Link>
+              )}
+            </>
           ) : undefined
         }
         summary={
@@ -194,6 +249,57 @@ function OpportunityDetailPage() {
           <section className="border-border rounded-md border p-4">
             <h2 className="text-ink-primary mb-2 text-sm font-semibold">转换信息</h2>
             <p className="text-sm text-ink-secondary">转换人：{detail.convertedBy}</p>
+          </section>
+        ) : null}
+        {detail.quotations && detail.quotations.length > 0 ? (
+          <section className="border-border rounded-md border p-4">
+            <h2 className="text-ink-primary mb-3 text-sm font-semibold">
+              相关报价（{detail.quotations.length}）
+            </h2>
+            <div className="overflow-x-auto">
+              <table className="divide-border min-w-full divide-y text-sm">
+                <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">报价单号</th>
+                    <th className="px-3 py-2 font-medium">状态</th>
+                    <th className="px-3 py-2 font-medium">报价日期</th>
+                    <th className="px-3 py-2 text-right font-medium">含税合计</th>
+                    <th className="px-3 py-2 font-medium">销售订单</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-border divide-y">
+                  {detail.quotations.map((q) => (
+                    <tr key={q.id}>
+                      <td className="px-3 py-2">
+                        <Link href={"/sales/quotations/" + q.id} className="text-brand-600 hover:underline">
+                          {q.code}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-2">
+                        <StatusBadge
+                          status={q.status}
+                          label={QUOTATION_STATUS_LABELS[q.status] ?? q.status}
+                          tone={QUOTATION_TONE_MAP[q.status] ?? "neutral"}
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-ink-secondary">{formatDate(q.quoteDate)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-ink-primary">
+                        {formatMoney(q.totalAmount, q.currency)}
+                      </td>
+                      <td className="px-3 py-2 text-ink-secondary">
+                        {q.salesOrderId ? (
+                          <Link href={"/sales/orders/" + q.salesOrderId} className="text-brand-600 hover:underline">
+                            查看订单
+                          </Link>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </section>
         ) : null}
       </EntityDetailWorkspace>

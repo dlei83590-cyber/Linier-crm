@@ -7,6 +7,8 @@
  * F2-6B 批 1：状态 Gate + 权限 Gate 后提供 Edit 入口（DRAFT/REJECTED）与
  * Convert→SO（ACCEPTED + 未过期 + 未转换，quotation:approve）动作按钮。
  * 其余 factActions（submit/accept/cancel）仍不开放。
+ * 商机→报价→订单 MVP：新增「打印」（v1 window.print + print CSS，globals.css @media print；
+ * 不引入 PDF 引擎），转换成功跳转 /sales/orders/[id]。
  * PermissionGuard 对齐 API requirePermission("quotation:view")。
  */
 import { useEffect, useState } from "react";
@@ -242,9 +244,17 @@ function QuotationDetailPage() {
         statusLabel={STATUS_LABELS[detail.effectiveStatus ?? detail.status] ?? detail.effectiveStatus ?? detail.status}
         statusTone={TONE_MAP[detail.effectiveStatus ?? detail.status] ?? "neutral"}
         actions={
-          canEdit || canSubmit || canAccept || canCancel || (canConvert && canApprove) ? (
-            <>
-              {canEdit && (detail.status === "DRAFT" || detail.status === "REJECTED") && (
+          <>
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-canvas"
+            >
+              打印
+            </button>
+            {(canEdit || canSubmit || canAccept || canCancel || (canConvert && canApprove)) && (
+              <>
+                {canEdit && (detail.status === "DRAFT" || detail.status === "REJECTED") && (
                 <Link
                   href={`/sales/quotations/${id}/edit`}
                   className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-canvas"
@@ -292,8 +302,9 @@ function QuotationDetailPage() {
                   {actionBusy ? "转换中…" : "转为销售订单"}
                 </button>
               )}
-            </>
-          ) : undefined
+              </>
+            )}
+          </>
         }
         summary={
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">

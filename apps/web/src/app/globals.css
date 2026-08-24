@@ -55,3 +55,30 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 .animate-page-in { animation: page-in 200ms cubic-bezier(0.4, 0, 0.2, 1) both; }
+
+/* 打印 — 报价单/单据打印 v1（window.print + print CSS；不引入 PDF 引擎）：
+   隐藏壳层（顶栏/侧栏/页脚/Toast 浮层），main 去内边距，白底黑字，表格行避免跨页截断 */
+@media print {
+  header,
+  aside,
+  footer,
+  [aria-live="polite"] {
+    display: none !important;
+  }
+  main {
+    padding: 0 !important;
+  }
+  body,
+  .bg-canvas,
+  .bg-surface {
+    background: #fff !important;
+  }
+  .shadow-elevation-sm,
+  .shadow-elevation-md,
+  .shadow-elevation-lg {
+    box-shadow: none !important;
+  }
+  tr {
+    break-inside: avoid;
+  }
+}

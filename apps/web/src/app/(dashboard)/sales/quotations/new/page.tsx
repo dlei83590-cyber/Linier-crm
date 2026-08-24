@@ -7,10 +7,12 @@
  * Header：customerId（必填）/ currency（默认 CNY）/ validFrom? / validUntil? / remark?
  * Lines：itemId / description? / quantity / uomId?（选物料自动带出 stockUom）
  * 成功 → 服务端返回 id/code → 跳转权威 Detail（re-GET）。
+ * 商机→报价 MVP：?opportunityId=… 进入时自动带入并锁定客户（ProjectOpportunity.customer），
+ * opportunityId 随单保存（POST /api/quotations 已支持）；?customerId=… 亦可直接预填客户。
  * PermissionGuard 对齐 API requirePermission("quotation:create")。
  */
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
@@ -56,10 +58,18 @@ function toIso(value: string): string | undefined {
 
 function QuotationCreateForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // 商机→报价 MVP：从商机详情「创建报价」进入（opportunityId）或携带 customerId 预填客户
+  const opportunityIdParam = searchParams.get("opportunityId") ?? "";
+  const customerIdParam = searchParams.get("customerId") ?? "";
   const [items, setItems] = useState<ItemOption[]>([]);
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [terms, setTerms] = useState<CommercialTermOption[]>([]);
   const [customerId, setCustomerId] = useState("");
+  const [opportunityId] = useState(opportunityIdParam);
+  const [opportunityLabel, setOpportunityLabel] = useState("");
+  const [presetCustomer, setPresetCustomer] = useState<CustomerOption | null>(null);
+  const [presetLoading, setPresetLoading] = useState(Boolean(opportunityIdParam));
   const [currency, setCurrency] = useState("CNY");
   // 有效期默认：从 = 当前系统日期；至 = 当前 + 30 天（date 输入，精确到天，无分钟）
   const today = new Date();
@@ -97,6 +107,37 @@ function QuotationCreateForm() {
       });
     return () => controller.abort();
   }, []);
+
+  // 商机→报价 MVP：opportunityId 参数 → 读取商机（编号/名称/客户），自动带入客户并锁定
+  useEffect(() => {
+    if (!opportunityIdParam) {
+      if (customerIdParam) setCustomerId(customerIdParam);
+      return;
+    }
+    const controller = new AbortController();
+    apiFetch<{ id: string; code: string; name: string; customer: CustomerOption | null }>(
+      "/api/project-opportunities/" + opportunityIdParam,
+      { signal: controller.signal },
+    )
+      .then((body) => {
+        const opp = body.data;
+        setOpportunityLabel(((opp.code ?? "") + " " + (opp.name ?? "")).trim());
+        if (opp.customer?.id) {
+          setPresetCustomer({ id: opp.customer.id, code: opp.customer.code, name: opp.customer.name });
+          setCustomerId(opp.customer.id);
+        }
+      })
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        // 商机读取失败：退回手动选择客户，不阻断报价创建（仅提示）
+        setError(
+          err instanceof ApiClientError ? err : new ApiClientError(0, "加载商机信息失败", "NETWORK_ERROR"),
+        );
+      })
+      .finally(() => setPresetLoading(false));
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opportunityIdParam, customerIdParam]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -155,6 +196,7 @@ function QuotationCreateForm() {
     try {
       const payload = {
         customerId,
+        ...(opportunityId ? { opportunityId } : {}),
         currency,
         ...(validFrom ? { validFrom: toIso(validFrom) } : {}),
         ...(validUntil ? { validUntil: toIso(validUntil) } : {}),
@@ -207,17 +249,33 @@ function QuotationCreateForm() {
             </p>
           </div>
         )}
+        {opportunityId && (
+          <div className="mb-4 rounded-md border border-border bg-canvas p-3 text-sm text-ink-secondary">
+            {presetLoading
+              ? "正在加载商机信息…"
+              : opportunityLabel
+                ? "来自商机：" +
+                  opportunityLabel +
+                  (presetCustomer
+                    ? " · 客户已带入（" + (presetCustomer.code ?? "") + " " + (presetCustomer.name ?? "") + "）"
+                    : "")
+                : "商机信息加载失败，请手动选择客户"}
+          </div>
+        )}
 
         <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-canvas p-4 text-sm md:grid-cols-3">
           <div>
-            <label className="block text-xs text-ink-secondary">客户 *</label>
+            <label className="block text-xs text-ink-secondary">
+              {presetCustomer ? "客户（来自商机）*" : "客户 *"}
+            </label>
             <select
               value={customerId}
               onChange={(e) => {
                 setCustomerId(e.target.value);
                 markDirty();
               }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+              disabled={presetCustomer !== null}
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
             >
               <option value="">选择客户</option>
               {customers.map((c) => (
@@ -416,7 +474,9 @@ function QuotationCreateForm() {
 export default function Page() {
   return (
     <PermissionGuard permission={actionPermission("quotation", "create")}>
-      <QuotationCreateForm />
+      <Suspense fallback={null}>
+        <QuotationCreateForm />
+      </Suspense>
     </PermissionGuard>
   );
 }
