@@ -2,6 +2,15 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Phase 1C：Customer Retirement Decision（CTO Directive Phase 1）
+
+### 治理
+
+- ADR-0051：遗留 Customer 模型处置决策 = **DEPRECATE**（保留兼容窗口，禁止 DROP，删除另开 Migration Gate）
+- Dependency Matrix：Customer 模型/子模型/API/UI/import/seed/test/migration 全维度审计——零业务引用、零前端消费（P0-1 后）、零 seed、零测试
+- 处置分类：A dead code=无；B legacy API=/api/customers 9 路由 + shared customer 权限模块（DEPRECATE）；C historical facts=生产 DB 可能有早期数据（迁移前 backfill 评估）；D 独立语义=无
+
+---
 ## [Unreleased] - Phase 1B：产品/原料合同视图（CTO Directive Phase 1）
 
 ### 新增
