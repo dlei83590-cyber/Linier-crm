@@ -282,5 +282,26 @@
 | PRODUCTION_INBOUND_ITEM_INVALID | 400 | item 不存在或已停用 / fromItemId == toItemId，400 |
 | PRODUCTION_INBOUND_WAREHOUSE_INVALID | 400 | 仓库不存在或已停用，400 |
 | PRODUCTION_INBOUND_SEQUENCE_MISSING | 500 | PIN DocumentSequence 缺失 = 部署配置错误（fail closed，禁 fallback），500 |
+| BOM_NOT_FOUND | 404 | 配方不存在或已删除，404 |
+| BOM_INVALID_STATE | 409 | 非 DRAFT 操作（PATCH/DELETE）/ 已归档，409 |
+| BOM_ALREADY_ACTIVE | 409 | 幂等：已 ACTIVE 禁止重复 activate，409 |
+| BOM_VERSION_CONFLICT | 409 | 同成品同版本配方已存在，409 |
+| BOM_NO_LINES | 400 | 配方至少一行原料，400 |
+| BOM_LINE_INVALID | 400 | 原料行非法（componentItemId == 成品 / 系数 <= 0 / 损耗率越界 / 原料单位 != 原料库存单位），400 |
+| BOM_COMPONENT_DUPLICATE | 400 | 同一配方内原料重复，400 |
+| BOM_ITEM_INVALID | 400 | 成品/原料不存在或已停用 / 成品不可生产（sourcingType 与 isManufacturable），400 |
+| PRODUCTION_ORDER_NOT_FOUND | 404 | 工单不存在或已删除，404 |
+| PRODUCTION_ORDER_INVALID_STATE | 409 | 非 DRAFT 操作（PATCH/DELETE）/ 非 DRAFT/SUBMITTED 过账 / 已 CANCELLED，409 |
+| PRODUCTION_ORDER_ALREADY_POSTED | 409 | 幂等：已 POSTED 禁止重复 post，409 |
+| PRODUCTION_ORDER_NO_LINES | 400 | 至少一条原料行 + 一条成品行，400 |
+| PRODUCTION_ORDER_LINE_INVALID | 400 | 行非法（数量 <= 0 / 成品行重复 / 原料行缺仓库），400 |
+| PRODUCTION_ORDER_ITEM_INVALID | 400 | 物料不存在或已停用 / 成品不可生产，400 |
+| PRODUCTION_ORDER_BOM_INVALID | 400 | 配方不存在/非 ACTIVE/非本成品配方，400 |
+| PRODUCTION_ORDER_BOM_REQUIREMENT | 400 | 原料行数量 < 配方需求量（有 BOM 时下限校验），400 |
+| PRODUCTION_ORDER_UOM_INVALID | 400 | 行单位 != 物料库存单位（服务端校验，禁任意 UOM），400 |
+| PRODUCTION_ORDER_WAREHOUSE_INVALID | 400 | 仓库不存在或已停用，400 |
+| PRODUCTION_ORDER_SUPPLIER_INVALID | 400 | OEM 必须选外协厂且为供应商类型，400 |
+| PRODUCTION_ORDER_FEE_INVALID | 400 | OEM 加工费必须 >= 0（缺失按 0），400 |
+| PRODUCTION_ORDER_SEQUENCE_MISSING | 500 | PRD DocumentSequence 缺失 = 部署配置错误（fail closed，禁 fallback），500 |
 
-> 合计：**277 个错误码**（自动统计）
+> 合计：**298 个错误码**（自动统计）

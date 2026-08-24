@@ -27,6 +27,40 @@ enum ItemType {
   PACKAGING // 包装材料
 }
 
+/// 商品来源（P-1/Item Sourcing）：成品三大来源 + 原料/半成品
+enum ItemSourcingType {
+  BOUGHT            // ①外购（成品直接销售/原料采购）——默认
+  SELF_MANUFACTURED // ②自产（物料组合，本厂加工；BOM 配方驱动）
+  OEM_OUTSOURCED    // ②OEM 外协（我方供料 + 加工费，外协厂加工）
+}
+
+/// 配方状态（P-1/ItemBom）：草稿 / 生效 / 归档（同成品同时仅一个 ACTIVE 默认配方）
+enum BomStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+/// 生产/外协工单类型（P-1/ProductionOrder）
+enum ProductionOrderType {
+  SELF_MANUFACTURE // 自产
+  OEM_OUTSOURCING  // OEM 外协（我方供料 + 加工费）
+}
+
+/// 生产/外协工单状态：草稿 / 已提交 / 已过账（同事务库存效应）/ 已取消
+enum ProductionOrderStatus {
+  DRAFT
+  SUBMITTED
+  POSTED
+  CANCELLED
+}
+
+/// 生产/外协工单行类型：MATERIAL=领料出库；FINISHED=成品入库
+enum ProductionOrderLineType {
+  MATERIAL
+  FINISHED
+}
+
 /// 生产入库单状态：草稿 / 已提交 / 已过账（产生库存效应）/ 已取消
 enum ProductionInboundStatus {
   DRAFT
@@ -243,6 +277,7 @@ enum DocumentType {
   SUPPLIER_CREDIT_NOTE // 供应商贷项通知单 SCN（Sprint 5C-2 新增；AP 侧冲减，5C-2 创建即取号）
   PRODUCTION_INBOUND // 生产入库单 PIN（P-2 新增；半成品→产成品入库，inboundNo DocumentSequence 创建即取号）
   SUPPLIER_DEBIT_NOTE // 供应商借项通知单 SDN（Sprint 5C-2 新增；AP 侧增加，5C-2 创建即取号）
+  PRODUCTION_ORDER // 生产/外协工单 PRD（P-1 新增；orderNo DocumentSequence 创建即取号）
 }
 
 /// Platform user account. Identity and credential record.
@@ -406,6 +441,8 @@ model UnitOfMeasure {
   adjustmentLines InventoryAdjustmentLine[] // 6B：调整行（InventoryAdjustmentLine.uom 方向）
   conversionLines InventoryConversionLine[] // 6B：转换行（InventoryConversionLine.uom 方向）
   conversionBaseUoms InventoryConversion[] @relation("ConversionBaseUom") // 6B：转换单 base UOM（InventoryConversion.baseUom 方向）
+  bomLines ItemBomLine[] @relation("BomLineUom") // P-1：配方行原料单位（ItemBomLine.componentUom 方向）
+  productionOrderLines ProductionOrderLine[] // P-1：工单行单位（ProductionOrderLine.uom 方向）
   createdAt     DateTime @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 
@@ -421,6 +458,7 @@ model Item {
   mnemonic      String? // 助记码
   name          String // 中文名称
   itemType      ItemType        @default(FINISHED_GOOD) // 分类枚举（CTO #2075：10 类）
+  sourcingType  ItemSourcingType @default(BOUGHT) // 商品来源（P-1：外购/自产/OEM；成品三大来源，BOUGHT=外购成品直接销售）
   // 五级层级（CTO #2075）：Level1 Category → Level2 SubCategory → Level3 Series → Level4 Model → Level5 Variant
   categoryId    String? // Level2 SubCategory（ItemCategory 树叶子）
   category      ItemCategory?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
@@ -512,6 +550,64 @@ model Item {
   @@index([replacementItemId])
   @@index([deletedAt])
   supplierCreditDebitNoteLines SupplierCreditDebitNoteLine[] // 5C-2：供应商贷/借项行（SupplierCreditDebitNoteLine.itemId 方向）
+  bomFinished ItemBom[] @relation("BomFinishedItem") // P-1：作为成品被配方引用（ItemBom.finishedItem 方向）
+  bomComponents ItemBomLine[] @relation("BomComponentItem") // P-1：作为原料被配方行引用（ItemBomLine.componentItem 方向）
+  productionOrderFinished ProductionOrder[] @relation("ProdOrderFinished") // P-1：作为成品开生产/外协工单（ProductionOrder.finishedItem 方向）
+  productionOrderLines ProductionOrderLine[] // P-1：工单行（领料/成品）（ProductionOrderLine.item 方向）
+}
+
+/// 配方（BOM）——物料组合固定配方（P-1/Item Sourcing）：1 成品 = N 行原料（含系数/损耗率；吨→米/件/个在系数表达）
+model ItemBom {
+  id              String   @id @default(cuid())
+  bomNo           String   @unique // 配方编码（自动生成：BOM-{成品code}-{bomVersion}，非 DocumentSequence）
+  finishedItemId  String                        // 成品（1 配方 = 1 成品）
+  finishedItem    Item     @relation("BomFinishedItem", fields: [finishedItemId], references: [id], onDelete: Restrict)
+  bomVersion      Int      @default(1)          // 配方版本（同成品多版本；@@unique 兜底）
+  status          BomStatus @default(DRAFT)
+  isDefault       Boolean  @default(false)      // 当前默认配方（ACTIVE 时唯一，activate 时服务端排他）
+  remark          String?
+  createdById     String?
+  updatedById     String?
+  approvedById    String?
+  approvalStatus  ApprovalStatus @default(DRAFT)
+  version         Int      @default(1)          // CAS 乐观锁
+  deletedAt       DateTime?
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(3)
+
+  lines            ItemBomLine[]
+  productionOrders ProductionOrder[] // P-1：工单引用配方（ProductionOrder.bom 方向）
+
+  @@unique([finishedItemId, bomVersion])
+  @@index([finishedItemId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+/// 配方行：生产 1 单位成品所需该原料数量（qtyPerFinishedUnit，原料单位）+ 损耗率（lossRate）
+model ItemBomLine {
+  id                String  @id @default(cuid())
+  bomId             String
+  bom               ItemBom @relation(fields: [bomId], references: [id], onDelete: Cascade)
+  componentItemId   String                       // 原料/半成品/外购件（可多个）
+  componentItem     Item    @relation("BomComponentItem", fields: [componentItemId], references: [id], onDelete: Restrict)
+  componentUomId    String                       // 原料计量单位（吨/公斤/件…）——必须 = 该原料库存单位（stockUomId，服务端校验）
+  componentUom      UnitOfMeasure? @relation("BomLineUom", fields: [componentUomId], references: [id], onDelete: Restrict)
+  qtyPerFinishedUnit Decimal @db.Decimal(18, 6)  // 配方系数：生产 1 单位成品消耗该原料数量（吨→米/件/个在此表达）
+  lossRate          Decimal @default(0) @db.Decimal(8, 6) // 损耗率（0.02 = 2%；需求量 = 成品数 × 系数 × (1+lossRate)）
+  sort              Int     @default(0)
+  remark            String?
+  createdById       String?
+  updatedById       String?
+  version           Int     @default(1)
+  deletedAt         DateTime?
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([bomId, componentItemId]) // 同一配方内原料去重
+  @@index([bomId])
+  @@index([componentItemId])
+  @@index([deletedAt])
 }
 
 /// 直线导轨专用扩展规格（关联 Item，1:1）。
@@ -633,6 +729,7 @@ model BusinessPartner {
   receipts            Receipt[] // 收款（4E-2；收款事实源）
   creditDebitNotes    CreditDebitNote[] // 4E-3：发票调整单（CN/DN；CreditDebitNote.customerId 方向）
   invoiceAdjustments  InvoiceAdjustment[] // 4E-3：调整事实（InvoiceAdjustment.customerId 方向）
+  productionOrders     ProductionOrder[] @relation("ProdOrderSupplier") // P-1：OEM 外协厂（ProductionOrder.supplier 方向）
   createdAt           DateTime       @default(now()) @db.Timestamptz(3)
   updatedAt           DateTime       @updatedAt @db.Timestamptz(3)
 
@@ -4940,6 +5037,8 @@ model Warehouse {
   stockCountLines StockCountLine[] // 6B：盘点行（StockCountLine.warehouse 方向）
   adjustmentLines InventoryAdjustmentLine[] // 6B：调整行（InventoryAdjustmentLine.warehouse 方向）
   conversionLines InventoryConversionLine[] // 6B：转换行（InventoryConversionLine.warehouse 方向）
+  productionOrders ProductionOrder[] // P-1：工单成品入库仓库（ProductionOrder.warehouse 方向）
+  productionOrderLines ProductionOrderLine[] // P-1：工单领料仓库（ProductionOrderLine.warehouse 方向）
 
   @@index([code])
   @@index([deletedAt])
@@ -6372,6 +6471,73 @@ model ProductionInboundLine {
   @@index([fromItemId])
   @@index([toItemId])
 }
+/// 生产/外协工单（P-1/Item Sourcing）：BOM 驱动多原料领料出库 → 成品入库（SELF=自产；OEM=我方供料+加工费）
+/// POSTED 同事务：原料行逐行 OUT（Movement/Projection/出库成本结转）+ 成品 IN（成本 = Σ原料成本 + OEM 加工费）
+model ProductionOrder {
+  id              String   @id @default(cuid())
+  orderNo         String   @unique // 工单号（DocumentSequence docType=PRODUCTION_ORDER，前缀 PRD；创建即取号）
+  productionType  ProductionOrderType @default(SELF_MANUFACTURE)
+  bomId           String?  // 引用配方（ACTIVE；可选——支持无配方手工工单）
+  bom             ItemBom? @relation(fields: [bomId], references: [id], onDelete: Restrict)
+  finishedItemId  String   // 成品（产出目标）
+  finishedItem    Item     @relation("ProdOrderFinished", fields: [finishedItemId], references: [id], onDelete: Restrict)
+  plannedQty      Decimal  @db.Decimal(18, 4) // 计划/实际产出数量（成品单位）
+  warehouseId     String   // 成品入库仓库
+  warehouse       Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  supplierId      String?  // OEM：外协厂（BusinessPartner 供应商）
+  supplier        BusinessPartner? @relation("ProdOrderSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
+  processingFee   Decimal? @db.Decimal(18, 2) // OEM：加工费合计（计入成品成本）
+  batchNo         String?
+  productionDate  DateTime? // 生产/完工日期
+  status          ProductionOrderStatus @default(DRAFT)
+  movementGroupId String?  // 稳定业务事实（POSTED 时生成并冻结；重试复用）
+  postedById      String?
+  postedAt        DateTime?
+  remark          String?
+  createdById     String?
+  updatedById     String?
+  version         Int      @default(1) // CAS 乐观锁
+  deletedAt       DateTime?
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(3)
+
+  lines ProductionOrderLine[]
+
+  @@index([orderNo])
+  @@index([finishedItemId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+/// 生产/外协工单行：MATERIAL=领料出库（item=原料）；FINISHED=成品入库（item=成品）
+model ProductionOrderLine {
+  id          String @id @default(cuid())
+  orderId     String
+  order       ProductionOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  lineType    ProductionOrderLineType
+  itemId      String
+  item        Item @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  uomId       String? // 行单位（原料=原料库存单位；成品=成品库存单位）
+  uom         UnitOfMeasure? @relation(fields: [uomId], references: [id], onDelete: SetNull)
+  quantity    Decimal @db.Decimal(18, 4) // 数量（原料行=领料量；成品行=产出量，恒正数）
+  warehouseId String? // 原料行=领料仓库（成品行为空——成品仓库在 header）
+  warehouse   Warehouse? @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  unitCost    Decimal? @db.Decimal(18, 4) // 成品行=POSTED 计算的单位成本（原料行空）
+  amount      Decimal? @db.Decimal(18, 2) // 成品行=入库成本（原料行空）
+  remark      String?
+  createdById String?
+  updatedById String?
+  version     Int     @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([orderId, lineType, itemId]) // 同一工单内同类型同物料去重
+  @@index([orderId])
+  @@index([itemId])
+  @@index([deletedAt])
+}
+
 /// 库存成本幂等源（ADR-0038）：sourceKey @unique 防重复累计成本（与 GRIR ACCRUAL 同事务）
 model InventoryCostSource {
   id        String   @id @default(cuid())
