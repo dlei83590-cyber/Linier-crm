@@ -4,7 +4,6 @@
  * Phase 2C — Customer Pool Workspace：公海池列表（CTO 生产测试 MVP）
  */
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace } from "@/components/workspace";
@@ -24,7 +23,6 @@ interface PoolRow {
 const SCOPE_LABELS: Record<string, string> = { GLOBAL: "全局", REGION: "区域", DEPARTMENT: "部门" };
 
 function CustomerPoolList() {
-  const router = useRouter();
   const { items, total, page, pageSize, loading, error, setPage, refresh } = useListQuery<PoolRow>("/api/customer-pools", {});
 
   return (
@@ -57,7 +55,11 @@ function CustomerPoolList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
-        onRowClick={(r: PoolRow) => router.push("/customer-pools/" + r.id)}
+        rowActions={(r: PoolRow) => (
+          <Link href={"/customer-pools/" + r.id} className="text-brand-600 hover:underline">
+            查看
+          </Link>
+        )}
       />
     </AppPage>
   );
