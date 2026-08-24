@@ -687,6 +687,32 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_LIST },
     order: 6,
   },
+  // boms：物料配方（P-1 Item Sourcing，ADR-0049）——成品物料组合固定配方（系数+损耗率；吨→米/件/个）
+  {
+    id: 'boms',
+    domain: 'inventory',
+    label: '物料配方',
+    route: '/inventory/boms',
+    permission: actionPermission('bom', 'view'),
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD_ACTIONS },
+    createRoute: '/inventory/boms/new',
+    createPermission: actionPermission('bom', 'create'),
+    order: 7,
+  },
+  // production-orders：生产/外协工单（P-1 Item Sourcing，ADR-0049）——自产/OEM 领料→成品入库
+  {
+    id: 'production-orders',
+    domain: 'inventory',
+    label: '生产/外协工单',
+    route: '/inventory/production-orders',
+    permission: actionPermission('production-order', 'view'),
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CRUD_ACTIONS },
+    createRoute: '/inventory/production-orders/new',
+    createPermission: actionPermission('production-order', 'create'),
+    order: 8,
+  },
   // gl-period-close：Sprint 7 Finance（ADR-0036）——期末结转（收入/费用 → 本年利润；防重复月结）
   {
     id: 'gl-period-close',

@@ -30,6 +30,7 @@ interface ItemDetail {
   name: string;
   mnemonic?: string | null;
   itemType?: string | null;
+  sourcingType?: string | null;
   status?: string | null;
   lifecycle?: string | null;
   series?: string | null;
@@ -78,6 +79,12 @@ interface AuditLogRow {
   createdAt: string;
   actor?: { id: string; email: string | null; name: string | null } | null;
 }
+
+const SOURCING_LABELS: Record<string, string> = {
+  BOUGHT: "外购（直接采购/销售）",
+  SELF_MANUFACTURED: "自产（物料组合）",
+  OEM_OUTSOURCED: "OEM 外协（我方供料+加工费）",
+};
 
 const ITEM_TYPE_LABELS: Record<string, string> = {
   FINISHED_GOOD: "成品",
@@ -207,6 +214,10 @@ function ItemDetailPage() {
             <InfoItem
               label="类型"
               value={detail.itemType ? ITEM_TYPE_LABELS[detail.itemType] ?? detail.itemType : null}
+            />
+            <InfoItem
+              label="商品来源"
+              value={detail.sourcingType ? SOURCING_LABELS[detail.sourcingType] ?? detail.sourcingType : null}
             />
             <InfoItem label="分类" value={detail.category?.name ?? null} />
             <InfoItem label="品牌" value={detail.brand} />

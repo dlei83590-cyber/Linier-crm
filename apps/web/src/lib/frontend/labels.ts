@@ -169,6 +169,8 @@ export const MODULE_LABELS: Record<string, string> = {
   "stock-count": "库存盘点",
   "inventory-adjustment": "库存调整",
   "inventory-conversion": "库存转换",
+  "bom": "物料配方",
+  "production-order": "生产/外协",
   "stock-projection": "库存余额投影",
   "inventory-movement": "库存流水",
   "supplier-invoice": "供应商发票",

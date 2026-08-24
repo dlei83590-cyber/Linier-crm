@@ -27,6 +27,7 @@ interface ItemDetail {
   name: string;
   mnemonic?: string | null;
   itemType?: string | null;
+  sourcingType?: string | null;
   status?: string | null;
   lifecycle?: string | null;
   series?: string | null;
@@ -72,6 +73,12 @@ const ITEM_TYPE_OPTIONS = [
   { value: "ASSET", label: "资产" },
   { value: "TOOLING", label: "工装" },
   { value: "PACKAGING", label: "包装物" },
+];
+
+const SOURCING_OPTIONS = [
+  { value: "BOUGHT", label: "外购（直接采购/销售）" },
+  { value: "SELF_MANUFACTURED", label: "自产（物料组合，本厂加工）" },
+  { value: "OEM_OUTSOURCED", label: "OEM 外协（我方供料 + 加工费）" },
 ];
 
 const STATUS_OPTIONS = [
@@ -142,6 +149,7 @@ function ItemEditForm() {
   const [name, setName] = useState("");
   const [mnemonic, setMnemonic] = useState("");
   const [itemType, setItemType] = useState("");
+  const [sourcingType, setSourcingType] = useState("BOUGHT");
   const [categoryId, setCategoryId] = useState("");
   const [series, setSeries] = useState("");
   const [model, setModel] = useState("");
@@ -195,6 +203,7 @@ function ItemEditForm() {
         setName(d.name);
         setMnemonic(d.mnemonic ?? "");
         setItemType(d.itemType ?? "");
+        setSourcingType(d.sourcingType ?? "BOUGHT");
         setCategoryId(d.categoryId ?? "");
         setSeries(d.series ?? "");
         setModel(d.model ?? "");
@@ -268,6 +277,7 @@ function ItemEditForm() {
       name: name.trim(),
       mnemonic: mnemonic.trim() || null,
       itemType: itemType || undefined,
+      sourcingType: sourcingType || undefined,
       categoryId: categoryId || null,
       series: series.trim() || null,
       model: model.trim() || null,
@@ -386,6 +396,15 @@ function ItemEditForm() {
           <select value={itemType} onChange={(e) => setItemType(e.target.value)} className={inputClass}>
             <option value="">请选择</option>
             {ITEM_TYPE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </FormField>
+        <FormField label="商品来源">
+          <select value={sourcingType} onChange={(e) => setSourcingType(e.target.value)} className={inputClass}>
+            {SOURCING_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>

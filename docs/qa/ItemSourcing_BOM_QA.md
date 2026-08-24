@@ -1,6 +1,6 @@
 # Item Sourcing + BOM + ProductionOrder QA（商品逻辑整理）
 
-> 日期：2026-08-24 ｜ 指令：用户「整理商品逻辑——成品三大来源 + 吨→米/件/个」｜ 范围：P-1~P-3（Schema + BOM API + 工单 API，不含前端页）
+> 日期：2026-08-24 ｜ 指令：用户「整理商品逻辑——成品三大来源 + 吨→米/件/个」｜ 范围：P-1~P-3（Schema + API）+ **P-4（前端页面）**
 > 验证事实源：GitHub CI（Quality Gates / Build / Secret Scanning）——本地未运行 build/test/type-check/lint
 
 ## 范围
@@ -8,7 +8,8 @@
 - **P-1 Schema**（Migration 0047）：Item.sourcingType + ItemBom/ItemBomLine + ProductionOrder/ProductionOrderLine + DocumentType.PRODUCTION_ORDER + 权限注册（bom/production-order）+ PRD 单据序列 seed
 - **P-2 BOM API**：/api/boms CRUD + activate（ACTIVE 唯一 + isDefault）
 - **P-3 工单 API**：/api/production-orders CRUD + submit/post/cancel（POSTED 同事务：领料 OUT → 成品 IN + 成本 + 幂等 + BOM 需求下限）
-- **不在范围**：前端页面（P-4）；生产成本归集/工序/工时/良率/工单冲销
+- **P-4 前端**：商品来源字段（新建/编辑/详情）+ 配方列表/新建/详情/编辑 + 工单列表/新建/详情（提交/过账/取消）——已交付
+- **不在范围**：生产成本归集/工序/工时/良率/工单冲销
 
 ## 变更清单
 

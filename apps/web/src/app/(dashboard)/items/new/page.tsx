@@ -46,6 +46,12 @@ const emptySupplierRow = (): SupplierRow => ({
   isPreferred: false,
 });
 
+const SOURCING_OPTIONS = [
+  { value: "BOUGHT", label: "外购（直接采购/销售）" },
+  { value: "SELF_MANUFACTURED", label: "自产（物料组合，本厂加工）" },
+  { value: "OEM_OUTSOURCED", label: "OEM 外协（我方供料 + 加工费）" },
+];
+
 const ITEM_TYPE_OPTIONS = [
   { value: "FINISHED_GOOD", label: "成品" },
   { value: "RAW_MATERIAL", label: "原材料" },
@@ -98,6 +104,7 @@ function ItemCreateForm() {
   const [name, setName] = useState("");
   const [mnemonic, setMnemonic] = useState("");
   const [itemType, setItemType] = useState("");
+  const [sourcingType, setSourcingType] = useState("BOUGHT");
   const [categoryId, setCategoryId] = useState("");
   const [series, setSeries] = useState("");
   const [model, setModel] = useState("");
@@ -166,6 +173,7 @@ function ItemCreateForm() {
       name: name.trim(),
       mnemonic: mnemonic.trim() || undefined,
       itemType: itemType || undefined,
+      sourcingType: sourcingType || undefined,
       categoryId: categoryId || undefined,
       series: series.trim() || undefined,
       model: model.trim() || undefined,
@@ -249,6 +257,15 @@ function ItemCreateForm() {
           <select value={itemType} onChange={(e) => setItemType(e.target.value)} className={inputClass}>
             <option value="">请选择</option>
             {ITEM_TYPE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </FormField>
+        <FormField label="商品来源">
+          <select value={sourcingType} onChange={(e) => setSourcingType(e.target.value)} className={inputClass}>
+            {SOURCING_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
