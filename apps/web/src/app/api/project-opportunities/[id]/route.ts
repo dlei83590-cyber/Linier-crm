@@ -29,7 +29,7 @@ const opportunityUpdateSchema = z
   })
   .refine((v) => Object.keys(v).length > 1, { message: "至少提供一个更新字段" });
 
-/** GET /api/project-opportunities/:id（详情含客户/关联项目） */
+/** GET /api/project-opportunities/:id（详情含客户/关联项目/关联报价——商机→报价 MVP 只读投影） */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await authenticate(request);
   const denied = requirePermission(user, "project-opportunity:view");
@@ -42,6 +42,21 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     include: {
       customer: { select: { id: true, code: true, name: true, type: true } },
       project: { select: { id: true, code: true, name: true, stage: true } },
+      // 商机→报价→订单 MVP：详情直接投影关联报价（含转订单投影），前端零 mock、零额外查询
+      quotations: {
+        where: { deletedAt: null },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          code: true,
+          status: true,
+          quoteDate: true,
+          currency: true,
+          totalAmount: true,
+          convertedAt: true,
+          salesOrderId: true,
+        },
+      },
     },
   });
   if (!opportunity) return failNotFound(ERROR_CODES.NOT_FOUND, "销售机会不存在");

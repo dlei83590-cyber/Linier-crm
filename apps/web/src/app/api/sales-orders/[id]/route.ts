@@ -35,6 +35,19 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       },
       revisions: { where: { deletedAt: null }, orderBy: { revisionNo: "desc" } },
       snapshots: { where: { deletedAt: null }, orderBy: { generatedAt: "desc" } },
+      // 履约回显：关联送货单（创建于本订单的 Delivery；状态即当前 DeliveryStatus，供订单详情展示闭环）
+      deliveries: {
+        where: { deletedAt: null },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          code: true,
+          status: true,
+          deliveryDate: true,
+          createdAt: true,
+          _count: { select: { lines: true } },
+        },
+      },
     },
   });
   if (!salesOrder) return failNotFound(ERROR_CODES.SALES_ORDER_NOT_FOUND, "销售订单不存在");
