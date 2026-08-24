@@ -76,7 +76,7 @@ describe('GET /api/reports/operations — 经营数据固定看板（只读聚�
   it('订单/报价 KPI 排除 CANCELLED，且按 createdAt 区间过滤（groupBy 保留全状态构成）', async () => {
     await GET(makeRequest('month'));
     const soCount = mockPrisma['salesOrder'] as { count: ReturnType<typeof vi.fn>; aggregate: ReturnType<typeof vi.fn>; groupBy: ReturnType<typeof vi.fn> };
-    const soCountWhere = soCount.count.mock.calls[0][0].where as { status?: { not?: string }; createdAt?: { gte?: Date; lt?: Date } };
+    const soCountWhere = soCount.count.mock.calls[0][0].where as { status?: { notIn?: string[] }; createdAt?: { gte?: Date; lt?: Date } };
     expect(soCountWhere.status?.notIn).toEqual(['DRAFT', 'CANCELLED']);
     expect(soCountWhere.createdAt?.gte).toBeInstanceOf(Date);
     expect(soCountWhere.createdAt?.lt).toBeInstanceOf(Date);
