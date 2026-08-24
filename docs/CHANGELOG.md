@@ -2,6 +2,19 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Phase 1B：产品/原料合同视图（CTO Directive Phase 1）
+
+### 新增
+
+- **items 详情页「产品/原料合同视图」section**：商品来源 / 移动加权成本 / 库存结存 / 作为成品的配方(BOM) / 作为原料被配方使用(BOM Usage) / 供应商(SupplierItem) / 库存余额(StockProjection SSOT) / 生产外协工单
+- GET /api/items/:id 扩展只读聚合：bomFinished / bomComponents / costBalance / productionOrderFinished / stockProjections / partnerPrices（复用权威模型，零字段复制）
+- 原料视图 = items 列表 itemType 过滤（Item 业务过滤，非独立 Entity）
+
+### 边界
+
+- 零 Schema / 零 Migration / 零平行模型；严格禁止 Product/RawMaterial/CRMProduct 第二主数据表；「产品有哪些供应商」复用 SupplierItem
+
+---
 ## [Unreleased] - Phase 1A：BusinessPartner Customer 360 Workspace（CTO Directive Phase 1）
 
 ### 新增

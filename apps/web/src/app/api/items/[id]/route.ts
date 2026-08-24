@@ -67,6 +67,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       supplierItems: { where: { deletedAt: null }, include: { supplier: { select: { id: true, code: true, name: true } } } },
       revisions: { where: { deletedAt: null }, orderBy: { revisionNo: "desc" } },
       tags: { where: { deletedAt: null }, include: { tag: { select: { id: true, code: true, name: true, color: true } } } },
+      // P-1B 产品/原料合同视图（只读聚合；复用权威模型，零字段复制）
+      bomFinished: { where: { deletedAt: null }, orderBy: { bomVersion: "desc" }, select: { id: true, bomNo: true, bomVersion: true, status: true, isDefault: true } }, // 产品：作为成品的配方
+      bomComponents: { where: { deletedAt: null }, select: { id: true, bom: { select: { id: true, bomNo: true, finishedItem: { select: { id: true, code: true, name: true } } } } } }, // 原料：被哪些配方使用
+      costBalance: true, // 库存成本（移动加权平均，ADR-0038）
+      productionOrderFinished: { where: { deletedAt: null }, orderBy: { createdAt: "desc" }, select: { id: true, orderNo: true, productionType: true, status: true, plannedQty: true } }, // 生产/外协工单
+      stockProjections: { select: { warehouseId: true, warehouse: { select: { code: true, name: true } }, onHandQty: true } }, // 库存余额（StockProjection SSOT，只读）
+      partnerPrices: { where: { deletedAt: null }, select: { id: true, partnerRoleType: true, unitPrice: true, currency: true, partner: { select: { id: true, code: true, name: true } } } }, // 供应商/客户价格（PartnerPrice = partner + item 单价）
     },
   });
   if (!item) return failNotFound(ERROR_CODES.NOT_FOUND, "物料不存在");
