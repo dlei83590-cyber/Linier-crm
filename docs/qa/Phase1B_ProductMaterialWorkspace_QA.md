@@ -15,6 +15,17 @@
 - [ ] 原料详情可追：Item(itemType=RAW_MATERIAL) → 单位 → 供应商 → 成本 → 库存 → BOM Usage（被哪些配方使用）
 - [ ] 零新表：Product / RawMaterial / CRMProduct 均未建立（复用 Item SSOT）
 
+## Runtime Acceptance 执行记录（待人工，CTO Blocker 1）
+
+> ⚠️ CI-First / No Local Server：AI 代理无浏览器、禁止启动本地服务器，无法执行运行时页面验证；以下由人工逐项执行并回填，**未机械勾选**。
+
+| 项 | 验证内容 | 结果 |
+|---|---|---|
+| 环境 / build SHA | （待填） | [ ] |
+| 执行人 / 日期 | （待填） | [ ] |
+| RA-1 产品实例 | Item → BOM → Supplier → Stock/Cost → Production/Outsource | [ ] |
+| RA-2 原料实例 | Item(RAW_MATERIAL) → Supplier → Stock/Cost → BOM Usage | [ ] |
+
 ## 边界
 
 - 零 Schema / 零 Migration / 零平行模型 / 零字段复制；严格禁止 Product/RawMaterial 第二主数据表

@@ -1,5 +1,8 @@
 # Customer API 测试用例（3C-1 Customer Foundation）
 
+> ⚠️ **LEGACY / DEPRECATED — ADR-0051**（2026-08-24）
+> Customer 模型已判定 DEPRECATE：业务事实全部由 BusinessPartner 承载；/api/customers 保留兼容窗口，**禁止新 CRM 功能继续使用**。新开发一律走 /api/business-partners（见 BusinessPartner_API.md）。
+
 > Sprint 3C-1 ｜分支：feature/sprint3-business-foundation
 > 用途：自动化测试复用基准，与 docs/qa/Sprint3C1_QA.md 配套
 

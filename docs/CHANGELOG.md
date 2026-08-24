@@ -2,6 +2,20 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Phase 1.5 Evidence Closure（CTO Corrective Directive）
+
+### 治理
+
+- **Blocker 2 完成（Test Case Closure）**：新建 docs/test-cases/BusinessPartner_API.md（Phase 1A detail aggregate contract）+ Item_API.md Phase 1B 契约 + Customer_API.md 加 LEGACY/DEPRECATED — ADR-0051 标记
+- **Blocker 3 部分（Contract Evidence）**：docs/contracts/README.md 建立不可变归档清单（来源/版本/日期/SHA-256 校验值/页码）；合同原文 PDF 待 CTO 提供（Archive Structure FINAL / Original Evidence PENDING）
+- **Blocker 4（Final Gate Correction）**：Phase1_Final_Gate_Review.md 第 6 项修正 + 3 blocker 记录 + Governance Finding（#217 premature merge）→ CLOSED-BY-CORRECTIVE-ACTION
+- **Blocker 1（Runtime QA）**：QA 文档建立 Runtime Acceptance 执行记录清单（环境/build SHA/执行人/日期/结果待填），AI 无法执行 runtime（CI-First/No Local Server），待人工执行，未机械勾选
+
+### 边界
+
+- 零 Schema / 零 Migration / 零新业务能力（纯证据/测试治理）
+
+---
 ## [Unreleased] - Phase 1 Final Gate Review（CTO Directive Phase 1 收口）
 
 ### 治理

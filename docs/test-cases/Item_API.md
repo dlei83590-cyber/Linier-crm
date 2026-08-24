@@ -3,6 +3,8 @@
 > 模块：Item Master Foundation（ERP 核心主数据）
 > 关联：docs/qa/Sprint3C3_QA.md、ADR-0012、API_GUIDELINES.md、ERROR_CODES.md、EVENTS.md
 > 说明：以下用例供自动化测试复用；覆盖 items 主档 + 分类树 + 规格/UOM/成本/供应商/版本/标签/附件子资源。
+>
+> **Phase 1B detail aggregate contract（2026-08-24）**：GET /api/items/:id 除主档字段外必须聚合返回 `sourcingType / bomFinished（成品配方）/ bomComponents（原料被配方使用）/ costBalance（移动加权成本）/ productionOrderFinished（生产外协工单）/ stockProjections（库存余额 SSOT）/ partnerPrices（伙伴价格）/ supplierItems（供应商）`——只读聚合，复用 Item/BOM/SupplierItem/StockProjection/CostBalance/PartnerPrice 权威模型，零字段复制。
 
 ## A. 认证与权限
 
