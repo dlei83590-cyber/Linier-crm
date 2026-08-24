@@ -2,6 +2,19 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Phase 2A-3：Nested Resource Scope Hardening（CTO Review 发现）
+
+### 修复
+
+- relations/special-dates 嵌套路由 parent-scope 校验（fail-closed 404）：relation 必须属于 :contactId 且 contact 属于 BusinessPartner :id；specialDate 必须属于 :contactId → partnerId = :id
+- 2A-2 关系 target selector 收紧：仅其他有效联系人（id !== self && isActive === true）
+- 回归测试：正确 ID / 错误 partnerId / 错误 contactId → 404 不触达子资源
+
+### 边界
+
+- 零 Schema / 零 Migration（纯路由校验加固）
+
+---
 ## [Unreleased] - Phase 2A-2：Customer 360 联系人管理 Workspace（CTO Directive Phase 2）
 
 ### 新增
