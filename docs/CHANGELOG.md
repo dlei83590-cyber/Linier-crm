@@ -2,6 +2,23 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 商品逻辑整理：成品三大来源 + 配方（BOM）+ 生产/外协工单（用户指令 2026-08-24，P-1~P-3）
+
+### 新增
+
+- **商品来源**：Item.sourcingType（BOUGHT 外购直接销售 / SELF_MANUFACTURED 自产 / OEM_OUTSOURCED 外协）；外购成品走既有采购链零新流程
+- **配方 ItemBom/Line**：1 成品 = N 行原料（系数 qtyPerFinishedUnit + 损耗率 lossRate）；bomVersion 多版本 + ACTIVE 唯一；**吨→米/件/个换算链 = 配方系数**（需求量 = 成品数 × 系数 × (1+损耗率)）；单位红线：系数单位必须 = 原料库存单位
+- **生产/外协工单 ProductionOrder/Line**：SELF_MANUFACTURE / OEM_OUTSOURCING（我方供料 + 加工费）；DRAFT→SUBMITTED→POSTED/CANCELLED；POSTED 同事务领料 OUT → 成品 IN + 成品成本（Σ原料成本 + OEM 加工费）入移动加权成本层 + 幂等 + BOM 需求下限 + 并发锁序
+- Migration 0047 + 权限（bom:*/production-order:*）+ PRD 单据序列 + 错误码（BOM_* ×9 / PRODUCTION_ORDER_* ×13）
+- 文档：ADR-0049 / test-cases（ItemBom_API + ProductionOrder_API）/ Design Gate / QA
+
+### 边界
+
+- 前端页面（P-4）后续交付；生产成本归集（人工/制造费用）、工序/工时/良率、工单冲销仍 HOLD
+- 原料领料 OUT 的 GL 过账（借 6401）与既有 ProductionInbound 一致，生产领料科目待成本归集解锁后纠正
+- ProductionInbound（半成品→成品 1:1）保留兼容；零 Schema 破坏
+
+---
 ## [Unreleased] - 所有功能页面增加该页面的仪表盘（用户指令 2026-08-24）
 
 ### 新增
