@@ -184,6 +184,9 @@ const SEED_ACTION_MODULES = [
   "system-setting",
   "tenant-setting",
   "user-setting",
+  // 经营数据固定看板（feat(crm) operations-report）：GET /api/reports/operations 只读聚合用 reports:view；
+  // 与 shared PERMISSION_MODULES 保持一致（ADR-0028：static RBAC 与 DB permission catalog 不漂移）
+  "reports",
 ] as const;
 
 const SEED_ACTIONS = ["view", "create", "edit", "delete", "approve", "audit", "export", "import", "assign", "close"] as const;

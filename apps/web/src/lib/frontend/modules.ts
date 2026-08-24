@@ -929,6 +929,18 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
   },
 
   // ===== 分析与报表（信息架构先行：Catalog 见 docs/frontend/Report_Catalog.md；不实现指标）=====
+  // operations-report：经营数据固定看板 MVP（feat(crm)）——GET /api/reports/operations 只读聚合（reports:view）；
+  // 固定看板：数字卡 + 普通表格（无图表组件依赖），只读无动作
+  {
+    id: 'operations-report',
+    domain: 'reports',
+    label: '经营数据看板',
+    route: '/reports/operations',
+    permission: actionPermission('reports', 'view'),
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_LIST },
+    order: 1,
+  },
   {
     id: 'reports',
     domain: 'reports',

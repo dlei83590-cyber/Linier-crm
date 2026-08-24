@@ -326,6 +326,9 @@ export const PERMISSION_MODULES = [
   // 动作映射：池/规则配置→:create/:edit/:delete；查看池/条目→:view；claim/release/reclaim→:assign（PERMISSION_ACTIONS 已有 assign，不塞进 :edit）；
   // 后台 sweep→customer-pool:consume（SYSTEM_PERMISSIONS，仅 SUPER_ADMIN/ADMIN）；与 prisma/seed.ts SEED_ACTION_MODULES 保持同步（ADR-0028 防漂移）
   "customer-pool",
+  // 经营数据固定看板（feat(crm) operations-report）：GET /api/reports/operations 只读聚合用 reports:view；
+  // 与 prisma/seed.ts SEED_ACTION_MODULES 保持一致（ADR-0028：static RBAC 与 DB permission catalog 不漂移）
+  "reports",
 ] as const;
 
 /** 生成模块×动作权限码（如 "item:view"） */
