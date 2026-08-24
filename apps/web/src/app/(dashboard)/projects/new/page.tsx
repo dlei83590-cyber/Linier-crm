@@ -8,7 +8,7 @@
  * expectedContractAmount/expectedProfit/expectedGrossMarginRate/paymentStatus 可选。
  * 纪律：Project Create 是独立项目创建，**不模拟 Opportunity → Project conversion**
  * （唯一正确入口是 /project-opportunities/:id/convert，Tier 3 本轮 HOLD，不在本页）。
- * Customer 使用 /api/customers authoritative selector；Create 成功只消费服务端返回 id → 跳 Detail。
+ * Customer 使用 /api/business-partners?type=CUSTOMER 选择器（P0-1 SSOT：option.id = BusinessPartner.id = POST customerId = 后端校验 id）。
  */
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -17,14 +17,10 @@ import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shar
 import { useSession } from "@/lib/session-context";
 import { AppPage, EntityFormWorkspace, ReferenceSelector } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { loadCustomerOptions, type CustomerOption } from "@/lib/frontend/customer-options";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 
-interface CustomerOption {
-  id: string;
-  code: string | null;
-  name: string | null;
-}
 
 const STAGE_OPTIONS = [
   { value: "LEAD", label: "线索" },
@@ -86,12 +82,12 @@ function ProjectCreateForm() {
   const [error, setError] = useState<ApiClientError | null>(null);
   const [dirty, setDirty] = useState(false);
 
-  // Customer selector 数据源（GET FINAL）
+  // Customer selector 数据源（P0-1 SSOT：/api/business-partners?type=CUSTOMER，option.id = BusinessPartner.id）
   useEffect(() => {
     const controller = new AbortController();
-    apiFetch<CustomerOption[]>("/api/business-partners?pageSize=100&type=CUSTOMER&isActive=true", { signal: controller.signal })
-      .then((body) => {
-        setCustomers(body.data);
+    loadCustomerOptions(controller.signal)
+      .then((list) => {
+        setCustomers(list);
         setSelectorsLoading(false);
       })
       .catch((err: unknown) => {

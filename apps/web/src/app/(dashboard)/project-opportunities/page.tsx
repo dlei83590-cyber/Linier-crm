@@ -5,7 +5,7 @@
  *
  * 依据 Contract Card（project-opportunities.md）：backend CRUD FINAL + convert，
  * 本 Wave 开放 List/Detail。结构：AppPage + EntityListWorkspace（Header → Toolbar → Table → Pagination）。
- * 不改 backend / 状态机 / action；Create/Edit 表单见 F2-4A2（customer selector 数据源 /api/customers 已核验）。
+ * 不改 backend / 状态机 / action；Create/Edit 表单见 F2-4A2（customer selector 数据源 /api/business-partners?type=CUSTOMER，P0-1 SSOT）。
  */
 import { useState } from "react";
 import Link from "next/link";
