@@ -3,7 +3,10 @@ import { Prisma } from "@prisma/client";
 import type { PartnerType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
-import { ok, failValidation, failConflict, parsePagination } from "@/lib/api/response";
+import { ok, fail, failValidation, failConflict, parsePagination } from "@/lib/api/response";
+import { handleServerError } from "@/lib/api/server-error";
+import { normalizeUscc, isValidUscc } from "@/lib/business-partner/normalize";
+import { findBusinessPartnerDuplicates } from "@/lib/business-partner/duplicate-check";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { z } from "zod";
@@ -42,6 +45,7 @@ const businessPartnerCreateSchema = z.object({
   phone: z.string().max(50).nullable().optional(),
   email: z.string().max(200).nullable().optional(),
   address: z.string().max(500).nullable().optional(),
+  duplicateAcknowledged: z.boolean().optional(),
 });
 
 /** GET /api/business-partners（分页 + code/name/mnemonic/type/region/industry/isActive 过滤） */
@@ -100,62 +104,146 @@ export async function POST(request: NextRequest) {
   if (existing && !existing.deletedAt) {
     return failConflict(ERROR_CODES.CONFLICT, "往来单位编码已存在");
   }
-  // 中文化校验（GB 32100-2015）：统一社会信用代码 = 18 位大写字母/数字（不含 I/O/S/V/Z），服务端归一化大写
-  if (parsed.data.uscc) {
-    const usccNormalized = parsed.data.uscc.toUpperCase();
-    if (!/^[0-9A-HJ-NPQRTUWXY]{18}$/.test(usccNormalized)) {
-      return failValidation({ uscc: "统一社会信用代码须为 18 位（GB 32100-2015，不含 I/O/S/V/Z）" });
-    }
-    const usccExisting = await prisma.businessPartner.findUnique({ where: { uscc: usccNormalized } });
-    if (usccExisting && !usccExisting.deletedAt) {
-      return failConflict(ERROR_CODES.CONFLICT, "统一社会信用代码已存在");
-    }
+
+  // ① USCC：raw → normalizeUscc → GB 32100 校验 → DB 保存 normalized（CTO §B.3；
+  //    Preflight 与 Create Guard 语义一致，杜绝 "preflight 允许 913... create 却因空格失败"）
+  const usccNormalized = parsed.data.uscc ? normalizeUscc(parsed.data.uscc) : null;
+  if (usccNormalized && !isValidUscc(usccNormalized)) {
+    return failValidation({ uscc: "统一社会信用代码须为 18 位（GB 32100-2015，不含 I/O/S/V/Z）" });
   }
 
-  const created = await prisma.businessPartner.create({
-    data: {
-      code: parsed.data.code,
-      mnemonic: parsed.data.mnemonic ?? null,
-      name: parsed.data.name,
-      type: (parsed.data.type as PartnerType) ?? "SUPPLIER",
-      uscc: parsed.data.uscc ? parsed.data.uscc.toUpperCase() : null,
-      taxpayerType: parsed.data.taxpayerType ?? null,
-      legalRepresentative: parsed.data.legalRepresentative ?? null,
-      registeredAddress: parsed.data.registeredAddress ?? null,
-      invoiceInfo: parsed.data.invoiceInfo === undefined ? undefined : parsed.data.invoiceInfo === null ? Prisma.JsonNull : (parsed.data.invoiceInfo as Prisma.InputJsonValue),
-      bankName: parsed.data.bankName ?? null,
-      bankAccount: parsed.data.bankAccount ?? null,
-      settlementTerms: parsed.data.settlementTerms ?? null,
-      shortName: parsed.data.shortName ?? null,
-      fullName: parsed.data.fullName ?? null,
-      groupName: parsed.data.groupName ?? null,
-      region: parsed.data.region ?? null,
-      industry: parsed.data.industry ?? null,
-      companySize: parsed.data.companySize ?? null,
-      creditRating: parsed.data.creditRating ?? null,
-      sourceChannel: parsed.data.sourceChannel ?? null,
-      foundedDate: parsed.data.foundedDate ? new Date(parsed.data.foundedDate) : null,
-      registeredCapital: parsed.data.registeredCapital ?? null,
-      employeeCount: parsed.data.employeeCount ?? null,
-      website: parsed.data.website ?? null,
-      wechatOfficialAccount: parsed.data.wechatOfficialAccount ?? null,
-      tags: parsed.data.tags === undefined ? undefined : parsed.data.tags === null ? Prisma.JsonNull : (parsed.data.tags as Prisma.InputJsonValue),
-      contactPerson: parsed.data.contactPerson ?? null,
-      phone: parsed.data.phone ?? null,
-      email: parsed.data.email ?? null,
-      address: parsed.data.address ?? null,
-      approvalStatus: "APPROVED",
-      createdById: user?.id ?? null,
-      updatedById: user?.id ?? null,
-    },
+  // ② Authoritative duplicate guard（与 Preflight 共用同一 matcher，禁止两套规则；不信任前端）
+  const dup = await findBusinessPartnerDuplicates({
+    name: parsed.data.name,
+    uscc: usccNormalized ?? undefined,
+    phone: parsed.data.phone ?? undefined,
   });
+
+  if (dup.duplicateLevel === "EXACT") {
+    // EXACT 永远 409，acknowledgement 不能绕过（CTO §B.1）
+    await writeAuditLog({
+      actorId: user?.id,
+      action: "business-partner.duplicate-blocked",
+      entityType: "businessPartner",
+      afterData: {
+        duplicateLevel: "EXACT",
+        matchedPartnerIds: dup.matches.map((m) => m.id),
+        matchReasons: [...new Set(dup.matches.flatMap((m) => m.matchReasons))],
+      },
+      result: "FAILURE",
+      ...meta,
+    });
+    const deletedHit = dup.matches.some((m) => m.matchReasons.includes("USCC_EXACT_DELETED"));
+    return fail(
+      ERROR_CODES.DUPLICATE_EXACT,
+      deletedHit
+        ? "已存在已归档/删除的同一主体（USCC 一致），请恢复或处理原主体，不能重复新建"
+        : "已存在相同统一社会信用代码的主体，禁止重复创建",
+      409,
+      { duplicateLevel: "EXACT", matches: dup.matches },
+    );
+  }
+
+  if (dup.duplicateLevel === "POTENTIAL" && !parsed.data.duplicateAcknowledged) {
+    // POTENTIAL 未显式确认 → 409（CTO §B.1 锁定：未 duplicateAcknowledged=true 不允许创建）
+    return fail(
+      ERROR_CODES.DUPLICATE_REQUIRES_ACK,
+      "已存在疑似重复的往来单位，需确认后继续创建",
+      409,
+      { duplicateLevel: "POTENTIAL", matches: dup.matches },
+    );
+  }
+
+  if (dup.duplicateLevel === "POTENTIAL" && parsed.data.duplicateAcknowledged) {
+    // 用户显式确认 → 允许创建 + Audit（request-level control，不持久化字段）
+    await writeAuditLog({
+      actorId: user?.id,
+      action: "business-partner.duplicate-acknowledged",
+      entityType: "businessPartner",
+      afterData: {
+        duplicateLevel: "POTENTIAL",
+        matchedPartnerIds: dup.matches.map((m) => m.id),
+        matchReasons: [...new Set(dup.matches.flatMap((m) => m.matchReasons))],
+      },
+      ...meta,
+    });
+  }
+
+  let created: Awaited<ReturnType<typeof prisma.businessPartner.create>> | undefined;
+  try {
+    created = await prisma.businessPartner.create({
+      data: {
+        code: parsed.data.code,
+        mnemonic: parsed.data.mnemonic ?? null,
+        name: parsed.data.name,
+        type: (parsed.data.type as PartnerType) ?? "SUPPLIER",
+        uscc: usccNormalized,
+        taxpayerType: parsed.data.taxpayerType ?? null,
+        legalRepresentative: parsed.data.legalRepresentative ?? null,
+        registeredAddress: parsed.data.registeredAddress ?? null,
+        invoiceInfo: parsed.data.invoiceInfo === undefined ? undefined : parsed.data.invoiceInfo === null ? Prisma.JsonNull : (parsed.data.invoiceInfo as Prisma.InputJsonValue),
+        bankName: parsed.data.bankName ?? null,
+        bankAccount: parsed.data.bankAccount ?? null,
+        settlementTerms: parsed.data.settlementTerms ?? null,
+        shortName: parsed.data.shortName ?? null,
+        fullName: parsed.data.fullName ?? null,
+        groupName: parsed.data.groupName ?? null,
+        region: parsed.data.region ?? null,
+        industry: parsed.data.industry ?? null,
+        companySize: parsed.data.companySize ?? null,
+        creditRating: parsed.data.creditRating ?? null,
+        sourceChannel: parsed.data.sourceChannel ?? null,
+        foundedDate: parsed.data.foundedDate ? new Date(parsed.data.foundedDate) : null,
+        registeredCapital: parsed.data.registeredCapital ?? null,
+        employeeCount: parsed.data.employeeCount ?? null,
+        website: parsed.data.website ?? null,
+        wechatOfficialAccount: parsed.data.wechatOfficialAccount ?? null,
+        tags: parsed.data.tags === undefined ? undefined : parsed.data.tags === null ? Prisma.JsonNull : (parsed.data.tags as Prisma.InputJsonValue),
+        contactPerson: parsed.data.contactPerson ?? null,
+        phone: parsed.data.phone ?? null,
+        email: parsed.data.email ?? null,
+        address: parsed.data.address ?? null,
+        approvalStatus: "APPROVED",
+        createdById: user?.id ?? null,
+        updatedById: user?.id ?? null,
+      },
+    });
+  } catch (err) {
+    // ③ P2002 Race Safety（CTO §D）：并发下 precheck 可能同时通过 → 按 target 区分语义
+    //    uscc → DUPLICATE_EXACT；code → 既有 code conflict；其他唯一约束 → 统一错误处理
+    if (err !== null && typeof err === "object" && (err as { code?: unknown }).code === "P2002") {
+      const target = (err as { meta?: { target?: string | string[] } }).meta?.target;
+      const targets = Array.isArray(target) ? target : target ? [target] : [];
+      if (targets.includes("uscc")) {
+        await writeAuditLog({
+          actorId: user?.id,
+          action: "business-partner.duplicate-blocked",
+          entityType: "businessPartner",
+          afterData: {
+            duplicateLevel: "EXACT",
+            matchedPartnerIds: [],
+            matchReasons: ["USCC_EXACT"],
+            note: "concurrent-race-p2002",
+          },
+          result: "FAILURE",
+          ...meta,
+        });
+        return failConflict(ERROR_CODES.DUPLICATE_EXACT, "统一社会信用代码已被占用（并发提交）");
+      }
+      if (targets.includes("code")) {
+        return failConflict(ERROR_CODES.CONFLICT, "往来单位编码已存在");
+      }
+      return handleServerError(request, user?.id, "business-partner.create", err);
+    }
+    return handleServerError(request, user?.id, "business-partner.create", err);
+  }
 
   await writeAuditLog({
     actorId: user?.id,
     action: "business-partner.create",
     entityType: "businessPartner",
-    entityId: created.id,
-    afterData: { code: created.code, name: created.name, type: created.type },
+    entityId: created?.id,
+    afterData: { code: created?.code, name: created?.name, type: created?.type },
     ...meta,
   });
 

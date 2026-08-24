@@ -2,9 +2,10 @@
 
 /**
  * Business Partners — 新建往来单位（Pending Pages Completion Gate — Batch 1）
- * 结构：EntityFormWorkspace（Header → Sections → Validation → Save/Cancel）。
+ * Phase 2B（客户查重 Vertical Slice）：name/uscc/phone blur + 400ms debounce → duplicate-check
+ * EXACT 阻断提交 / POTENTIAL 确认后携带 duplicateAcknowledged=true / stale 防护；保存前 Server Guard 最终裁决。
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
@@ -12,12 +13,23 @@ import { AppPage, EntityFormWorkspace } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
+import {
+  computeDuplicateUiState,
+  shouldRunDuplicateCheck,
+  isStaleDuplicateResult,
+  withAcknowledgment,
+  duplicateReasonLabel,
+  type DuplicateCheckView,
+} from "@/lib/frontend/duplicate-check";
 
 const TYPE_OPTIONS = [
   { value: "CUSTOMER", label: "客户" },
   { value: "SUPPLIER", label: "供应商" },
   { value: "BOTH", label: "客户兼供应商" },
 ];
+
+const TYPE_LABELS: Record<string, string> = { CUSTOMER: "客户", SUPPLIER: "供应商", BOTH: "客户兼供应商" };
+const DEBOUNCE_MS = 400;
 
 const inputClass = INPUT_CLASS;
 
@@ -29,7 +41,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     </section>
   );
 }
-
 
 function BusinessPartnerCreateForm() {
   const router = useRouter();
@@ -58,36 +69,99 @@ function BusinessPartnerCreateForm() {
   const [error, setError] = useState<ApiClientError | null>(null);
   const [dirty, setDirty] = useState(false);
 
+  // Phase 2B：查重状态
+  const [dupResult, setDupResult] = useState<DuplicateCheckView | null>(null);
+  const [dupLoading, setDupLoading] = useState(false);
+  const [dupAcknowledged, setDupAcknowledged] = useState(false);
+  const dupSeqRef = useRef(0);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const runDuplicateCheck = () => {
+    if (!shouldRunDuplicateCheck(name, uscc, phone)) {
+      setDupResult(null);
+      setDupAcknowledged(false);
+      return;
+    }
+    const seq = ++dupSeqRef.current;
+    setDupLoading(true);
+    apiFetch<DuplicateCheckView>("/api/business-partners/duplicate-check", {
+      method: "POST",
+      body: JSON.stringify({
+        name: name.trim() || undefined,
+        uscc: uscc.trim() || undefined,
+        phone: phone.trim() || undefined,
+      }),
+    })
+      .then(({ data }) => {
+        if (isStaleDuplicateResult(seq, dupSeqRef.current)) return; // stale 响应不覆盖新结果
+        setDupResult(data);
+        setDupAcknowledged(false);
+      })
+      .catch(() => {
+        if (isStaleDuplicateResult(seq, dupSeqRef.current)) return;
+        // 查重失败静默降级：不阻断主流程，保存时由 Server Guard 兜底裁决
+        setDupResult(null);
+      })
+      .finally(() => {
+        if (!isStaleDuplicateResult(seq, dupSeqRef.current)) setDupLoading(false);
+      });
+  };
+
+  const scheduleDuplicateCheck = () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(runDuplicateCheck, DEBOUNCE_MS);
+  };
+
+  const dupState = computeDuplicateUiState(dupResult?.duplicateLevel, dupAcknowledged);
+
   const handleSave = () => {
     if (submitting) return;
     if (!code.trim() || !name.trim()) {
       setError(new ApiClientError(400, "编码与名称为必填项", "VALIDATION"));
       return;
     }
+    // UI 层 EXACT 阻断（Server Guard 仍会在保存时最终裁决）
+    if (dupState.blocking) {
+      setError(
+        new ApiClientError(
+          409,
+          "已存在匹配往来单位，禁止重复创建。请复用已有主体，或通过主数据流程调整客户角色/类型。",
+          "DUPLICATE_EXACT",
+        ),
+      );
+      return;
+    }
+    if (dupState.warning && !dupState.confirmed) {
+      setError(new ApiClientError(409, "已存在疑似重复的往来单位，请先勾选确认后继续创建。", "DUPLICATE_REQUIRES_ACK"));
+      return;
+    }
     setSubmitting(true);
     setError(null);
-    const payload: Record<string, unknown> = {
-      code: code.trim(),
-      mnemonic: mnemonic.trim() || undefined,
-      name: name.trim(),
-      type,
-      uscc: uscc.trim() || undefined,
-      taxpayerType: taxpayerType.trim() || undefined,
-      legalRepresentative: legalRepresentative.trim() || undefined,
-      region: region.trim() || undefined,
-      industry: industry.trim() || undefined,
-      companySize: companySize.trim() || undefined,
-      contactPerson: contactPerson.trim() || undefined,
-      phone: phone.trim() || undefined,
-      email: email.trim() || undefined,
-      address: address.trim() || undefined,
-      bankName: bankName.trim() || undefined,
-      bankAccount: bankAccount.trim() || undefined,
-      settlementTerms: settlementTerms.trim() || undefined,
-      registeredCapital: registeredCapital.trim() || undefined,
-      employeeCount: employeeCount ? Number(employeeCount) : undefined,
-      website: website.trim() || undefined,
-    };
+    const payload: Record<string, unknown> = withAcknowledgment(
+      {
+        code: code.trim(),
+        mnemonic: mnemonic.trim() || undefined,
+        name: name.trim(),
+        type,
+        uscc: uscc.trim() || undefined,
+        taxpayerType: taxpayerType.trim() || undefined,
+        legalRepresentative: legalRepresentative.trim() || undefined,
+        region: region.trim() || undefined,
+        industry: industry.trim() || undefined,
+        companySize: companySize.trim() || undefined,
+        contactPerson: contactPerson.trim() || undefined,
+        phone: phone.trim() || undefined,
+        email: email.trim() || undefined,
+        address: address.trim() || undefined,
+        bankName: bankName.trim() || undefined,
+        bankAccount: bankAccount.trim() || undefined,
+        settlementTerms: settlementTerms.trim() || undefined,
+        registeredCapital: registeredCapital.trim() || undefined,
+        employeeCount: employeeCount ? Number(employeeCount) : undefined,
+        website: website.trim() || undefined,
+      },
+      dupState.warning && dupState.confirmed,
+    );
     apiFetch<{ id: string }>("/api/business-partners", {
       method: "POST",
       body: JSON.stringify(payload),
@@ -112,12 +186,62 @@ function BusinessPartnerCreateForm() {
       onSave={handleSave}
       onCancel={() => router.push("/business-partners")}
     >
+      {/* Phase 2B：查重提示区（EXACT 阻断卡 / POTENTIAL 确认卡；NONE 不打扰） */}
+      {dupLoading && <div className="mb-3 text-xs text-ink-muted">正在查重…</div>}
+      {dupState.visible && dupResult && dupResult.matches.length > 0 && (
+        <div
+          className={
+            "mb-4 rounded-md border p-3 " +
+            (dupState.blocking
+              ? "border-red-300 bg-red-50 text-red-800"
+              : "border-amber-300 bg-amber-50 text-amber-900")
+          }
+        >
+          <p className="text-sm font-semibold">
+            {dupState.blocking ? "已存在匹配往来单位（禁止重复创建）" : "已存在疑似重复的往来单位"}
+          </p>
+          <ul className="mt-2 space-y-2">
+            {dupResult.matches.map((m) => (
+              <li key={m.id} className="text-xs">
+                <span className="font-medium">{m.name}</span>
+                <span className="ml-1 text-ink-muted">（{m.code} · {TYPE_LABELS[m.type] ?? m.type}）</span>
+                {m.isActive === false && <span className="ml-1 text-ink-muted">· 已停用</span>}
+                <div className="mt-0.5 text-ink-muted">
+                  {m.usccMasked && <span>USCC: {m.usccMasked}　</span>}
+                  {m.phoneMasked && <span>电话: {m.phoneMasked}　</span>}
+                  {m.matchReasons.map((r) => duplicateReasonLabel(r)).join("；")}
+                </div>
+              </li>
+            ))}
+          </ul>
+          {dupState.blocking ? (
+            <p className="mt-2 text-xs">
+              如需复用已有主体，请通过主数据流程调整其客户/供应商角色或类型，不要重复新建。
+            </p>
+          ) : (
+            <label className="mt-3 flex cursor-pointer items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={dupAcknowledged}
+                onChange={(e) => setDupAcknowledged(e.target.checked)}
+                className="h-3.5 w-3.5"
+              />
+              确认继续创建（将记录审计）
+            </label>
+          )}
+        </div>
+      )}
       <Section title="基本信息">
         <FormField label="编码" required>
           <input value={code} onChange={(e) => setCode(e.target.value)} className={inputClass} placeholder="唯一内部编码" />
         </FormField>
         <FormField label="名称" required>
-          <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={scheduleDuplicateCheck}
+            className={inputClass}
+          />
         </FormField>
         <FormField label="助记码">
           <input value={mnemonic} onChange={(e) => setMnemonic(e.target.value)} className={inputClass} />
@@ -132,7 +256,13 @@ function BusinessPartnerCreateForm() {
           </select>
         </FormField>
         <FormField label="统一社会信用代码">
-          <input value={uscc} onChange={(e) => setUscc(e.target.value)} className={inputClass} placeholder="18 位统一社会信用代码（GB 32100-2015）" />
+          <input
+            value={uscc}
+            onChange={(e) => setUscc(e.target.value)}
+            onBlur={scheduleDuplicateCheck}
+            className={inputClass}
+            placeholder="18 位统一社会信用代码（GB 32100-2015）"
+          />
         </FormField>
         <FormField label="纳税人类型">
           <input value={taxpayerType} onChange={(e) => setTaxpayerType(e.target.value)} className={inputClass} placeholder="一般纳税人/小规模纳税人" />
@@ -155,7 +285,12 @@ function BusinessPartnerCreateForm() {
           <input value={contactPerson} onChange={(e) => setContactPerson(e.target.value)} className={inputClass} />
         </FormField>
         <FormField label="电话">
-          <input value={phone} onChange={(e) => setPhone(e.target.value)} className={inputClass} />
+          <input
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            onBlur={scheduleDuplicateCheck}
+            className={inputClass}
+          />
         </FormField>
         <FormField label="邮箱">
           <input value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />

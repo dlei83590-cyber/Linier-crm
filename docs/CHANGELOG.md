@@ -2,6 +2,23 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Phase 2B：客户查重 Vertical Slice（CTO FAST TRACK Directive；零 Schema / 零 Migration）
+
+### 新增
+
+- 共享 normalization（apps/web/src/lib/business-partner/normalize.ts：normalizeUscc / normalizeCompanyName / normalizePhone + GB 32100 校验 + 单测）与确定性 matcher（duplicate-check.ts：findBusinessPartnerDuplicates——Preflight 与 Create Guard 共用，禁止规则漂移）
+- POST /api/business-partners/duplicate-check（Preflight；RBAC business-partner:create；EXACT>POTENTIAL>NONE；matches 上限 10；masked phone/USCC 最小化响应；零业务 Audit 防 debounce 污染）
+- Create Guard（POST /api/business-partners）：USCC raw → normalize → GB 32100 → matcher → persistence；EXACT 永远 409 DUPLICATE_EXACT（含 soft-deleted 同 USCC → 提示恢复/处理原主体）；POTENTIAL 未确认 → 409 DUPLICATE_REQUIRES_ACK、确认后允许创建 + Audit duplicate-acknowledged；阻断写 Audit duplicate-blocked；P2002 race 按 target 区分（uscc → DUPLICATE_EXACT / code → CONFLICT / 其他 → 统一 500）
+- UI：新建往来单位页 name/uscc/phone blur + 400ms debounce 查重；EXACT blocking card / POTENTIAL warning card + 确认 checkbox（duplicateAcknowledged=true 随请求）；seq stale 防护；保存前 Server Guard 最终裁决
+- 错误码：DUPLICATE_EXACT / DUPLICATE_REQUIRES_ACK（ERROR_CODES.md 307 码）
+- 文档：docs/test-cases/DuplicateCheck_API.md（DC-01~25）+ docs/qa/Phase2B_DuplicateCheck_QA.md（Runtime 未勾选，待人工 Smoke）
+
+### 边界
+
+- 零 Schema / 零 Migration；零自动合并；零 EXACT override；零新 RBAC 模块；零角色转换子系统；查重结果为 NONE 不构成创建授权 token
+
+---
+
 ## [Unreleased] - Phase 2B-0：客户查重 Design Gate（CTO Directive Phase 2B，纯设计）
 
 ### 设计（纯文档，不实施）
