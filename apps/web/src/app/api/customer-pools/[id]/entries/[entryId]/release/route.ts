@@ -21,14 +21,14 @@ const releaseSchema = z.object({});
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ poolId: string; entryId: string }> },
+  { params }: { params: Promise<{ id: string; entryId: string }> },
 ) {
   const user = await authenticate(request);
   const denied = requirePermission(user, "customer-pool:assign");
   if (denied) return denied;
   requestLog(request, user?.id, "customer-ownership.release");
 
-  const { poolId, entryId } = await params;
+  const { id: poolId, entryId } = await params;
   const meta = requestMeta(request);
   const parsed = releaseSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
