@@ -31,11 +31,12 @@ describe('relations GET — parent-scope 校验（2A-3）', () => {
     expect(res.status).toBe(200);
   });
 
-  it('错误 partnerId（contact 不属于该 BusinessPartner）→ 404 fail-closed', async () => {
+  it('错误 partnerId（contact 不属于该 BusinessPartner）→ 404 fail-closed，不触达子资源查询', async () => {
     mockPrisma.partnerContact = { findFirst: vi.fn().mockResolvedValue(null) };
+    mockPrisma.contactRelation = { findMany: vi.fn() };
     const res = await GET(makeRequest(), { params: Promise.resolve({ id: 'bp-999', contactId: 'c-1' }) });
     expect(res.status).toBe(404);
-    expect(mockPrisma.contactRelation).toBeUndefined(); // 不触达子资源查询
+    expect((mockPrisma.contactRelation as { findMany: ReturnType<typeof vi.fn> }).findMany).not.toHaveBeenCalled();
   });
 
   it('错误 contactId → 404（不通过错误 URL 访问他人联系人子资源）', async () => {
