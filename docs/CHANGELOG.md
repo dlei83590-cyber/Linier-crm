@@ -2,6 +2,13 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Phase 2B-0：客户查重 Design Gate（CTO Directive Phase 2B，纯设计）
+
+### 设计（纯文档，不实施）
+
+- docs/SPRINTS/Phase2B_Duplicate_Check_Design.md：合同「客户录入重复自动提示」→ 零 Schema 设计——normalization（USCC/公司名/电话，共享服务端函数 + 单测）/ 确定性 match（USCC_EXACT 阻断 / NAME/PARTNER_PHONE/CONTACT_MOBILE POTENTIAL）/ POST /api/business-partners/duplicate-check / Server Create Guard（EXACT→409，防 API 直调绕过）/ UI blur 自动提示 + POTENTIAL 确认（request-level ack + Audit）/ RBAC 复用 business-partner:view/create / 禁止自动合并
+
+---
 ## [Unreleased] - Phase 2A-3：Nested Resource Scope Hardening（CTO Review 发现）
 
 ### 修复
