@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
-import { ok, fail, failConflict, failNotFound, failServer } from "@/lib/api/response";
+import { ok, fail, failConflict, failServer } from "@/lib/api/response";
 import { ERROR_CODES, type ErrorCode } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { z } from "zod";
