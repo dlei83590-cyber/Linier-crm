@@ -2,6 +2,26 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Contract Alignment Program Phase 0：合同基线与架构审计（CTO Directive 2026-08-24）
+
+### 治理
+
+- 合同 20 项功能覆盖矩阵：docs/reviews/Contract_Feature_Coverage_Audit_2026-08-24.md（FINAL/PARTIAL/MISSING/DEVIATED/LEGACY 状态）
+- ADR-0050：合同对齐治理基线（SSOT 冻结清单 / Phase 0-7 Gate 顺序 / 冻结边界 / 禁止平行模型）
+- ROADMAP v1.43：Contract Alignment Track 章节
+
+### 核心审计结论
+
+- Customer 遗留双真相：业务单据全指向 BusinessPartner；Customer 仅子模型自引用（LEGACY/DUPLICATE）；**P0-1 商机/项目新建客户选择 ID 错配 BUG**（前端 /api/customers 提交 Customer.id，后端按 BusinessPartner 校验 → 必然 404）
+- ProjectVisit=走访记录（PARTIAL，CRM Activity 基座候选，Phase 3A 决策禁止双写）；ProjectExpense=项目费用登记（PARTIAL，报销全链缺，Phase 5）
+- Dashboard/20 模块 KPI=模块摘要，经营/绩效 BI MISSING（解除「合同必需子集」HOLD）
+- BOM 基础 FINAL；SalesOrderMaterialRequirementProjection（订单算料投影）MISSING（只做需求预测，不做 Reservation/MRP）
+- 客户多供应商=SupplierItem FINAL；公海/查重/拜访计划/定位签到全部 MISSING
+
+### 边界
+
+- 纯审计/治理 PR：零 Schema / 零 API / 零 Migration（Gate 0）
+- 合同原文未入库（docs/contracts/ 待归档，P0-2）；P0-1 客户选择器迁移为 Phase 1 前置 P0 修复
 ## [Unreleased] - 计量单位：软删占位自动复活（用户反馈 2026-08-24 二轮）
 
 ### 新增
