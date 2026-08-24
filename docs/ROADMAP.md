@@ -37,7 +37,7 @@
 | Phase | 内容 | 状态 |
 |---|---|---|
 | Phase 0 | 合同基线与架构审计（本 PR：纯审计/治理，零 Schema） | ✅ 本 PR |
-| Phase 1 | 主数据与客户主体收口（BP Customer SSOT / 产品原料视图 / 供应商收口；Customer 遗留审查→兼容→deprecate） | ⬜ Gate 0 后 |
+| Phase 1 | 主数据与客户主体收口（BP Customer SSOT / 产品原料视图 / 供应商收口；Customer 遗留审查→兼容→deprecate） | ✅（PR #212-#216，Final Gate Review docs/reviews/Phase1_Final_Gate_Review.md） |
 | Phase 2 | 客户管理核心（联系人增强 / 客户查重 duplicate-check / 客户公海 Pool） | ⬜ |
 | Phase 3 | CRM 活动/跟进/拜访计划/定位签到（Activity 决策，禁止双写） | ⬜ |
 | Phase 4 | 商机/报价/订单收口（快速报价 / 打印模板 / 批量导入 / SalesOrderMaterialRequirementProjection 算料投影） | ⬜ |

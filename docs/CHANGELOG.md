@@ -2,6 +2,14 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Phase 1 Final Gate Review（CTO Directive Phase 1 收口）
+
+### 治理
+
+- docs/reviews/Phase1_Final_Gate_Review.md：Phase 1 六项事实逐条代码证据（Customer.id 提交清零 / 新 CRM 用 BusinessPartner.id / Customer 360 可追溯 / Item SSOT 复用 / Customer Retirement Decision / CI 全绿）
+- ROADMAP Contract Alignment Track Phase 1 → ✅（PR #212-#216）
+
+---
 ## [Unreleased] - Phase 1C：Customer Retirement Decision（CTO Directive Phase 1）
 
 ### 治理
