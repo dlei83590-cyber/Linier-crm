@@ -2,6 +2,23 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 计量单位：软删占位自动复活（用户反馈 2026-08-24 二轮）
+
+### 新增
+
+- **新建同编码 → 自动复活软删记录**：同编码仅被历史删除记录占用时（误删后重建是正常业务），不再 409 拒绝——自动将软删记录置回（deletedAt 置空、isActive=true、更新名称/符号、version+1），返回 201
+- 防并发竞态：updateMany where { id, deletedAt: { not: null } }——count=0（已被并发复活）时幂等返回当前记录，不重复创建
+
+### 变更
+
+- 409 CONFLICT 仅保留给 **active 记录占用**（真冲突）
+- 路由级测试 5 用例：全新创建 201 / active 占用 409 / 软删复活 201（字段校验）/ 并发幂等 201 / 其他 DB 错误结构化 500
+
+### 边界
+
+- PATCH 改编码撞软删占位仍 409（编辑场景需更换编码；重建请用新建）
+
+---
 ## [Unreleased] - 修复：新建计量单位 500（用户反馈 2026-08-24）
 
 ### 修复

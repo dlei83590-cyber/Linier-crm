@@ -65,10 +65,50 @@ export async function POST(request: NextRequest) {
 
   try {
     const existing = await prisma.unitOfMeasure.findUnique({ where: { code: parsed.data.code } });
+    // ① active 记录占用 → 真冲突（正常业务提示）
     if (existing && !existing.deletedAt) {
       return failConflict(ERROR_CODES.CONFLICT, "计量单位编码已存在");
     }
+    // ② 软删记录占位（误删后重建同编码是正常业务）→ 复活该记录（deletedAt 置空 + 更新字段）
+    //    防并发竞态：updateMany where { id, deletedAt: { not: null } }——count=0 说明已被并发复活，重查返回
+    if (existing && existing.deletedAt) {
+      const revivedCount = await prisma.unitOfMeasure.updateMany({
+        where: { id: existing.id, deletedAt: { not: null } },
+        data: {
+          name: parsed.data.name,
+          symbol: parsed.data.symbol ?? null,
+          isActive: true,
+          deletedAt: null,
+          approvalStatus: "APPROVED",
+          updatedById: user?.id ?? null,
+          version: { increment: 1 },
+        },
+      });
+      const revived = await prisma.unitOfMeasure.findUniqueOrThrow({ where: { id: existing.id } });
+      if (revivedCount.count === 0) {
+        // 并发下已被其他请求复活：返回当前记录（幂等）
+        await writeAuditLog({
+          actorId: user?.id,
+          action: "unit-of-measure.create",
+          entityType: "unitOfMeasure",
+          entityId: revived.id,
+          afterData: { code: revived.code, name: revived.name, revived: true },
+          ...meta,
+        });
+        return ok(revived, undefined, 201);
+      }
+      await writeAuditLog({
+        actorId: user?.id,
+        action: "unit-of-measure.create",
+        entityType: "unitOfMeasure",
+        entityId: revived.id,
+        afterData: { code: revived.code, name: revived.name, revived: true },
+        ...meta,
+      });
+      return ok(revived, undefined, 201);
+    }
 
+    // ③ 全新编码 → 正常创建
     const created = await prisma.unitOfMeasure.create({
       data: {
         code: parsed.data.code,
@@ -91,11 +131,10 @@ export async function POST(request: NextRequest) {
 
     return ok(created, undefined, 201);
   } catch (err) {
-    // P2002：code @unique 冲突——软删记录仍占用编码（findUnique 放行 → create 撞唯一约束）→ 友好 409
+    // 兜底：P2002（极端并发下 create/update 撞唯一约束）→ 友好 409；其他运行时错误 → 结构化日志（P0 Incident R2 模式）
     if (err && typeof err === "object" && "code" in err && (err as { code?: unknown }).code === "P2002") {
-      return failConflict(ERROR_CODES.CONFLICT, "计量单位编码已存在（历史删除记录仍占用该编码，请更换编码）");
+      return failConflict(ERROR_CODES.CONFLICT, "计量单位编码已存在");
     }
-    // 其他运行时错误：结构化日志 + 500（不泄露 stack；P0 Incident R2 模式）
     return handleServerError(request, user?.id, "unit-of-measure.create", err);
   }
 }
