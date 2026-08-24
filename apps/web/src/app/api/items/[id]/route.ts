@@ -73,7 +73,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       costBalance: true, // 库存成本（移动加权平均，ADR-0038）
       productionOrderFinished: { where: { deletedAt: null }, orderBy: { createdAt: "desc" }, select: { id: true, orderNo: true, productionType: true, status: true, plannedQty: true } }, // 生产/外协工单
       stockProjections: { select: { warehouseId: true, warehouse: { select: { code: true, name: true } }, onHandQty: true } }, // 库存余额（StockProjection SSOT，只读）
-      partnerPrices: { where: { deletedAt: null }, include: { priceList: { select: { id: true, name: true } } } }, // 供应商/客户价格
+      partnerPrices: { where: { deletedAt: null }, select: { id: true, partnerRoleType: true, unitPrice: true, currency: true, partner: { select: { id: true, code: true, name: true } } } }, // 供应商/客户价格（PartnerPrice = partner + item 单价）
     },
   });
   if (!item) return failNotFound(ERROR_CODES.NOT_FOUND, "物料不存在");

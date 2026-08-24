@@ -76,7 +76,7 @@ interface ItemDetail {
   costBalance?: { avgUnitCost?: string | null; onHandQty?: string | null; totalCost?: string | null } | null;
   productionOrderFinished?: Array<{ id: string; orderNo: string; productionType: string; status: string; plannedQty: string }>;
   stockProjections?: Array<{ warehouseId: string; onHandQty: string; warehouse?: { code: string | null; name: string | null } | null }>;
-  partnerPrices?: Array<{ id: string; priceList?: { id: string; name: string | null } | null }>;
+  partnerPrices?: Array<{ id: string; partnerRoleType?: string | null; unitPrice?: string | null; currency?: string | null; partner?: { id: string; code: string | null; name: string | null } | null }>;
 }
 
 interface AuditLogRow {
@@ -339,6 +339,19 @@ function ItemDetailPage() {
                   {(detail.supplierItems ?? []).map((s) => (
                     <span key={s.id} className="rounded-md border border-border px-2 py-1 text-xs text-ink-primary">
                       {s.supplier?.name ?? s.supplier?.code ?? "—"}{s.isPreferred ? " · 优选" : ""}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {(detail.partnerPrices ?? []).length > 0 && (
+              <div className="mt-3">
+                <p className="mb-1 text-xs text-ink-muted">伙伴价格（PartnerPrice）</p>
+                <div className="flex flex-wrap gap-2">
+                  {(detail.partnerPrices ?? []).map((pp) => (
+                    <span key={pp.id} className="rounded-md border border-border px-2 py-1 text-xs tabular-nums text-ink-primary">
+                      {pp.partner?.name ?? pp.partner?.code ?? "—"}：{pp.unitPrice} {pp.currency ?? "CNY"}
                     </span>
                   ))}
                 </div>
