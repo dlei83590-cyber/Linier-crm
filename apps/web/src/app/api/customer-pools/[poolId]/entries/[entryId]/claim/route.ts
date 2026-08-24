@@ -11,9 +11,7 @@ import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
-const claimSchema = z.object({
-  ownerId: z.string().min(1).optional(), // 管理员代领：本路由已 require customer-pool:assign；owner 用户须 active
-});
+const claimSchema = z.object({});
 
 /**
  * POST /api/customer-pools/:poolId/entries/:entryId/claim — 挑入公海客户
@@ -39,7 +37,7 @@ export async function POST(
   const pool = await prisma.customerPool.findFirst({ where: { id: poolId, deletedAt: null } });
   if (!pool) return failNotFound(ERROR_CODES.POOL_NOT_FOUND, "公海池不存在");
 
-  const ownerId = parsed.data.ownerId ?? user?.id ?? null;
+  const ownerId = user?.id ?? null;
   if (!ownerId) return fail(ERROR_CODES.AUTHENTICATION_ERROR, "无法确定归属人", 401);
 
   let result: { entryId: string; ownershipId: string; ownerId: string };
@@ -58,9 +56,6 @@ export async function POST(
         select: { id: true },
       });
       if (!bp) throw new Error("PARTNER_INACTIVE");
-
-      const owner = await tx.user.findUnique({ where: { id: ownerId }, select: { id: true, isActive: true } });
-      if (!owner || !owner.isActive) throw new Error("OWNER_INACTIVE");
 
       const ownership = await tx.customerOwnership.create({
         data: {
@@ -100,7 +95,6 @@ export async function POST(
     if (msg === "ENTRY_NOT_FOUND") return failNotFound(ERROR_CODES.POOL_ENTRY_NOT_FOUND, "池条目不存在");
     if (msg === "NOT_CLAIMABLE") return failConflict(ERROR_CODES.POOL_ENTRY_NOT_CLAIMABLE, "条目不在可挑入状态（非 IN_POOL）");
     if (msg === "PARTNER_INACTIVE") return fail(ERROR_CODES.POOL_ENTRY_NOT_CLAIMABLE, "客户已删除/停用，不能挑入", 409);
-    if (msg === "OWNER_INACTIVE") return fail(ERROR_CODES.POOL_ENTRY_NOT_CLAIMABLE, "归属用户不存在或已停用", 409);
     if (e !== null && typeof e === "object" && (e as { code?: unknown }).code === "P2002") {
       return failConflict(ERROR_CODES.POOL_CLAIM_CONFLICT, "该客户已有有效归属（并发冲突）");
     }

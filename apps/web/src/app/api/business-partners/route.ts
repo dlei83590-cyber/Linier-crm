@@ -7,7 +7,6 @@ import { ok, fail, failValidation, failConflict, parsePagination } from "@/lib/a
 import { handleServerError } from "@/lib/api/server-error";
 import { normalizeUscc, isValidUscc } from "@/lib/business-partner/normalize";
 import { findBusinessPartnerDuplicates } from "@/lib/business-partner/duplicate-check";
-import { syncPartnerToPool } from "@/lib/customer-pool/evaluate-and-sync";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { z } from "zod";
@@ -247,11 +246,6 @@ export async function POST(request: NextRequest) {
     afterData: { code: created?.code, name: created?.name, type: created?.type },
     ...meta,
   });
-
-  // Phase 2C：公海规则联动（best-effort——失败不回滚 BP 主档事务，sweep 可修复；CTO 裁决）
-  if (created?.id) {
-    await syncPartnerToPool(created.id, user?.id);
-  }
 
   return ok(created, undefined, 201);
 }

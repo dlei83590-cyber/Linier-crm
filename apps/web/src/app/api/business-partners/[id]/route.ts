@@ -9,7 +9,6 @@ import { requestLog } from "@/lib/api/logger";
 import { z } from "zod";
 import { validateUscc, normalizeUscc } from "@/lib/tax-invoice";
 import { casUpdate } from "@/lib/api/cas";
-import { syncPartnerToPool } from "@/lib/customer-pool/evaluate-and-sync";
 
 export const dynamic = "force-dynamic";
 
@@ -195,9 +194,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     afterData: { code: updated.code, name: updated.name },
     ...meta,
   });
-
-  // Phase 2C：公海规则联动（best-effort——失败不回滚 BP 主档事务，sweep 可修复；CTO 裁决）
-  await syncPartnerToPool(id, user?.id);
 
   return ok(updated);
 }

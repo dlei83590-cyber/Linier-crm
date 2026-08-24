@@ -11,16 +11,13 @@ import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
-const releaseSchema = z.object({
-  mode: z.enum(["TO_POOL", "REMOVE"]), // TO_POOL=回池（归属释放+entry=IN_POOL）；REMOVE=移出池（归属关闭+entry=RELEASED）
-});
+const releaseSchema = z.object({});
 
 /**
- * POST /api/customer-pools/:poolId/entries/:entryId/release — 归属释放
+ * POST /api/customer-pools/:poolId/entries/:entryId/release — 释放归属回公海（单一语义，CTO MVP）
  *
- * TO_POOL：active ownership.releasedAt=now + entry.status=IN_POOL（回同一池）
- * REMOVE ：active ownership 关闭 + entry.status=RELEASED + entry.releasedAt=now（退出公海）
- * 单事务；无 active ownership 时 TO_POOL → 409（无归属可释放）；REMOVE → 直接移出（幂等）
+ * active ownership.releasedAt=now + entry.status=IN_POOL（回同一池）；单事务 + Outbox CustomerOwnershipReleased。
+ * 无 active ownership → 409（无归属可释放）。
  */
 export async function POST(
   request: NextRequest,
@@ -39,7 +36,7 @@ export async function POST(
   const pool = await prisma.customerPool.findFirst({ where: { id: poolId, deletedAt: null } });
   if (!pool) return failNotFound(ERROR_CODES.POOL_NOT_FOUND, "公海池不存在");
 
-  let result: { entryId: string; mode: string; ownershipReleased: boolean; entryStatus: string };
+  let result: { entryId: string; entryStatus: string; ownershipReleased: boolean };
   try {
     result = await prisma.$transaction(async (tx) => {
       const locked = await tx.$queryRaw<Array<{ id: string; status: string; businessPartnerId: string }>>(
@@ -52,58 +49,31 @@ export async function POST(
         where: { entryId, releasedAt: null, deletedAt: null },
         select: { id: true },
       });
+      if (!activeOwnership) throw new Error("NOT_RELEASABLE");
 
-      if (parsed.data.mode === "TO_POOL") {
-        if (!activeOwnership) throw new Error("NOT_RELEASABLE");
-        await tx.customerOwnership.update({
-          where: { id: activeOwnership.id },
-          data: {
-            releasedAt: new Date(),
-            releasedById: user?.id ?? null,
-            releaseReason: "MANUAL_RELEASE",
-            updatedById: user?.id ?? null,
-            version: { increment: 1 },
-          },
-        });
-        await tx.customerPoolEntry.update({
-          where: { id: entryId },
-          data: { status: "IN_POOL", releasedAt: null, releasedById: null, releaseReason: null, updatedById: user?.id ?? null, version: { increment: 1 } },
-        });
-        await writeDomainEvent(tx, {
-          eventType: "CustomerOwnershipReleased",
-          aggregateType: "CustomerOwnership",
-          aggregateId: activeOwnership.id,
-          payload: { ownershipId: activeOwnership.id, entryId, poolId, businessPartnerId: entry.businessPartnerId, releasedAt: new Date().toISOString(), releaseReason: "MANUAL_RELEASE" },
-          idempotencyKey: "CustomerOwnershipReleased|" + activeOwnership.id,
-        });
-        return { entryId, mode: "TO_POOL", ownershipReleased: true, entryStatus: "IN_POOL" };
-      }
-
-      // REMOVE：关闭归属（如有）+ 移出池
-      if (activeOwnership) {
-        await tx.customerOwnership.update({
-          where: { id: activeOwnership.id },
-          data: {
-            releasedAt: new Date(),
-            releasedById: user?.id ?? null,
-            releaseReason: "MANUAL_RELEASE",
-            updatedById: user?.id ?? null,
-            version: { increment: 1 },
-          },
-        });
-        await writeDomainEvent(tx, {
-          eventType: "CustomerOwnershipReleased",
-          aggregateType: "CustomerOwnership",
-          aggregateId: activeOwnership.id,
-          payload: { ownershipId: activeOwnership.id, entryId, poolId, businessPartnerId: entry.businessPartnerId, releasedAt: new Date().toISOString(), releaseReason: "MANUAL_RELEASE" },
-          idempotencyKey: "CustomerOwnershipReleased|" + activeOwnership.id,
-        });
-      }
+      await tx.customerOwnership.update({
+        where: { id: activeOwnership.id },
+        data: {
+          releasedAt: new Date(),
+          releasedById: user?.id ?? null,
+          releaseReason: "MANUAL_RELEASE",
+          updatedById: user?.id ?? null,
+          version: { increment: 1 },
+        },
+      });
       await tx.customerPoolEntry.update({
         where: { id: entryId },
-        data: { status: "RELEASED", releasedAt: new Date(), releasedById: user?.id ?? null, releaseReason: "MANUAL", updatedById: user?.id ?? null, version: { increment: 1 } },
+        data: { status: "IN_POOL", releasedAt: null, releasedById: null, releaseReason: null, updatedById: user?.id ?? null, version: { increment: 1 } },
       });
-      return { entryId, mode: "REMOVE", ownershipReleased: activeOwnership !== null, entryStatus: "RELEASED" };
+      await writeDomainEvent(tx, {
+        eventType: "CustomerOwnershipReleased",
+        aggregateType: "CustomerOwnership",
+        aggregateId: activeOwnership.id,
+        payload: { ownershipId: activeOwnership.id, entryId, poolId, businessPartnerId: entry.businessPartnerId, releasedAt: new Date().toISOString(), releaseReason: "MANUAL_RELEASE" },
+        idempotencyKey: "CustomerOwnershipReleased|" + activeOwnership.id,
+      });
+
+      return { entryId, entryStatus: "IN_POOL", ownershipReleased: true };
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "";
@@ -117,7 +87,7 @@ export async function POST(
     action: "customer-ownership.release",
     entityType: "customerOwnership",
     entityId: result.entryId,
-    afterData: { entryId: result.entryId, mode: result.mode, entryStatus: result.entryStatus, poolId },
+    afterData: { entryId: result.entryId, entryStatus: result.entryStatus, poolId },
     ...meta,
   });
 

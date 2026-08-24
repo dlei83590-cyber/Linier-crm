@@ -10,9 +10,8 @@ export const dynamic = "force-dynamic";
 /**
  * GET /api/business-partners/:id/pool-status — Customer 360 公海状态聚合（Phase 2C-2）
  *
- * 返回：当前 active entry（所属池/状态/enteredAt/enterReason）+ 当前 active ownership（owner）
- *      + 归属历史（ownership timeline，最多 10 条）。
- * 权限：customer-pool:view。
+ * 返回：当前 active entry（所属池/状态/enteredAt/enterReason）+ 当前 active ownership（owner）。
+ * 权限：customer-pool:view。（CTO MVP：第一轮不返回 ownershipHistory）
  */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await authenticate(request);
@@ -40,20 +39,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       where: { businessPartnerId: id, releasedAt: null, deletedAt: null },
       select: { id: true, claimedAt: true, claimedById: true, owner: { select: { id: true, name: true, email: true } } },
     }),
-    prisma.customerOwnership.findMany({
-      where: { businessPartnerId: id, deletedAt: null },
-      select: {
-        id: true,
-        claimedAt: true,
-        releasedAt: true,
-        releaseReason: true,
-        owner: { select: { id: true, name: true } },
-        entry: { select: { poolId: true, pool: { select: { code: true, name: true } } } },
-      },
-      orderBy: { claimedAt: "desc" },
-      take: 10,
-    }),
   ]);
 
-  return ok({ entry, activeOwnership, ownershipHistory });
+  return ok({ entry, activeOwnership });
 }

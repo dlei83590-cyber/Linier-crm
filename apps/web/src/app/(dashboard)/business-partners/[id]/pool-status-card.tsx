@@ -27,24 +27,10 @@ interface PoolStatus {
     claimedAt: string;
     owner: { id: string; name: string | null; email: string | null };
   } | null;
-  ownershipHistory: {
-    id: string;
-    claimedAt: string;
-    releasedAt: string | null;
-    releaseReason: string | null;
-    owner: { id: string; name: string | null };
-    entry: { poolId: string; pool: { code: string; name: string } };
-  }[];
 }
 
 const STATUS_LABELS: Record<string, string> = { IN_POOL: "在公海", CLAIMED: "已被挑入" };
-const ENTER_REASON_LABELS: Record<string, string> = { MANUAL: "手工入池", FIELD_RULE: "规则自动入池", RE_ENTER: "重新入池" };
-const RELEASE_REASON_LABELS: Record<string, string> = {
-  RECLAIMED: "重新挑入",
-  RULE_RETURN: "规则回流",
-  MANUAL_RELEASE: "手动释放",
-  BP_INACTIVE: "客户停用",
-};
+const ENTER_REASON_LABELS: Record<string, string> = { MANUAL: "手工入池", RE_ENTER: "重新入池" };
 
 export function PoolStatusCard({ partnerId }: { partnerId: string }) {
   const [data, setData] = useState<PoolStatus | null>(null);
@@ -156,24 +142,6 @@ export function PoolStatusCard({ partnerId }: { partnerId: string }) {
             </PermissionGuard>
           )}
 
-          {/* ownership history */}
-          {data.ownershipHistory.length > 0 && (
-            <div>
-              <h3 className="mb-1 text-xs font-medium text-ink-muted">归属历史</h3>
-              <ul className="space-y-1 text-xs text-ink-muted">
-                {data.ownershipHistory.map((h) => (
-                  <li key={h.id}>
-                    {formatDate(h.claimedAt)} 由 {h.owner.name ?? "—"} 认领（{h.entry.pool.name}）
-                    {h.releasedAt && (
-                      <span>
-                        {" "}→ {formatDate(h.releasedAt)} 释放（{RELEASE_REASON_LABELS[h.releaseReason ?? ""] ?? h.releaseReason ?? "—"}）
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
         </div>
       )}
     </section>

@@ -47,11 +47,6 @@ function PoolDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // 新增规则
-  const [ruleMatchMode, setRuleMatchMode] = useState("ANY");
-  const [rulePriority, setRulePriority] = useState("0");
-  const [ruleCondition, setRuleCondition] = useState('[{"field":"region","operator":"EQ","value":"华东"}]');
-
   // 手工入池
   const [partnerIdInput, setPartnerIdInput] = useState("");
 
@@ -68,34 +63,6 @@ function PoolDetailPage() {
   useEffect(() => {
     if (poolId) load();
   }, [poolId, load]);
-
-  const addRule = async () => {
-    let condition: unknown;
-    try {
-      condition = JSON.parse(ruleCondition);
-    } catch {
-      setError("规则 condition 不是合法 JSON");
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      await apiFetch("/api/customer-pools/" + poolId + "/rules", {
-        method: "POST",
-        body: JSON.stringify({
-          ruleType: "FIELD_MATCH",
-          matchMode: ruleMatchMode,
-          condition,
-          priority: Number(rulePriority) || 0,
-        }),
-      });
-      load();
-    } catch (err: unknown) {
-      setError(err instanceof ApiClientError ? err.message : "新增规则失败");
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const addEntry = async () => {
     if (!partnerIdInput.trim()) return;
@@ -135,40 +102,6 @@ function PoolDetailPage() {
     <AppPage title={pool ? pool.name : "公海池详情"} description={pool ? pool.code + " · " + (SCOPE_LABELS[pool.scopeType] ?? pool.scopeType) + (pool.scopeValue ? "：" + pool.scopeValue : "") : "加载中…"}>
       <div className="space-y-4">
         {error && <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-
-        {/* 规则区 */}
-        <section className="rounded-md border border-border p-4">
-          <h2 className="mb-3 text-sm font-semibold text-ink-primary">流公海规则（FIELD_MATCH）</h2>
-          <ul className="space-y-1 text-sm">
-            {pool?.rules.map((r) => (
-              <li key={r.id} className="flex items-center gap-2 text-xs">
-                <span className="rounded bg-brand-50 px-1.5 py-0.5 text-brand-700">{r.matchMode}</span>
-                <span className="font-mono text-ink-muted">{JSON.stringify(r.condition)}</span>
-                <span>priority={r.priority}</span>
-                {!r.isActive && <span className="text-ink-muted">（已停用）</span>}
-              </li>
-            ))}
-            {pool && pool.rules.length === 0 && <li className="text-sm text-ink-muted">暂无规则。</li>}
-          </ul>
-          <PermissionGuard permission={actionPermission("customer-pool", "edit")}>
-            <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-4">
-              <select value={ruleMatchMode} onChange={(e) => setRuleMatchMode(e.target.value)} className={INPUT_CLASS}>
-                <option value="ANY">ANY（任一命中）</option>
-                <option value="ALL">ALL（全部命中）</option>
-              </select>
-              <input value={rulePriority} onChange={(e) => setRulePriority(e.target.value)} className={INPUT_CLASS} placeholder="priority" />
-              <input
-                value={ruleCondition}
-                onChange={(e) => setRuleCondition(e.target.value)}
-                className={INPUT_CLASS + " md:col-span-2"}
-                placeholder='[{"field":"region","operator":"EQ","value":"华东"}]'
-              />
-            </div>
-            <button onClick={addRule} disabled={busy} className={BUTTON_PRIMARY_CLASS + " mt-2"}>
-              新增规则
-            </button>
-          </PermissionGuard>
-        </section>
 
         {/* 条目区 */}
         <section className="rounded-md border border-border p-4">
