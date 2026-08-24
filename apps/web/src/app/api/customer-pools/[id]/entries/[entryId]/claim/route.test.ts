@@ -41,7 +41,7 @@ function makeRequest(): NextRequest {
 }
 
 function params() {
-  return Promise.resolve({ poolId: 'pool-1', entryId: 'entry-1' });
+  return Promise.resolve({ id: 'pool-1', entryId: 'entry-1' });
 }
 
 describe('POST .../claim — Phase 2C-2 领取（CTO MVP 关键路径）', () => {
