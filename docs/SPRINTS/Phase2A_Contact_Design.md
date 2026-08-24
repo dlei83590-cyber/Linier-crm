@@ -31,7 +31,7 @@
 |---|---|---|---|
 | 手机号（合同「手机」与「电话」分开） | 仅 phone（未区分座机/手机） | 缺 mobile | PartnerContact 加 mobile 字段 |
 | 联系备注 | 无 | 缺 contactNote | PartnerContact 加 contactNote 字段 |
-| 特殊日期（生日等）+ 前置提醒 | 无 | 缺 ContactSpecialDate 模型 | 新建（§5） |
+| 特殊日期（生日等）+ 前置提醒 | 无 | 缺 ContactSpecialDate 模型（含 recurrence NONE|YEARLY） | 新建（§5） |
 | 联系人关系档案 | 无 | 缺 ContactRelation 模型 | 新建（§6） |
 
 ## 3. 是否需要 Migration
@@ -40,7 +40,9 @@
 - ALTER TABLE PartnerContact ADD COLUMN mobile TEXT, ADD COLUMN contactNote TEXT
 - CREATE TABLE ContactSpecialDate（见 §5）
 - CREATE TABLE ContactRelation（见 §6）
-- 新枚举 ContactSpecialDateType（BIRTHDAY/ANNIVERSARY/OTHER）、ContactRelationType（COLLEAGUE/REPORTS_TO/DECISION_MAKER/INFLUENCER/RELATIVE/OTHER）
+- 新枚举 ContactSpecialDateType（BIRTHDAY/ANNIVERSARY/OTHER）、ContactSpecialDateRecurrence（NONE/YEARLY）、ContactRelationType（COLLEAGUE/REPORTS_TO/DECISION_MAKER/INFLUENCER/RELATIVE/OTHER）
+- 主联系人唯一性 partial unique index（手写 SQL，Prisma DSL 无法表达 partial index，migration history 为 SSOT）：
+  CREATE UNIQUE INDEX PartnerContact_one_primary_per_partner ON PartnerContact(partnerId) WHERE isPrimary = true AND isActive = true AND deletedAt IS NULL;
 
 ## 4. API 设计（contacts CRUD，消费 BusinessPartner.id）
 
@@ -49,7 +51,7 @@
 | GET | /api/business-partners/:id/contacts | partner-contact:view | 联系人列表（isPrimary 排序） |
 | POST | /api/business-partners/:id/contacts | partner-contact:create | 新建（isPrimary 时清除其他主联系人） |
 | PATCH | /api/business-partners/:id/contacts/:contactId | partner-contact:edit | 编辑（CAS version；isPrimary 排他） |
-| DELETE | /api/business-partners/:id/contacts/:contactId | partner-contact:delete | 软删除（停用） |
+| DELETE | /api/business-partners/:id/contacts/:contactId | partner-contact:delete | 软删除：deletedAt=now 且 isActive=false（两者同时，非二选一） |
 | GET | /api/business-partners/:id/contacts/upcoming-reminders | partner-contact:view | 即将到期特殊日期提醒（服务端计算） |
 | GET/POST | /api/business-partners/:id/contacts/:contactId/special-dates | partner-contact:view/edit | 特殊日期 |
 | DELETE | .../special-dates/:specialDateId | partner-contact:edit | 删除特殊日期 |
@@ -60,10 +62,15 @@
 
 ## 5. Reminder 设计（特殊日期 + 前置提醒）
 
-ContactSpecialDate 字段：id / contactId / type(BIRTHDAY|ANNIVERSARY|OTHER) / date / title / remindDaysBefore / reminderEnabled + 审计字段
+ContactSpecialDate 字段：id / contactId / type(BIRTHDAY|ANNIVERSARY|OTHER) / date / recurrence(NONE|YEARLY) / title / remindDaysBefore / reminderEnabled + 审计字段
 
-- 服务端计算：remindAt = date - remindDaysBefore（upcoming-reminders Query 派生，禁止前端判断）
+- recurrence 语义（CTO Required Amendment 1）：BIRTHDAY 默认 YEARLY；ANNIVERSARY 默认 YEARLY；OTHER 可 NONE|YEARLY
+- 服务端计算 nextOccurrence（非原始 date 直接比较）：
+  - NONE：nextOccurrence = date（一次性，date >= 今日才命中）
+  - YEARLY：nextOccurrence = 本年度 month/day（若已过则下一年度）；2 月 29 日非闰年按 2 月 28 日（写入 Test Case）
+- remindAt = nextOccurrence - remindDaysBefore（upcoming-reminders Query 派生，禁止前端判断）
 - Query：GET .../contacts/upcoming-reminders —— 返回 now ≤ remindAt ≤ now + window 的到期项（window 参数，默认 30 天）
+- Date-only 业务日期不得因 UTC 时区换算跨日（DB @db.Date，服务端按本地日期口径计算，不 new Date() 到 UTC 中间转换）
 - 通知执行：Notification 基础设施（Template/Message/Channel/Log）已存在但无正式执行器——第一阶段只做 Upcoming Query + 明确后续消费方式（Notification consumer / cron 扫 Query），禁止 fake push
 
 ## 6. Contact Relation 设计（关系档案）
@@ -92,10 +99,11 @@ ContactRelation 字段：id / sourceContactId / targetContactId / relationType(C
 | CONTACT_RELATION_SELF | source == target | 400 |
 | CONTACT_RELATION_CROSS_PARTNER | 跨客户关系（一期禁止） | 400 |
 | CONTACT_SPECIAL_DATE_INVALID | 日期非法/提醒天数越界 | 400 |
+| CONTACT_PRIMARY_CONFLICT | 并发设置主联系人冲突（partial unique 触发，409） | 409 |
 
 ## 10. Test Cases
 
-- 新增 docs/test-cases/PartnerContact_API.md：contacts CRUD + 主联系人排他 + 特殊日期 + 关系（source≠target/跨客户拒绝）+ upcoming-reminders 服务端计算
+- 新增 docs/test-cases/PartnerContact_API.md：contacts CRUD + 主联系人并发排他（partial unique + transaction，两并发仅一个成功）+ 特殊日期（recurrence YEARLY/NONE）+ 关系（source≠target/跨客户拒绝）+ upcoming-reminders 服务端计算 + 2 月 29 日非闰年按 2/28 提醒 + date-only 不跨日
 
 ## 11. 预计修改文件
 
