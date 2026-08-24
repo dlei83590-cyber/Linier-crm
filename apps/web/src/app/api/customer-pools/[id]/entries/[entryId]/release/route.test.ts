@@ -11,7 +11,7 @@ vi.mock('@/lib/api-helpers', () => ({
   requestLog: vi.fn(),
 }));
 
-import { POST } from '@/app/api/customer-pools/[poolId]/entries/[entryId]/release/route';
+import { POST } from '@/app/api/customer-pools/[id]/entries/[entryId]/release/route';
 
 type TxMock = {
   $queryRaw: ReturnType<typeof vi.fn>;
