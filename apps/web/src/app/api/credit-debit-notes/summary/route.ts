@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { authenticate, requirePermission, requestLog } from "@/lib/api-helpers";
+import { authenticate, requirePermission } from "@/lib/api-helpers";
+import { requestLog } from "@/lib/api/logger";
 import { ok } from "@/lib/api/response";
 
 export const dynamic = "force-dynamic";

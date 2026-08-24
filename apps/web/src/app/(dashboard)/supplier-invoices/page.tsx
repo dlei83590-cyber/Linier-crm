@@ -156,7 +156,7 @@ function SupplierInvoiceList() {
       <ModuleKpiStrip
         statuses={Object.keys(STATUS_LABELS).map((s) => ({ value: s, label: STATUS_LABELS[s] ?? s }))}
         data={summary}
-        activeStatus={filters.documentStatus ?? filters.status ?? null}
+        activeStatus={filters.documentStatus ?? null}
         onSelectStatus={selectStatus}
       />
       <EntityListWorkspace<SupplierInvoiceRow>

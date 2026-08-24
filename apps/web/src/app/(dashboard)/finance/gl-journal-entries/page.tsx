@@ -45,6 +45,7 @@ const SOURCE_LABELS: Record<string, string> = {
 
 function GlEntryList() {
   const [sourceTypeInput, setSourceTypeInput] = useState("");
+  const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ sourceType?: string; status?: string }>({});
 
   const [summary, setSummary] = useState<ModuleSummaryData | null>(null);
