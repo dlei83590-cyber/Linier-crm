@@ -18,6 +18,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, ErrorPanel } from "@/components/workspace";
 import { ContactWorkspace } from "./contact-workspace";
 import { PoolStatusCard } from "./pool-status-card";
+import { ActivityTimeline } from "./activity-timeline";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { formatDate, formatMoney } from "@/lib/format";
 
@@ -87,15 +88,6 @@ function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
     <div>
       <div className="text-xs text-ink-secondary">{label}</div>
       <div className="mt-0.5 text-sm text-ink-primary">{value ?? "—"}</div>
-    </div>
-  );
-}
-
-function ComingByContract({ title, phase }: { title: string; phase: string }) {
-  return (
-    <div className="flex min-h-[160px] flex-col items-center justify-center rounded-md border border-dashed border-border bg-canvas p-6 text-center">
-      <p className="text-sm font-medium text-ink-primary">{title}</p>
-      <p className="mt-1 text-xs text-ink-muted">该能力由合同 Phase {phase} 授权落地，当前尚未实现（不展示 mock 数据）。</p>
     </div>
   );
 }
@@ -453,7 +445,7 @@ function PartnerDetailPage() {
           </section>
         )}
 
-        {tab === "activity" && <ComingByContract title="活动 / 跟进 / 拜访 / 签到" phase="3" />}
+        {tab === "activity" && <ActivityTimeline partnerId={id} />}
         {tab === "pool" && <PoolStatusCard partnerId={id} />}
 
         <Link href="/business-partners" className="text-sm text-brand-600 hover:underline">← 返回往来单位列表</Link>
