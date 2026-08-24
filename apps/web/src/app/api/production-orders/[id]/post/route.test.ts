@@ -50,7 +50,19 @@ function makeOrder(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function makeTx(order: ReturnType<typeof makeOrder>) {
+type TxMock = {
+  $queryRaw: ReturnType<typeof vi.fn>;
+  productionOrder: {
+    findFirst: ReturnType<typeof vi.fn>;
+    updateMany: ReturnType<typeof vi.fn>;
+    findFirstOrThrow: ReturnType<typeof vi.fn>;
+  };
+  itemBomLine: { findMany: ReturnType<typeof vi.fn> };
+  inventoryCostBalance: { findFirst: ReturnType<typeof vi.fn> };
+  productionOrderLine: { update: ReturnType<typeof vi.fn> };
+};
+
+function makeTx(order: ReturnType<typeof makeOrder>): TxMock {
   return {
     $queryRaw: vi.fn().mockResolvedValue([{ id: order.id }]),
     productionOrder: {
@@ -61,7 +73,7 @@ function makeTx(order: ReturnType<typeof makeOrder>) {
     itemBomLine: { findMany: vi.fn().mockResolvedValue([]) },
     inventoryCostBalance: { findFirst: vi.fn().mockResolvedValue(null) },
     productionOrderLine: { update: vi.fn().mockResolvedValue({}) },
-  } as unknown as Prisma.TransactionClient;
+  };
 }
 
 function makeRequest(version: number): NextRequest {

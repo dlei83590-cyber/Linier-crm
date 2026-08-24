@@ -90,6 +90,7 @@ export async function POST(request: NextRequest) {
         if (seen.has(l.componentItemId)) throw new Error("COMPONENT_DUPLICATE");
         seen.add(l.componentItemId);
         const comp = compMap.get(l.componentItemId);
+        if (!comp) throw new Error("ITEM_INVALID");
         if (!comp.stockUomId || comp.stockUomId !== l.componentUomId) {
           throw new Error("LINE_INVALID"); // 单位红线：componentUomId 必须 = 原料库存单位
         }
