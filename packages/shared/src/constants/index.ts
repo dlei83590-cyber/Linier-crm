@@ -300,6 +300,10 @@ export const PERMISSION_MODULES = [
   "inventory-conversion",
   // P-1 生产入库（ProductionInbound）：create→production-inbound:create；submit/post→:edit（post→:edit 对齐 supplier-invoice 先例）；cancel→:close；line 仅 view/edit——与 seed.ts SEED_ACTION_MODULES 保持一致
   "production-inbound",
+  // P-1 Item Sourcing（2026-08-24 Design Gate）：bom（配方：create→bom:create；activate→bom:approve；PATCH/DELETE→bom:edit/delete）
+  "bom",
+  // P-1 Item Sourcing：production-order（生产/外协工单：create→production-order:create；submit→:edit；post→:edit（对齐 5B post→:edit 先例）；cancel→:close）
+  "production-order",
   // Sprint 6A Read Model：库存只读查询模块（stock-projection / inventory-movement——只读 Query API 用 :view；
   // 与 prisma/seed.ts SEED_ACTION_MODULES 保持一致，避免 static RBAC 与 DB permission catalog 漂移（ADR-0028））
   "stock-projection",
