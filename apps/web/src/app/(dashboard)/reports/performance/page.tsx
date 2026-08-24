@@ -37,8 +37,6 @@ interface PerformanceData {
   rows: PerformanceRow[];
 }
 
-const PERIOD_LABELS: Record<Period, string> = { week: "本周", month: "本月" };
-
 function PerformanceBoard() {
   const [period, setPeriod] = useState<Period>("week");
   const [data, setData] = useState<PerformanceData | null>(null);
@@ -57,8 +55,6 @@ function PerformanceBoard() {
   useEffect(() => {
     load(period);
   }, [period, load]);
-
-  const missing = (available: boolean) => (available ? "" : "暂无事实数据");
 
   return (
     <AppPage>
