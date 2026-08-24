@@ -1,5 +1,4 @@
 import { NextRequest } from "next/server";
-import type { CustomerPoolScopeType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
 import { ok, fail, failValidation, failNotFound, failConflict } from "@/lib/api/response";
