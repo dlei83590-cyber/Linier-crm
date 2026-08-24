@@ -26,6 +26,10 @@ function makeRequest(body: unknown): NextRequest {
   });
 }
 
+function postRule(body: unknown) {
+  return POST(makeRequest(body), { params: Promise.resolve({ id: 'pool-1' }) });
+}
+
 describe('POST /api/customer-pools/:id/rules — Phase 2C 规则', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -38,7 +42,7 @@ describe('POST /api/customer-pools/:id/rules — Phase 2C 规则', () => {
   });
 
   it('FIELD_MATCH 合法规则 → 201', async () => {
-    const res = await POST(makeRequest({
+    const res = await postRule({
       ruleType: 'FIELD_MATCH',
       matchMode: 'ANY',
       condition: [{ field: 'region', operator: 'EQ', value: '华东' }],
@@ -48,7 +52,7 @@ describe('POST /api/customer-pools/:id/rules — Phase 2C 规则', () => {
   });
 
   it('INACTIVITY 规则 → 400 POOL_RULE_SOURCE_UNAVAILABLE（Phase 3 前禁用）', async () => {
-    const res = await POST(makeRequest({
+    const res = await postRule({
       ruleType: 'INACTIVITY',
       matchMode: 'ANY',
       condition: [{ field: 'region', operator: 'EQ', value: '华东' }],
@@ -60,7 +64,7 @@ describe('POST /api/customer-pools/:id/rules — Phase 2C 规则', () => {
   });
 
   it('白名单外字段 → 400 POOL_RULE_INVALID（fail closed）', async () => {
-    const res = await POST(makeRequest({
+    const res = await postRule({
       ruleType: 'FIELD_MATCH',
       matchMode: 'ANY',
       condition: [{ field: 'ownerId', operator: 'EQ', value: 'u-1' }],
@@ -72,7 +76,7 @@ describe('POST /api/customer-pools/:id/rules — Phase 2C 规则', () => {
 
   it('pool 不存在 → 404 POOL_NOT_FOUND', async () => {
     mockPrisma.customerPool = { findFirst: vi.fn().mockResolvedValue(null) };
-    const res = await POST(makeRequest({
+    const res = await postRule({
       ruleType: 'FIELD_MATCH',
       matchMode: 'ANY',
       condition: [{ field: 'region', operator: 'EQ', value: '华东' }],

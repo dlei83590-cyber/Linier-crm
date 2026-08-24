@@ -17,7 +17,7 @@ import { casUpdate } from '@/lib/api/cas';
 
 const casMock = casUpdate as ReturnType<typeof vi.fn>;
 
-function makeRequest(body: unknown, method: string): NextRequest {
+function makeRequest(body: unknown, method = "POST"): NextRequest {
   return new NextRequest('http://localhost/api/customer-pools/pool-1', {
     method,
     headers: { authorization: 'Bearer test-token', 'content-type': 'application/json' },

@@ -7,14 +7,14 @@
  * - INACTIVITY 规则：Phase 3 Activity 提供权威 lastActivityAt 前禁止创建/启用（fail closed）。
  * - FIELD_MATCH condition 字段白名单：type / region / industry / sourceChannel / isActive；operator EQ|IN。
  */
-import { ERROR_CODES } from "@/lib/api/errors";
+import { ERROR_CODES, type ErrorCode } from "@/lib/api/errors";
 
 export const POOL_RULE_FIELD_WHITELIST = ["type", "region", "industry", "sourceChannel", "isActive"] as const;
 export const POOL_RULE_OPERATORS = ["EQ", "IN"] as const;
 
 export interface PoolScopeValidation {
   ok: boolean;
-  errorCode?: string;
+  errorCode?: ErrorCode;
   message?: string;
 }
 
@@ -34,7 +34,7 @@ export function validatePoolScope(scopeType: string, scopeValue: string | null |
 
 export interface RuleValidation {
   ok: boolean;
-  errorCode?: string;
+  errorCode?: ErrorCode;
   message?: string;
 }
 

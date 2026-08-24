@@ -39,6 +39,10 @@ function makeRequest(body: unknown): NextRequest {
   });
 }
 
+function postEntry(body: unknown) {
+  return POST(makeRequest(body), { params: Promise.resolve({ id: 'pool-1' }) });
+}
+
 function setupPool(partial: Partial<{ isActive: boolean; scopeType: string; scopeValue: string | null }> = {}) {
   mockPrisma.customerPool = {
     findFirst: vi.fn().mockResolvedValue({
@@ -63,7 +67,7 @@ describe('POST /api/customer-pools/:id/entries — 手工入池（CTO 全校验�
   it('GLOBAL 池 + CUSTOMER 客户手工入池成功（201）+ Outbox 同事务事件', async () => {
     const tx = makeTx();
     mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx));
-    const res = await POST(makeRequest({ businessPartnerId: 'bp-1' }));
+    const res = await postEntry({ businessPartnerId: 'bp-1' }));
     expect(res.status).toBe(201);
     expect(tx.outboxMessage.create).toHaveBeenCalledTimes(1);
     const outboxArgs = tx.outboxMessage.create.mock.calls[0][0];
@@ -72,13 +76,13 @@ describe('POST /api/customer-pools/:id/entries — 手工入池（CTO 全校验�
 
   it('BP 不存在 → 404', async () => {
     mockPrisma.businessPartner = { findFirst: vi.fn().mockResolvedValue(null) };
-    const res = await POST(makeRequest({ businessPartnerId: 'bp-x' }));
+    const res = await postEntry({ businessPartnerId: 'bp-x' }));
     expect(res.status).toBe(404);
   });
 
   it('SUPPLIER 客户 → 400 POOL_ENTRY_NOT_ALLOWED（仅 CUSTOMER/BOTH）', async () => {
     mockPrisma.businessPartner = { findFirst: vi.fn().mockResolvedValue({ id: 'bp-1', type: 'SUPPLIER', region: null }) };
-    const res = await POST(makeRequest({ businessPartnerId: 'bp-1' }));
+    const res = await postEntry({ businessPartnerId: 'bp-1' }));
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error.code).toBe('POOL_ENTRY_NOT_ALLOWED');
@@ -86,33 +90,33 @@ describe('POST /api/customer-pools/:id/entries — 手工入池（CTO 全校验�
 
   it('池已停用 → 400', async () => {
     setupPool({ isActive: false });
-    const res = await POST(makeRequest({ businessPartnerId: 'bp-1' }));
+    const res = await postEntry({ businessPartnerId: 'bp-1' }));
     expect(res.status).toBe(400);
   });
 
   it('REGION scope 与 BP.region 不匹配 → 400', async () => {
     setupPool({ scopeType: 'REGION', scopeValue: '华南' });
-    const res = await POST(makeRequest({ businessPartnerId: 'bp-1' }));
+    const res = await postEntry({ businessPartnerId: 'bp-1' }));
     expect(res.status).toBe(400);
   });
 
   it('REGION scope 匹配 → 201', async () => {
     setupPool({ scopeType: 'REGION', scopeValue: '华东' });
-    const res = await POST(makeRequest({ businessPartnerId: 'bp-1' }));
+    const res = await postEntry({ businessPartnerId: 'bp-1' }));
     expect(res.status).toBe(201);
   });
 
   it('DEPARTMENT scope 与操作者部门匹配 → 201；不匹配 → 400', async () => {
     setupPool({ scopeType: 'DEPARTMENT', scopeValue: 'dept-1' });
-    expect((await POST(makeRequest({ businessPartnerId: 'bp-1' }))).status).toBe(201);
+    expect((await postEntry({ businessPartnerId: 'bp-1' }))).status).toBe(201);
     setupPool({ scopeType: 'DEPARTMENT', scopeValue: 'dept-999' });
-    expect((await POST(makeRequest({ businessPartnerId: 'bp-1' }))).status).toBe(400);
+    expect((await postEntry({ businessPartnerId: 'bp-1' }))).status).toBe(400);
   });
 
   it('已有 active ownership → 409 CUSTOMER_ALREADY_OWNED', async () => {
     const tx = makeTx({ customerOwnership: { findFirst: vi.fn().mockResolvedValue({ id: 'own-1' }) } });
     mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx));
-    const res = await POST(makeRequest({ businessPartnerId: 'bp-1' }));
+    const res = await postEntry({ businessPartnerId: 'bp-1' }));
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error.code).toBe('CUSTOMER_ALREADY_OWNED');
@@ -121,7 +125,7 @@ describe('POST /api/customer-pools/:id/entries — 手工入池（CTO 全校验�
   it('已有 active entry → 409 CUSTOMER_ALREADY_IN_POOL', async () => {
     const tx = makeTx({ customerPoolEntry: { findFirst: vi.fn().mockResolvedValue({ id: 'entry-x' }), create: vi.fn() } });
     mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx));
-    const res = await POST(makeRequest({ businessPartnerId: 'bp-1' }));
+    const res = await postEntry({ businessPartnerId: 'bp-1' }));
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error.code).toBe('CUSTOMER_ALREADY_IN_POOL');
@@ -135,7 +139,7 @@ describe('POST /api/customer-pools/:id/entries — 手工入池（CTO 全校验�
       },
     });
     mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx));
-    const res = await POST(makeRequest({ businessPartnerId: 'bp-1' }));
+    const res = await postEntry({ businessPartnerId: 'bp-1' }));
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error.code).toBe('CUSTOMER_ALREADY_IN_POOL');
