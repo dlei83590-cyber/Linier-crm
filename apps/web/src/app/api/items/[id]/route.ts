@@ -16,6 +16,7 @@ const itemUpdateSchema = z
     mnemonic: z.string().max(50).nullable().optional(),
     name: z.string().min(1).max(200).optional(),
     itemType: z.enum(["FINISHED_GOOD", "RAW_MATERIAL", "SEMI_FINISHED", "PURCHASED_PART", "ACCESSORY", "SERVICE", "CONSUMABLE", "ASSET", "TOOLING", "PACKAGING"]).optional(),
+    sourcingType: z.enum(["BOUGHT", "SELF_MANUFACTURED", "OEM_OUTSOURCED"]).optional(),
     categoryId: z.string().min(1).nullable().optional(),
     series: z.string().max(100).nullable().optional(),
     model: z.string().max(100).nullable().optional(),

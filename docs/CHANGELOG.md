@@ -2,6 +2,21 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 商品逻辑整理 P-4：前端交付（用户指令 2026-08-24，配方/工单页面 + 商品来源字段）
+
+### 新增
+
+- **导航注册**：物料配方（/inventory/boms）+ 生产/外协工单（/inventory/production-orders）加入库存管理域（Module Registry + labels）
+- **商品来源字段**：Item 新建/编辑页「商品来源」下拉（外购/自产/OEM 外协）+ 详情页展示（后端 items POST/PATCH schema 已支持 sourcingType）
+- **配方页面**：列表（状态筛选）+ 新建（成品 + 原料行：系数/损耗率/单位自动带出库存单位）+ 详情（需求预估列 + 激活/编辑/删除动作）+ 编辑（仅 DRAFT，CAS）
+- **工单页面**：列表（类型/状态筛选）+ 新建（自产/OEM；选 ACTIVE 配方自动预估领料量，服务端提交后权威重算；手工模式物料行；OEM 外协厂 + 加工费）+ 详情（行明细 + 提交/过账/取消动作 + 过账后成本证据/库存流水组）
+
+### 边界
+
+- 零新 API（复用 P-1~P-3 后端）；items POST/PATCH 增加 sourcingType 可选字段（向后兼容）
+- 前端展示的配方预估领料量仅参考，服务端 POST 时权威计算（BOM 需求下限校验）
+
+---
 ## [Unreleased] - 商品逻辑整理：成品三大来源 + 配方（BOM）+ 生产/外协工单（用户指令 2026-08-24，P-1~P-3）
 
 ### 新增

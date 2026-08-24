@@ -15,6 +15,7 @@ const itemCreateSchema = z.object({
   mnemonic: z.string().max(50).optional(),
   name: z.string().min(1).max(200),
   itemType: z.enum(["FINISHED_GOOD", "RAW_MATERIAL", "SEMI_FINISHED", "PURCHASED_PART", "ACCESSORY", "SERVICE", "CONSUMABLE", "ASSET", "TOOLING", "PACKAGING"]).optional(),
+  sourcingType: z.enum(["BOUGHT", "SELF_MANUFACTURED", "OEM_OUTSOURCED"]).optional(),
   categoryId: z.string().min(1).optional(),
   series: z.string().max(100).optional(),
   model: z.string().max(100).optional(),
