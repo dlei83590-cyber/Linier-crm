@@ -8,12 +8,13 @@
  * 注意：DRAFT 发票不占号（code 可空）→ 显示 "—"。
  * PermissionGuard 对齐 API requirePermission("invoice:view")。
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog, ModuleKpiStrip } from "@/components/workspace";
+import type { ModuleSummaryData } from "@/lib/module-summary/types";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
@@ -68,6 +69,35 @@ function InvoiceList() {
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ code?: string; status?: string }>({});
 
+  const [summary, setSummary] = useState<ModuleSummaryData | null>(null);
+
+  // 页面仪表盘 KPI：只读汇总（GET /api/invoices/summary）；失败静默隐藏
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<ModuleSummaryData>("/api/invoices/summary")
+      .then((b) => {
+        if (!cancelled) setSummary(b.data);
+      })
+      .catch(() => {
+        if (!cancelled) setSummary(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 仪表盘卡片点击：联动列表状态筛选（保留其他筛选）
+  const selectStatus = (status: string | null) => {
+    setStatusInput(status ?? "");
+    setFilters((prev) => {
+      const next = { ...prev };
+      if (status) next.status = status;
+      else delete next.status;
+      return next;
+    });
+    setPage(1);
+  };
+
   const { items, total, page, pageSize, loading, error, setPage, refresh } =
     useListQuery<InvoiceRow>("/api/invoices", filters);
 
@@ -106,6 +136,12 @@ function InvoiceList() {
 
   return (
     <AppPage>
+      <ModuleKpiStrip
+        statuses={Object.keys(STATUS_LABELS).map((s) => ({ value: s, label: STATUS_LABELS[s] ?? s }))}
+        data={summary}
+        activeStatus={filters.status ?? null}
+        onSelectStatus={selectStatus}
+      />
       <EntityListWorkspace<InvoiceRow>
         title="销售发票"
         description="销售发票列表（唯一创建入口：送货单）"

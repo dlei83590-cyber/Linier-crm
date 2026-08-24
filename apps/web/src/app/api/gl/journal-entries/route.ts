@@ -8,7 +8,7 @@ import { businessDayStart, businessDayEnd } from '@/lib/gl/period';
 
 export const dynamic = 'force-dynamic';
 
-/** GET /api/gl/journal-entries — 记账凭证列表（分页 + sourceType/sourceId/dateFrom/dateTo 过滤；Sprint 7 GL，ADR-0033；gl:view） */
+/** GET /api/gl/journal-entries — 记账凭证列表（分页 + sourceType/sourceId/status/dateFrom/dateTo 过滤；Sprint 7 GL，ADR-0033；gl:view） */
 export async function GET(request: NextRequest) {
   const user = await authenticate(request);
   const denied = requirePermission(user, 'gl:view');
@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
   const { page, pageSize, skip, take } = parsePagination(searchParams);
   const sourceType = searchParams.get('sourceType')?.trim();
   const sourceId = searchParams.get('sourceId')?.trim();
+  const status = searchParams.get('status')?.trim();
   const dateFrom = searchParams.get('dateFrom')?.trim();
   const dateTo = searchParams.get('dateTo')?.trim();
 
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
     deletedAt: null,
     ...(sourceType ? { sourceType } : {}),
     ...(sourceId ? { sourceId } : {}),
+    ...(status ? { status } : {}),
     ...(dateFrom || dateTo
       ? {
           postingDate: {

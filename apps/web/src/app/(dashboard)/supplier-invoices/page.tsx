@@ -13,7 +13,8 @@ import Link from "next/link";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog, ModuleKpiStrip } from "@/components/workspace";
+import type { ModuleSummaryData } from "@/lib/module-summary/types";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
@@ -43,6 +44,7 @@ const STATUS_LABELS: Record<string, string> = {
   MATCHED: "已匹配",
   APPROVED: "已批准",
   POSTED: "已过账",
+  CANCELLED: "已取消",
 };
 
 const TONE_MAP: Record<string, StatusTone> = {
@@ -77,6 +79,35 @@ function SupplierInvoiceList() {
       .then((body) => setSuppliers(Array.isArray(body.data) ? body.data : []))
       .catch(() => undefined);
   }, []);
+
+  const [summary, setSummary] = useState<ModuleSummaryData | null>(null);
+
+  // 页面仪表盘 KPI：只读汇总（GET /api/supplier-invoices/summary）；失败静默隐藏
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<ModuleSummaryData>("/api/supplier-invoices/summary")
+      .then((b) => {
+        if (!cancelled) setSummary(b.data);
+      })
+      .catch(() => {
+        if (!cancelled) setSummary(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 仪表盘卡片点击：联动列表 documentStatus 筛选（保留其他筛选）
+  const selectStatus = (status: string | null) => {
+    setStatusInput(status ?? "");
+    setFilters((prev) => {
+      const next = { ...prev };
+      if (status) next.documentStatus = status;
+      else delete next.documentStatus;
+      return next;
+    });
+    setPage(1);
+  };
 
   const { items, total, page, pageSize, loading, error, setPage, refresh } =
     useListQuery<SupplierInvoiceRow>("/api/supplier-invoices", filters);
@@ -122,6 +153,12 @@ function SupplierInvoiceList() {
 
   return (
     <AppPage>
+      <ModuleKpiStrip
+        statuses={Object.keys(STATUS_LABELS).map((s) => ({ value: s, label: STATUS_LABELS[s] ?? s }))}
+        data={summary}
+        activeStatus={filters.documentStatus ?? null}
+        onSelectStatus={selectStatus}
+      />
       <EntityListWorkspace<SupplierInvoiceRow>
         title="供应商发票"
         description="供应商发票（RECEIPT_BASED 三重匹配 + AP 应付）"

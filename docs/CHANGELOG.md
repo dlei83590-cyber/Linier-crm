@@ -2,6 +2,23 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 所有功能页面增加该页面的仪表盘（用户指令 2026-08-24）
+
+### 新增
+
+- **模块页仪表盘（KPI 数字卡片条）**：20 个业务单据模块列表页顶部展示「该页面的仪表盘」——全部 + 按状态计数 + 可选金额汇总；点击状态卡片联动列表筛选（保留其他筛选）
+- **只读 summary API ×20**：`GET /api/<module>/summary`（总数 + GROUP BY 状态 + 头级金额 Decimal 字符串；权限 = 各模块 `<module>:view`）——报价/销售订单/送货/销售发票/采购申请/采购订单/到货收货/质检(result)/仓库收货/采购退货/库存调拨/库存盘点/库存调整/库存转换/供应商发票(documentStatus)/供应商贷借项/付款核销/贷项借项通知单/收款核销/记账凭证
+- **共享组件** `ModuleKpiStrip`（workspace primitive）+ `lib/module-summary/types.ts` 契约类型
+- **GL 列表 API** 新增可选 `status` 过滤（手动凭证流状态筛选）
+- 路由级测试：`purchase-orders/summary/route.test.ts`；测试用例 docs/test-cases/ModuleSummary_API.md
+
+### 边界
+
+- 主数据/系统管理/只读报表页不加；AR/AP 只读投影后续复用
+- 金额卡为全部单据口径（不随状态筛选变化）；summary 挂载时拉取，不做实时轮询；失败静默隐藏
+- 零 Schema / 零 Migration / 零事件 / 零权限码新增（复用既有 `<module>:view`）
+
+---
 ## [Unreleased] - 全局文案统一：工作台 → 仪表盘（用户指令 2026-08-24）
 
 ### 变更

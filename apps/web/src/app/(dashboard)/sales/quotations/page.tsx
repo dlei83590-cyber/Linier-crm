@@ -7,13 +7,14 @@
  * 不改 backend / 状态机 / action；不提供新建按钮（Direct Create 属 F2-6B）。
  * PermissionGuard 对齐 API requirePermission("quotation:view")（三层一致铁律）。
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog, ModuleKpiStrip } from "@/components/workspace";
+import type { ModuleSummaryData } from "@/lib/module-summary/types";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { useSession } from "@/lib/session-context";
@@ -77,6 +78,35 @@ function QuotationList() {
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ code?: string; status?: string }>({});
 
+  const [summary, setSummary] = useState<ModuleSummaryData | null>(null);
+
+  // 页面仪表盘 KPI：只读汇总（GET /api/quotations/summary）；失败静默隐藏
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<ModuleSummaryData>("/api/quotations/summary")
+      .then((b) => {
+        if (!cancelled) setSummary(b.data);
+      })
+      .catch(() => {
+        if (!cancelled) setSummary(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 仪表盘卡片点击：联动列表状态筛选（保留其他筛选）
+  const selectStatus = (status: string | null) => {
+    setStatusInput(status ?? "");
+    setFilters((prev) => {
+      const next = { ...prev };
+      if (status) next.status = status;
+      else delete next.status;
+      return next;
+    });
+    setPage(1);
+  };
+
   const { items, total, page, pageSize, loading, error, setPage, refresh } =
     useListQuery<QuotationRow>("/api/quotations", filters);
 
@@ -118,6 +148,12 @@ function QuotationList() {
 
   return (
     <AppPage>
+      <ModuleKpiStrip
+        statuses={Object.keys(STATUS_LABELS).map((s) => ({ value: s, label: STATUS_LABELS[s] ?? s }))}
+        data={summary}
+        activeStatus={filters.status ?? null}
+        onSelectStatus={selectStatus}
+      />
       <EntityListWorkspace<QuotationRow>
         title="报价单"
         description="销售报价单列表"

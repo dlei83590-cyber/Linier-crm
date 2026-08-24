@@ -12,12 +12,13 @@
  * 无详情 GET 端点（/api/credit-debit-notes/{id} 仅 submit/apply），故列表内联操作 + 明细展开。
  * PermissionGuard 对齐 API requirePermission("credit-debit-note:view")。
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, StatusBadge, ModuleKpiStrip } from "@/components/workspace";
+import type { ModuleSummaryData } from "@/lib/module-summary/types";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
@@ -113,6 +114,35 @@ function CnDnList() {
   const [actionError, setActionError] = useState<ApiClientError | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<ConfirmTarget | null>(null);
 
+  const [summary, setSummary] = useState<ModuleSummaryData | null>(null);
+
+  // 页面仪表盘 KPI：只读汇总（GET /api/credit-debit-notes/summary）；失败静默隐藏
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<ModuleSummaryData>("/api/credit-debit-notes/summary")
+      .then((b) => {
+        if (!cancelled) setSummary(b.data);
+      })
+      .catch(() => {
+        if (!cancelled) setSummary(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 仪表盘卡片点击：联动列表状态筛选（保留其他筛选）
+  const selectStatus = (status: string | null) => {
+    setStatusInput(status ?? "");
+    setFilters((prev) => {
+      const next = { ...prev };
+      if (status) next.status = status;
+      else delete next.status;
+      return next;
+    });
+    setPage(1);
+  };
+
   const { items, total, page, pageSize, loading, error, setPage, refresh } =
     useListQuery<CnDnRow>("/api/credit-debit-notes", filters);
 
@@ -176,6 +206,12 @@ function CnDnList() {
 
   return (
     <AppPage>
+      <ModuleKpiStrip
+        statuses={Object.keys(STATUS_LABEL).map((s) => ({ value: s, label: STATUS_LABEL[s] ?? s }))}
+        data={summary}
+        activeStatus={filters.status ?? null}
+        onSelectStatus={selectStatus}
+      />
       {actionError && (
         <div className="border-status-danger-border mb-3 rounded-md border bg-status-danger-bg/10 p-3 text-sm text-status-danger-text">
           {describeStatus(actionError.status)}：{actionError.message}
