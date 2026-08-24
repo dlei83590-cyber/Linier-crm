@@ -378,6 +378,10 @@ export const ERROR_CODES = {
   CONTACT_RELATION_CROSS_PARTNER: 'CONTACT_RELATION_CROSS_PARTNER', // 跨客户关系（一期禁止），400
   CONTACT_RELATION_NOT_FOUND: 'CONTACT_RELATION_NOT_FOUND', // 联系人关系不存在，404
   CONTACT_SPECIAL_DATE_INVALID: 'CONTACT_SPECIAL_DATE_INVALID', // 特殊日期非法/提醒天数越界，400
+
+  // 2B：客户查重 duplicate-check（零 Schema；Preflight + Create Guard 共用 matcher）
+  DUPLICATE_EXACT: 'DUPLICATE_EXACT', // 强重复（USCC 全库命中，含 soft-deleted），创建阻断，409
+  DUPLICATE_REQUIRES_ACK: 'DUPLICATE_REQUIRES_ACK', // POTENTIAL 命中但未 duplicateAcknowledged=true，409
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

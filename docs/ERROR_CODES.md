@@ -310,5 +310,7 @@
 | CONTACT_RELATION_CROSS_PARTNER | 400 | 跨客户关系（一期禁止），400 |
 | CONTACT_RELATION_NOT_FOUND | 404 | 联系人关系不存在，404 |
 | CONTACT_SPECIAL_DATE_INVALID | 400 | 特殊日期非法/提醒天数越界，400 |
+| DUPLICATE_EXACT | 409 | 强重复（USCC 全库命中，含 soft-deleted），创建阻断，409 |
+| DUPLICATE_REQUIRES_ACK | 409 | POTENTIAL 命中但未 duplicateAcknowledged=true，409 |
 
-> 合计：**305 个错误码**（自动统计）
+> 合计：**307 个错误码**（自动统计）
