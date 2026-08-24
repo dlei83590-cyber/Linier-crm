@@ -189,7 +189,7 @@ function BusinessPartnerList() {
             key: "code",
             header: "编码",
             render: (row) => (
-              <Link href={`/business-partners/${row.id}/edit`} className="font-medium text-brand-600 hover:underline">
+              <Link href={`/business-partners/${row.id}`} className="font-medium text-brand-600 hover:underline">
                 {row.code}
               </Link>
             ),
@@ -224,6 +224,9 @@ function BusinessPartnerList() {
         onPageChange={setPage}
         rowActions={(row) => (
           <div className="flex justify-end gap-1">
+            <Link href={`/business-partners/${row.id}`} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary transition-colors hover:bg-slate-100">
+              详情
+            </Link>
             {canEdit && (
               <button type="button" onClick={() => router.push(`/business-partners/${row.id}/edit`)} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary transition-colors hover:bg-slate-100">
                 编辑

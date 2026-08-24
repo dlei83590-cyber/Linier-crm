@@ -75,6 +75,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     include: {
       roles: { where: { deletedAt: null }, orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] },
       invoiceInfoRecord: true, // 开票资料（ADR-0043；F3 前端接线）
+      // P-1A Customer 360 Workspace 只读聚合（复用 PartnerContact/Address/Credit/Tag 权威模型，不复制业务字段）
+      partnerContacts: { where: { deletedAt: null }, orderBy: [{ isPrimary: "desc" }, { sort: "asc" }] },
+      partnerAddresses: { where: { deletedAt: null }, orderBy: [{ isDefault: "desc" }, { sort: "asc" }] },
+      partnerTags: { where: { deletedAt: null }, include: { tag: { select: { id: true, code: true, name: true, color: true } } } },
+      partnerCredit: true,
     },
   });
   if (!partner) return failNotFound(ERROR_CODES.NOT_FOUND, "往来单位不存在");

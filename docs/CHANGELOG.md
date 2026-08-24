@@ -2,6 +2,20 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Phase 1A：BusinessPartner Customer 360 Workspace（CTO Directive Phase 1）
+
+### 新增
+
+- **Customer 360 Workspace**（/business-partners/[id]，14 tab 只读聚合）：概览/工商资料/开票资料/联系人/地址/信用/标签（GET 详情扩展 include）+ 商机/项目/报价/销售订单/应收回款（聚合各 authoritative 列表 API 的 customerId 过滤）+ 活动跟进/公海 Coming-by-contract 占位
+- GET /api/business-partners/:id 扩展只读聚合：partnerContacts/partnerAddresses/partnerTags/partnerCredit（复用权威模型，零字段复制）
+- 列表页 code 链接 + 行操作「详情」指向 360 页
+
+### 边界
+
+- 零 Schema / 零 Migration / 零平行模型；不实现 Phase 2/3 未授权能力（公海/查重/CRM Activity/拜访/签到/绩效 BI）；无正式事实源的 tab 显示 Coming-by-contract，禁止 mock
+- 联系人/地址/信用/标签写操作（CRUD API）未建（管理留后续 Phase）；附件未接入往来单位（FileAttachment 无 BusinessPartner 关联）
+
+---
 ## [Unreleased] - P0-2：合同证据归档索引（CTO Directive Phase 1，docs/contracts/）
 
 ### 治理
