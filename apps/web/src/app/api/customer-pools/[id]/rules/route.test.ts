@@ -47,7 +47,7 @@ describe('POST /api/customer-pools/:id/rules — Phase 2C 规则', () => {
       matchMode: 'ANY',
       condition: [{ field: 'region', operator: 'EQ', value: '华东' }],
       priority: 10,
-    }));
+    });
     expect(res.status).toBe(201);
   });
 
@@ -56,7 +56,7 @@ describe('POST /api/customer-pools/:id/rules — Phase 2C 规则', () => {
       ruleType: 'INACTIVITY',
       matchMode: 'ANY',
       condition: [{ field: 'region', operator: 'EQ', value: '华东' }],
-    }));
+    });
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error.code).toBe('POOL_RULE_SOURCE_UNAVAILABLE');
@@ -68,7 +68,7 @@ describe('POST /api/customer-pools/:id/rules — Phase 2C 规则', () => {
       ruleType: 'FIELD_MATCH',
       matchMode: 'ANY',
       condition: [{ field: 'ownerId', operator: 'EQ', value: 'u-1' }],
-    }));
+    });
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error.code).toBe('POOL_RULE_INVALID');
@@ -80,7 +80,7 @@ describe('POST /api/customer-pools/:id/rules — Phase 2C 规则', () => {
       ruleType: 'FIELD_MATCH',
       matchMode: 'ANY',
       condition: [{ field: 'region', operator: 'EQ', value: '华东' }],
-    }));
+    });
     expect(res.status).toBe(404);
     const body = await res.json();
     expect(body.error.code).toBe('POOL_NOT_FOUND');
