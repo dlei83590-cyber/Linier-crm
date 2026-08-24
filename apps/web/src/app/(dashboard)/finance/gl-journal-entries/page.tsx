@@ -1,11 +1,13 @@
 "use client";
 
 /** GL 记账凭证 — 只读列表页（Sprint 7 Finance 首块，ADR-0033；事件驱动自动过账，无手工过账 UI） */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
-import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, StatusBadge, ModuleKpiStrip } from "@/components/workspace";
+import { apiFetch } from "@/lib/api-client";
+import type { ModuleSummaryData } from "@/lib/module-summary/types";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate, formatMoney } from "@/lib/format";
@@ -26,6 +28,14 @@ interface GlEntryRow {
   attachmentCount?: number | null;
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: "草稿",
+  SUBMITTED: "已提交",
+  APPROVED: "已批准",
+  POSTED: "已过账",
+  REJECTED: "已驳回",
+};
+
 const SOURCE_LABELS: Record<string, string> = {
   SupplierInvoicePosted: "发票过账",
   SupplierPaymentApplied: "付款核销",
@@ -35,13 +45,42 @@ const SOURCE_LABELS: Record<string, string> = {
 
 function GlEntryList() {
   const [sourceTypeInput, setSourceTypeInput] = useState("");
-  const [filters, setFilters] = useState<{ sourceType?: string }>({});
+  const [filters, setFilters] = useState<{ sourceType?: string; status?: string }>({});
+
+  const [summary, setSummary] = useState<ModuleSummaryData | null>(null);
+
+  // 页面仪表盘 KPI：只读汇总（GET /api/gl/journal-entries/summary）；失败静默隐藏
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<ModuleSummaryData>("/api/gl/journal-entries/summary")
+      .then((b) => {
+        if (!cancelled) setSummary(b.data);
+      })
+      .catch(() => {
+        if (!cancelled) setSummary(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 仪表盘卡片点击：联动列表状态筛选（保留其他筛选）
+  const selectStatus = (status: string | null) => {
+    setStatusInput(status ?? "");
+    setFilters((prev) => {
+      const next = { ...prev };
+      if (status) next.status = status;
+      else delete next.status;
+      return next;
+    });
+    setPage(1);
+  };
 
   const { items, total, page, pageSize, loading, error, setPage, refresh } =
     useListQuery<GlEntryRow>("/api/gl/journal-entries", filters);
 
   const applyFilter = () => {
-    const next: { sourceType?: string } = {};
+    const next: { sourceType?: string; status?: string } = {};
     if (sourceTypeInput) next.sourceType = sourceTypeInput;
     setFilters(next);
     setPage(1);
@@ -50,6 +89,12 @@ function GlEntryList() {
 
   return (
     <AppPage>
+      <ModuleKpiStrip
+        statuses={Object.keys(STATUS_LABELS).map((s) => ({ value: s, label: STATUS_LABELS[s] ?? s }))}
+        data={summary}
+        activeStatus={filters.status ?? null}
+        onSelectStatus={selectStatus}
+      />
       <EntityListWorkspace<GlEntryRow>
         title="记账凭证"
         description="GL 过账消费 5C 会计事件自动生成（借贷平衡、幂等、POSTED 终态不可变）；无手工录入"

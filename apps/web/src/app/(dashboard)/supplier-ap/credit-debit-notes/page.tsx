@@ -1,12 +1,13 @@
 "use client";
 
 /** Supplier CN/DN — 供应商贷项/借项列表页（5C-2，CTO 解锁 2026-08-19） */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog, ModuleKpiStrip } from "@/components/workspace";
+import type { ModuleSummaryData } from "@/lib/module-summary/types";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate, formatMoney } from "@/lib/format";
@@ -57,6 +58,35 @@ function CnDnList() {
   const [deleting, setDeleting] = useState<CnDnRow | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
+  const [summary, setSummary] = useState<ModuleSummaryData | null>(null);
+
+  // 页面仪表盘 KPI：只读汇总（GET /api/supplier-credit-debit-notes/summary）；失败静默隐藏
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<ModuleSummaryData>("/api/supplier-credit-debit-notes/summary")
+      .then((b) => {
+        if (!cancelled) setSummary(b.data);
+      })
+      .catch(() => {
+        if (!cancelled) setSummary(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 仪表盘卡片点击：联动列表状态筛选（保留其他筛选）
+  const selectStatus = (status: string | null) => {
+    setStatusInput(status ?? "");
+    setFilters((prev) => {
+      const next = { ...prev };
+      if (status) next.status = status;
+      else delete next.status;
+      return next;
+    });
+    setPage(1);
+  };
+
   const { items, total, page, pageSize, loading, error, setPage, refresh } =
     useListQuery<CnDnRow>("/api/supplier-credit-debit-notes", filters);
 
@@ -89,6 +119,12 @@ function CnDnList() {
 
   return (
     <AppPage>
+      <ModuleKpiStrip
+        statuses={Object.keys(STATUS_LABELS).map((s) => ({ value: s, label: STATUS_LABELS[s] ?? s }))}
+        data={summary}
+        activeStatus={filters.documentStatus ?? filters.status ?? null}
+        onSelectStatus={selectStatus}
+      />
       <EntityListWorkspace<CnDnRow>
         title="供应商贷项/借项"
         description="供应商开给我方的 AP 侧调整单据（贷项冲减应付 / 借项增加应付；APPLIED 才回写应付未结项）"

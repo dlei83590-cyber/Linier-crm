@@ -7,12 +7,13 @@
  * AppPage → EntityListWorkspace → StatusBadge / ErrorPanel / common toolbar。
  * 保留「+ 新建质检」入口（如有）；不改 backend / 状态机 / action。
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog, ModuleKpiStrip } from "@/components/workspace";
+import type { ModuleSummaryData } from "@/lib/module-summary/types";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
@@ -45,6 +46,8 @@ const RESULT_LABELS: Record<string, string> = {
   PENDING: "待检",
 };
 
+const RESULT_OPTIONS = ["QUALIFIED", "PARTIAL", "REJECTED", "PENDING"] as const;
+
 function InspectionList() {
   const { state } = useSession();
   const canCreate =
@@ -58,6 +61,35 @@ function InspectionList() {
   const [modeInput, setModeInput] = useState("");
   const [resultInput, setResultInput] = useState("");
   const [filters, setFilters] = useState<{ inspectionMode?: string; result?: string }>({});
+
+  const [summary, setSummary] = useState<ModuleSummaryData | null>(null);
+
+  // 页面仪表盘 KPI：只读汇总（GET /api/inspections/summary）；失败静默隐藏
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<ModuleSummaryData>("/api/inspections/summary")
+      .then((b) => {
+        if (!cancelled) setSummary(b.data);
+      })
+      .catch(() => {
+        if (!cancelled) setSummary(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 仪表盘卡片点击：联动列表状态筛选（保留其他筛选）
+  const selectStatus = (status: string | null) => {
+    setResultInput(status ?? "");
+    setFilters((prev) => {
+      const next = { ...prev };
+      if (status) next.result = status;
+      else delete next.result;
+      return next;
+    });
+    setPage(1);
+  };
 
   const { items, total, page, pageSize, loading, error, setPage, refresh } =
     useListQuery<InspectionRow>("/api/inspections", filters);
@@ -95,6 +127,12 @@ function InspectionList() {
 
   return (
     <AppPage>
+      <ModuleKpiStrip
+        statuses={RESULT_OPTIONS.map((s) => ({ value: s, label: RESULT_LABELS[s] ?? s }))}
+        data={summary}
+        activeStatus={filters.result ?? null}
+        onSelectStatus={selectStatus}
+      />
       <EntityListWorkspace<InspectionRow>
         title="质检记录"
         description="质检记录仪表盘"
