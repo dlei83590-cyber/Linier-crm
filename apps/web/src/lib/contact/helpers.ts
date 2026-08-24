@@ -1,4 +1,3 @@
-import { Prisma } from '@prisma/client';
 
 /**
  * 2A 联系人管理领域函数（不放路由逻辑）
