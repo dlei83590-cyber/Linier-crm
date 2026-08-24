@@ -70,6 +70,13 @@ interface ItemDetail {
     changeSummary?: string | null;
     createdAt: string;
   }>;
+  // P-1B 产品/原料合同视图（详情 GET 已 include）
+  bomFinished?: Array<{ id: string; bomNo: string; bomVersion: number; status: string; isDefault: boolean }>;
+  bomComponents?: Array<{ id: string; bom?: { id: string; bomNo: string; finishedItem?: { id: string; code: string | null; name: string | null } | null } | null }>;
+  costBalance?: { avgUnitCost?: string | null; onHandQty?: string | null; totalCost?: string | null } | null;
+  productionOrderFinished?: Array<{ id: string; orderNo: string; productionType: string; status: string; plannedQty: string }>;
+  stockProjections?: Array<{ warehouseId: string; onHandQty: string; warehouse?: { code: string | null; name: string | null } | null }>;
+  partnerPrices?: Array<{ id: string; priceList?: { id: string; name: string | null } | null }>;
 }
 
 interface AuditLogRow {
@@ -281,6 +288,88 @@ function ItemDetailPage() {
               <InfoItem label="可销售" value={detail.isSalable ? "是" : "否"} />
               <InfoItem label="可生产" value={detail.isManufacturable ? "是" : "否"} />
             </div>
+          </section>
+
+          {/* P-1B 产品/原料合同视图：配方 / 供应商 / 库存 / 成本 / 生产外协 / 配方使用（只读聚合，复用 Item SSOT） */}
+          <section className="rounded-md border border-border p-4">
+            <h2 className="mb-3 text-sm font-semibold text-ink-primary">产品/原料合同视图</h2>
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              <InfoItem
+                label="商品来源"
+                value={detail.sourcingType ? SOURCING_LABELS[detail.sourcingType] ?? detail.sourcingType : null}
+              />
+              <InfoItem
+                label="移动加权单位成本"
+                value={detail.costBalance?.avgUnitCost != null ? detail.costBalance.avgUnitCost : null}
+              />
+              <InfoItem label="库存结存数量" value={detail.costBalance?.onHandQty != null ? detail.costBalance.onHandQty : null} />
+              <InfoItem label="库存结存成本" value={detail.costBalance?.totalCost != null ? detail.costBalance.totalCost : null} />
+            </div>
+
+            {(detail.bomFinished ?? []).length > 0 && (
+              <div className="mt-3">
+                <p className="mb-1 text-xs text-ink-muted">作为成品的配方（BOM）</p>
+                <div className="flex flex-wrap gap-2">
+                  {(detail.bomFinished ?? []).map((b) => (
+                    <Link key={b.id} href={`/inventory/boms/${b.id}`} className="rounded-md border border-border px-2 py-1 text-xs text-brand-600 hover:bg-canvas">
+                      {b.bomNo}（v{b.bomVersion}）{b.isDefault ? " · 默认" : ""} · {b.status}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {(detail.bomComponents ?? []).length > 0 && (
+              <div className="mt-3">
+                <p className="mb-1 text-xs text-ink-muted">作为原料被配方使用（BOM Usage）</p>
+                <div className="flex flex-wrap gap-2">
+                  {(detail.bomComponents ?? []).map((bc) => (
+                    <Link key={bc.id} href={`/inventory/boms/${bc.bom?.id}`} className="rounded-md border border-border px-2 py-1 text-xs text-brand-600 hover:bg-canvas">
+                      {bc.bom?.bomNo} → {bc.bom?.finishedItem?.code ?? ""} {bc.bom?.finishedItem?.name ?? ""}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {(detail.supplierItems ?? []).length > 0 && (
+              <div className="mt-3">
+                <p className="mb-1 text-xs text-ink-muted">供应商（SupplierItem）</p>
+                <div className="flex flex-wrap gap-2">
+                  {(detail.supplierItems ?? []).map((s) => (
+                    <span key={s.id} className="rounded-md border border-border px-2 py-1 text-xs text-ink-primary">
+                      {s.supplier?.name ?? s.supplier?.code ?? "—"}{s.isPreferred ? " · 优选" : ""}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {(detail.stockProjections ?? []).length > 0 && (
+              <div className="mt-3">
+                <p className="mb-1 text-xs text-ink-muted">库存余额（StockProjection SSOT，按仓库）</p>
+                <div className="flex flex-wrap gap-2">
+                  {(detail.stockProjections ?? []).map((sp, i) => (
+                    <span key={sp.warehouseId + i} className="rounded-md border border-border px-2 py-1 text-xs tabular-nums text-ink-primary">
+                      {sp.warehouse?.name ?? sp.warehouse?.code ?? "—"}：{sp.onHandQty}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {(detail.productionOrderFinished ?? []).length > 0 && (
+              <div className="mt-3">
+                <p className="mb-1 text-xs text-ink-muted">生产/外协工单（作为成品产出）</p>
+                <div className="flex flex-wrap gap-2">
+                  {(detail.productionOrderFinished ?? []).map((po) => (
+                    <Link key={po.id} href={`/inventory/production-orders/${po.id}`} className="rounded-md border border-border px-2 py-1 text-xs text-brand-600 hover:bg-canvas">
+                      {po.orderNo}（{po.productionType === "OEM_OUTSOURCING" ? "OEM" : "自产"} · {po.plannedQty} · {po.status}）
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
 
           <section className="rounded-md border border-border p-4">
