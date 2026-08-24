@@ -221,7 +221,7 @@ function WarehouseReceiptList() {
     <AppPage>
       <EntityListWorkspace<WarehouseReceiptRow>
         title="仓库收货"
-        description="仓库收货/入库工作台"
+        description="仓库收货/入库仪表盘"
         emptyMessage="暂无仓库收货单——点击「+ 新建仓库收货单」创建第一张入库单"
         headerActions={
           canCreate ? (

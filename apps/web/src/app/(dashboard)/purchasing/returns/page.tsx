@@ -93,7 +93,7 @@ function ReturnList() {
     <AppPage>
       <EntityListWorkspace<ReturnRow>
         title="采购退货"
-        description="采购退货工作台"
+        description="采购退货仪表盘"
         emptyMessage="暂无采购退货单——点击「+ 新建采购退货单」创建第一张退货单"
         headerActions={
           canCreate ? (

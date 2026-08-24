@@ -94,7 +94,7 @@ function StockCountList() {
     <AppPage>
       <EntityListWorkspace<StockCountRow>
         title="库存盘点"
-        description="库存盘点工作台"
+        description="库存盘点仪表盘"
         emptyMessage="暂无盘点单——点击「+ 新建」创建第一张"
         headerActions={
           canCreate ? (

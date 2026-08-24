@@ -272,7 +272,7 @@ export interface FrontendModule {
 
 /** 一级域（顺序即导航顺序；CTO 22:30 锁定） */
 export const MODULE_DOMAINS: ReadonlyArray<ModuleDomainDef> = [
-  { id: 'workbench', label: '工作台', order: 1 },
+  { id: 'workbench', label: '仪表盘', order: 1 },
   { id: 'customer-project', label: '客户与项目', order: 2 },
   { id: 'sales', label: '销售管理', order: 3 },
   { id: 'purchasing', label: '采购管理', order: 4 },
@@ -285,12 +285,12 @@ export const MODULE_DOMAINS: ReadonlyArray<ModuleDomainDef> = [
 ];
 
 export const MODULES: ReadonlyArray<FrontendModule> = [
-  // ===== 工作台 =====
+  // ===== 仪表盘 =====
   // dashboard：聚合页已在 main（ui.list）；contract 侧以 dashboard API 为准
   {
     id: 'dashboard',
     domain: 'workbench',
-    label: '工作台',
+    label: '仪表盘',
     route: '/dashboard',
     permission: null,
     availability: 'ready',

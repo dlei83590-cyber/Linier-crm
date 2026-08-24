@@ -130,7 +130,7 @@ export interface ModuleAccent {
 }
 
 export const MODULE_ACCENTS: ReadonlyArray<ModuleAccent> = [
-  { id: 'workbench', label: '工作台', color: '#2563eb', soft: '#eff6ff', strong: '#1d4ed8' },
+  { id: 'workbench', label: '仪表盘', color: '#2563eb', soft: '#eff6ff', strong: '#1d4ed8' },
   { id: 'customer-project', label: '客户与项目', color: '#7c3aed', soft: '#f5f3ff', strong: '#6d28d9' },
   { id: 'sales', label: '销售管理', color: '#059669', soft: '#ecfdf5', strong: '#047857' },
   { id: 'purchasing', label: '采购管理', color: '#ea580c', soft: '#fff7ed', strong: '#c2410c' },

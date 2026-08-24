@@ -94,7 +94,7 @@ function ConversionList() {
     <AppPage>
       <EntityListWorkspace<ConversionRow>
         title="库存转换"
-        description="库存转换工作台"
+        description="库存转换仪表盘"
         emptyMessage="暂无转换单——点击「+ 新建」创建第一张"
         headerActions={
           canCreate ? (

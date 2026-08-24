@@ -95,7 +95,7 @@ function TransferList() {
     <AppPage>
       <EntityListWorkspace<TransferRow>
         title="库存调拨"
-        description="库存调拨工作台"
+        description="库存调拨仪表盘"
         emptyMessage="暂无调拨单——点击「+ 新建」创建第一张"
         headerActions={
           canCreate ? (

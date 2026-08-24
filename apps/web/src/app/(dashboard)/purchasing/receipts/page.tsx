@@ -119,7 +119,7 @@ function ReceiptList() {
     <AppPage>
       <EntityListWorkspace<ReceiptRow>
         title="到货收货"
-        description="到货收货工作台"
+        description="到货收货仪表盘"
         emptyMessage="暂无到货收货单——点击「+ 新建到货收货单」创建第一张收货单"
         headerActions={
           canCreate ? (
