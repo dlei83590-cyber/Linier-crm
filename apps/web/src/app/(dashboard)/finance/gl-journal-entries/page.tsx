@@ -45,7 +45,6 @@ const SOURCE_LABELS: Record<string, string> = {
 
 function GlEntryList() {
   const [sourceTypeInput, setSourceTypeInput] = useState("");
-  const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ sourceType?: string; status?: string }>({});
 
   const [summary, setSummary] = useState<ModuleSummaryData | null>(null);
@@ -67,7 +66,6 @@ function GlEntryList() {
 
   // 仪表盘卡片点击：联动列表状态筛选（保留其他筛选）
   const selectStatus = (status: string | null) => {
-    setStatusInput(status ?? "");
     setFilters((prev) => {
       const next = { ...prev };
       if (status) next.status = status;
