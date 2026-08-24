@@ -16,6 +16,7 @@ import Link from "next/link";
 import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, ErrorPanel } from "@/components/workspace";
+import { ContactWorkspace } from "./contact-workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { formatDate, formatMoney } from "@/lib/format";
 
@@ -269,36 +270,7 @@ function PartnerDetailPage() {
 
         {tab === "contacts" && (
           <section className="rounded-md border border-border p-4">
-            {(detail.partnerContacts ?? []).length > 0 ? (
-              <table className="min-w-full divide-y divide-border text-sm">
-                <thead className="text-ink-secondary bg-canvas text-left text-xs font-medium">
-                  <tr>
-                    <th className="px-4 py-2 font-semibold">姓名</th>
-                    <th className="px-4 py-2 font-semibold">职位</th>
-                    <th className="px-4 py-2 font-semibold">部门</th>
-                    <th className="px-4 py-2 font-semibold">电话</th>
-                    <th className="px-4 py-2 font-semibold">邮箱</th>
-                    <th className="px-4 py-2 font-semibold">微信</th>
-                    <th className="px-4 py-2 font-semibold">主联系人</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {(detail.partnerContacts ?? []).map((c) => (
-                    <tr key={c.id}>
-                      <td className="px-4 py-2">{c.name}</td>
-                      <td className="px-4 py-2">{c.title ?? "—"}</td>
-                      <td className="px-4 py-2">{c.department ?? "—"}</td>
-                      <td className="px-4 py-2">{c.phone ?? "—"}</td>
-                      <td className="px-4 py-2">{c.email ?? "—"}</td>
-                      <td className="px-4 py-2">{c.wechat ?? "—"}</td>
-                      <td className="px-4 py-2">{c.isPrimary ? "是" : "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <p className="text-sm text-ink-muted">暂无联系人（联系人管理由合同 Phase 2 授权）。</p>
-            )}
+            <ContactWorkspace partnerId={id} />
           </section>
         )}
 
