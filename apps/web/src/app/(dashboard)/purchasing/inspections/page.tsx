@@ -97,7 +97,7 @@ function InspectionList() {
     <AppPage>
       <EntityListWorkspace<InspectionRow>
         title="质检记录"
-        description="质检记录工作台"
+        description="质检记录仪表盘"
         headerActions={
           canCreate ? (
             <Link

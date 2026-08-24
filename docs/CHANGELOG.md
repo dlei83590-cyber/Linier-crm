@@ -2,6 +2,20 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 全局文案统一：工作台 → 仪表盘（用户指令 2026-08-24）
+
+### 变更
+
+- 一级导航分组「工作台」→「仪表盘」（modules.ts MODULE_DOMAINS / tokens.ts MODULE_ACCENTS）
+- 仪表盘模块标签「工作台」→「仪表盘」（/dashboard，modules.ts MODULES）
+- 404 / 403 页「返回工作台」→「返回仪表盘」
+- 10 个模块列表页描述统一「XX工作台」→「XX仪表盘」（采购订单/采购申请/到货收货/质检记录/仓库收货入库/采购退货/库存调拨/库存盘点/库存调整/库存转换）
+
+### 边界
+
+- 纯前端展示文案变更，零 API / Schema / 权限 / 路由变更；DB 菜单 seed 原已使用「仪表盘」（DASHBOARD），本次仅对齐前端模块注册表与页面文案
+
+---
 ## [Unreleased] - 新建采购 500 修复：单号回收后取号占用冲突（用户指令 2026-08-21 反馈）
 
 ### 修复

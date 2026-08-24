@@ -130,7 +130,7 @@ function OrderList() {
     <AppPage>
       <EntityListWorkspace<OrderRow>
         title="采购订单"
-        description="采购订单工作台"
+        description="采购订单仪表盘"
         emptyMessage="暂无采购订单——点击「+ 新建采购订单」创建第一张采购订单"
         headerActions={
           canCreate ? (

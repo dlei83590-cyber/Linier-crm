@@ -120,7 +120,7 @@ function RequisitionList() {
     <AppPage>
       <EntityListWorkspace<RequisitionRow>
         title="采购申请"
-        description="采购申请工作台"
+        description="采购申请仪表盘"
         emptyMessage="暂无采购申请——点击「+ 新建采购申请」创建第一张采购申请"
         headerActions={
           canCreate ? (

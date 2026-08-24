@@ -95,7 +95,7 @@ function AdjustmentList() {
     <AppPage>
       <EntityListWorkspace<AdjustmentRow>
         title="库存调整"
-        description="库存调整工作台"
+        description="库存调整仪表盘"
         emptyMessage="暂无调整单——点击「+ 新建」创建第一张"
         headerActions={
           canCreate ? (
