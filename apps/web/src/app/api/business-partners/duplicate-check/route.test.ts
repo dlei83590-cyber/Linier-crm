@@ -38,12 +38,12 @@ function makeRequest(body: unknown): NextRequest {
 }
 
 describe('POST /api/business-partners/duplicate-check — Phase 2B preflight', () => {
+  let bpMock: { findMany: ReturnType<typeof vi.fn> };
   beforeEach(() => {
     vi.clearAllMocks();
-    mockPrisma.businessPartner = {
-      findMany: vi.fn().mockResolvedValue([]),
-    };
-    mockPrisma.partnerContact = { findMany: vi.fn().mockResolvedValue([]) };
+    bpMock = { findMany: vi.fn().mockResolvedValue([]) };
+    mockPrisma['businessPartner'] = bpMock;
+    mockPrisma['partnerContact'] = { findMany: vi.fn().mockResolvedValue([]) };
   });
 
   it('13. 无 business-partner:create 权限 → 403', async () => {
@@ -63,7 +63,7 @@ describe('POST /api/business-partners/duplicate-check — Phase 2B preflight', (
   });
 
   it('19. preflight 命中 POTENTIAL 不写业务 Audit（仅 requestLog）', async () => {
-    mockPrisma.businessPartner.findMany = vi.fn().mockResolvedValue([
+    bpMock.findMany = vi.fn().mockResolvedValue([
       bp({ id: 'p1', name: '上海某某科技有限公司' }),
     ]);
     const res = await POST(makeRequest({ name: '上海某某科技有限公司' }));
@@ -75,7 +75,7 @@ describe('POST /api/business-partners/duplicate-check — Phase 2B preflight', (
   });
 
   it('EXACT 命中返回 masked matches（不泄漏完整值）', async () => {
-    mockPrisma.businessPartner.findMany = vi.fn().mockResolvedValue([
+    bpMock.findMany = vi.fn().mockResolvedValue([
       bp({ id: 'p1', name: '已有公司', uscc: '91310000MA1K35L88U', phone: '13812340000' }),
     ]);
     const res = await POST(makeRequest({ uscc: '91310000MA1K35L88U' }));

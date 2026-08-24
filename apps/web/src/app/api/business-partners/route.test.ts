@@ -28,6 +28,12 @@ function bp(partial: Partial<BpRow> & { id: string; name: string }): BpRow {
   return { code: 'BP-' + partial.id, type: 'CUSTOMER', isActive: true, uscc: null, phone: null, deletedAt: null, ...partial };
 }
 
+let bpMock: {
+  findUnique: ReturnType<typeof vi.fn>;
+  findMany: ReturnType<typeof vi.fn>;
+  create: ReturnType<typeof vi.fn>;
+};
+
 let usccRows: BpRow[] = [];
 let bpRows: BpRow[] = [];
 let createImpl: ((args: unknown) => Promise<unknown>) | null = null;
@@ -52,7 +58,7 @@ describe('POST /api/business-partners — Phase 2B create guard', () => {
     bpRows = [];
     createImpl = null;
     vi.clearAllMocks();
-    mockPrisma.businessPartner = {
+    bpMock = {
       findUnique: vi.fn().mockResolvedValue(null),
       findMany: vi.fn(({ where }: { where?: Record<string, unknown> }) => {
         if (where && 'uscc' in where) return Promise.resolve(usccRows);
@@ -62,7 +68,8 @@ describe('POST /api/business-partners — Phase 2B create guard', () => {
         createImpl ? createImpl(args) : Promise.resolve({ id: 'bp-new', code: 'BP-NEW-001', name: '新客户有限公司', type: 'CUSTOMER' }),
       ),
     };
-    mockPrisma.partnerContact = { findMany: vi.fn().mockResolvedValue([]) };
+    mockPrisma['businessPartner'] = bpMock;
+    mockPrisma['partnerContact'] = { findMany: vi.fn().mockResolvedValue([]) };
   });
 
   it('14. EXACT create → 409 DUPLICATE_EXACT（阻断，ack 不能绕过见 15）', async () => {
@@ -71,7 +78,7 @@ describe('POST /api/business-partners — Phase 2B create guard', () => {
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error.code).toBe('DUPLICATE_EXACT');
-    expect(mockPrisma.businessPartner.create).not.toHaveBeenCalled();
+    expect(bpMock.create).not.toHaveBeenCalled();
   });
 
   it('15. EXACT + acknowledgement → 仍 409 DUPLICATE_EXACT', async () => {
@@ -80,7 +87,7 @@ describe('POST /api/business-partners — Phase 2B create guard', () => {
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error.code).toBe('DUPLICATE_EXACT');
-    expect(mockPrisma.businessPartner.create).not.toHaveBeenCalled();
+    expect(bpMock.create).not.toHaveBeenCalled();
   });
 
   it('15b. soft-deleted 同 USCC create → 409 + 恢复/处理提示文案', async () => {
@@ -98,14 +105,14 @@ describe('POST /api/business-partners — Phase 2B create guard', () => {
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error.code).toBe('DUPLICATE_REQUIRES_ACK');
-    expect(mockPrisma.businessPartner.create).not.toHaveBeenCalled();
+    expect(bpMock.create).not.toHaveBeenCalled();
   });
 
   it('17. POTENTIAL + ack → 201 创建成功', async () => {
     bpRows = [bp({ id: 'p1', name: '上海某某科技有限公司' })];
     const res = await POST(makeRequest({ ...baseBody, name: '上海某某科技有限公司', duplicateAcknowledged: true }));
     expect(res.status).toBe(201);
-    expect(mockPrisma.businessPartner.create).toHaveBeenCalledTimes(1);
+    expect(bpMock.create).toHaveBeenCalledTimes(1);
   });
 
   it('18. POTENTIAL + ack → 写 business-partner.duplicate-acknowledged Audit', async () => {
@@ -114,7 +121,7 @@ describe('POST /api/business-partners — Phase 2B create guard', () => {
     const calls = (await import('@/lib/api-helpers')).writeAuditLog as ReturnType<typeof vi.fn>;
     const ackCall = calls.mock.calls.find((c: unknown[]) => (c[0] as { action: string }).action === 'business-partner.duplicate-acknowledged');
     expect(ackCall).toBeTruthy();
-    const data = (ackCall[0] as { afterData: { matchedPartnerIds: string[]; matchReasons: string[] } }).afterData;
+    const data = (ackCall![0] as { afterData: { matchedPartnerIds: string[]; matchReasons: string[] } }).afterData;
     expect(data.matchedPartnerIds).toEqual(['p1']);
     expect(data.matchReasons).toContain('NAME_EXACT');
   });
@@ -173,7 +180,7 @@ describe('POST /api/business-partners — Phase 2B create guard', () => {
   it('USCC 大小写/空格归一后 create 成功且 DB 存 normalized', async () => {
     const res = await POST(makeRequest({ ...baseBody, uscc: ' 9131 0000 ma1k 35l 88u ' }));
     expect(res.status).toBe(201);
-    const createArgs = (mockPrisma.businessPartner.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const createArgs = (bpMock.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(createArgs.data.uscc).toBe('91310000MA1K35L88U');
   });
 
