@@ -5,6 +5,7 @@ import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/respon
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { casUpdate } from "@/lib/api/cas";
+import { handleServerError } from "@/lib/api/server-error";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -45,36 +46,45 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
   const { version, ...updates } = parsed.data;
-  const existing = await prisma.unitOfMeasure.findFirst({ where: { id, deletedAt: null } });
-  if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "计量单位不存在");
 
-  if (updates.code) {
-    const codeExisting = await prisma.unitOfMeasure.findUnique({ where: { code: updates.code } });
-    if (codeExisting && codeExisting.id !== id && !codeExisting.deletedAt) {
-      return failConflict(ERROR_CODES.CONFLICT, "计量单位编码已存在");
+  try {
+    const existing = await prisma.unitOfMeasure.findFirst({ where: { id, deletedAt: null } });
+    if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "计量单位不存在");
+
+    if (updates.code) {
+      const codeExisting = await prisma.unitOfMeasure.findUnique({ where: { code: updates.code } });
+      if (codeExisting && codeExisting.id !== id && !codeExisting.deletedAt) {
+        return failConflict(ERROR_CODES.CONFLICT, "计量单位编码已存在");
+      }
     }
+
+    const cas = await casUpdate(prisma, "unitOfMeasure", id, version, {
+      ...updates,
+      updatedById: user!.id,
+    });
+    if (cas.outcome === "NOT_FOUND") return failNotFound(ERROR_CODES.NOT_FOUND, "计量单位不存在");
+    if (cas.outcome === "CONFLICT") return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
+    const updated = await prisma.unitOfMeasure.findFirst({ where: { id, deletedAt: null } });
+    if (!updated) return failNotFound(ERROR_CODES.NOT_FOUND, "计量单位不存在");
+
+    await writeAuditLog({
+      actorId: user?.id,
+      action: "unit-of-measure.update",
+      entityType: "unitOfMeasure",
+      entityId: id,
+      beforeData: { code: existing.code, name: existing.name },
+      afterData: { code: updated.code, name: updated.name },
+      ...meta,
+    });
+
+    return ok(updated);
+  } catch (err) {
+    // P2002：改 code 撞软删占位唯一约束 → 友好 409；其他 → 结构化日志（P0 Incident R2 模式）
+    if (err && typeof err === "object" && "code" in err && (err as { code?: unknown }).code === "P2002") {
+      return failConflict(ERROR_CODES.CONFLICT, "计量单位编码已存在（历史删除记录仍占用该编码，请更换编码）");
+    }
+    return handleServerError(request, user?.id, "unit-of-measure.update", err);
   }
-
-  const cas = await casUpdate(prisma, "unitOfMeasure", id, version, {
-    ...updates,
-    updatedById: user!.id,
-  });
-  if (cas.outcome === "NOT_FOUND") return failNotFound(ERROR_CODES.NOT_FOUND, "计量单位不存在");
-  if (cas.outcome === "CONFLICT") return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  const updated = await prisma.unitOfMeasure.findFirst({ where: { id, deletedAt: null } });
-  if (!updated) return failNotFound(ERROR_CODES.NOT_FOUND, "计量单位不存在");
-
-  await writeAuditLog({
-    actorId: user?.id,
-    action: "unit-of-measure.update",
-    entityType: "unitOfMeasure",
-    entityId: id,
-    beforeData: { code: existing.code, name: existing.name },
-    afterData: { code: updated.code, name: updated.name },
-    ...meta,
-  });
-
-  return ok(updated);
 }
 
 /** DELETE /api/unit-of-measures/:id（软删除；被物料/单据/换算引用 → 不可删除（可编辑）） */

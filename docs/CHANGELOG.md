@@ -2,6 +2,20 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 修复：新建计量单位 500（用户反馈 2026-08-24）
+
+### 修复
+
+- **新建计量单位 500（根因）**：POST /api/unit-of-measures 裸跑 Prisma 无 try/catch——同编码被**软删记录占用**时（先删后重建同编码，@unique 占位），findUnique 放行后 create 撞 P2002，未捕获冒泡成 Next.js 原生 500（前端只显示「请求失败（500）」，无结构化日志）
+- POST 增加 P2002 处理 → **409 CONFLICT**（「历史删除记录仍占用该编码，请更换编码」）；其他运行时错误 → handleServerError 结构化日志 + 500（不泄露 stack，P0 Incident R2 模式）
+- **顺带修复同根因**：PATCH /api/unit-of-measures/:id 改编码同样撞软删占位 P2002 → 409（不再 500）
+- 路由级测试 3 用例：正常创建 201 / 软删占位 P2002 转 409 / 其他 DB 错误转结构化 500
+
+### 边界
+
+- 无 Schema/Migration 变更；仅错误处理加固（对齐仓库 P0 Incident R2 先例）
+
+---
 ## [Unreleased] - 商品逻辑整理 P-4：前端交付（用户指令 2026-08-24，配方/工单页面 + 商品来源字段）
 
 ### 新增

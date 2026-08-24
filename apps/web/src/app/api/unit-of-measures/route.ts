@@ -5,6 +5,7 @@ import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/l
 import { ok, failValidation, failConflict, parsePagination } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
+import { handleServerError } from "@/lib/api/server-error";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -62,30 +63,39 @@ export async function POST(request: NextRequest) {
   const parsed = unitOfMeasureCreateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
-  const existing = await prisma.unitOfMeasure.findUnique({ where: { code: parsed.data.code } });
-  if (existing && !existing.deletedAt) {
-    return failConflict(ERROR_CODES.CONFLICT, "计量单位编码已存在");
+  try {
+    const existing = await prisma.unitOfMeasure.findUnique({ where: { code: parsed.data.code } });
+    if (existing && !existing.deletedAt) {
+      return failConflict(ERROR_CODES.CONFLICT, "计量单位编码已存在");
+    }
+
+    const created = await prisma.unitOfMeasure.create({
+      data: {
+        code: parsed.data.code,
+        name: parsed.data.name,
+        symbol: parsed.data.symbol ?? null,
+        approvalStatus: "APPROVED",
+        createdById: user?.id ?? null,
+        updatedById: user?.id ?? null,
+      },
+    });
+
+    await writeAuditLog({
+      actorId: user?.id,
+      action: "unit-of-measure.create",
+      entityType: "unitOfMeasure",
+      entityId: created.id,
+      afterData: { code: created.code, name: created.name },
+      ...meta,
+    });
+
+    return ok(created, undefined, 201);
+  } catch (err) {
+    // P2002：code @unique 冲突——软删记录仍占用编码（findUnique 放行 → create 撞唯一约束）→ 友好 409
+    if (err && typeof err === "object" && "code" in err && (err as { code?: unknown }).code === "P2002") {
+      return failConflict(ERROR_CODES.CONFLICT, "计量单位编码已存在（历史删除记录仍占用该编码，请更换编码）");
+    }
+    // 其他运行时错误：结构化日志 + 500（不泄露 stack；P0 Incident R2 模式）
+    return handleServerError(request, user?.id, "unit-of-measure.create", err);
   }
-
-  const created = await prisma.unitOfMeasure.create({
-    data: {
-      code: parsed.data.code,
-      name: parsed.data.name,
-      symbol: parsed.data.symbol ?? null,
-      approvalStatus: "APPROVED",
-      createdById: user?.id ?? null,
-      updatedById: user?.id ?? null,
-    },
-  });
-
-  await writeAuditLog({
-    actorId: user?.id,
-    action: "unit-of-measure.create",
-    entityType: "unitOfMeasure",
-    entityId: created.id,
-    afterData: { code: created.code, name: created.name },
-    ...meta,
-  });
-
-  return ok(created, undefined, 201);
 }
