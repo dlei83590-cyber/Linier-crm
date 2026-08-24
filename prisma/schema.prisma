@@ -291,6 +291,7 @@ model User {
   department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   roles        UserRole[]
   auditLogs    AuditLog[]
+  customerOwnerships CustomerOwnership[] // 2C：作为公海归属 owner（ownerId 方向）
   purchaseRequisitions PurchaseRequisition[] // 5A：采购申请（requesterId 方向）
   purchaseOrders PurchaseOrder[] // 5A：采购订单（purchaserId 方向，采购员；CTO Phase 4B 指令）
   receivedPurchaseReceipts PurchaseReceipt[] // 5B：收货单（receivedById 方向，收货员）
@@ -713,6 +714,8 @@ model BusinessPartner {
   customers           Customer[]
   roles               BusinessPartnerRole[]
   partnerContacts     PartnerContact[]
+  poolEntries         CustomerPoolEntry[] // 2C：公海成员（Entry 方向）
+  customerOwnerships  CustomerOwnership[] // 2C：客户归属事实流（SSOT：客户级 owner 唯一权威）
   partnerAddresses    PartnerAddress[]
   partnerTags         PartnerTag[]
   partnerBankAccounts PartnerBankAccount[]
@@ -6636,5 +6639,160 @@ model GlPeriodClose {
   createdAt  DateTime @default(now()) @db.Timestamptz(3)
 
   @@index([periodKey])
+}
+
+// ============================================================================
+// Phase 2C：客户公海 Customer Pool（CTO OQ 裁决 + ADR-0053 APPROVED；Migration 0049）
+// 红线：客户级 owner 唯一权威事实 = CustomerOwnership（SSOT）；Entry → Ownership 1:N（entryId 不 unique，
+//       历史 ownership 永不覆盖）；Entry/Ownership 无 isActive（status/releasedAt + deletedAt 为权威，
+//       禁止双状态漂移）；禁止给 BusinessPartner 加 ownerId / 用 createdById / ProjectOpportunity.ownerId 推断归属；
+//       OQ-5：v1 不做 approval workflow（Pool/Rule 仅 RBAC + version + Audit）
+// ============================================================================
+
+enum CustomerPoolScopeType {
+  GLOBAL
+  REGION
+  DEPARTMENT
+}
+
+/// FIELD_MATCH 首版（region/industry/sourceChannel/type/isActive 白名单）；INACTIVITY 保留位——
+/// Phase 3 Activity 提供权威 lastActivityAt 前启用 → 400 POOL_RULE_SOURCE_UNAVAILABLE（fail closed）
+enum CustomerPoolRuleType {
+  FIELD_MATCH
+  INACTIVITY
+}
+
+enum CustomerPoolRuleMatchMode {
+  ALL
+  ANY
+}
+
+enum CustomerPoolEntryStatus {
+  IN_POOL
+  CLAIMED
+  RELEASED
+}
+
+enum CustomerPoolEntryEnterReason {
+  MANUAL
+  FIELD_RULE
+  RE_ENTER
+}
+
+enum CustomerPoolEntryReleaseReason {
+  MANUAL
+  BP_INACTIVE
+  POOL_CHANGED
+}
+
+enum CustomerOwnershipReleaseReason {
+  RECLAIMED
+  RULE_RETURN
+  MANUAL_RELEASE
+  BP_INACTIVE
+}
+
+/// 公海池定义（多公海；主数据风格。OQ-1：REGION scopeValue = BusinessPartner.region 字符串 EQ/IN，不建字典；
+/// OQ-5：v1 无 approvalStatus，仅 RBAC + version + Audit）
+model CustomerPool {
+  id          String   @id @default(cuid())
+  code        String   @unique // 池编码
+  name        String
+  description String?
+  scopeType   CustomerPoolScopeType
+  scopeValue  String? // GLOBAL→null；REGION→BP.region 字符串；DEPARTMENT→Department.id（服务端组合校验）
+  isActive    Boolean  @default(true)
+  version     Int      @default(1)
+  createdById String?
+  updatedById String?
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  rules   CustomerPoolRule[]
+  entries CustomerPoolEntry[]
+
+  @@index([scopeType])
+  @@index([deletedAt])
+}
+
+/// 流公海规则（FIELD_MATCH 首版：condition Json = [{ field, operator: EQ|IN, value }]；
+/// field 白名单 type/region/industry/sourceChannel/isActive——服务端校验 fail closed）
+model CustomerPoolRule {
+  id          String   @id @default(cuid())
+  poolId      String
+  pool        CustomerPool @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  ruleType    CustomerPoolRuleType @default(FIELD_MATCH)
+  matchMode   CustomerPoolRuleMatchMode @default(ANY)
+  condition   Json // [{ field, operator, value }]；INACTIVITY 规则禁止创建/启用（Phase 3 前）
+  priority    Int      @default(0)
+  isActive    Boolean  @default(true)
+  version     Int      @default(1)
+  createdById String?
+  updatedById String?
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([poolId])
+  @@index([deletedAt])
+}
+
+/// 公海成员事实（Entry → Ownership 1:N；权威状态 = status + deletedAt，**无 isActive**——
+/// 禁止 releasedAt 与 isActive 双状态矛盾。同一 partner 同一时刻至多一个有效 Entry（partial unique））
+model CustomerPoolEntry {
+  id                String   @id @default(cuid())
+  poolId            String
+  pool              CustomerPool @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  businessPartnerId String
+  businessPartner   BusinessPartner @relation(fields: [businessPartnerId], references: [id], onDelete: Cascade)
+  status            CustomerPoolEntryStatus @default(IN_POOL)
+  enteredAt         DateTime @default(now()) @db.Timestamptz(3)
+  enteredById       String?
+  enterReason       CustomerPoolEntryEnterReason @default(MANUAL)
+  releasedAt        DateTime? @db.Timestamptz(3)
+  releasedById      String?
+  releaseReason     CustomerPoolEntryReleaseReason?
+  version           Int      @default(1)
+  createdById       String?
+  updatedById       String?
+  deletedAt         DateTime?
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+
+  ownerships CustomerOwnership[]
+
+  @@index([poolId])
+  @@index([businessPartnerId])
+  @@index([deletedAt])
+}
+
+/// 客户归属事实流（SSOT：客户级 owner 唯一权威事实 = CustomerOwnership；Entry 1 → N Ownership；
+/// 权威状态 = releasedAt + deletedAt，**无 isActive**；正常生命周期用 releasedAt 关闭（事实保留），
+/// deletedAt 仅限纠错场景且 MUST 写 Audit customer-ownership.correct）
+model CustomerOwnership {
+  id                String   @id @default(cuid())
+  businessPartnerId String
+  businessPartner   BusinessPartner @relation(fields: [businessPartnerId], references: [id], onDelete: Cascade)
+  entryId           String // 不 unique（Entry → Ownership 1:N）
+  entry             CustomerPoolEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  ownerId           String
+  owner             User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  claimedAt         DateTime @default(now()) @db.Timestamptz(3)
+  claimedById       String?
+  releasedAt        DateTime? @db.Timestamptz(3)
+  releasedById      String?
+  releaseReason     CustomerOwnershipReleaseReason?
+  version           Int      @default(1)
+  createdById       String?
+  updatedById       String?
+  deletedAt         DateTime?
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([businessPartnerId])
+  @@index([entryId])
+  @@index([ownerId])
+  @@index([deletedAt])
 }
 

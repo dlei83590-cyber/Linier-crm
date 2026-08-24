@@ -53,6 +53,8 @@ const SEED_ACTION_MODULES = [
   "item",
   "business-partner",
   "partner-contact",
+  // Phase 2C 客户公海（ADR-0053 + CTO OQ 裁决；与 shared PERMISSION_MODULES 保持一致，ADR-0028 防漂移）
+  "customer-pool",
   "price-list",
   // Sprint 3C-4：Price Foundation 模块
   "price-policy",
@@ -240,6 +242,8 @@ const SEED_SYSTEM_ACTION_PERMISSIONS: Array<{ name: string; code: string; module
   { name: "consume domain-events", code: "domain-event:consume", module: "domain-event" },
   // Sprint 6B-3：Adjustment Apply 受限系统权限（P8/P9 Final：Adjustment 直接动库存账且 MANUAL 高风险——apply 仅 SUPER_ADMIN/ADMIN，不进入全局 PERMISSION_ACTIONS（apply 非通用 CRUD action）；seed 注册供权限矩阵/审计可见）
   { name: "apply inventory-adjustment", code: "inventory-adjustment:apply", module: "inventory-adjustment" },
+  // Phase 2C：Customer Pool 后台 sweep / 规则回流执行（仅 SUPER_ADMIN/ADMIN 静态授权）
+  { name: "consume customer-pool", code: "customer-pool:consume", module: "customer-pool" },
 ];
 
 const SEED_UNITS = [

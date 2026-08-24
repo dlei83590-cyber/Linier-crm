@@ -241,6 +241,16 @@
 | `ItemRevisionReleased` | 物料新版本发布（3C-3 ItemRevision）                | `{ itemId, code, revisionNo, revision, changeSummary, releasedBy, releasedAt }`    |
 | `PriceListChanged`     | 价格表变更（3C-5）                                 | `{ priceListId, code, priceType }`                                                 |
 
+### 2.5 客户公海（Phase 2C，Migration 0049；ADR-0053 APPROVED + CTO OQ 裁决）
+
+| eventType                   | 触发时机                        | 载荷示例                                                                |
+| --------------------------- | ------------------------------- | ----------------------------------------------------------------------- |
+| `CustomerPoolEntryEntered`  | 客户入池（手工入池 2C-1 / 规则自动入池 2C-2） | `{ entryId, poolId, businessPartnerId, enterReason, enteredBy }` |
+| `CustomerPoolEntryClaimed`  | 公海客户被挑入（claim，2C-2）   | `{ entryId, ownershipId, poolId, businessPartnerId, ownerId, claimedBy }` |
+| `CustomerOwnershipReleased` | 归属释放/回池（release，2C-2）  | `{ ownershipId, entryId, businessPartnerId, releasedAt, releaseReason }` |
+
+> 事件经通用 domain-events Outbox 通道同事务写入（writeDomainEvent，idempotencyKey 唯一防重）；当前无业务消费者，事件事实持久化即视为已交付（不 fake downstream delivery，CTO 裁决）。
+
 ## 3. 订阅方约定
 
 | 订阅方          | 监听事件                         | 用途                                 |

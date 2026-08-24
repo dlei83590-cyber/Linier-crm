@@ -382,6 +382,20 @@ export const ERROR_CODES = {
   // 2B：客户查重 duplicate-check（零 Schema；Preflight + Create Guard 共用 matcher）
   DUPLICATE_EXACT: 'DUPLICATE_EXACT', // 强重复（USCC 全库命中，含 soft-deleted），创建阻断，409
   DUPLICATE_REQUIRES_ACK: 'DUPLICATE_REQUIRES_ACK', // POTENTIAL 命中但未 duplicateAcknowledged=true，409
+
+  // 2C：客户公海 Customer Pool（ADR-0053 APPROVED + CTO OQ 裁决；Migration 0049）
+  POOL_NOT_FOUND: 'POOL_NOT_FOUND', // 公海池不存在，404
+  POOL_CODE_EXISTS: 'POOL_CODE_EXISTS', // 池编码已存在，409
+  POOL_SCOPE_INVALID: 'POOL_SCOPE_INVALID', // scopeType/scopeValue 组合非法（GLOBAL 必须 null 等），400
+  POOL_RULE_NOT_FOUND: 'POOL_RULE_NOT_FOUND', // 规则不存在，404
+  POOL_RULE_INVALID: 'POOL_RULE_INVALID', // 规则 condition 非法/字段不在白名单/operator 非 EQ|IN，400
+  POOL_RULE_SOURCE_UNAVAILABLE: 'POOL_RULE_SOURCE_UNAVAILABLE', // INACTIVITY 规则 Phase 3 前禁用（无 Activity 事实源），400
+  POOL_ENTRY_NOT_FOUND: 'POOL_ENTRY_NOT_FOUND', // 池条目不存在，404
+  POOL_ENTRY_NOT_ALLOWED: 'POOL_ENTRY_NOT_ALLOWED', // 客户类型不允许入池（须 CUSTOMER/BOTH 且 deletedAt=null），400
+  POOL_ENTRY_NOT_CLAIMABLE: 'POOL_ENTRY_NOT_CLAIMABLE', // 条目不在可 claim 状态（非 IN_POOL/已删除），409
+  POOL_CLAIM_CONFLICT: 'POOL_CLAIM_CONFLICT', // 并发 claim 撞唯一约束（partial unique P2002），409
+  CUSTOMER_ALREADY_OWNED: 'CUSTOMER_ALREADY_OWNED', // 已有有效归属（active ownership），409
+  CUSTOMER_ALREADY_IN_POOL: 'CUSTOMER_ALREADY_IN_POOL', // 已有有效池条目（active entry），409
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
