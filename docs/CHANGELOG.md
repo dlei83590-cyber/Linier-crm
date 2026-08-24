@@ -2,6 +2,19 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Phase 2A-2：Customer 360 联系人管理 Workspace（CTO Directive Phase 2）
+
+### 新增
+
+- Customer 360 联系人 Tab 从只读升级为管理 Workspace：联系人列表/新增/编辑/删除/设主/启用停用 + 特殊日期（类型/日期/recurrence/提前天数）+ 即将到期提醒（展示服务端 nextOccurrence/remindAt）+ 联系人关系档案（target 排除自己，仅同客户）
+- 关键契约：主联系人只提交 isPrimary=true（排他由 Backend 权威）；编辑带 version（CAS，409 冲突提示）；recurrence 透传 Backend enum；零 /api/customers / Legacy CustomerContact
+- 纯逻辑 helper + 单测（workspace-helpers：payload/排除自己/recurrence 透传，5 用例）
+
+### 边界
+
+- 零 Schema / 零 Migration；消费 2A-1 API；不做 nextOccurrence/2-29 前端算法（Backend 权威）；不 fake notification；不做关系图谱
+
+---
 ## [Unreleased] - Phase 2A-1：联系人管理 Backend（CTO Directive Phase 2）
 
 ### 新增
