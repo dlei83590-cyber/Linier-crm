@@ -78,14 +78,11 @@ describe('POST /api/business-partners/:id/activities — Phase 3 MVP 跟进活�
     expect(res.status).toBe(400);
   });
 
-  it('联系人跨客户 → 事务拒绝（CONTACT_MISMATCH → 500 路径或 fail-closed）', async () => {
-    const tx = makeTx({ partnerContact: { findFirst: vi.fn().mockResolvedValue(null) } });
-    // 传入属于其他客户的 contactId → partnerContact.findFirst（partnerId 限定）返回 null → CONTACT_MISMATCH
+  it('联系人跨客户 → 事务拒绝（fail-closed：create 不被调用）', async () => {
     const tx2 = makeTx();
-    tx2.partnerContact.findFirst.mockResolvedValue(null);
+    tx2.partnerContact.findFirst.mockResolvedValue(null); // partnerId 限定查询无命中 → CONTACT_MISMATCH
     mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx2));
-    const res = await POST(makeRequest({ activityType: 'FOLLOW_UP', summary: 'x', contactId: 'c-other' }), { params: Promise.resolve({ id: 'bp-1' }) });
-    // CONTACT_MISMATCH 被 catch 为 500？断言非 201 且 customerActivity.create 未调用（fail-closed）
+    await POST(makeRequest({ activityType: 'FOLLOW_UP', summary: 'x', contactId: 'c-other' }), { params: Promise.resolve({ id: 'bp-1' }) });
     expect(tx2.customerActivity.create).not.toHaveBeenCalled();
   });
 });
