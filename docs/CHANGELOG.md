@@ -2,6 +2,35 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Phase 2C-2：客户公海 Claim / 规则自动入池 / Sweep / UI（CTO 自动解锁，2C-1 CI PASS 后连续开发）
+
+### 新增
+
+- 规则评估器 lib/customer-pool/rule-evaluator.ts（纯确定性 matcher：EQ/IN + 白名单 type/region/industry/sourceChannel/isActive；
+  type CUSTOMER/BOTH + deletedAt=null 前置；多池 priority 最高获胜，**同 priority → AMBIGUOUS（NO AUTO ENTRY + Audit ambiguous，禁止随机选池）**；
+  REGION scope 字符串精确匹配；DEPARTMENT scope 自动评估跳过）
+- evaluate-and-sync service（BP create/update 成功后调用；**失败不回滚 BP 主档事务**（best-effort + audit + sweep 可修复）；
+  MATCH → 同事务入池 + Outbox CustomerPoolEntryEntered；idempotent）
+- claim：POST /api/customer-pools/:poolId/entries/:entryId/claim（customer-pool:assign；ownerId 可选代领；
+  **事务：SELECT ... FOR UPDATE 锁 entry → validate IN_POOL/BP active/owner active → create ownership → entry=CLAIMED → Outbox CustomerPoolEntryClaimed 同事务**；
+  并发双 claim → P2002 → 409 POOL_CLAIM_CONFLICT）
+- release：POST .../release（**TO_POOL=回池** ownership.releasedAt=now + entry=IN_POOL；**REMOVE=移出池** ownership 关闭 + entry=RELEASED；
+  单事务 + Outbox CustomerOwnershipReleased）
+- sweep：POST /api/customer-pools/sweep（**customer-pool:consume** SYSTEM；分批（每候选独立事务）/ idempotent / sorted（ORDER BY id）/ 
+  返回统计 scanned/entered/unchanged/ambiguous/blocked/failed + hasMore）
+- BP 写入联动：POST create + PATCH update 成功后调 syncPartnerToPool（业务路由零复制——共享 service）
+- UI：Customer 360 公海 Tab 从 Coming-by-contract 升级为真实能力（PoolStatusCard：当前 ownership/池状态/enteredAt·reason/owner/claim/release/归属历史）；
+  Customer Pool Workspace（/customer-pools 列表 + 新建 + 详情：规则管理/条目列表/手工入池/挑入）
+- 新增只读端点 GET /api/business-partners/:id/pool-status（customer-pool:view）
+- Audit 动作：customer-pool-entry.auto-enter-ambiguous / auto-enter-failed + customer-ownership.claim/release；Outbox 事件 CustomerPoolEntryClaimed / CustomerOwnershipReleased（EVENTS.md 2.5 已注册）
+
+### 边界
+
+- 零 INACTIVITY 实现（Phase 3 前 400 POOL_RULE_SOURCE_UNAVAILABLE）；零 quota/cooldown（OQ-2）；零 approval workflow（OQ-5）；
+  零新 Region/Team 模型（OQ-1）；零给 BusinessPartner 加 ownerId（SSOT 红线：客户级 owner 唯一权威 = CustomerOwnership）
+
+---
+
 ## [Unreleased] - Phase 2C-1：客户公海 Pool Foundation（ADR-0053 APPROVED + CTO OQ 裁决；Migration 0049）
 
 ### 新增

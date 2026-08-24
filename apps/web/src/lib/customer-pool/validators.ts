@@ -32,6 +32,12 @@ export function validatePoolScope(scopeType: string, scopeValue: string | null |
   return { ok: false, errorCode: ERROR_CODES.POOL_SCOPE_INVALID, message: "scopeType 非法（GLOBAL|REGION|DEPARTMENT）" };
 }
 
+export interface RuleConditionItem {
+  field: string;
+  operator: "EQ" | "IN";
+  value: unknown;
+}
+
 export interface RuleValidation {
   ok: boolean;
   errorCode?: ErrorCode;

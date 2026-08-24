@@ -38,7 +38,7 @@
 |---|---|---|
 | Phase 0 | 合同基线与架构审计（本 PR：纯审计/治理，零 Schema） | ✅ 本 PR |
 | Phase 1 | 主数据与客户主体收口（BP Customer SSOT / 产品原料视图 / 供应商收口；Customer 遗留审查→兼容→deprecate） | ✅（PR #212-#216 + Phase 1.5 Evidence Closure #218：Test Case 补齐 + Contract Evidence 结构 + Governance Finding；Runtime QA 待人工） |
-| Phase 2 | 客户管理核心（联系人增强 / 客户查重 duplicate-check / 客户公海 Pool） | 🔄（2A 全部完成 #220-222；2B 查重 Vertical Slice 完成 #225（零 Schema）：Preflight + Create Guard + UI 自动提示 + Audit + 错误码 + 测试；2C-0 客户公海架构审计 + ADR-0053 完成 #226（纯设计：CustomerOwnership 必要 / 写入即判定 + 手动 sweep / INACTIVITY 禁实现）；Phase 1+2A+2B Runtime QA 待人工一次 Smoke；2C Schema/实现另开 Gate） |
+| Phase 2 | 客户管理核心（联系人增强 / 客户查重 duplicate-check / 客户公海 Pool） | 🔄（2A 全部完成 #220-222；2B 查重 Vertical Slice 完成 #225（零 Schema）；2C-0 架构审计 + ADR-0053 完成 #226；**2C-1 Pool Foundation #228（Migration 0049 四模型 + RBAC + 错误码 + pools/rules/entries API）已合并**；**2C-2 Claim/Rules/Sweep/UI 实现中（claim/release 事务+Outbox、规则自动入池、sweep、Customer 360 公海 + Pool Workspace）**；Phase 1+2A+2B Runtime QA 待人工一次 Smoke；2C Runtime 待 2C-2 merge 后单独 Smoke） |
 | Phase 3 | CRM 活动/跟进/拜访计划/定位签到（Activity 决策，禁止双写） | ⬜ |
 | Phase 4 | 商机/报价/订单收口（快速报价 / 打印模板 / 批量导入 / SalesOrderMaterialRequirementProjection 算料投影） | ⬜ |
 | Phase 5 | 报销 Vertical Slice（申请 ≠ 审批 ≠ 过账 ≠ 付款；客户 ROI 数据源） | ⬜ |
