@@ -11,7 +11,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
-import { AppPage, EntityFormWorkspace, DependentSelector } from "@/components/workspace";
+import { EntityFormWorkspace, DependentSelector } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
