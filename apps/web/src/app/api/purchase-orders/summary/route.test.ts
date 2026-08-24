@@ -44,7 +44,7 @@ describe('GET /api/purchase-orders/summary — 页面仪表盘 KPI', () => {
     expect(body.success).toBe(true);
     expect(body.data.total).toBe(12);
     expect(body.data.byStatus).toEqual({ DRAFT: 3, CONFIRMED: 9 });
-    expect(body.data.amount).toEqual({ label: '订单金额', value: '12345.6700' });
+    expect(body.data.amount).toEqual({ label: '订单金额', value: '12345.67' });
   });
 
   it('金额为 0 时返回 undefined（无金额卡）', async () => {
