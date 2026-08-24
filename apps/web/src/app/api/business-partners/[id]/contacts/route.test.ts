@@ -23,14 +23,19 @@ function makeRequest(body: unknown): NextRequest {
   });
 }
 
-function makeTx() {
+type TxMock = {
+  businessPartner: { findFirst: ReturnType<typeof vi.fn> };
+  partnerContact: { updateMany: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
+};
+
+function makeTx(): TxMock {
   return {
     businessPartner: { findFirst: vi.fn().mockResolvedValue({ id: 'bp-1' }) },
     partnerContact: {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       create: vi.fn().mockResolvedValue({ id: 'c-1', partnerId: 'bp-1', name: '张三', isPrimary: true }),
     },
-  } as Record<string, unknown>;
+  };
 }
 
 describe('POST /api/business-partners/:id/contacts — 主联系人唯一性', () => {
