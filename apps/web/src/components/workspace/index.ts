@@ -13,6 +13,9 @@ export { PageToolbar } from './page-toolbar';
 export { EntityListWorkspace } from './entity-list-workspace';
 export type { ListColumn } from './entity-list-workspace';
 
+export { ModuleKpiStrip } from './module-kpi-strip';
+export type { ModuleKpiStripProps } from './module-kpi-strip';
+
 export { EntityDetailWorkspace } from './entity-detail-workspace';
 export { EntityFormWorkspace } from './entity-form-workspace';
 
