@@ -2883,6 +2883,29 @@ model BusinessPartnerRole {
 }
 
 /// 联系人（Partner 级共享：Customer/Supplier 复用）
+/// 联系人特殊日期类型（2A：合同「特殊时间前置提醒」；BIRTHDAY/ANNIVERSARY 默认 YEARLY）
+enum ContactSpecialDateType {
+  BIRTHDAY
+  ANNIVERSARY
+  OTHER
+}
+
+/// 联系人特殊日期重复语义（2A CTO Amendment：年度重复；2 月 29 非闰年按 2/28）
+enum ContactSpecialDateRecurrence {
+  NONE
+  YEARLY
+}
+
+/// 联系人关系类型（2A 合同「联系人关联关系档案」；只做关系事实 + 查看，不做图数据库）
+enum ContactRelationType {
+  COLLEAGUE
+  REPORTS_TO
+  DECISION_MAKER
+  INFLUENCER
+  RELATIVE
+  OTHER
+}
+
 model PartnerContact {
   id         String   @id @default(cuid())
   partnerId  String
@@ -2890,10 +2913,12 @@ model PartnerContact {
   name       String
   title      String? // 职位
   department String? // 部门
-  phone      String?
+  phone      String? // 电话（座机）
+  mobile     String? // 手机（2A：与 phone 区分）
   email      String?
   wechat     String?
-  isPrimary  Boolean  @default(false) // 主联系人
+  contactNote String? // 联系备注（2A 精细画像）
+  isPrimary  Boolean  @default(false) // 主联系人（DB partial unique：同一 partner 至多一个 active primary）
   sort       Int      @default(0)
   isActive   Boolean  @default(true)
   createdById String?
@@ -2905,7 +2930,54 @@ model PartnerContact {
   createdAt  DateTime @default(now()) @db.Timestamptz(3)
   updatedAt  DateTime @updatedAt @db.Timestamptz(3)
 
+  specialDates ContactSpecialDate[] // 2A：联系人特殊日期（生日/纪念日 + 前置提醒）
+  relationsAsSource ContactRelation[] @relation("ContactRelationSource") // 2A：作为关系源
+  relationsAsTarget ContactRelation[] @relation("ContactRelationTarget") // 2A：作为关系目标
+
   @@index([partnerId])
+  @@index([deletedAt])
+}
+
+/// 联系人特殊日期（2A 合同「特殊时间前置提醒」；recurrence=NONE|YEARLY，nextOccurrence 服务端派生）
+model ContactSpecialDate {
+  id             String   @id @default(cuid())
+  contactId      String
+  contact        PartnerContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  type           ContactSpecialDateType
+  date           DateTime @db.Date
+  recurrence     ContactSpecialDateRecurrence @default(NONE)
+  title          String?
+  remindDaysBefore Int    @default(0)
+  reminderEnabled Boolean @default(true)
+  createdById    String?
+  updatedById    String?
+  version        Int     @default(1)
+  deletedAt      DateTime?
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([contactId])
+  @@index([deletedAt])
+}
+
+/// 联系人关系（2A 合同「关联关系档案」；一期仅同 BusinessPartner 内关系，服务端校验）
+model ContactRelation {
+  id               String   @id @default(cuid())
+  sourceContactId  String
+  sourceContact    PartnerContact @relation("ContactRelationSource", fields: [sourceContactId], references: [id], onDelete: Cascade)
+  targetContactId  String
+  targetContact    PartnerContact @relation("ContactRelationTarget", fields: [targetContactId], references: [id], onDelete: Cascade)
+  relationType     ContactRelationType
+  note             String?
+  createdById      String?
+  updatedById      String?
+  version          Int      @default(1)
+  deletedAt        DateTime?
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([sourceContactId])
+  @@index([targetContactId])
   @@index([deletedAt])
 }
 
