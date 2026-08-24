@@ -59,7 +59,7 @@ describe('POST .../release — Phase 2C-2 释放回公海（单一语义，CTO M
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data.entryStatus).toBe('IN_POOL');
-    const entryUpdate = (tx.customerPoolEntry.update as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    const entryUpdate = (tx.customerPoolEntry.update as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(entryUpdate.data.status).toBe('IN_POOL');
     expect(tx.outboxMessage.create).toHaveBeenCalledTimes(1);
   });

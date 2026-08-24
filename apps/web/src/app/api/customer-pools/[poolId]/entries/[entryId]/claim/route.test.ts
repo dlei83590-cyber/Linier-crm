@@ -58,7 +58,7 @@ describe('POST .../claim — Phase 2C-2 领取（CTO MVP 关键路径）', () =>
     expect(res.status).toBe(201);
     const createArgs = (tx.customerOwnership.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(createArgs.data.ownerId).toBe('u-1'); // 默认领给自己
-    const entryUpdate = (tx.customerPoolEntry.update as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    const entryUpdate = (tx.customerPoolEntry.update as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(entryUpdate.data.status).toBe('CLAIMED');
     expect(tx.outboxMessage.create).toHaveBeenCalledTimes(1);
   });
