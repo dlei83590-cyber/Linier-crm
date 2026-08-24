@@ -68,7 +68,8 @@ describe('POST /api/unit-of-measures — 新建计量单位（500 修复 + 软�
     expect(body.data.id).toBe('uom-old');
     expect(body.data.deletedAt).toBeNull();
 
-    const updateArgs = (mockPrisma.unitOfMeasure.updateMany as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const uomMock = mockPrisma.unitOfMeasure as { updateMany: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
+    const updateArgs = uomMock.updateMany.mock.calls[0][0];
     expect(updateArgs.where).toEqual({ id: 'uom-old', deletedAt: { not: null } });
     expect(updateArgs.data.deletedAt).toBeNull();
     expect(updateArgs.data.name).toBe('千克');
@@ -87,7 +88,8 @@ describe('POST /api/unit-of-measures — 新建计量单位（500 修复 + 软�
     expect(res.status).toBe(201);
     const body = await res.json();
     expect(body.data.id).toBe('uom-old');
-    expect(mockPrisma.unitOfMeasure.create).not.toHaveBeenCalled();
+    const uomMock2 = mockPrisma.unitOfMeasure as { create: ReturnType<typeof vi.fn> };
+    expect(uomMock2.create).not.toHaveBeenCalled();
   });
 
   it('其他数据库运行时错误 → 500 结构化（INTERNAL_ERROR，不泄露 stack）', async () => {
