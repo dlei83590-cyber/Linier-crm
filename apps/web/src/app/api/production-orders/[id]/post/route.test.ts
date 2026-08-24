@@ -114,7 +114,7 @@ describe('POST /api/production-orders/:id/post — 过账（同事务库存效�
     const costArgs = (upsertInboundCost as ReturnType<typeof vi.fn>).mock.calls[0][1];
     expect(costArgs.itemId).toBe('fg-1');
     expect(costArgs.sourceKey).toBe('COST:PRODUCTION_ORDER:line-f1');
-    expect(costArgs.baseAmount.toString()).toBe('0.00'); // 无成本层原料 → 0 成本
+    expect(costArgs.baseAmount.toString()).toBe('0'); // 无成本层原料 → 0 成本
   });
 
   it('POSTED 重复过账 → 409 幂等拒绝', async () => {
