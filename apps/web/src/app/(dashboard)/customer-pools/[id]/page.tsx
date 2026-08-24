@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
-import { AppPage } from "@/components/workspace";
+import { AppPage, PageHeader } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { INPUT_CLASS, BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { formatDate } from "@/lib/format";
@@ -99,7 +99,13 @@ function PoolDetailPage() {
   };
 
   return (
-    <AppPage title={pool ? pool.name : "公海池详情"} description={pool ? pool.code + " · " + (SCOPE_LABELS[pool.scopeType] ?? pool.scopeType) + (pool.scopeValue ? "：" + pool.scopeValue : "") : "加载中…"}>
+    <AppPage>
+      <PageHeader
+        title={pool ? pool.name : "公海池详情"}
+        description={pool ? pool.code + " · " + (SCOPE_LABELS[pool.scopeType] ?? pool.scopeType) + (pool.scopeValue ? "：" + pool.scopeValue : "") : "加载中…"}
+        backHref="/customer-pools"
+        backLabel="返回公海列表"
+      />
       <div className="space-y-4">
         {error && <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
