@@ -2,6 +2,20 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - P0-1：商机/项目客户选择器对齐 BusinessPartner SSOT（CTO Directive Phase 1）
+
+### 修复
+
+- **Customer ID 错配根治（来源端）**：全前端 /api/customers 残留消费清零——新增共享客户选择器 `lib/frontend/customer-options.ts`（数据源 = /api/business-partners?type=CUSTOMER&isActive=true；option.id = BusinessPartner.id = POST customerId = 后端校验 id），商机新建 / 项目新建统一接入
+- 清理 3 处误导性注释（/api/customers → business-partners）
+- **回归测试 ×3**：数据源 URL 断言（非 /api/customers）/ option.id 透传 BusinessPartner.id / AbortSignal 透传
+
+### 边界
+
+- 零 Schema / 零 API / 零 Migration；不建 Customer↔BusinessPartner 映射表；不改 ProjectOpportunity/Project FK；后端双表猜测禁止（错误在来源端消灭）
+- /api/customers 遗留路由保留（Phase 1C Customer Retirement Audit 再决策）
+
+---
 ## [Unreleased] - Contract Alignment Program Phase 0：合同基线与架构审计（CTO Directive 2026-08-24）
 
 ### 治理
