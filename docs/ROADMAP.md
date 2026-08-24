@@ -1,6 +1,6 @@
 # 产品路线图（ROADMAP）
 
-- 版本：v1.42
+- 版本：v1.43
 - 日期：2026-08-24
 - 维护者：CIO（JINZA）｜审核：CTO
 - 状态说明：✅ 已完成 ｜ 🔄 进行中 ｜ ⬜ 未开始
@@ -25,6 +25,28 @@
 
 > 依赖顺序：1 → 2 → 3 → 4/5/6 → 7 → 8 → 9 → 10
 > （Sprint 4-6 可部分并行，但都依赖 Sprint 3 业务底座；Sprint 7 依赖 4-6 的单据）
+
+---
+
+## 1A. Contract Alignment Track（合同对齐专项，CTO Directive 2026-08-24）
+
+> 合同验收范围：基础信息/客户档案/联系人/公海/查重/商机/跟进/拜访/签到/报价/订单/销售出库/报销/经营数据/绩效数据。
+> 原则：合同功能 → 已有 ERP/CRM 能力复用 → 缺口补齐 → 重复模型收敛 → 前后端闭环 → 自动化验证 → 合同验收。冻结 SSOT：BusinessPartner/Item/ProjectOpportunity/Project/Quotation/SalesOrder/InventoryMovement/StockProjection/Finance-GL/AuditLog/File。
+> **禁止再造平行 Customer/Product/RawMaterial/Order/Inventory 数据体系。** Phase 0 审计：docs/reviews/Contract_Feature_Coverage_Audit_2026-08-24.md（20 项矩阵）；ADR-0050。
+
+| Phase | 内容 | 状态 |
+|---|---|---|
+| Phase 0 | 合同基线与架构审计（本 PR：纯审计/治理，零 Schema） | ✅ 本 PR |
+| Phase 1 | 主数据与客户主体收口（BP Customer SSOT / 产品原料视图 / 供应商收口；Customer 遗留审查→兼容→deprecate） | ⬜ Gate 0 后 |
+| Phase 2 | 客户管理核心（联系人增强 / 客户查重 duplicate-check / 客户公海 Pool） | ⬜ |
+| Phase 3 | CRM 活动/跟进/拜访计划/定位签到（Activity 决策，禁止双写） | ⬜ |
+| Phase 4 | 商机/报价/订单收口（快速报价 / 打印模板 / 批量导入 / SalesOrderMaterialRequirementProjection 算料投影） | ⬜ |
+| Phase 5 | 报销 Vertical Slice（申请 ≠ 审批 ≠ 过账 ≠ 付款；客户 ROI 数据源） | ⬜ |
+| Phase 6 | 经营/绩效 BI 合同子集（解除「合同必需子集」HOLD；Rule→Facts→Result→Drill-down；自助 BI/OLAP/DW/AI 继续 HOLD） | ⬜ |
+| Phase 7 | 合同 Final Audit / Release Gate（Contract Coverage=100% + Known Limitations + Security/Data Migration Review） | ⬜ |
+
+> 顺序：Phase 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7；可有限并行（Phase 1B 与 1A；Phase 4 报价打印与 3 后半程）；BI 不得提前（防假指标）。
+> Gate 纪律：每 Phase 独立 PR + CI + Runtime QA；Gate 0 禁止 Customer Pool / CRM Activity / Check-In Schema；本 Phase 0 PR CI PASS + CTO Review APPROVED 后才发 Phase 1 START。
 >
 > **Post-6B 双轨执行（CTO Directive 2026-08-12，baseline main @ `874e060`）→ 双轨收口（2026-08-18）**：Track A = Frontend Operations **✅ FINAL CLOSED**（PR #24 + F2-0~F2-6B + B2-0~B2-2B，10 模块工作台 + Sales/Purchasing/Inventory actions + Project Workspace 全部合并，B2-2A/B2-2B 31/31 Runtime Acceptance ACCEPTED）；Track B = Supplier Invoice / AP（5C-1）**✅ FINAL**（PR #23 已合并，生产 baseline 0028）；Project Lifecycle（Acceptance/Transition/Close/Attachments）**✅ L0–L2-B1 已合并 main**（PR #77-#83）；**Inventory Read Model ✅ FINAL（2026-08-18：GET /api/stock-projections + /api/inventory-movements 只读 Query API + 前端两页替换 Placeholder，CTO #8845 Blocking 解除）**；**Pending Pages Completion ✅（2026-08-18：9 个待开发页面全部打通——Batch 1 Master Data 4 模块 CRUD `8ca5f06` + Batch 2 System 3 模块 `053e256` + Batch 3 走访/风险引导页 `05183cc`，ADR-0029，零迁移）**；**AP Open Items 只读查询 ✅（2026-08-18：GET /api/ap-open-items + /supplier-ap/open-items 列表页，5C-1C1 会计投影，ap-open-item:view 仅 SUPER_ADMIN/ADMIN）**；**5C-2 Supplier CN/DN + Payment Allocation ✅（2026-08-19 CTO 解锁，ADR-0030，Migration 0029+0030）**；**5C-2 Payment 整体冲销 ✅（2026-08-19，Migration 0031，POST /:id/reverse + SupplierPaymentReversed）**；**5C-2 CN/DN 跨票 Consolidated ✅（2026-08-20，Migration 0032，SupplierCreditDebitNoteInvoice M:N + sourceSupplierInvoiceIds[] + 行归属分摊/逐票防超调）**；**Sprint 7 Finance 首块 GL 过账消费 5C 事件 ✅（2026-08-20 CTO 解锁，ADR-0033，Migration 0033：GlAccount/GlJournalEntry/Line + consumer 4 事件自动过账 + 只读 API/前端；GL 余额/试算/利润表仍后续 backlog）**；**GRIR 过账 ✅（2026-08-20：GrirAccrued/GrirReversed 事件 outbox 化 + GL 分录，EVENTS v1.39）**；**GL 余额/试算平衡/利润表 ✅（2026-08-20，ADR-0034：trial-balance/account-balances/profit-statement 只读 API + 前端 2 页；实时聚合派生，不建余额表；期初结转/多币种后续）**；**GL 手工凭证 + 审核流 ✅（2026-08-20，ADR-0035：Migration 0034 voucherNo 可空 + approvedAt/ById；手工凭证 DRAFT→SUBMITTED→APPROVED→POSTED/REJECTED + maker-checker + DRAFT 不占号/POST 取号；前端录入页 + 状态机按钮）**；**GL 期初余额 + 期末结转 ✅（2026-08-20，ADR-0036：Migration 0035 GlPeriodClose 防重复月结 + seed 4103 本年利润；closePeriod 结转凭证 + openingBalance 派生；/finance/gl-period-close 页）**；**GL 期间解锁/重开 ✅（2026-08-20，ADR-0037：reopenPeriod 红字冲销结转凭证 + 删 GlPeriodClose；POST period-closes/:id/reopen；多轮结转/重开事实链完整）**；**成本核算首块 ✅（2026-08-20 CTO 授权解除 D9 HOLD，ADR-0038：InventoryCostBalance 移动加权平均 + WHR 入库更新 + 只读 API/前端）**；**成本核算第二步 出库结转 ✅（2026-08-20，ADR-0039：applyOutboundCost 移动平均结转 + ledger-command OUT 同事务）**；**成本核算第三步 GL COGS ✅（2026-08-20，ADR-0040：出库结转同事务过账 借 6401 贷 库存科目）**；**成本核算第四步 多 COGS 科目映射 ✅（2026-08-20，ADR-0041：贷方按 itemType——成品/半成品→1405、原材料类→1403；借方多科目/FIFO/Cost Layer 后续）**；Reservation / Costing / GL 过账 / BI / OA / Mobile = HOLD（解除需 CTO 单独指令；BI reports 信息架构待 20 份报表清单）
 
@@ -283,6 +305,7 @@
 ## 15. 变更记录
 
 | 日期       | 变更       | 说明                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| 2026-08-24 | 更新 v1.43 | **Contract Alignment Program Phase 0（CTO Directive 2026-08-24，纯审计/治理 PR——零 Schema）**：合同 20 项功能覆盖矩阵（docs/reviews/Contract_Feature_Coverage_Audit_2026-08-24.md，状态 FINAL/PARTIAL/MISSING/DEVIATED/LEGACY）；核心结论——①业务单据全指向 BusinessPartner（Customer 仅遗留子模型自引用，LEGACY/DUPLICATE，/api/customers 仅 3 处前端消费且商机/项目新建存在 ID 错配 BUG=P0-1）；②ProjectVisit=走访记录（PARTIAL，CRM Activity 基座候选）；③ProjectExpense=项目费用登记（PARTIAL，报销全链缺）；④Dashboard/20 模块 KPI=模块摘要，经营/绩效 BI MISSING（解除「合同必需子集」HOLD）；⑤BOM 基础 FINAL，订单算料投影（SalesOrderMaterialRequirementProjection）MISSING；⑥客户多供应商=SupplierItem FINAL；⑦公海/查重/拜访计划/定位签到全 MISSING；ADR-0050（SSOT 冻结 + Phase 0-7 Gate + 冻结边界）；ROADMAP Contract Alignment Track；P0-1 商机/项目客户选择器迁移 /api/customers→business-partners |
 | 2026-08-24 | 更新 v1.42 | **商品逻辑整理（用户指令，Design Gate docs/SPRINTS/Item_Sourcing_BOM_Design.md → P-1~P-3 实施，ADR-0049，Migration 0047）**：① 成品三大来源 Item.sourcingType（BOUGHT 外购直接销售 / SELF_MANUFACTURED 自产 / OEM_OUTSOURCED 外协）——外购成品零新流程；② BOM 配方 ItemBom/Line（1 成品 = N 行原料：系数 qtyPerFinishedUnit + 损耗率 lossRate，bomVersion 多版本 + ACTIVE 唯一）；③ 吨→米/件/个换算链 = 配方系数（需求量 = 成品数 × 系数 × (1+损耗率)），单位红线：系数单位必须 = 原料库存单位；④ 生产/外协工单 ProductionOrder/Line（SELF/OEM，OEM=我方供料+加工费；DRAFT→SUBMITTED→POSTED/CANCELLED；POSTED 同事务领料 OUT → 成品 IN + 成品成本 Σ原料成本+OEM 加工费 入移动加权成本层 + 幂等 + BOM 需求下限 + 并发锁序）；API /api/boms（CRUD+activate）+ /api/production-orders（CRUD+submit/post/cancel）+ 权限 bom:*/production-order:* + PRD 单据序列 + 错误码 22 个；生产入库单（半成品→成品 1:1）保留兼容；**P-4 前端已交付（商品来源字段 + 配方列表/新建/详情/编辑 + 工单列表/新建/详情——提交/过账/取消）**；生产成本归集/工序/工单冲销仍 HOLD |
 | 2026-08-21 | 更新 v1.41 | **Business UX Rationalization Phase 2（Deep Business Semantics / 深层业务语义整改）启动（CIO 2026-08-21，规范归档 docs/BUSINESS_UX_RATIONALIZATION_PHASE2.md）**：Phase 1（Batch 1-15 表现层整改：枚举中文化/技术字段隐藏/金额对齐/空态/业务日期/状态展示）已全部合并 main；Phase 2 不再以「页面更整齐」为目标，转向验证字段语义——为什么存在/谁提供/用户此阶段是否知道/手输或自动带出或计算或只读/来源单据事实是否被下游任意修改/字段间业务约束/状态允许动作/动作产生的不可逆业务事实/前端与 API·状态机·RBAC·会计·库存事实一致/真实业务人员能否自然完成整条流程；每个页面整改前必须阅读 Prisma model·create/update schema·GET/POST/PATCH/action APIs·enums·状态机·RBAC·CAS/FOR UPDATE·来源/下游单据关系·domain event·GL/Inventory side effect·ADR·QA；先建 Field Decision Matrix 与 Action/State Matrix；创建时必填≠提交时必填（SAVE DRAFT/SUBMIT/APPROVE/EXECUTE 分阶段）；Derived Fields（subtotal/taxAmount/totalAmount/balance/remainingQty 等）必须 canonical backend source，禁止前端 quantity×unitPrice 估算替代；后端契约问题标记 CONTRACT ISSUE 不以前端 workaround 掩盖；Runtime Acceptance 覆盖正常路径/非法状态动作/无权限/重复提交/CAS 409/超量/超额/reversal；每批 1 个业务流程或 1-3 个强关联页面；**Batch 1 = Quotation 链纵向深审（销售链 P0 优先）**；优先级不变：销售链→采购链→财务 P0，主数据/库存随后，Project 再后，BI/OA/Mobile 不抢占 |
 | 2026-08-21 | 更新 v1.40 | **Business UX Rationalization / 业务页面合理性整改 启动（CIO 2026-08-21，规范归档 docs/BUSINESS_UX_RATIONALIZATION.md）**：页面层从「字段搬运优先」切换到「业务合理性优先」——每个页面先业务审计（角色/类型/字段/排序/自动带出/状态矩阵）再改代码；列表页非数据库浏览器、详情页信息分层、表单减少认知负担、状态机驱动按钮、错误信息转业务语言；整改优先级 P0 销售链（Quotation→SO→Delivery→Invoice→AR/Receipt）→ P0 采购链 → P0 财务 → P1 主数据/库存 → P2 Project；每批 1-3 个强关联页面，PR 必须带 Business Problem / UX Changes / Business Rules Preserved / Validation / Runtime Acceptance / Known Risk；与 Sprint 8 UI Modernization（好看）区分，本轮解决「好用、业务对」；**Batch 1 = Sales Order 三页整改（进行中，PR 待开）**；BI/OA/Mobile 不抢占整改优先级 |
