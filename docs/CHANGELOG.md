@@ -2,6 +2,20 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Phase 2A-1：联系人管理 Backend（CTO Directive Phase 2）
+
+### 新增
+
+- **Schema/Migration 0048**：PartnerContact +mobile/contactNote + ContactSpecialDate（recurrence NONE|YEARLY）+ ContactRelation + 主联系人 partial unique index（并发安全）
+- **API**：contacts CRUD + special-dates + relations + upcoming-reminders（nextOccurrence 服务端派生，2/29 非闰年按 2/28）
+- **RBAC** partner-contact:view/create/edit/delete；错误码 CONTACT_*（7 个）；Audit（create/update/delete/special-date/relation）
+- 单测：helpers（recurrence/2-29/remindAt/window）+ contacts route（主联系人排他/P2002 409）
+
+### 边界
+
+- 复用 PartnerContact SSOT（零第二套主档/零 Legacy CustomerContact 写入）；零 Phase 3；零公海；零 Sales/Inventory/GL/BOM 核心改动；通知执行器未就绪 → 只做 Query（禁止 fake push）
+
+---
 ## [Unreleased] - Phase 2A-0：联系人管理 Design Gate（CTO Directive Phase 2）
 
 ### 设计（纯文档，不实施）

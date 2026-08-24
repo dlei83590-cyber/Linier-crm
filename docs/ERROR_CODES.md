@@ -303,5 +303,12 @@
 | PRODUCTION_ORDER_SUPPLIER_INVALID | 400 | OEM 必须选外协厂且为供应商类型，400 |
 | PRODUCTION_ORDER_FEE_INVALID | 400 | OEM 加工费必须 >= 0（缺失按 0），400 |
 | PRODUCTION_ORDER_SEQUENCE_MISSING | 500 | PRD DocumentSequence 缺失 = 部署配置错误（fail closed，禁 fallback），500 |
+| CONTACT_NOT_FOUND | 404 | 联系人不存在或已删除，404 |
+| CONTACT_PARTNER_INVALID | 400 | 客户不存在/联系人所属客户不匹配，400 |
+| CONTACT_PRIMARY_CONFLICT | 409 | 并发设置主联系人冲突（partial unique 触发），409 |
+| CONTACT_RELATION_SELF | 400 | source == target，400 |
+| CONTACT_RELATION_CROSS_PARTNER | 400 | 跨客户关系（一期禁止），400 |
+| CONTACT_RELATION_NOT_FOUND | 404 | 联系人关系不存在，404 |
+| CONTACT_SPECIAL_DATE_INVALID | 400 | 特殊日期非法/提醒天数越界，400 |
 
-> 合计：**298 个错误码**（自动统计）
+> 合计：**305 个错误码**（自动统计）

@@ -52,6 +52,7 @@ const SEED_ACTION_MODULES = [
   "audit",
   "item",
   "business-partner",
+  "partner-contact",
   "price-list",
   // Sprint 3C-4：Price Foundation 模块
   "price-policy",
