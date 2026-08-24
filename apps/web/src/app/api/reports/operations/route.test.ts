@@ -109,8 +109,10 @@ describe('GET /api/reports/operations — 经营数据固定看板（只读聚�
     expect(res.status).toBe(200);
     const body = await res.json();
     const from = new Date(body.data.range.from);
-    expect(from.getUTCMonth()).toBe(0);
-    expect(from.getUTCDate()).toBe(1);
+    // start 以 UTC 存 12/31 16:00（= CST 1/1 00:00）；用 CST 视角断言业务日
+    const cst = new Date(from.getTime() + 8 * 60 * 60 * 1000);
+    expect(cst.getUTCMonth()).toBe(0);
+    expect(cst.getUTCDate()).toBe(1);
     expect(from.getUTCHours()).toBe(16);
   });
 
