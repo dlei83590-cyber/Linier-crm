@@ -42,7 +42,7 @@ function buildMocks() {
       { stage: 'QUOTATION', _count: { _all: 4 } },
     ]),
   };
-  mockPrisma['projectVisit'] = {
+  mockPrisma['customerActivity'] = {
     count: vi.fn().mockResolvedValue(7),
   };
 }
@@ -77,11 +77,11 @@ describe('GET /api/reports/operations — 经营数据固定看板（只读聚�
     await GET(makeRequest('month'));
     const soCount = mockPrisma['salesOrder'] as { count: ReturnType<typeof vi.fn>; aggregate: ReturnType<typeof vi.fn>; groupBy: ReturnType<typeof vi.fn> };
     const soCountWhere = soCount.count.mock.calls[0][0].where as { status?: { not?: string }; createdAt?: { gte?: Date; lt?: Date } };
-    expect(soCountWhere.status?.not).toBe('CANCELLED');
+    expect(soCountWhere.status?.notIn).toEqual(['DRAFT', 'CANCELLED']);
     expect(soCountWhere.createdAt?.gte).toBeInstanceOf(Date);
     expect(soCountWhere.createdAt?.lt).toBeInstanceOf(Date);
-    const soAggWhere = soCount.aggregate.mock.calls[0][0].where as { status?: { not?: string } };
-    expect(soAggWhere.status?.not).toBe('CANCELLED');
+    const soAggWhere = soCount.aggregate.mock.calls[0][0].where as { status?: { notIn?: string[] } };
+    expect(soAggWhere.status?.notIn).toEqual(['DRAFT', 'CANCELLED']);
     // 状态构成 groupBy 不排除 CANCELLED（透明展示口径）
     const soGroupWhere = soCount.groupBy.mock.calls[0][0].where as { status?: unknown };
     expect(soGroupWhere.status).toBeUndefined();

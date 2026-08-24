@@ -59,11 +59,14 @@ export async function GET(request: NextRequest) {
   const range: Prisma.DateTimeFilter = { gte: start, lt: end };
 
   const orderWhere: Prisma.SalesOrderWhereInput = { deletedAt: null, createdAt: range };
-  const orderActiveWhere: Prisma.SalesOrderWhereInput = { ...orderWhere, status: { not: "CANCELLED" } };
+  // CTO 口径（MUST-FIX）：经营金额/数量不含 DRAFT（草稿非成交）；groupBy 状态构成仍保留全状态透明展示
+  const orderActiveWhere: Prisma.SalesOrderWhereInput = { ...orderWhere, status: { notIn: ["DRAFT", "CANCELLED"] } };
   const quotationWhere: Prisma.QuotationWhereInput = { deletedAt: null, createdAt: range, status: { not: "CANCELLED" } };
   const customerWhere: Prisma.BusinessPartnerWhereInput = { deletedAt: null, type: { in: ["CUSTOMER", "BOTH"] } };
   const opportunityWhere: Prisma.ProjectOpportunityWhereInput = { deletedAt: null };
-  const visitWhere: Prisma.ProjectVisitWhereInput = { deletedAt: null, visitedAt: range };
+  // 跟进/拜访口径（CTO MUST-FIX）：客户级真实 = CustomerActivity（#234，Migration 0050）；
+  // 跟进=FOLLOW_UP、拜访=CHECK_IN，按 createdAt 时间范围；不再用 ProjectVisit 冒充（禁双加）
+  const activityRange: Prisma.CustomerActivityWhereInput = { deletedAt: null, createdAt: range };
 
   const [
     orderCount,
@@ -89,8 +92,8 @@ export async function GET(request: NextRequest) {
     prisma.projectOpportunity.count({ where: opportunityWhere }),
     prisma.projectOpportunity.count({ where: { ...opportunityWhere, createdAt: range } }),
     prisma.projectOpportunity.groupBy({ by: ["stage"], where: opportunityWhere, _count: { _all: true } }),
-    prisma.projectVisit.count({ where: { ...visitWhere, visitType: "VISIT" } }),
-    prisma.projectVisit.count({ where: { ...visitWhere, visitType: { not: "VISIT" } } }),
+    prisma.customerActivity.count({ where: { ...activityRange, activityType: "CHECK_IN" } }),
+    prisma.customerActivity.count({ where: { ...activityRange, activityType: "FOLLOW_UP" } }),
   ]);
 
   return ok({
