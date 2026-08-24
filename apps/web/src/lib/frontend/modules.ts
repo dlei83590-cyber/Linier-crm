@@ -929,8 +929,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
   },
 
   // ===== 分析与报表（信息架构先行：Catalog 见 docs/frontend/Report_Catalog.md；不实现指标）=====
-  // operations-report：经营数据固定看板 MVP（feat(crm)）——GET /api/reports/operations 只读聚合（reports:view）；
-  // 固定看板：数字卡 + 普通表格（无图表组件依赖），只读无动作
+  // operations-report：经营数据固定看板 MVP（feat(crm)）——GET /api/reports/operations 只读聚合（reports:view）
   {
     id: 'operations-report',
     domain: 'reports',
@@ -941,6 +940,17 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_LIST },
     order: 1,
   },
+  // performance-report：绩效数据固定页 MVP（feat(crm)）——GET /api/reports/performance 只读聚合（reports:view）
+  {
+    id: 'performance-report',
+    domain: 'reports',
+    label: '绩效数据',
+    route: '/reports/performance',
+    permission: actionPermission('reports', 'view'),
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_LIST },
+    order: 2,
+  },
   {
     id: 'reports',
     domain: 'reports',
@@ -949,7 +959,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     permission: null,
     availability: 'hold',
     capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
-    order: 2,
+    order: 3,
   },
 ];
 
