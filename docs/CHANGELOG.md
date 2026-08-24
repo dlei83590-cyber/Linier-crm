@@ -2,6 +2,14 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Phase 2A-0：联系人管理 Design Gate（CTO Directive Phase 2）
+
+### 设计（纯文档，不实施）
+
+- docs/SPRINTS/Phase2A_Contact_Design.md：合同三条联系人要求 → 当前能力 / 缺失（mobile+contactNote 字段 + ContactSpecialDate + ContactRelation 模型）/ Migration 0048 / API（contacts CRUD + special-dates + relations + upcoming-reminders）/ RBAC（partner-contact:view/create/edit/delete）/ Audit / 错误码 CONTACT_* / Test Cases / 预计修改文件 / 冻结边界
+- 关键决策：① PartnerContact 复用（零第二套主档）；② 特殊日期+前置提醒 = ContactSpecialDate（服务端计算 remindAt = date - remindDaysBefore，Upcoming Query，禁止 fake push）；③ 关系 = ContactRelation（source≠target，一期同客户内关系）
+
+---
 ## [Unreleased] - Phase 1.5 Evidence Closure（CTO Corrective Directive）
 
 ### 治理
