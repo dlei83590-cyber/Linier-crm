@@ -57,12 +57,16 @@ describe('findBusinessPartnerDuplicates（Phase 2B matcher）', () => {
     vi.clearAllMocks();
     mockPrisma.businessPartner = {
       findMany: vi.fn(({ where }: { where?: Record<string, unknown> }) => {
-        if (where && 'uscc' in where) return Promise.resolve(usccRows);
-        return Promise.resolve(bpRows);
+        // 模拟 DB 语义：EXACT 分支排除 excludePartnerId；POTENTIAL 分支过滤 deletedAt
+        if (where && 'uscc' in where) {
+          const exclude = (where as { id?: { not?: string } }).id?.not;
+          return Promise.resolve(exclude ? usccRows.filter((r) => r.id !== exclude) : usccRows);
+        }
+        return Promise.resolve(bpRows.filter((r) => r.deletedAt === null));
       }),
     };
     mockPrisma.partnerContact = {
-      findMany: vi.fn().mockResolvedValue(contactRows),
+      findMany: vi.fn().mockImplementation(() => Promise.resolve(contactRows)),
     };
   });
 

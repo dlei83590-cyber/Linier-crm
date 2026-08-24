@@ -160,6 +160,7 @@ export async function findBusinessPartnerDuplicates(
       take: POTENTIAL_CANDIDATE_LIMIT,
     });
     for (const c of bpCandidates) {
+      if (c.deletedAt) continue; // POTENTIAL 只扫有效主体（查询层已过滤，应用层防御）
       const reasons: DuplicateMatchReason[] = [];
       if (nameNorm && c.name && normalizeCompanyName(c.name) === nameNorm) reasons.push("NAME_EXACT");
       if (phoneNorm && c.phone && normalizePhone(c.phone) === phoneNorm) reasons.push("PARTNER_PHONE_EXACT");
