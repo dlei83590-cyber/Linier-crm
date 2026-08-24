@@ -23,7 +23,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const bp = await prisma.businessPartner.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
   if (!bp) return failNotFound(ERROR_CODES.NOT_FOUND, "往来单位不存在");
 
-  const [entry, activeOwnership, ownershipHistory] = await Promise.all([
+  const [entry, activeOwnership] = await Promise.all([
     prisma.customerPoolEntry.findFirst({
       where: { businessPartnerId: id, status: { not: "RELEASED" }, deletedAt: null },
       select: {
