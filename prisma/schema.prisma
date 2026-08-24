@@ -716,6 +716,7 @@ model BusinessPartner {
   partnerContacts     PartnerContact[]
   poolEntries         CustomerPoolEntry[] // 2C：公海成员（Entry 方向）
   customerOwnerships  CustomerOwnership[] // 2C：客户归属事实流（SSOT：客户级 owner 唯一权威）
+  activities          CustomerActivity[] // Phase 3：客户跟进/拜访计划/定位签到（CustomerActivity 方向）
   partnerAddresses    PartnerAddress[]
   partnerTags         PartnerTag[]
   partnerBankAccounts PartnerBankAccount[]
@@ -2936,6 +2937,7 @@ model PartnerContact {
   specialDates ContactSpecialDate[] // 2A：联系人特殊日期（生日/纪念日 + 前置提醒）
   relationsAsSource ContactRelation[] @relation("ContactRelationSource") // 2A：作为关系源
   relationsAsTarget ContactRelation[] @relation("ContactRelationTarget") // 2A：作为关系目标
+  activities        CustomerActivity[] // Phase 3：客户跟进活动（CustomerActivity 方向）
 
   @@index([partnerId])
   @@index([deletedAt])
@@ -6793,6 +6795,52 @@ model CustomerOwnership {
   @@index([businessPartnerId])
   @@index([entryId])
   @@index([ownerId])
+  @@index([deletedAt])
+}
+
+// ============================================================================
+// Phase 3 MVP - Customer Activity（客户跟进 / 拜访计划 / 定位签到）
+// CTO 合同「客户跟进」「拜访计划」「签到管理」最小落地（并行任务 feat/activity-timeline-mvp，Migration 0050）
+// BP 维度（businessPartnerId）；RBAC 复用 project-visit 权限模块（尽量复用，不新增权限模块）；
+// HOLD：审批流/评论/群消息/酷卡片/签退/围栏/通用 Activity Engine/Reminder Engine/Notification Engine。
+// 时间线事实：FOLLOW_UP → createdAt；VISIT_PLAN → planDate；CHECK_IN → checkinAt。
+// 说明：ProjectVisit 为 Project 维度（projectId 必填 + 走访语义），无法承载 BP 维度客户活动
+//   （缺 PartnerContact 关联/拜访计划/定位签到字段）；故新建最小 CustomerActivity 表，禁止双写。
+// ============================================================================
+
+/// 客户跟进活动类型：跟进 / 拜访计划 / 定位签到
+enum CustomerActivityType {
+  FOLLOW_UP // 客户跟进（跟进内容 + 下次行动 + 提醒）
+  VISIT_PLAN // 拜访计划（计划日期）
+  CHECK_IN // 定位签到（经纬度 + 签到时间）
+}
+
+/// 客户跟进活动（Customer 360「跟进活动」Tab；BP 维度，Migration 0050）
+model CustomerActivity {
+  id                String               @id @default(cuid())
+  businessPartnerId String
+  businessPartner   BusinessPartner      @relation(fields: [businessPartnerId], references: [id], onDelete: Cascade)
+  activityType      CustomerActivityType @default(FOLLOW_UP)
+  contactId         String? // 关联联系人（PartnerContact）
+  contact           PartnerContact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  summary           String? // 跟进内容 / 拜访目的 / 签到备注
+  nextAction        String? // 下次行动（FOLLOW_UP）
+  reminderAt        DateTime? // 提醒时间（FOLLOW_UP）
+  planDate          DateTime? // 计划日期（VISIT_PLAN）
+  checkinAt         DateTime? // 签到时间（CHECK_IN；服务端 now 落库，不信任客户端）
+  latitude          Decimal? @db.Decimal(10, 7) // 纬度（CHECK_IN；-90..90）
+  longitude         Decimal? @db.Decimal(10, 7) // 经度（CHECK_IN；-180..180）
+  locationNote      String? // 签到位置（浏览器返回/人工备注）
+  isActive          Boolean              @default(true)
+  createdById       String?
+  updatedById       String?
+  version           Int                  @default(1)
+  deletedAt         DateTime?
+  createdAt         DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime             @updatedAt @db.Timestamptz(3)
+
+  @@index([businessPartnerId])
+  @@index([activityType])
   @@index([deletedAt])
 }
 
