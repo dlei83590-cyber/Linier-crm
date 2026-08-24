@@ -95,7 +95,7 @@ describe('DELETE /api/customer-pools/:id — 软删', () => {
     const res = await DELETE(new NextRequest('http://localhost/api/customer-pools/pool-1', { method: 'DELETE', headers: { authorization: 'Bearer test-token' } }), { params: Promise.resolve({ id: 'pool-1' }) });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.deleted).toBe(true);
+    expect(body.data.deleted).toBe(true);
     const calls = (await import('@/lib/api-helpers')).writeAuditLog as ReturnType<typeof vi.fn>;
     expect(calls.mock.calls.some((c: unknown[]) => (c[0] as { action: string }).action === 'customer-pool.delete')).toBe(true);
   });
