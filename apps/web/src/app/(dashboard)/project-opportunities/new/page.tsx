@@ -7,7 +7,7 @@
  * code/name/customerId 必填；stage 默认 LEAD；商业预测字段可空。
  * 分区：基本信息 / 商业预测 / 其他；不 40 行平铺。
  * Customer 使用 /api/business-partners?type=CUSTOMER 选择器（P0-1 SSOT：option.id = BusinessPartner.id = POST customerId = 后端校验 id）。
- * Convert（Tier 3 factAction）不在本页，保持 HOLD。
+ * Convert（FRT-05 已开放）不在本页——唯一入口在商机详情页「转为项目」按钮。
  */
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";

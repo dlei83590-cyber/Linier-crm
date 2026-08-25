@@ -520,6 +520,15 @@ function ProjectDetailPage() {
     saving: boolean;
     error: ApiClientError | null;
   }>({ open: false, targetStage: "", remark: "", saving: false, error: null });
+  // FRT-05：Close command dialog（消费 backend POST /api/projects/:id/close 契约：
+  // reason 必填 + version CAS；force=true 需 project:close + project:approve 双权限）
+  const [closeDialog, setCloseDialog] = useState<{
+    open: boolean;
+    reason: string;
+    force: boolean;
+    saving: boolean;
+    error: ApiClientError | null;
+  }>({ open: false, reason: "", force: false, saving: false, error: null });
   const [stakeholderForm, setStakeholderForm] =
     useState<StakeholderFormValue>(EMPTY_STAKEHOLDER_FORM);
   const [memberForm, setMemberForm] = useState<MemberFormValue>(EMPTY_MEMBER_FORM);
@@ -1826,6 +1835,69 @@ function ProjectDetailPage() {
     setTransitionDialog((prev) => ({ ...prev, open: false }));
   };
 
+  // FRT-05：结项（POST /api/projects/:id/close；version CAS；force 需双权限；409 业务阻断真实展示）
+  const openClose = () => {
+    if (!detail) return;
+    setCloseDialog({ open: true, reason: "", force: false, saving: false, error: null });
+  };
+  const closeClose = () => {
+    setCloseDialog((prev) => ({ ...prev, open: false }));
+  };
+  const submitClose = async () => {
+    if (!detail || !closeDialog.open) return;
+    if (closeDialog.reason.trim() === "") {
+      setCloseDialog((prev) => ({
+        ...prev,
+        error: new ApiClientError(400, "结项原因必填", "VALIDATION"),
+      }));
+      return;
+    }
+    setCloseDialog((prev) => ({ ...prev, saving: true, error: null }));
+    try {
+      await apiFetch("/api/projects/" + id + "/close", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reason: closeDialog.reason.trim(),
+          version: detail.version, // authoritative CAS（不本地推导 version）
+          ...(closeDialog.force ? { force: true } : {}),
+        }),
+      });
+      setCloseDialog((prev) => ({ ...prev, open: false }));
+      // mutation 后 authoritative re-GET（不本地 patch stage/version）
+      await reloadProject();
+    } catch (err) {
+      setCloseDialog((prev) => ({
+        ...prev,
+        saving: false,
+        error:
+          err instanceof ApiClientError ? err : new ApiClientError(0, "结项失败", "NETWORK_ERROR"),
+      }));
+    }
+  };
+  // VERSION_CONFLICT stale：重新 GET → 重新消费最新 version + stage；不自动重发 close
+  const reloadClose = async () => {
+    setCloseDialog((prev) => ({ ...prev, saving: true, error: null }));
+    try {
+      const body = await apiFetch<ProjectDetail>("/api/projects/" + id);
+      setDetail(body.data);
+      setCloseDialog({
+        open: true,
+        reason: "",
+        force: false,
+        saving: false,
+        error: null,
+      });
+    } catch (err) {
+      setCloseDialog((prev) => ({
+        ...prev,
+        saving: false,
+        error:
+          err instanceof ApiClientError ? err : new ApiClientError(0, "重新加载失败", "NETWORK_ERROR"),
+      }));
+    }
+  };
+
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
@@ -2040,6 +2112,11 @@ function ProjectDetailPage() {
     canEdit &&
     detail.stage !== "CLOSED" &&
     (detail.allowedTransitions?.length ?? 0) > 0;
+  // FRT-05：Close 入口 Gate（backend requirePermission("project:close")；CLOSED 后不显示；
+  // force 需 project:close + project:approve 双权限（与 backend close route force 分支一致））
+  const canClose =
+    hasPermission(roles, actionPermission("project", "close")) && detail.stage !== "CLOSED";
+  const canForceClose = hasPermission(roles, actionPermission("project", "approve"));
   const canAddAcceptance =
     canManageAcceptances &&
     detail.stage !== "CLOSED" &&
@@ -2073,14 +2150,16 @@ function ProjectDetailPage() {
         statusLabel={STAGE_LABELS[detail.stage] ?? detail.stage}
         statusTone={STAGE_TONE_MAP[detail.stage] ?? "neutral"}
         actions={
-          canEdit && detail.stage !== "CLOSED" ? (
+          canEdit || canClose ? (
             <div className="flex items-center gap-2">
-              <Link
-                href={`/projects/${id}/edit`}
-                className={BUTTON_PRIMARY_CLASS}
-              >
-                编辑
-              </Link>
+              {canEdit && detail.stage !== "CLOSED" && (
+                <Link
+                  href={"/projects/" + id + "/edit"}
+                  className={BUTTON_PRIMARY_CLASS}
+                >
+                  编辑
+                </Link>
+              )}
               {canTransition && (
                 <button
                   type="button"
@@ -2088,6 +2167,15 @@ function ProjectDetailPage() {
                   className={BUTTON_PRIMARY_CLASS}
                 >
                   阶段流转
+                </button>
+              )}
+              {canClose && (
+                <button
+                  type="button"
+                  onClick={openClose}
+                  className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
+                >
+                  结项
                 </button>
               )}
             </div>
@@ -3348,6 +3436,92 @@ function ProjectDetailPage() {
                 className="bg-brand-600 hover:bg-brand-700 rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {transitionDialog.saving ? "处理中…" : "确认流转"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FRT-05：Close command dialog（消费 backend POST /api/projects/:id/close：
+  reason 必填 + version CAS；force 仅 canForceClose 可见；VERSION_CONFLICT → 重新加载） */}
+      {closeDialog.open && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          onClick={closeClose}
+        >
+          <div
+            className="border-border bg-surface shadow-elevation-lg w-full max-w-md rounded-lg border p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-ink-primary text-base font-semibold">项目结项</h2>
+            <p className="text-ink-secondary mt-1 text-sm">
+              结项后将锁定项目关键字段（stage 置为 CLOSED）。
+            </p>
+            <div className="mt-4">
+              <label className="text-ink-secondary block text-xs font-medium">结项原因 *</label>
+              <textarea
+                value={closeDialog.reason}
+                onChange={(e) =>
+                  setCloseDialog((prev) => ({ ...prev, reason: e.target.value }))
+                }
+                maxLength={500}
+                rows={3}
+                placeholder="必填（最长 500 字）"
+                className="border-border focus:border-brand-500 mt-1 w-full rounded-md border px-2.5 py-1.5 text-sm"
+              />
+            </div>
+            {canForceClose && (
+              <label className="mt-3 flex items-center gap-2 text-sm text-ink-secondary">
+                <input
+                  type="checkbox"
+                  checked={closeDialog.force}
+                  onChange={(e) =>
+                    setCloseDialog((prev) => ({ ...prev, force: e.target.checked }))
+                  }
+                  className="h-4 w-4"
+                />
+                强制结项（需 project:close + project:approve；跳过未完成任务/风险/验收/回款阻断）
+              </label>
+            )}
+            {closeDialog.error && (
+              <div className="border-status-danger-border mt-3 rounded-md border bg-status-danger-bg p-3 text-sm text-status-danger-text">
+                <p>
+                  {describeStatus(closeDialog.error.status)}：{closeDialog.error.message}
+                  {closeDialog.error.code ? "（" + closeDialog.error.code + "）" : ""}
+                </p>
+                {closeDialog.error.code === "VERSION_CONFLICT" && (
+                  <div className="mt-2">
+                    <p className="text-xs">该记录已被其他操作更新，请重新加载最新数据后再操作。</p>
+                    <button
+                      type="button"
+                      onClick={reloadClose}
+                      disabled={closeDialog.saving}
+                      className={"mt-2 " + BUTTON_PRIMARY_CLASS}
+                    >
+                      重新加载
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeClose}
+                disabled={closeDialog.saving}
+                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={submitClose}
+                disabled={closeDialog.saving || closeDialog.reason.trim() === ""}
+                className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {closeDialog.saving ? "处理中…" : "确认结项"}
               </button>
             </div>
           </div>

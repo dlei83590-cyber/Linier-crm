@@ -7,7 +7,7 @@
  * - PATCH 不含 code/customerId → 两项锁定展示（Create 可写 ≠ Edit 可改）
  * - 已转换机会（convertedAt != null）：stage 不允许修改（backend 409；前端镜像：禁用 + 不发送）
  * - 复用 EntityFormWorkspace + dirty guard + version CAS + isVersionConflict；reload 成功后才 clear dirty
- * - Convert（Tier 3 factAction）不在本页，保持 HOLD
+ * - Convert（FRT-05 已开放）不在本页——唯一入口在商机详情页「转为项目」按钮
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";

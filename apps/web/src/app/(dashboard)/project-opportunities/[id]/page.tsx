@@ -5,13 +5,18 @@
  *
  * 依据 Contract Card（project-opportunities.md）：backend CRUD FINAL + convert。
  * 结构：AppPage + EntityDetailWorkspace（Header Summary → Status → Actions → Sections）。
- * 不改 backend / 状态机 / action；convert（Tier 3 factAction）保持 HOLD。
+ * 不改 backend / 状态机 / action。
+ * FRT-05：convert 由 Tier 3 HOLD 开放 —— POST /api/project-opportunities/:id/convert（唯一入口，
+ * 权限 = project-opportunity:create 或 project:create，前端镜像同权限）：
+ *  - 未转换（convertedAt 为空且无 project）→「转为项目」按钮；成功后 router 跳转真实 /projects/{project.id}
+ *  - 已转换 → 隐藏转换按钮，提供「查看项目」链接（/projects/{project.id}）
+ *  - 409 ALREADY_CONVERTED（并发/重复点击）→ 展示真实错误并允许重试
  * 商机→报价→订单 MVP：新增「创建报价」入口（→ /sales/quotations/new?opportunityId=…）与
  * 关联报价只读区块（GET 详情 include quotations 投影，数据真实、零 mock）。
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
@@ -138,11 +143,20 @@ function OpportunityDetailPage() {
     state.status === "authenticated" &&
     state.user !== null &&
     hasPermission(state.user.roles as RoleCode[], actionPermission("quotation", "create"));
+  // FRT-05 convert 权限：与 backend requirePermission("project-opportunity:create") ?? requirePermission("project:create") 镜像
+  const canConvert =
+    state.status === "authenticated" &&
+    state.user !== null &&
+    (hasPermission(state.user.roles as RoleCode[], actionPermission("project-opportunity", "create")) ||
+      hasPermission(state.user.roles as RoleCode[], actionPermission("project", "create")));
+  const router = useRouter();
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
   const [detail, setDetail] = useState<OpportunityDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | null>(null);
+  const [converting, setConverting] = useState(false);
+  const [convertError, setConvertError] = useState<ApiClientError | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -161,6 +175,32 @@ function OpportunityDetailPage() {
       });
     return () => controller.abort();
   }, [id]);
+
+  // FRT-05：转为项目（唯一入口 POST /api/project-opportunities/:id/convert）
+  // 成功后跳转真实 Project（/projects/{project.id}）；409 ALREADY_CONVERTED 展示真实错误允许重试
+  const runConvert = async () => {
+    if (!detail || converting) return;
+    setConverting(true);
+    setConvertError(null);
+    try {
+      const body = await apiFetch<{ project: { id: string }; opportunityId: string; converted: boolean }>(
+        `/api/project-opportunities/${id}/convert`,
+        { method: "POST" },
+      );
+      const projectId = body.data?.project?.id;
+      if (!projectId) {
+        setConvertError(new ApiClientError(500, "转换成功但未返回项目信息", "INVALID_RESPONSE"));
+        return;
+      }
+      router.push(`/projects/${projectId}`);
+    } catch (err) {
+      setConvertError(
+        err instanceof ApiClientError ? err : new ApiClientError(0, "转换失败", "NETWORK_ERROR"),
+      );
+    } finally {
+      setConverting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -192,8 +232,26 @@ function OpportunityDetailPage() {
         statusLabel={STAGE_LABELS[detail.stage] ?? detail.stage}
         statusTone={STAGE_TONE_MAP[detail.stage] ?? "neutral"}
         actions={
-          canEdit || canCreateQuotation ? (
+          canEdit || canCreateQuotation || canConvert || detail.project ? (
             <>
+              {detail.project ? (
+                <Link
+                  href={"/projects/" + detail.project.id}
+                  className={BUTTON_PRIMARY_CLASS}
+                >
+                  查看项目
+                </Link>
+              ) : null}
+              {canConvert && !detail.project && (
+                <button
+                  type="button"
+                  onClick={runConvert}
+                  disabled={converting}
+                  className={BUTTON_PRIMARY_CLASS + " disabled:cursor-not-allowed disabled:opacity-50"}
+                >
+                  {converting ? "转换中…" : "转为项目"}
+                </button>
+              )}
               {canCreateQuotation && (
                 <Link
                   href={"/sales/quotations/new?opportunityId=" + encodeURIComponent(id)}
@@ -234,9 +292,14 @@ function OpportunityDetailPage() {
             <InfoItem
               label="已转项目"
               value={
-                detail.project
-                  ? `${detail.project.code ?? ""} ${detail.project.name ?? ""}`.trim()
-                  : null
+                detail.project ? (
+                  <Link
+                    href={"/projects/" + detail.project.id}
+                    className="text-brand-600 hover:underline"
+                  >
+                    {`${detail.project.code ?? ""} ${detail.project.name ?? ""}`.trim()}
+                  </Link>
+                ) : null
               }
             />
             <InfoItem label="转换时间" value={formatDate(detail.convertedAt)} />
@@ -272,6 +335,32 @@ function OpportunityDetailPage() {
             <p className="text-sm whitespace-pre-wrap text-ink-secondary">{detail.description}</p>
           </section>
         ) : null}
+        {convertError && (
+          <section className="border-status-danger-border rounded-md border bg-status-danger-bg p-4">
+            <h2 className="mb-2 text-sm font-semibold text-status-danger-text">转换失败</h2>
+            <p className="text-sm text-status-danger-text">
+              {convertError.message}
+              {convertError.code ? "（" + convertError.code + "）" : ""}
+            </p>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={runConvert}
+                disabled={converting}
+                className={BUTTON_PRIMARY_CLASS + " disabled:cursor-not-allowed disabled:opacity-50"}
+              >
+                {converting ? "转换中…" : "重试"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConvertError(null)}
+                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-canvas"
+              >
+                关闭
+              </button>
+            </div>
+          </section>
+        )}
         {detail.convertedBy ? (
           <section className="border-border rounded-md border p-4">
             <h2 className="text-ink-primary mb-2 text-sm font-semibold">转换信息</h2>
