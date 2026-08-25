@@ -17,11 +17,13 @@ import { casUpdate } from '@/lib/api/cas';
 
 const casMock = casUpdate as ReturnType<typeof vi.fn>;
 
-const ratingRuleMock = () =>
-  mockPrisma.customerSupplierRatingRule as {
+const ratingRuleMock = () => {
+  if (mockPrisma.customerSupplierRatingRule === undefined) mockPrisma.customerSupplierRatingRule = {};
+  return mockPrisma.customerSupplierRatingRule as {
     findFirst: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
   };
+};
 
 function makeRequest(method: 'GET' | 'PATCH' | 'DELETE', url: string, body?: unknown): NextRequest {
   const init: { method: string; headers: Record<string, string>; body?: string } = { method, headers: { authorization: 'Bearer test-token' } };

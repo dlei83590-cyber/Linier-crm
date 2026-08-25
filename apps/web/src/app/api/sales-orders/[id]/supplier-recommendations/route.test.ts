@@ -33,7 +33,7 @@ function setupDefault() {
     findMany: vi.fn().mockResolvedValue([
       { id: 'si-1', itemId: 'fg-1', isPreferred: true, purchasePrice: '100', supplier: { id: 'sup-1', code: 'S001', name: '甲供应商', creditRating: 'AA', settlementTerms: '30 天', isActive: true, partnerCredit: { rating: 'AA' } } },
       { id: 'si-2', itemId: 'fg-2', isPreferred: false, purchasePrice: '200', supplier: { id: 'sup-1', code: 'S001', name: '甲供应商', creditRating: 'AA', settlementTerms: '30 天', isActive: true, partnerCredit: { rating: 'AA' } } },
-      { id: 'si-3', itemId: 'fg-1', isPreferred: false, purchasePrice: '90', supplier: { id: 'sup-2', code: 'S002', name: '乙供应商', creditRating: 'B', settlementTerms: null, isActive: true, partnerCredit: { rating: 'B' } } },
+      { id: 'si-3', itemId: 'fg-1', isPreferred: false, purchasePrice: '90', supplier: { id: 'sup-2', code: 'S002', name: '乙供应商', creditRating: 'A', settlementTerms: null, isActive: true, partnerCredit: { rating: 'A' } } },
       { id: 'si-4', itemId: 'fg-2', isPreferred: false, purchasePrice: '80', supplier: { id: 'sup-3', code: 'S003', name: '丙供应商', creditRating: 'AAA', settlementTerms: null, isActive: true, partnerCredit: null } },
     ]),
   };
@@ -49,7 +49,7 @@ describe('GET /api/sales-orders/:id/supplier-recommendations — 推荐供应商
     const res = await GET(makeRequest(), { params: Promise.resolve({ id: 'so-1' }) });
     expect(res.status).toBe(200);
     const body = await res.json();
-    // 甲 AA（优选）与乙 B 满足 ≥ A；丙无 PartnerCredit 评级 → 不满足门槛被过滤
+    // 甲 AA（优选）与乙 A 满足 ≥ A；丙无 PartnerCredit 评级 → 不满足门槛被过滤
     expect(body.data.rows.length).toBe(2);
     expect(body.data.rows[0].supplierName).toBe('甲供应商'); // 优选优先
     expect(body.data.rows[0].supplierRating).toBe('AA');

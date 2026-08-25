@@ -13,13 +13,15 @@ vi.mock('@/lib/api-helpers', () => ({
 
 import { GET, POST } from '@/app/api/customer-supplier-rating-rules/route';
 
-const ratingRuleMock = () =>
-  mockPrisma.customerSupplierRatingRule as {
+const ratingRuleMock = () => {
+  if (mockPrisma.customerSupplierRatingRule === undefined) mockPrisma.customerSupplierRatingRule = {};
+  return mockPrisma.customerSupplierRatingRule as {
     count: ReturnType<typeof vi.fn>;
     findMany: ReturnType<typeof vi.fn>;
     findUnique: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
   };
+};
 
 function makeRequest(method: 'GET' | 'POST', url: string, body?: unknown): NextRequest {
   const init: { method: string; headers: Record<string, string>; body?: string } = { method, headers: { authorization: 'Bearer test-token' } };
