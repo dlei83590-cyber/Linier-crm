@@ -171,14 +171,6 @@ const STAGE_TONE_MAP: Record<string, "neutral" | "info" | "success" | "warning" 
   SAMPLING: "neutral", TESTING: "warning", SMALL_BATCH: "warning", MASS_SUPPLY: "success",
   PAUSED: "warning", FAILED: "danger", CLOSED: "neutral",
 };
-const QUOTATION_STATUS_LABELS: Record<string, string> = {
-  DRAFT: "草稿", SUBMITTED: "已提交", APPROVED: "已批准", SENT: "已发送",
-  ACCEPTED: "客户已接受", REJECTED: "已拒绝", CANCELLED: "已取消", CONVERTED: "已转订单", EXPIRED: "已过期",
-};
-const QUOTATION_TONE_MAP: Record<string, "neutral" | "info" | "success" | "warning" | "danger"> = {
-  DRAFT: "neutral", SUBMITTED: "info", APPROVED: "success", SENT: "info",
-  ACCEPTED: "success", REJECTED: "danger", CANCELLED: "danger", CONVERTED: "success", EXPIRED: "neutral",
-};
 const ORDER_STATUS_LABELS: Record<string, string> = {
   DRAFT: "草稿", CONFIRMED: "已确认", PARTIALLY_DELIVERED: "部分交付",
   DELIVERED: "已交付", COMPLETED: "已完成", CANCELLED: "已取消",
