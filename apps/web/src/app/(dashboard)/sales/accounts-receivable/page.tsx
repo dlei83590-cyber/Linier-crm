@@ -11,10 +11,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import { actionPermission } from "@nilier-crm/shared";
-import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
+import { SALES_STATUS_OPTIONS, salesStatusLabel, salesStatusTone } from "@/lib/sales-status";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate, formatMoney } from "@/lib/format";
 
@@ -35,25 +35,6 @@ interface ArRow {
     invoiceTotal: string | null;
   } | null;
 }
-
-const STATUS_OPTIONS = ["OPEN", "PARTIALLY_PAID", "PAID", "OVERDUE", "CLOSED"] as const;
-
-/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
-const STATUS_LABELS: Record<string, string> = {
-  OPEN: "未结清",
-  PARTIALLY_PAID: "部分收款",
-  PAID: "已结清",
-  OVERDUE: "已逾期",
-  CLOSED: "已关闭",
-};
-
-const TONE_MAP: Record<string, StatusTone> = {
-  OPEN: "warning",
-  PARTIALLY_PAID: "warning",
-  PAID: "success",
-  OVERDUE: "danger",
-  CLOSED: "neutral",
-};
 
 function ArList() {
   const [statusInput, setStatusInput] = useState("");
@@ -94,9 +75,9 @@ function ArList() {
             className={SELECT_CLASS}
           >
             <option value="">全部状态</option>
-            {STATUS_OPTIONS.map((s) => (
+            {SALES_STATUS_OPTIONS.ar.map((s) => (
               <option key={s} value={s}>
-                {STATUS_LABELS[s] ?? s}
+                {salesStatusLabel("ar", s)}
               </option>
             ))}
           </select>
@@ -146,8 +127,8 @@ function ArList() {
             render: (row) => (
               <StatusBadge
                 status={row.effectiveStatus ?? row.status}
-                label={STATUS_LABELS[row.effectiveStatus ?? row.status] ?? row.effectiveStatus ?? row.status}
-                toneMap={TONE_MAP}
+                label={salesStatusLabel("ar", row.effectiveStatus ?? row.status)}
+                tone={salesStatusTone("ar", row.effectiveStatus ?? row.status)}
               />
             ),
           },

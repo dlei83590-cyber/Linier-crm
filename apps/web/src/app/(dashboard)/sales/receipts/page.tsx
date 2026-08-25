@@ -10,12 +10,14 @@
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
-import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog, ModuleKpiStrip } from "@/components/workspace";
+import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 import type { ModuleSummaryData } from "@/lib/module-summary/types";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
+import { SALES_STATUS_OPTIONS, salesStatusLabel, salesStatusTone } from "@/lib/sales-status";
 import { useListQuery } from "@/lib/use-list-query";
 import { useSession } from "@/lib/session-context";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
@@ -36,28 +38,8 @@ interface ReceiptRow {
   _count?: { allocations: number };
 }
 
-const STATUS_OPTIONS = [
-  "UNALLOCATED",
-  "PARTIALLY_ALLOCATED",
-  "FULLY_ALLOCATED",
-  "VOIDED",
-] as const;
-
-const STATUS_LABEL: Record<string, string> = {
-  UNALLOCATED: "未核销",
-  PARTIALLY_ALLOCATED: "部分核销",
-  FULLY_ALLOCATED: "已核销",
-  VOIDED: "已作废",
-};
-
-const TONE_MAP: Record<string, StatusTone> = {
-  UNALLOCATED: "info",
-  PARTIALLY_ALLOCATED: "warning",
-  FULLY_ALLOCATED: "success",
-  VOIDED: "danger",
-};
-
 function ReceiptList() {
+  const router = useRouter();
   const toast = useToast();
   const { state } = useSession();
   const canDelete = hasPermission((state.user?.roles ?? []) as RoleCode[], actionPermission("receipt", "delete"));
@@ -134,7 +116,7 @@ function ReceiptList() {
   return (
     <AppPage>
       <ModuleKpiStrip
-        statuses={Object.keys(STATUS_LABEL).map((s) => ({ value: s, label: STATUS_LABEL[s] ?? s }))}
+        statuses={SALES_STATUS_OPTIONS.receipt.map((s) => ({ value: s, label: salesStatusLabel("receipt", s) }))}
         data={summary}
         activeStatus={filters.status ?? null}
         onSelectStatus={selectStatus}
@@ -160,9 +142,9 @@ function ReceiptList() {
               className={SELECT_CLASS}
             >
               <option value="">全部状态</option>
-              {STATUS_OPTIONS.map((s) => (
+              {SALES_STATUS_OPTIONS.receipt.map((s) => (
                 <option key={s} value={s}>
-                  {STATUS_LABEL[s] ?? s}
+                  {salesStatusLabel("receipt", s)}
                 </option>
               ))}
             </select>
@@ -203,7 +185,11 @@ function ReceiptList() {
             key: "status",
             header: "状态",
             render: (row) => (
-              <StatusBadge status={row.status} label={STATUS_LABEL[row.status] ?? row.status} toneMap={TONE_MAP} />
+              <StatusBadge
+                status={row.status}
+                label={salesStatusLabel("receipt", row.status)}
+                tone={salesStatusTone("receipt", row.status)}
+              />
             ),
           },
           {
@@ -249,15 +235,16 @@ function ReceiptList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
-        rowActions={(row) =>
-          canDelete && row.status === "VOIDED" ? (
-            <div className="flex justify-end gap-1">
-              <button type="button" onClick={() => setDeleting(row)} className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text transition-colors hover:bg-red-50">
-                删除
-              </button>
-            </div>
-          ) : undefined
-        }
+        rowActions={(row) => (
+          <RowActionsMenu
+            actions={[
+              { key: "view", label: "查看详情", onSelect: () => router.push("/sales/receipts/" + row.id) },
+              ...(canDelete && row.status === "VOIDED"
+                ? [{ key: "delete", label: "删除", tone: "danger" as const, onSelect: () => setDeleting(row) }]
+                : []),
+            ]}
+          />
+        )}
       />
       <ConfirmActionDialog
         open={deleting !== null}

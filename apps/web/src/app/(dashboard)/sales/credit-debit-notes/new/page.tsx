@@ -14,8 +14,9 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
-import { CARD_CLASS } from "@/lib/ui-classes";
+import { ErrorPanel } from "@/components/workspace";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, CARD_CLASS, INPUT_CLASS } from "@/lib/ui-classes";
 import { formatMoney } from "@/lib/format";
 
 interface InvoiceOption {
@@ -164,7 +165,7 @@ function CnDnCreateForm() {
           onClick={(e) => {
             if (dirty && !window.confirm("有未保存的更改，确定离开？")) e.preventDefault();
           }}
-          className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
+          className={BUTTON_SECONDARY_CLASS}
         >
           返回列表
         </Link>
@@ -172,15 +173,12 @@ function CnDnCreateForm() {
 
       <div className="p-4">
         {error && (
-          <div className="mb-4 rounded-md bg-status-danger-bg p-3 text-sm text-status-danger-text">
-            <p>
-              {describeStatus(error.status)}：{error.message}
-              {error.code ? `（${error.code}）` : ""}
-            </p>
+          <div className="mb-4">
+            <ErrorPanel error={error} />
           </div>
         )}
 
-        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-canvas p-4 text-sm md:grid-cols-3">
+        <div className="mb-4 grid grid-cols-1 gap-4 rounded-md bg-canvas p-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <label className="block text-xs text-ink-secondary">通知单类型 *</label>
             <select
@@ -189,7 +187,7 @@ function CnDnCreateForm() {
                 setNoteType(e.target.value);
                 markDirty();
               }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+              className={"mt-1 " + INPUT_CLASS}
             >
               <option value="CREDIT">{NOTE_TYPE_LABEL.CREDIT}</option>
               <option value="DEBIT">{NOTE_TYPE_LABEL.DEBIT}</option>
@@ -203,12 +201,12 @@ function CnDnCreateForm() {
             <select
               value={sourceInvoiceId}
               onChange={(e) => handleInvoiceChange(e.target.value)}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+              className={"mt-1 " + INPUT_CLASS}
             >
               <option value="">选择发票</option>
               {invoices.map((inv) => (
                 <option key={inv.id} value={inv.id}>
-                  {inv.code ?? inv.id}（{inv.customer?.name ?? "—"} · {formatMoney(inv.invoiceTotal, "CNY")}）
+                  {inv.code ?? "（未编号）"}（{inv.customer?.name ?? "—"} · {formatMoney(inv.invoiceTotal, "CNY")}）
                 </option>
               ))}
             </select>
@@ -225,7 +223,7 @@ function CnDnCreateForm() {
                 markDirty();
               }}
               maxLength={500}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+              className={"mt-1 " + INPUT_CLASS}
             />
             {fieldErrors.reason && (
               <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.reason}</p>
@@ -294,7 +292,7 @@ function CnDnCreateForm() {
             type="button"
             onClick={handleSubmit}
             disabled={submitting}
-            className="bg-brand-600 hover:bg-brand-700 rounded-md px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className={BUTTON_PRIMARY_CLASS}
           >
             {submitting ? "提交中…" : "创建（草稿）"}
           </button>

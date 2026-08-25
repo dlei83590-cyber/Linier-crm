@@ -16,18 +16,10 @@ import Link from "next/link";
 import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
-import { CARD_CLASS } from "@/lib/ui-classes";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, CARD_CLASS, INPUT_CLASS } from "@/lib/ui-classes";
+import { PageLoading } from "@/components/ui/skeleton";
+import { salesStatusLabel } from "@/lib/sales-status";
 import { formatMoney } from "@/lib/format";
-
-/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: "草稿",
-  CONFIRMED: "已确认",
-  PARTIALLY_DELIVERED: "部分交付",
-  DELIVERED: "已交付",
-  COMPLETED: "已完成",
-  CANCELLED: "已取消",
-};
 
 interface SalesOrderDetail {
   id: string;
@@ -154,7 +146,11 @@ function SalesOrderEditForm() {
   };
 
   if (loading) {
-    return <div className="rounded-lg border border-border bg-surface p-6 text-sm text-ink-muted">加载中…</div>;
+    return (
+      <div className="rounded-lg border border-border bg-surface overflow-hidden">
+        <PageLoading rows={4} />
+      </div>
+    );
   }
 
   if (error && !detail) {
@@ -178,7 +174,7 @@ function SalesOrderEditForm() {
           <h1 className="text-lg font-semibold text-ink-primary">编辑销售订单 — {detail.code}</h1>
           <Link
             href={`/sales/orders/${id}`}
-            className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
+            className={BUTTON_SECONDARY_CLASS}
           >
             返回详情
           </Link>
@@ -198,7 +194,7 @@ function SalesOrderEditForm() {
         <h1 className="text-lg font-semibold text-ink-primary">
           编辑销售订单 — {detail?.code}
           <span className="ml-2 text-xs font-normal text-ink-muted">
-            {STATUS_LABELS[detail?.status ?? ""] ?? detail?.status}
+            {salesStatusLabel("salesOrder", detail?.status ?? "")}
           </span>
         </h1>
         <div className="flex items-center gap-2">
@@ -208,7 +204,7 @@ function SalesOrderEditForm() {
             onClick={(e) => {
               if (dirty && !window.confirm("有未保存的更改，确定离开？")) e.preventDefault();
             }}
-            className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
+            className={BUTTON_SECONDARY_CLASS}
           >
             返回详情
           </Link>
@@ -249,7 +245,7 @@ function SalesOrderEditForm() {
           </div>
         )}
 
-        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-canvas p-4 text-sm md:grid-cols-3">
+        <div className="mb-4 grid grid-cols-1 gap-4 rounded-md bg-canvas p-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <label className="block text-xs text-ink-secondary">客户（只读）</label>
             <p className="mt-1 text-ink-secondary">
@@ -270,7 +266,7 @@ function SalesOrderEditForm() {
               type="date"
               value={requestedDeliveryDate}
               onChange={(e) => setRequestedDeliveryDate(e.target.value)}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+              className={"mt-1 " + INPUT_CLASS}
             />
           </div>
           <div>
@@ -279,7 +275,7 @@ function SalesOrderEditForm() {
               value={paymentTerm}
               onChange={(e) => setPaymentTerm(e.target.value)}
               maxLength={50}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+              className={"mt-1 " + INPUT_CLASS}
             />
           </div>
           <div>
@@ -288,17 +284,17 @@ function SalesOrderEditForm() {
               value={incoterm}
               onChange={(e) => setIncoterm(e.target.value)}
               maxLength={50}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+              className={"mt-1 " + INPUT_CLASS}
             />
           </div>
-          <div className="col-span-2 md:col-span-3">
+          <div className="sm:col-span-2 lg:col-span-3">
             <label className="block text-xs text-ink-secondary">备注（可选，≤1000，清空即置空）</label>
             <textarea
               value={remark}
               onChange={(e) => setRemark(e.target.value)}
               rows={2}
               maxLength={1000}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+              className={"mt-1 " + INPUT_CLASS}
             />
           </div>
         </div>
@@ -308,7 +304,7 @@ function SalesOrderEditForm() {
             type="button"
             onClick={saveHeader}
             disabled={submitting}
-            className="bg-brand-600 hover:bg-brand-700 rounded-md px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className={BUTTON_PRIMARY_CLASS}
           >
             {submitting ? "保存中…" : "保存头字段"}
           </button>

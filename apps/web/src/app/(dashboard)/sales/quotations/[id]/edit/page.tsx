@@ -27,23 +27,12 @@ import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shar
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { useSession } from "@/lib/session-context";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
-import { CARD_CLASS } from "@/lib/ui-classes";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, CARD_CLASS, INPUT_CLASS } from "@/lib/ui-classes";
+import { PageLoading } from "@/components/ui/skeleton";
+import { salesStatusLabel } from "@/lib/sales-status";
 import { formatMoney } from "@/lib/format";
 
 const EDITABLE_STATUSES = ["DRAFT", "REJECTED"] as const;
-
-/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: "草稿",
-  SUBMITTED: "已提交",
-  APPROVED: "已批准",
-  SENT: "已发送",
-  ACCEPTED: "客户已接受",
-  REJECTED: "已拒绝",
-  CANCELLED: "已取消",
-  CONVERTED: "已转订单",
-  EXPIRED: "已过期",
-};
 
 interface ItemOption {
   id: string;
@@ -420,8 +409,8 @@ function QuotationEditForm() {
 
   if (loading) {
     return (
-      <div className="rounded-lg border border-border bg-surface p-6 text-sm text-ink-muted">
-        加载中…
+      <div className="rounded-lg border border-border bg-surface overflow-hidden">
+        <PageLoading rows={4} />
       </div>
     );
   }
@@ -447,14 +436,14 @@ function QuotationEditForm() {
           <h1 className="text-lg font-semibold text-ink-primary">编辑报价单 — {detail.code}</h1>
           <Link
             href={`/sales/quotations/${id}`}
-            className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
+            className={BUTTON_SECONDARY_CLASS}
           >
             返回详情
           </Link>
         </div>
         <div className="p-6">
           <p className="text-sm text-status-warning-text">
-            仅 草稿 / 已拒绝 状态可编辑（当前 {STATUS_LABELS[detail.status] ?? detail.status}）——已提交/已接受/已转换的报价单不可修改。
+            仅 草稿 / 已拒绝 状态可编辑（当前 {salesStatusLabel("quotation", detail.status)}）——已提交/已接受/已转换的报价单不可修改。
           </p>
         </div>
       </div>
@@ -467,7 +456,7 @@ function QuotationEditForm() {
         <h1 className="text-lg font-semibold text-ink-primary">
           编辑报价单 — {detail?.code}
           <span className="ml-2 text-xs font-normal text-ink-muted">
-            {STATUS_LABELS[detail?.status ?? ""] ?? detail?.status}
+            {salesStatusLabel("quotation", detail?.status ?? "")}
           </span>
         </h1>
         <div className="flex items-center gap-2">
@@ -477,7 +466,7 @@ function QuotationEditForm() {
             onClick={(e) => {
               if (anyDirty && !window.confirm("有未保存的更改，确定离开？")) e.preventDefault();
             }}
-            className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
+            className={BUTTON_SECONDARY_CLASS}
           >
             返回详情
           </Link>
@@ -521,7 +510,7 @@ function QuotationEditForm() {
         )}
 
         {/* ── 头字段（只读展示 customer/currency/status；仅编辑业务输入） ── */}
-        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-canvas p-4 text-sm md:grid-cols-3">
+        <div className="mb-4 grid grid-cols-1 gap-4 rounded-md bg-canvas p-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <label className="block text-xs text-ink-secondary">客户（只读）</label>
             <p className="mt-1 text-ink-secondary">
@@ -544,7 +533,7 @@ function QuotationEditForm() {
               type="date"
               value={validFrom}
               onChange={(e) => setValidFrom(e.target.value)}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+              className={"mt-1 " + INPUT_CLASS}
             />
           </div>
           <div>
@@ -553,7 +542,7 @@ function QuotationEditForm() {
               type="date"
               value={validUntil}
               onChange={(e) => setValidUntil(e.target.value)}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+              className={"mt-1 " + INPUT_CLASS}
             />
             {fieldErrors.validUntil && (
               <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.validUntil}</p>
@@ -564,7 +553,7 @@ function QuotationEditForm() {
             <select
               value={paymentTerm}
               onChange={(e) => setPaymentTerm(e.target.value)}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+              className={"mt-1 " + INPUT_CLASS}
             >
               <option value="">未指定</option>
               {terms.map((t) => (
@@ -585,7 +574,7 @@ function QuotationEditForm() {
               value={taxProfileId}
               onChange={(e) => setTaxProfileId(e.target.value)}
               disabled={!!taxProfilesError}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none disabled:bg-canvas disabled:text-ink-muted"
+              className={"mt-1 " + INPUT_CLASS}
             >
               <option value="">未指定</option>
               {taxProfiles.map((t) => (
@@ -600,14 +589,14 @@ function QuotationEditForm() {
               </p>
             )}
           </div>
-          <div className="col-span-2 md:col-span-3">
+          <div className="sm:col-span-2 lg:col-span-3">
             <label className="block text-xs text-ink-secondary">备注（可选，≤1000，清空即置空）</label>
             <textarea
               value={remark}
               onChange={(e) => setRemark(e.target.value)}
               rows={2}
               maxLength={1000}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+              className={"mt-1 " + INPUT_CLASS}
             />
           </div>
         </div>
@@ -617,7 +606,7 @@ function QuotationEditForm() {
             type="button"
             onClick={saveHeader}
             disabled={submitting}
-            className="bg-brand-600 hover:bg-brand-700 rounded-md px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className={BUTTON_PRIMARY_CLASS}
           >
             {submitting ? "保存中…" : "保存头字段"}
           </button>

@@ -17,32 +17,14 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
-import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel, StatusBadge } from "@/components/workspace";
+import { PageLoading } from "@/components/ui/skeleton";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
+import { salesStatusLabel, salesStatusTone } from "@/lib/sales-status";
 import { useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
-
-const TONE_MAP: Record<string, StatusTone> = {
-  DRAFT: "neutral",
-  CONFIRMED: "success",
-  PARTIALLY_DELIVERED: "warning",
-  DELIVERED: "success",
-  COMPLETED: "success",
-  CANCELLED: "danger",
-};
-
-/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: "草稿",
-  CONFIRMED: "已确认",
-  PARTIALLY_DELIVERED: "部分交付",
-  DELIVERED: "已交付",
-  COMPLETED: "已完成",
-  CANCELLED: "已取消",
-};
 
 interface SalesOrderLine {
   id: string;
@@ -112,25 +94,6 @@ interface SupplierRecommendation {
   totalPrice?: number;
 }
 
-/** 送货单状态展示（与 Delivery 列表页一致） */
-const DELIVERY_TONE_MAP: Record<string, StatusTone> = {
-  DRAFT: "neutral",
-  READY: "info",
-  DISPATCHED: "info",
-  DELIVERED: "success",
-  COMPLETED: "success",
-  CANCELLED: "danger",
-};
-
-const DELIVERY_STATUS_LABELS: Record<string, string> = {
-  DRAFT: "草稿",
-  READY: "待发运",
-  DISPATCHED: "已发运",
-  DELIVERED: "已送达",
-  COMPLETED: "已完成",
-  CANCELLED: "已取消",
-};
-
 /** dialog 选择状态：行 id → 是否勾选 + 交付数量 */
 interface DeliverySelection {
   checked: boolean;
@@ -167,6 +130,7 @@ function SalesOrderDetailPage() {
   const [selections, setSelections] = useState<Record<string, DeliverySelection>>({});
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<"confirm" | "cancel" | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
   const canCreateDelivery = hasPermission(roles, actionPermission("delivery", "create"));
@@ -332,13 +296,13 @@ function SalesOrderDetailPage() {
       });
     loadProjections(controller.signal);
     return () => controller.abort();
-  }, [id, loadProjections]);
+  }, [id, loadProjections, reloadKey]);
 
   if (loading) {
     return (
       <AppPage>
-        <div className="border-border bg-surface rounded-lg border p-6 text-sm text-ink-muted">
-          加载中…
+        <div className="border-border bg-surface overflow-hidden rounded-lg border">
+          <PageLoading rows={5} />
         </div>
       </AppPage>
     );
@@ -347,7 +311,7 @@ function SalesOrderDetailPage() {
   if (error || !detail) {
     return (
       <AppPage>
-        <ErrorPanel error={error} />
+        <ErrorPanel error={error} onRetry={() => setReloadKey((k) => k + 1)} />
         <Link href="/sales/orders" className="mt-3 inline-block text-sm text-brand-600 hover:underline">
           返回列表
         </Link>
@@ -367,8 +331,8 @@ function SalesOrderDetailPage() {
         title={`销售订单详情 — ${detail.code}`}
         backHref="/sales/orders"
         status={detail.status}
-        statusLabel={STATUS_LABELS[detail.status] ?? detail.status}
-        statusTone={TONE_MAP[detail.status] ?? "neutral"}
+        statusLabel={salesStatusLabel("salesOrder", detail.status)}
+        statusTone={salesStatusTone("salesOrder", detail.status)}
         actions={
           <>
             {detail.status === "DRAFT" && canEdit && (
@@ -535,8 +499,8 @@ function SalesOrderDetailPage() {
                     <td className="px-3 py-2">
                       <StatusBadge
                         status={dlv.status}
-                        label={DELIVERY_STATUS_LABELS[dlv.status] ?? dlv.status}
-                        toneMap={DELIVERY_TONE_MAP}
+                        label={salesStatusLabel("delivery", dlv.status)}
+                        tone={salesStatusTone("delivery", dlv.status)}
                       />
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums text-ink-primary">

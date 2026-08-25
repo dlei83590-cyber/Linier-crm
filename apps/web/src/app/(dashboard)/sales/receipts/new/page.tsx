@@ -15,8 +15,9 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
-import { CARD_CLASS } from "@/lib/ui-classes";
+import { ErrorPanel } from "@/components/workspace";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, CARD_CLASS, INPUT_CLASS } from "@/lib/ui-classes";
 
 interface CustomerOption {
   id: string;
@@ -139,7 +140,7 @@ function ReceiptCreateForm() {
           onClick={(e) => {
             if (dirty && !window.confirm("有未保存的更改，确定离开？")) e.preventDefault();
           }}
-          className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
+          className={BUTTON_SECONDARY_CLASS}
         >
           返回列表
         </Link>
@@ -147,15 +148,12 @@ function ReceiptCreateForm() {
 
       <div className="p-4">
         {error && (
-          <div className="mb-4 rounded-md bg-status-danger-bg p-3 text-sm text-status-danger-text">
-            <p>
-              {describeStatus(error.status)}：{error.message}
-              {error.code ? `（${error.code}）` : ""}
-            </p>
+          <div className="mb-4">
+            <ErrorPanel error={error} />
           </div>
         )}
 
-        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-canvas p-4 text-sm md:grid-cols-3">
+        <div className="mb-4 grid grid-cols-1 gap-4 rounded-md bg-canvas p-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <label className="block text-xs text-ink-secondary">客户 *</label>
             <select
@@ -164,7 +162,7 @@ function ReceiptCreateForm() {
                 setCustomerId(e.target.value);
                 markDirty();
               }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+              className={"mt-1 " + INPUT_CLASS}
             >
               <option value="">选择客户</option>
               {customers.map((c) => (
@@ -186,7 +184,7 @@ function ReceiptCreateForm() {
                 markDirty();
               }}
               maxLength={10}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+              className={"mt-1 " + INPUT_CLASS}
             />
           </div>
           <div>
@@ -200,7 +198,7 @@ function ReceiptCreateForm() {
                 setAmount(e.target.value);
                 markDirty();
               }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+              className={"mt-1 " + INPUT_CLASS}
             />
             {fieldErrors.amount && (
               <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.amount}</p>
@@ -215,7 +213,7 @@ function ReceiptCreateForm() {
                 setReceiptDate(e.target.value);
                 markDirty();
               }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+              className={"mt-1 " + INPUT_CLASS}
             />
           </div>
           <div>
@@ -226,7 +224,7 @@ function ReceiptCreateForm() {
                 setPaymentMethod(e.target.value);
                 markDirty();
               }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+              className={"mt-1 " + INPUT_CLASS}
             >
               {PAYMENT_METHODS.map((m) => (
                 <option key={m} value={m}>
@@ -247,10 +245,10 @@ function ReceiptCreateForm() {
                 markDirty();
               }}
               maxLength={100}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+              className={"mt-1 " + INPUT_CLASS}
             />
           </div>
-          <div className="col-span-2">
+          <div className="sm:col-span-2">
             <label className="block text-xs text-ink-secondary">变更说明（可选，≤500）</label>
             <input
               value={changeReason}
@@ -259,7 +257,7 @@ function ReceiptCreateForm() {
                 markDirty();
               }}
               maxLength={500}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+              className={"mt-1 " + INPUT_CLASS}
             />
           </div>
         </div>
@@ -273,7 +271,7 @@ function ReceiptCreateForm() {
             type="button"
             onClick={handleSubmit}
             disabled={submitting}
-            className="bg-brand-600 hover:bg-brand-700 rounded-md px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className={BUTTON_PRIMARY_CLASS}
           >
             {submitting ? "提交中…" : "创建收款单"}
           </button>

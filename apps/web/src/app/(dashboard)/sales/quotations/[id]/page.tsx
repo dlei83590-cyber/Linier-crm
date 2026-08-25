@@ -15,38 +15,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
-import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
+import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
+import { PageLoading } from "@/components/ui/skeleton";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
+import { salesStatusLabel, salesStatusTone } from "@/lib/sales-status";
 import { useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
-
-const TONE_MAP: Record<string, StatusTone> = {
-  DRAFT: "neutral",
-  SUBMITTED: "info",
-  APPROVED: "success",
-  SENT: "info",
-  ACCEPTED: "success",
-  REJECTED: "danger",
-  CANCELLED: "danger",
-  CONVERTED: "info",
-  EXPIRED: "warning",
-};
-
-/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: "草稿",
-  SUBMITTED: "已提交",
-  APPROVED: "已批准",
-  SENT: "已发送",
-  ACCEPTED: "客户已接受",
-  REJECTED: "已拒绝",
-  CANCELLED: "已取消",
-  CONVERTED: "已转订单",
-  EXPIRED: "已过期",
-};
 
 interface QuotationLine {
   id: string;
@@ -102,6 +78,7 @@ function QuotationDetailPage() {
   const [error, setError] = useState<ApiClientError | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiClientError | null>(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
 
   const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
   const canEdit = hasPermission(roles, actionPermission("quotation", "edit"));
@@ -174,11 +151,12 @@ function QuotationDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
-      reloadDetail();
+      await reloadDetail();
     } catch (err: unknown) {
       setActionError(
         err instanceof ApiClientError ? err : new ApiClientError(0, "操作失败", "NETWORK_ERROR"),
       );
+    } finally {
       setActionBusy(false);
     }
   };
@@ -187,8 +165,7 @@ function QuotationDetailPage() {
   const handleAccept = () => runAction(`/api/quotations/${id}/accept`);
   const handleCancel = async () => {
     if (!detail || actionBusy) return;
-    if (!window.confirm("确定取消该报价单？取消后不可恢复。")) return;
-    await runAction(`/api/quotations/${id}/cancel`);
+    setCancelOpen(true);
   };
 
   useEffect(() => {
@@ -212,8 +189,8 @@ function QuotationDetailPage() {
   if (loading) {
     return (
       <AppPage>
-        <div className="border-border bg-surface rounded-lg border p-6 text-sm text-ink-muted">
-          加载中…
+        <div className="border-border bg-surface overflow-hidden rounded-lg border">
+          <PageLoading rows={5} />
         </div>
       </AppPage>
     );
@@ -222,7 +199,7 @@ function QuotationDetailPage() {
   if (error || !detail) {
     return (
       <AppPage>
-        <ErrorPanel error={error} />
+        <ErrorPanel error={error} onRetry={reloadDetail} />
         <Link href="/sales/quotations" className="mt-3 inline-block text-sm text-brand-600 hover:underline">
           返回列表
         </Link>
@@ -242,8 +219,8 @@ function QuotationDetailPage() {
         title={`报价单详情 — ${detail.code}`}
         backHref="/sales/quotations"
         status={detail.effectiveStatus ?? detail.status}
-        statusLabel={STATUS_LABELS[detail.effectiveStatus ?? detail.status] ?? detail.effectiveStatus ?? detail.status}
-        statusTone={TONE_MAP[detail.effectiveStatus ?? detail.status] ?? "neutral"}
+        statusLabel={salesStatusLabel("quotation", detail.effectiveStatus ?? detail.status)}
+        statusTone={salesStatusTone("quotation", detail.effectiveStatus ?? detail.status)}
         actions={
           <>
             <button
@@ -390,6 +367,19 @@ function QuotationDetailPage() {
           </div>
         </section>
       </EntityDetailWorkspace>
+      <ConfirmActionDialog
+        open={cancelOpen}
+        title="取消报价单"
+        description="确定取消该报价单？取消后不可恢复。"
+        confirmLabel="确认取消"
+        tone="danger"
+        busy={actionBusy}
+        onConfirm={() => {
+          setCancelOpen(false);
+          void runAction(`/api/quotations/${id}/cancel`);
+        }}
+        onCancel={() => setCancelOpen(false)}
+      />
     </AppPage>
   );
 }

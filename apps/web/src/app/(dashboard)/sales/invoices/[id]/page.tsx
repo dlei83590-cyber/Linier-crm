@@ -14,11 +14,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
-import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
+import { salesStatusLabel, salesStatusTone } from "@/lib/sales-status";
 import { useToast } from "@/components/ui/toast";
 import { PageLoading } from "@/components/ui/skeleton";
 import { useSession } from "@/lib/session-context";
@@ -29,23 +29,6 @@ import {
   formatTaxInvoiceNumber,
   validateIssueVatFields,
 } from "@/lib/vat-labels";
-
-const TONE_MAP: Record<string, StatusTone> = {
-  DRAFT: "neutral",
-  ISSUED: "info",
-  PARTIALLY_PAID: "warning",
-  PAID: "success",
-  CANCELLED: "danger",
-};
-
-/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: "草稿",
-  ISSUED: "已开票",
-  PARTIALLY_PAID: "部分收款",
-  PAID: "已收款",
-  CANCELLED: "已取消",
-};
 
 interface InvoiceLine {
   id: string;
@@ -110,6 +93,7 @@ function InvoiceDetailPage() {
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiClientError | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   // VAT 开票表单（ADR-0043）：发票类型默认普票；税务号码按类型校验；红字引用原票 ID
   const [issueForm, setIssueForm] = useState({
     invoiceType: "ORDINARY_VAT",
@@ -170,7 +154,7 @@ function InvoiceDetailPage() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [id]);
+  }, [id, reloadKey]);
 
   const runAction = async (action: ConfirmAction) => {
     if (!detail || actionBusy) return;
@@ -258,7 +242,7 @@ function InvoiceDetailPage() {
   if (error || !detail) {
     return (
       <AppPage>
-        <ErrorPanel error={error} />
+        <ErrorPanel error={error} onRetry={() => setReloadKey((k) => k + 1)} />
         <Link href="/sales/invoices" className="mt-3 inline-block text-sm text-brand-600 hover:underline">
           返回列表
         </Link>
@@ -278,8 +262,8 @@ function InvoiceDetailPage() {
         title={`销售发票详情 — ${detail.code ?? "（草稿）"}`}
         backHref="/sales/invoices"
         status={detail.status}
-        statusLabel={STATUS_LABELS[detail.status] ?? detail.status}
-        statusTone={TONE_MAP[detail.status] ?? "neutral"}
+        statusLabel={salesStatusLabel("invoice", detail.status)}
+        statusTone={salesStatusTone("invoice", detail.status)}
         actions={
           (isDraft && (canApprove || canClose)) || (isIssuedBlue && canCreate) || (isReverseable && canApprove) || (isRedDeletable && canDelete) ? (
             <>
