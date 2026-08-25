@@ -6,6 +6,7 @@ import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/respon
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { casUpdate } from "@/lib/api/cas";
+import { buildFollowUpInfo } from "@/lib/api/opportunity-followup";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -60,7 +61,20 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     },
   });
   if (!opportunity) return failNotFound(ERROR_CODES.NOT_FOUND, "销售机会不存在");
-  return ok(opportunity);
+
+  // 商机跟进 MVP：该商机关联客户（BusinessPartner）最近一次 FOLLOW_UP（CustomerActivity.createdAt）
+  const lastFollowUp = opportunity.customerId
+    ? await prisma.customerActivity.findFirst({
+        where: { businessPartnerId: opportunity.customerId, activityType: "FOLLOW_UP", deletedAt: null },
+        orderBy: { createdAt: "desc" },
+        select: { createdAt: true },
+      })
+    : null;
+
+  return ok({
+    ...opportunity,
+    ...buildFollowUpInfo(lastFollowUp?.createdAt ?? null, opportunity.createdAt),
+  });
 }
 
 /** PATCH /api/project-opportunities/:id（乐观锁 version；已转换后禁止改关键字段） */
