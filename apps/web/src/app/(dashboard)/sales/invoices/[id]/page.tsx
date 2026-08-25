@@ -325,6 +325,21 @@ function InvoiceDetailPage() {
                 )
               }
             />
+            <InfoItem
+              label="来源销售订单"
+              value={
+                detail.delivery?.salesOrder ? (
+                  <Link
+                    href={`/sales/orders/${detail.delivery.salesOrder.id}`}
+                    className="text-brand-600 hover:underline"
+                  >
+                    {detail.delivery.salesOrder.code}
+                  </Link>
+                ) : (
+                  "—"
+                )
+              }
+            />
             <InfoItem label="开票日期" value={formatDate(detail.invoiceDate)} />
             <InfoItem label="到期日" value={formatDate(detail.dueDate)} />
             <InfoItem label="币种" value={detail.currency} />

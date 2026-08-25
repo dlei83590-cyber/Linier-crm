@@ -13,7 +13,7 @@
  * confirm/cancel 等其它 factActions 仍不开放；不提供 Edit 入口。
  * PermissionGuard 对齐 API requirePermission("sales-order:view")。
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
@@ -90,6 +90,28 @@ interface SalesOrderDetail {
   createdAt: string;
 }
 
+/** Q 线投影：BOM 预计用料行（GET /api/sales-orders/:id/material-requirements） */
+interface MaterialRequirement {
+  itemId: string;
+  itemCode: string | null;
+  itemName: string | null;
+  uom: string | null;
+  requiredQty: number;
+  onHandQty: number;
+}
+
+/** Q 线投影：推荐供应商行（GET /api/sales-orders/:id/supplier-recommendations） */
+interface SupplierRecommendation {
+  supplierId: string;
+  supplierCode: string | null;
+  supplierName: string | null;
+  creditRating: string | null;
+  settlementTerms: string | null;
+  itemCount: number;
+  preferredCount: number;
+  totalPrice?: number;
+}
+
 /** 送货单状态展示（与 Delivery 列表页一致） */
 const DELIVERY_TONE_MAP: Record<string, StatusTone> = {
   DRAFT: "neutral",
@@ -130,8 +152,13 @@ function SalesOrderDetailPage() {
   const { state } = useSession();
   const id = typeof params.id === "string" ? params.id : "";
   const [detail, setDetail] = useState<SalesOrderDetail | null>(null);
-  const [materials, setMaterials] = useState<Array<{ itemCode: string | null; itemName: string | null; uom: string | null; requiredQty: number; onHandQty: number }>>([]);
-  const [suppliers, setSuppliers] = useState<Array<{ supplierName: string | null; creditRating: string | null; itemCount: number; preferredCount: number }>>([]);
+  // Q 线投影状态（FRT-06：独立 loading/error/retry；API 失败 ≠ 无 BOM/无供应商）
+  const [materials, setMaterials] = useState<MaterialRequirement[]>([]);
+  const [materialsLoading, setMaterialsLoading] = useState(true);
+  const [materialsError, setMaterialsError] = useState<ApiClientError | null>(null);
+  const [suppliers, setSuppliers] = useState<SupplierRecommendation[]>([]);
+  const [suppliersLoading, setSuppliersLoading] = useState(true);
+  const [suppliersError, setSuppliersError] = useState<ApiClientError | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
@@ -247,6 +274,47 @@ function SalesOrderDetailPage() {
     }
   };
 
+  // ── Q 线投影：BOM 预计用料 + 推荐供应商（只读；独立 loading/error/retry） ──
+  // 禁止 .catch(() => undefined) 吞错：API 失败必须显示真实错误并提供重试，
+  // 不得把「接口失败」伪装成「无配方/无供应商」的空态。
+  const loadProjections = useCallback(
+    (signal?: AbortSignal) => {
+      setMaterialsLoading(true);
+      setSuppliersLoading(true);
+      setMaterialsError(null);
+      setSuppliersError(null);
+      apiFetch<MaterialRequirement[]>(`/api/sales-orders/${id}/material-requirements`, { signal })
+        .then((body) => setMaterials(body.data))
+        .catch((err: unknown) => {
+          if (err instanceof DOMException && err.name === "AbortError") return;
+          setMaterialsError(
+            err instanceof ApiClientError
+              ? err
+              : new ApiClientError(0, "加载 BOM 用料失败", "NETWORK_ERROR"),
+          );
+        })
+        .finally(() => {
+          if (!signal?.aborted) setMaterialsLoading(false);
+        });
+      apiFetch<SupplierRecommendation[]>(`/api/sales-orders/${id}/supplier-recommendations`, { signal })
+        .then((body) => setSuppliers(body.data))
+        .catch((err: unknown) => {
+          if (err instanceof DOMException && err.name === "AbortError") return;
+          setSuppliersError(
+            err instanceof ApiClientError
+              ? err
+              : new ApiClientError(0, "加载推荐供应商失败", "NETWORK_ERROR"),
+          );
+        })
+        .finally(() => {
+          if (!signal?.aborted) setSuppliersLoading(false);
+        });
+    },
+    [id],
+  );
+
+  const retryProjections = () => loadProjections();
+
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -262,15 +330,9 @@ function SalesOrderDetailPage() {
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
-    // Q 线：BOM 预计用料 + 推荐供应商（只读投影）
-    apiFetch<Array<{ itemCode: string | null; itemName: string | null; uom: string | null; requiredQty: number; onHandQty: number }>>(`/api/sales-orders/${id}/material-requirements`, { signal: controller.signal })
-      .then((body) => setMaterials(body.data))
-      .catch(() => undefined);
-    apiFetch<Array<{ supplierName: string | null; creditRating: string | null; itemCount: number; preferredCount: number }>>(`/api/sales-orders/${id}/supplier-recommendations`, { signal: controller.signal })
-      .then((body) => setSuppliers(body.data))
-      .catch(() => undefined);
+    loadProjections(controller.signal);
     return () => controller.abort();
-  }, [id]);
+  }, [id, loadProjections]);
 
   if (loading) {
     return (
@@ -497,10 +559,26 @@ function SalesOrderDetailPage() {
         </section>
       </EntityDetailWorkspace>
 
-      {/* Q 线：BOM 预计用料 + 推荐供应商（只读投影） */}
+      {/* Q 线：BOM 预计用料 + 推荐供应商（只读投影；独立 loading/error/retry，FRT-06） */}
       <section className="border-border bg-surface rounded-lg border p-4">
         <h2 className="text-ink-primary mb-3 text-sm font-semibold">BOM 预计用料（Q 线）</h2>
-        {materials.length === 0 ? (
+        {materialsLoading ? (
+          <p className="text-ink-muted text-xs">正在加载配方用料…</p>
+        ) : materialsError ? (
+          <div role="alert" className="rounded-md border border-status-danger-border bg-status-danger-bg/10 p-3 text-sm text-status-danger-text">
+            <p>
+              {describeStatus(materialsError.status)}：{materialsError.message}
+              {materialsError.code ? `（${materialsError.code}）` : ""}
+            </p>
+            <button
+              type="button"
+              onClick={retryProjections}
+              className="mt-2 rounded-md border border-border bg-surface px-2 py-1 text-xs font-medium hover:bg-canvas"
+            >
+              重试
+            </button>
+          </div>
+        ) : materials.length === 0 ? (
           <p className="text-ink-muted text-xs">无配方原料需求（订单行成品无 ACTIVE 配方）。</p>
         ) : (
           <table className="w-full text-left text-sm">
@@ -514,7 +592,7 @@ function SalesOrderDetailPage() {
             </thead>
             <tbody className="divide-border divide-y">
               {materials.map((m) => (
-                <tr key={m.itemCode ?? m.itemName ?? ""}>
+                <tr key={m.itemId ?? m.itemCode ?? m.itemName ?? ""}>
                   <td className="px-2 py-2">{m.itemName ?? m.itemCode ?? "—"}</td>
                   <td className="px-2 py-2">{m.uom ?? "—"}</td>
                   <td className="px-2 py-2 tabular-nums">{m.requiredQty.toFixed(4)}</td>
@@ -525,7 +603,23 @@ function SalesOrderDetailPage() {
           </table>
         )}
         <h2 className="text-ink-primary mt-4 mb-3 text-sm font-semibold">推荐供应商（Q 线）</h2>
-        {suppliers.length === 0 ? (
+        {suppliersLoading ? (
+          <p className="text-ink-muted text-xs">正在加载推荐供应商…</p>
+        ) : suppliersError ? (
+          <div role="alert" className="rounded-md border border-status-danger-border bg-status-danger-bg/10 p-3 text-sm text-status-danger-text">
+            <p>
+              {describeStatus(suppliersError.status)}：{suppliersError.message}
+              {suppliersError.code ? `（${suppliersError.code}）` : ""}
+            </p>
+            <button
+              type="button"
+              onClick={retryProjections}
+              className="mt-2 rounded-md border border-border bg-surface px-2 py-1 text-xs font-medium hover:bg-canvas"
+            >
+              重试
+            </button>
+          </div>
+        ) : suppliers.length === 0 ? (
           <p className="text-ink-muted text-xs">暂无推荐供应商（订单行商品无 SupplierItem 关系）。</p>
         ) : (
           <table className="w-full text-left text-sm">
@@ -539,8 +633,8 @@ function SalesOrderDetailPage() {
             </thead>
             <tbody className="divide-border divide-y">
               {suppliers.map((s) => (
-                <tr key={s.supplierName ?? ""}>
-                  <td className="px-2 py-2">{s.supplierName ?? "—"}</td>
+                <tr key={s.supplierId ?? s.supplierName ?? ""}>
+                  <td className="px-2 py-2">{s.supplierName ?? s.supplierCode ?? "—"}</td>
                   <td className="px-2 py-2">{s.creditRating ?? "—"}</td>
                   <td className="px-2 py-2 tabular-nums">{s.itemCount}</td>
                   <td className="px-2 py-2 tabular-nums">{s.preferredCount}</td>

@@ -25,6 +25,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     where: { id, deletedAt: null },
     include: {
       customer: { select: { id: true, code: true, name: true } },
+      // FRT-06（最小 additive fix）：转换投影随详情返回，报价详情可直接展示已转订单链接
+      salesOrder: { select: { id: true, code: true, status: true } },
       lines: {
         where: { deletedAt: null },
         orderBy: { lineNo: "asc" },
