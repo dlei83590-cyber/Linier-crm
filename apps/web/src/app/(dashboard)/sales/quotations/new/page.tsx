@@ -84,6 +84,9 @@ function QuotationCreateForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiClientError | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  // Q 线：CSV 批量导入（itemCode,quantity,unitPrice?；unitPrice 仅供预览，行价由系统定价引擎决定——ADR-0015 红线）
+  const [csvInput, setCsvInput] = useState("");
+  const [csvError, setCsvError] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -167,6 +170,51 @@ function QuotationCreateForm() {
   const addLine = () => {
     setLines((prev) => [...prev, { ...EMPTY_LINE }]);
     markDirty();
+  };
+
+  const importCsv = () => {
+    setCsvError("");
+    const rows = csvInput
+      .split(/\r?\n/)
+      .map((ln) => ln.trim())
+      .filter(Boolean);
+    if (rows.length === 0) {
+      setCsvError("请粘贴 CSV（每行：itemCode,quantity[,unitPrice]）");
+      return;
+    }
+    const errors: string[] = [];
+    const added: LineForm[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      const cols = rows[i].split(",").map((c) => c.trim());
+      const [itemCode, quantity, unitPrice] = cols;
+      if (!itemCode) {
+        errors.push("第 " + (i + 1) + " 行：缺少 itemCode");
+        continue;
+      }
+      const item = items.find((it) => it.code === itemCode);
+      if (!item) {
+        errors.push("第 " + (i + 1) + " 行：未找到编码 " + itemCode);
+        continue;
+      }
+      const qty = Number(quantity);
+      if (!quantity || !(qty > 0)) {
+        errors.push("第 " + (i + 1) + " 行：数量必须大于 0");
+        continue;
+      }
+      if (unitPrice !== undefined && unitPrice !== "" && Number.isNaN(Number(unitPrice))) {
+        errors.push("第 " + (i + 1) + " 行：unitPrice 非数字（行价最终由系统定价引擎决定）");
+        continue;
+      }
+      added.push({ itemId: item.id, description: item.code ?? "", quantity, uomId: item.stockUom?.id ?? "" });
+    }
+    if (errors.length > 0) {
+      setCsvError(errors.slice(0, 10).join("；") + (errors.length > 10 ? "（其余略）" : ""));
+      return;
+    }
+    if (added.length === 0) return;
+    setLines(added.length === 1 ? added : added);
+    markDirty();
+    setCsvInput("");
   };
 
   const removeLine = (idx: number) => {
@@ -373,6 +421,27 @@ function QuotationCreateForm() {
             className="bg-brand-600 hover:bg-brand-700 rounded-md px-3 py-1.5 text-sm font-medium text-white"
           >
             + 添加行
+          </button>
+        </div>
+        {/* Q 线：CSV 批量导入（itemCode,quantity[,unitPrice]；unitPrice 仅供预览，行价由系统定价引擎决定） */}
+        <div className="mb-3 rounded-md border border-border p-3">
+          <p className="mb-1 text-xs text-ink-muted">
+            CSV 批量导入：每行 <code>itemCode,quantity[,unitPrice]</code>，例如 <code>LG-SG45,100,45.5</code>
+          </p>
+          <textarea
+            value={csvInput}
+            onChange={(e) => setCsvInput(e.target.value)}
+            rows={3}
+            placeholder={"LG-SG45,100\nM8X25,200"}
+            className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 font-mono text-xs focus:outline-none"
+          />
+          {csvError && <p className="mt-1 text-xs text-status-danger-text">{csvError}</p>}
+          <button
+            type="button"
+            onClick={importCsv}
+            className="border-border bg-surface mt-2 rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-canvas"
+          >
+            导入 CSV
           </button>
         </div>
         {fieldErrors.lines && <p className="mb-2 text-xs text-status-danger-text">{fieldErrors.lines}</p>}
