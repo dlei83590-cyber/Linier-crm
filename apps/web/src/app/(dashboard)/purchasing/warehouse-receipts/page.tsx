@@ -25,7 +25,7 @@ interface WarehouseReceiptRow {
   code: string;
   status: string;
   postedAt?: string | null;
-  purchaseReceipt?: { code: string | null } | null;
+  purchaseReceipt?: { id: string; code: string | null } | null;
   warehouse?: { name: string | null } | null;
   location?: { name: string | null } | null;
   _count?: { lines: number };
@@ -335,7 +335,17 @@ function WarehouseReceiptList() {
           {
             key: "purchaseReceipt",
             header: "来源收货单",
-            render: (row) => row.purchaseReceipt?.code ?? "—",
+            render: (row) =>
+              row.purchaseReceipt?.code ? (
+                <Link
+                  href={`/purchasing/receipts/${row.purchaseReceipt.id}`}
+                  className="font-medium text-brand-600 hover:underline"
+                >
+                  {row.purchaseReceipt.code}
+                </Link>
+              ) : (
+                "—"
+              ),
           },
           {
             key: "warehouse",
