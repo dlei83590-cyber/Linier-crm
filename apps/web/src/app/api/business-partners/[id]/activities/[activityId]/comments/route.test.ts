@@ -61,12 +61,12 @@ describe('GET /api/business-partners/:id/activities/:activityId/comments — 评
     const body = await res.json();
     expect(body.data).toHaveLength(1);
     expect(body.data[0].content).toBe('第一条');
-    const findArgs = (mockPrisma.activityComment.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const findArgs = (mockPrisma.activityComment as { findMany: ReturnType<typeof vi.fn> }).findMany.mock.calls[0][0];
     expect(findArgs.orderBy.createdAt).toBe('asc');
   });
 
   it('活动不存在 → 404', async () => {
-    mockPrisma.customerActivity.findFirst.mockResolvedValue(null);
+    (mockPrisma.customerActivity as { findFirst: ReturnType<typeof vi.fn> }).findFirst.mockResolvedValue(null);
     const res = await GET(getRequest(), { params: ACT_PARAMS });
     expect(res.status).toBe(404);
   });

@@ -44,6 +44,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (activity.activityType !== "FOLLOW_UP") {
         return { error: "NOT_FOLLOW_UP" as const, status: activity.status };
       }
+      if (activity.status !== "SUBMITTED") {
+        return { error: "INVALID_STATE" as const, status: activity.status };
+      }
 
       const updated = await tx.customerActivity.updateMany({
         where: {
