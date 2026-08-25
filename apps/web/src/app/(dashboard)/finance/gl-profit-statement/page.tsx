@@ -1,7 +1,9 @@
 "use client";
 
 /** GL 利润表（简化）— 只读页（Sprint 7 Finance，ADR-0034；期间收入−成本−费用） */
+// FRT-09：与试算平衡互链（本页暂无独立菜单入口，详见 PR body REGISTRY DELTA REQUIRED）
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, ErrorPanel } from "@/components/workspace";
@@ -39,6 +41,12 @@ function ProfitStatementView() {
         <div>
           <h1 className="text-lg font-semibold text-ink-primary">利润表（简化）</h1>
           <p className="text-sm text-ink-secondary">期间收入 − 成本/费用 = 利润（实时聚合，事实源 = 记账凭证）</p>
+          <div className="mt-2 flex items-center gap-1 text-sm">
+            <Link href="/finance/gl-trial-balance" className="rounded-md border border-border px-2.5 py-1 text-ink-secondary hover:bg-slate-50">
+              试算平衡
+            </Link>
+            <span className="rounded-md bg-brand-600 px-2.5 py-1 font-medium text-white">利润表</span>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-md border border-border px-2 py-1.5 text-sm" />

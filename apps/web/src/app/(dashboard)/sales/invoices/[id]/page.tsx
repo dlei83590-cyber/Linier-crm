@@ -72,6 +72,9 @@ interface InvoiceDetail {
   taxInvoiceNo?: string | null;
   redLetter?: boolean;
   redInvoiceRefId?: string | null;
+  // 审批门禁投影（issue 路由 2b：命中审批策略须 approvalStatus=APPROVED 才可开票）
+  approvalStatus?: string | null;
+  workflowInstance?: { id: string; status: string | null; currentStepNo: number | null; startedAt: string | null; completedAt: string | null } | null;
   remark?: string | null;
   customer?: { id: string; code: string | null; name: string | null } | null;
   delivery?: {
@@ -85,7 +88,7 @@ interface InvoiceDetail {
   createdAt: string;
 }
 
-type ConfirmAction = "issue" | "cancel" | "delete-red" | "reverse-issue";
+type ConfirmAction = "issue" | "cancel" | "delete-red" | "reverse-issue" | "red-invoice";
 
 function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -124,6 +127,10 @@ function InvoiceDetailPage() {
   const isDraft = detail !== null && detail.status === "DRAFT";
   // 蓝票（ISSUED 且非红字）可红冲；红字草稿自动预填引用
   const isIssuedBlue = detail !== null && detail.status === "ISSUED" && !detail.redLetter;
+  // 反开票（撤销开票）：仅 ISSUED 蓝票且未收款（后端 paidAmount=0 + 无未冲销核销 409 兜底）
+  const isReverseable = isIssuedBlue && Number(detail.paidAmount) === 0;
+  // 开票审批门禁（与 issue 路由 2b 一致）：命中审批策略时仅 APPROVED 可开票
+  const isIssueable = isDraft && (!detail.workflowInstance || detail.approvalStatus === "APPROVED");
   // 红字发票（redLetter）DRAFT/ISSUED/CANCELLED 可删除（ISSUED 删除 = 撤销红冲恢复应收；CANCELLED 直接删）
   const isRedDeletable =
     detail !== null && detail.redLetter === true && ["DRAFT", "ISSUED", "CANCELLED"].includes(detail.status);
@@ -197,6 +204,16 @@ function InvoiceDetailPage() {
         await apiFetch(`/api/invoices/${id}`, {
           method: "DELETE",
         });
+      } else if (action === "red-invoice") {
+        // red-invoice：从 ISSUED 蓝票创建红字 DRAFT（后端复制头/行快照 + redInvoiceRefId 预填）
+        const body = await apiFetch<{ id: string }>(`/api/invoices/${id}/red-invoice`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        toast.success("红字发票草稿已创建，请填写税务信息后开具");
+        router.push("/sales/invoices/" + body.data.id);
+        return;
       } else {
         // reverse-issue：反开票撤销（红冲 = 撤销错误开票）
         await apiFetch(`/api/invoices/${id}/reverse-issue`, {
@@ -261,9 +278,9 @@ function InvoiceDetailPage() {
         statusLabel={STATUS_LABELS[detail.status] ?? detail.status}
         statusTone={TONE_MAP[detail.status] ?? "neutral"}
         actions={
-          (isDraft && (canApprove || canClose)) || (isIssuedBlue && canCreate) || (isRedDeletable && canDelete) ? (
+          (isDraft && (canApprove || canClose)) || (isIssuedBlue && canCreate) || (isReverseable && canApprove) || (isRedDeletable && canDelete) ? (
             <>
-              {isDraft && canApprove && (
+              {isDraft && canApprove && isIssueable && (
                 <button
                   type="button"
                   onClick={() => setConfirmAction("issue")}
@@ -284,6 +301,16 @@ function InvoiceDetailPage() {
                 </button>
               )}
               {isIssuedBlue && canCreate && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmAction("red-invoice")}
+                  disabled={actionBusy}
+                  className="rounded-md border border-border px-3 py-1.5 text-sm font-medium text-ink-secondary hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {actionBusy ? "处理中…" : "红字发票"}
+                </button>
+              )}
+              {isReverseable && canApprove && (
                 <button
                   type="button"
                   onClick={() => setConfirmAction("reverse-issue")}
@@ -544,6 +571,20 @@ function InvoiceDetailPage() {
         onConfirm={() => {
           setConfirmAction(null);
           void runAction("delete-red");
+        }}
+        onCancel={() => setConfirmAction(null)}
+      />
+
+      <ConfirmActionDialog
+        open={confirmAction === "red-invoice"}
+        title="创建红字发票"
+        description="从已开票蓝字发票生成红字草稿（复制头/行快照并预填原票引用，金额在开具时服务端取反；已有全额红冲则拒绝重复创建）。确认创建？"
+        confirmLabel="确认创建"
+        tone="danger"
+        busy={actionBusy}
+        onConfirm={() => {
+          setConfirmAction(null);
+          void runAction("red-invoice");
         }}
         onCancel={() => setConfirmAction(null)}
       />

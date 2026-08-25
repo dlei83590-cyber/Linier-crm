@@ -4,7 +4,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { actionPermission } from "@nilier-crm/shared";
+import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
+import { useSession } from "@/lib/session-context";
 import { AppPage, EntityFormWorkspace, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
@@ -47,6 +48,9 @@ function GlEntryDetailView() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const toast = useToast();
+  const { state } = useSession();
+  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
+  const canApprove = hasPermission(roles, actionPermission("gl", "approve"));
   const id = params.id;
   const [detail, setDetail] = useState<GlEntryDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -132,6 +136,26 @@ function GlEntryDetailView() {
             </table>
           </div>
         </section>
+        {detail.status === "SUBMITTED" && canApprove ? (
+          <section className="rounded-md border border-status-warning-border bg-status-warning-bg/10 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-status-warning-text">审核驳回</h2>
+                <p className="mt-0.5 text-xs text-ink-secondary">
+                  maker-checker：审核人不能是创建人；驳回后凭证进入 REJECTED（需人工处置）。
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => runAction("reject")}
+                disabled={acting}
+                className="rounded-md border border-status-danger-border bg-surface px-3 py-1.5 text-sm font-medium text-status-danger-text hover:bg-status-danger-bg disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {acting ? "处理中…" : "驳回"}
+              </button>
+            </div>
+          </section>
+        ) : null}
       </EntityFormWorkspace>
     </AppPage>
   );
