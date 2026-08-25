@@ -16,6 +16,7 @@ import { actionPermission } from "@nilier-crm/shared";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { INPUT_CLASS, BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { formatDate } from "@/lib/format";
+import { GEOLOCATION_OPTIONS, geolocationErrorMessage } from "@/lib/visit/geolocation";
 
 interface ActivityRow {
   id: string;
@@ -59,6 +60,7 @@ export function ActivityTimeline({ partnerId }: { partnerId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // 进行中操作的活动 id（null=空闲）
+  const [notice, setNotice] = useState<string | null>(null); // 成功反馈（签到距离等；失败用 error）
 
   // 表单
   const [mode, setMode] = useState<"FOLLOW_UP" | "VISIT_PLAN" | "CHECK_IN">("FOLLOW_UP");
@@ -155,22 +157,37 @@ export function ActivityTimeline({ partnerId }: { partnerId: string }) {
       return;
     }
     setError(null);
+    setNotice(null);
     navigator.geolocation.getCurrentPosition(
       (pos) => setGeo({ lat: String(pos.coords.latitude), lng: String(pos.coords.longitude) }),
-      () => setError("定位失败，请检查浏览器定位权限"),
+      (err) => {
+        // 定位拒绝/信号不可用/超时 → 明确真实原因（FRT-04，禁止静默失败）
+        setGeo(null);
+        setError(geolocationErrorMessage(err?.code));
+      },
+      GEOLOCATION_OPTIONS,
     );
   };
 
   const submit = async () => {
     setBusy("__form__");
     setError(null);
+    setNotice(null);
     try {
       const body: Record<string, unknown> = { activityType: mode };
       if (mode === "FOLLOW_UP") {
+        if (!summary.trim()) {
+          setError("跟进内容必填");
+          return;
+        }
         body.summary = summary.trim();
         body.nextAction = nextAction.trim() || undefined;
       } else if (mode === "VISIT_PLAN") {
-        body.planDate = planDate ? new Date(planDate).toISOString() : undefined;
+        if (!planDate) {
+          setError("请选择拜访计划日期（必填）");
+          return;
+        }
+        body.planDate = new Date(planDate).toISOString();
         body.summary = summary.trim() || undefined;
       } else {
         if (!geo) {
@@ -181,7 +198,14 @@ export function ActivityTimeline({ partnerId }: { partnerId: string }) {
         body.longitude = Number(geo.lng);
         body.locationNote = summary.trim() || undefined;
       }
-      await apiFetch("/api/business-partners/" + partnerId + "/activities", { method: "POST", body: JSON.stringify(body) });
+      const { data } = await apiFetch<{ distanceMeters?: number | null }>(
+        "/api/business-partners/" + partnerId + "/activities",
+        { method: "POST", body: JSON.stringify(body) },
+      );
+      if (mode === "CHECK_IN") {
+        // 范围内成功反馈：服务端 Haversine 距离事实（客户未配置范围时 distanceMeters=null）
+        setNotice(data?.distanceMeters != null ? "签到成功（距客户 " + data.distanceMeters + " 米）" : "签到成功");
+      }
       setSummary("");
       setNextAction("");
       setPlanDate("");
@@ -197,6 +221,7 @@ export function ActivityTimeline({ partnerId }: { partnerId: string }) {
   return (
     <section className="rounded-md border border-border p-4">
       <h2 className="mb-3 text-sm font-semibold text-ink-primary">跟进活动</h2>
+      {notice && <p className="mb-2 rounded-md border border-green-200 bg-green-50 p-2 text-xs text-green-700">{notice}</p>}
       {error && <p className="mb-2 rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">{error}</p>}
 
       <PermissionGuard permission={actionPermission("project-visit", "create")}>
