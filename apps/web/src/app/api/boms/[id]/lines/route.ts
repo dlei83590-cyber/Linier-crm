@@ -44,8 +44,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (bom.status !== "DRAFT") throw new Error("INVALID_STATE");
       if (bom.version !== parsed.data.version) throw new Error("VERSION_CONFLICT");
 
-      // 原料校验：存在 + 不与成品相同 + 单位红线（componentUomId 必须 = 原料库存单位）
-      const comp = await tx.item.findFirst({ where: { id: parsed.data.componentItemId, deletedAt: null } });
+      // 原料校验：存在 + status=ACTIVE（禁 INACTIVE/LOCKED/ARCHIVED 进入 BOM）+ 不与成品相同 + 单位红线
+      const comp = await tx.item.findFirst({ where: { id: parsed.data.componentItemId, deletedAt: null, status: "ACTIVE" } });
       if (!comp) throw new Error("ITEM_INVALID");
       if (comp.id === bom.finishedItemId) throw new Error("LINE_INVALID");
       if (!comp.stockUomId || comp.stockUomId !== parsed.data.componentUomId) throw new Error("LINE_INVALID");
@@ -97,6 +97,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (msg === "ITEM_INVALID") return failConflict(ERROR_CODES.BOM_ITEM_INVALID, "原料不存在或已停用");
     if (msg === "LINE_INVALID") return failConflict(ERROR_CODES.BOM_LINE_INVALID, "原料行非法（原料单位必须 = 原料库存单位，且原料不得等于成品）");
     if (msg === "COMPONENT_DUPLICATE") return failConflict(ERROR_CODES.BOM_COMPONENT_DUPLICATE, "同一配方内原料重复");
+    if (e !== null && typeof e === "object" && (e as { code?: unknown }).code === "P2002") {
+      // 并发双请求同时通过预检 → DB unique（bomId, componentItemId）兜底 → 明确 409
+      return failConflict(ERROR_CODES.BOM_COMPONENT_DUPLICATE, "同一配方内原料重复（并发冲突）");
+    }
     console.error("[bom.line.create]", e);
     return failServer("增加配方行失败");
   }
