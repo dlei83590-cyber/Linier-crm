@@ -209,6 +209,32 @@ export async function GET(request: NextRequest) {
     }))
     .sort((a, b) => b.salesOrderCount - a.salesOrderCount);
 
+  // ===== 固定品牌维度（Item.brand 真实事实源）：SalesOrderLine → Item.brand → 行数/金额（未设置归「未设置」）=====
+  const brandLines = await prisma.salesOrderLine.findMany({
+    where: {
+      deletedAt: null,
+      salesOrder: { deletedAt: null, status: { notIn: ["DRAFT", "CANCELLED"] }, createdAt: range },
+    },
+    select: { itemId: true, totalAmount: true },
+  });
+  const brandItemIds = [...new Set(brandLines.map((l) => l.itemId).filter((x): x is string => x !== null))];
+  const brandItems = brandItemIds.length
+    ? await prisma.item.findMany({ where: { id: { in: brandItemIds } }, select: { id: true, brand: true } })
+    : [];
+  const brandByItem = new Map(brandItems.map((i) => [i.id, i.brand]));
+  const brandAgg = new Map<string, { lineCount: number; amount: Prisma.Decimal }>();
+  for (const l of brandLines) {
+    if (!l.itemId) continue;
+    const brand = brandByItem.get(l.itemId) ?? "未设置";
+    const cur = brandAgg.get(brand) ?? { lineCount: 0, amount: new Prisma.Decimal(0) };
+    cur.lineCount += 1;
+    cur.amount = cur.amount.plus(l.totalAmount ?? 0);
+    brandAgg.set(brand, cur);
+  }
+  const brands = [...brandAgg.entries()]
+    .map(([brand, v]) => ({ brand, lineCount: v.lineCount, amount: v.amount.toString() }))
+    .sort((a, b) => b.lineCount - a.lineCount);
+
   return ok({
     period: rawPeriod,
     range: { from: start.toISOString(), to: end.toISOString() },
@@ -231,5 +257,8 @@ export async function GET(request: NextRequest) {
     targets,
     customerTiers,
     regions,
+    brands,
+    // channel：当前无明确 SSOT 事实源 → 前端显示「暂无渠道事实数据」（CTO ⑦；禁造字段）
+    channelAvailable: false,
   });
 }
