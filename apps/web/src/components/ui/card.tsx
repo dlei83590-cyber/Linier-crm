@@ -44,7 +44,7 @@ export function Card({
   );
 }
 
-export interface CardHeaderProps extends Omit<HTMLAttributes<HTMLDivElement>, 'size'> {
+export interface CardHeaderProps extends Omit<HTMLAttributes<HTMLDivElement>, 'size' | 'title'> {
   title?: ReactNode;
   /** 标题下方说明 */
   description?: ReactNode;
