@@ -12,7 +12,7 @@
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
@@ -101,6 +101,7 @@ function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
 
 function InvoiceDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const { state } = useSession();
   const id = typeof params.id === "string" ? params.id : "";
   const [detail, setDetail] = useState<InvoiceDetail | null>(null);

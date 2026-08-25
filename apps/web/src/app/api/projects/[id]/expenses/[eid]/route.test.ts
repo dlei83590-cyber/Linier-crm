@@ -42,6 +42,15 @@ function makeRequest(body: Record<string, unknown>): NextRequest {
   });
 }
 
+/** 调用 PATCH 并保证响应存在（路由所有路径都返回 NextResponse；TS 对事务联合推断宽松，运行时守卫兜底） */
+async function callPatch(body: Record<string, unknown>): Promise<NextResponse> {
+  const res = await PATCH(makeRequest(body), {
+    params: Promise.resolve({ id: 'proj-1', eid: 'exp-1' }),
+  });
+  if (res === undefined) throw new Error('PATCH returned undefined');
+  return res;
+}
+
 const baseExisting = {
   id: 'exp-1',
   projectId: 'proj-1',
@@ -64,9 +73,7 @@ describe('PATCH /api/projects/:id/expenses/:eid — 报销编辑/改稿门禁（
     const tx = makeTx(baseExisting, { ...baseExisting, category: '交通费', amount: '120', version: 4 });
     mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx));
     mockCasUpdate.mockResolvedValue({ outcome: 'OK' });
-    const res = await PATCH(makeRequest({ version: 3, category: '交通费', amount: 120 }), {
-      params: Promise.resolve({ id: 'proj-1', eid: 'exp-1' }),
-    });
+    const res = await callPatch({ version: 3, category: '交通费', amount: 120 });
     expect(res.status).toBe(200);
     expect(mockCasUpdate).toHaveBeenCalledWith(
       expect.anything(),
@@ -84,9 +91,7 @@ describe('PATCH /api/projects/:id/expenses/:eid — 报销编辑/改稿门禁（
     );
     mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx));
     mockCasUpdate.mockResolvedValue({ outcome: 'OK' });
-    const res = await PATCH(makeRequest({ version: 3, note: '已按驳回意见修改' }), {
-      params: Promise.resolve({ id: 'proj-1', eid: 'exp-1' }),
-    });
+    const res = await callPatch({ version: 3, note: '已按驳回意见修改' });
     expect(res.status).toBe(200);
     expect(mockCasUpdate).toHaveBeenCalled();
   });
@@ -94,9 +99,7 @@ describe('PATCH /api/projects/:id/expenses/:eid — 报销编辑/改稿门禁（
   it('PENDING 冻结（审批中禁改）→ 409 EXPENSE_INVALID_STATE，不触达 CAS', async () => {
     const tx = makeTx({ ...baseExisting, approvalStatus: 'PENDING' }, {});
     mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx));
-    const res = await PATCH(makeRequest({ version: 3, amount: 200 }), {
-      params: Promise.resolve({ id: 'proj-1', eid: 'exp-1' }),
-    });
+    const res = await callPatch({ version: 3, amount: 200 });
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error.code).toBe('EXPENSE_INVALID_STATE');
@@ -106,9 +109,7 @@ describe('PATCH /api/projects/:id/expenses/:eid — 报销编辑/改稿门禁（
   it('APPROVED 冻结（已批准禁改）→ 409 EXPENSE_INVALID_STATE', async () => {
     const tx = makeTx({ ...baseExisting, approvalStatus: 'APPROVED' }, {});
     mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx));
-    const res = await PATCH(makeRequest({ version: 3, category: '办公费' }), {
-      params: Promise.resolve({ id: 'proj-1', eid: 'exp-1' }),
-    });
+    const res = await callPatch({ version: 3, category: '办公费' });
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error.code).toBe('EXPENSE_INVALID_STATE');
@@ -119,9 +120,7 @@ describe('PATCH /api/projects/:id/expenses/:eid — 报销编辑/改稿门禁（
     const tx = makeTx(baseExisting, {});
     mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx));
     mockCasUpdate.mockResolvedValue({ outcome: 'CONFLICT' });
-    const res = await PATCH(makeRequest({ version: 2, amount: 120 }), {
-      params: Promise.resolve({ id: 'proj-1', eid: 'exp-1' }),
-    });
+    const res = await callPatch({ version: 2, amount: 120 });
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error.code).toBe('VERSION_CONFLICT');
@@ -131,9 +130,7 @@ describe('PATCH /api/projects/:id/expenses/:eid — 报销编辑/改稿门禁（
     mockRequirePermission.mockReturnValue(
       NextResponse.json({ success: false, error: { code: 'FORBIDDEN', message: 'no' } }, { status: 403 }),
     );
-    const res = await PATCH(makeRequest({ version: 3, amount: 120 }), {
-      params: Promise.resolve({ id: 'proj-1', eid: 'exp-1' }),
-    });
+    const res = await callPatch({ version: 3, amount: 120 });
     expect(res.status).toBe(403);
     expect(mockPrisma.$transaction).not.toHaveBeenCalled();
   });
