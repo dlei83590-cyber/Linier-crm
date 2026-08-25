@@ -27,8 +27,31 @@ import {
   ProjectSubresourceDialog,
 } from "@/components/workspace";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
-import { formatDate } from "@/lib/format";
-import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
+import { formatDate, formatMoneyValue } from "@/lib/format";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
+import { PageLoading } from "@/components/ui/skeleton";
+import { useToast } from "@/components/ui/toast";
+import {
+  PROJECT_STAGE_LABELS as STAGE_LABELS,
+  PROJECT_STAGE_TONES as STAGE_TONE_MAP,
+  PROJECT_PRIORITY_LABELS as PRIORITY_LABELS,
+  PROJECT_PAYMENT_LABELS as PAYMENT_LABELS,
+  PROJECT_TASK_STATUS_LABELS as TASK_STATUS_LABELS,
+  PROJECT_RISK_STATUS_LABELS as RISK_STATUS_LABELS,
+  PROJECT_RISK_PROBABILITY_LABELS as RISK_PROBABILITY_LABELS,
+  PROJECT_MILESTONE_STATUS_LABELS as MILESTONE_STATUS_LABELS,
+  PROJECT_STAKEHOLDER_ROLE_LABELS as STAKEHOLDER_ROLE_LABELS,
+  PROJECT_SUBRESOURCE_LABELS as SUBRESOURCE_LABELS,
+  PROJECT_VISIT_TYPE_LABELS as VISIT_TYPE_LABELS,
+  PROJECT_ACCEPTANCE_RESULT_LABELS as ACCEPTANCE_RESULT_LABELS,
+  PROJECT_ACCEPTANCE_TONES as ACCEPTANCE_TONE_MAP,
+} from "@/lib/project-stage";
+import {
+  SubresourceCard,
+  DetailTable,
+  TruncatedCell,
+  RowActionButtons,
+} from "./detail-components";
 import {
   StakeholderFields,
   MemberFields,
@@ -224,117 +247,9 @@ type ExpenseRow = NonNullable<ProjectDetail["expenses"]>[number];
 type ProgressRow = NonNullable<ProjectDetail["progresses"]>[number];
 type AcceptanceRow = NonNullable<ProjectDetail["acceptances"]>[number];
 
-const STAGE_LABELS: Record<string, string> = {
-  LEAD: "线索",
-  QUALIFIED: "准入",
-  SOLUTION: "方案",
-  QUOTATION: "报价",
-  SAMPLING: "试样",
-  TESTING: "测试",
-  SMALL_BATCH: "小批量",
-  MASS_SUPPLY: "批量供货",
-  PAUSED: "暂停",
-  FAILED: "失败",
-  CLOSED: "结项",
-};
+// UI-06：状态文案/语义色映射统一消费 lib/project-stage.ts（aliased imports，见文件头）
+// 阶段/优先级/回款/任务/风险/里程碑/关系人/走访/验收/子资源标签文案不再在页面内重复定义。
 
-const STAGE_TONE_MAP: Record<string, "success" | "neutral" | "warning" | "danger" | "info"> = {
-  LEAD: "neutral",
-  QUALIFIED: "info",
-  SOLUTION: "info",
-  QUOTATION: "warning",
-  SAMPLING: "neutral",
-  TESTING: "warning",
-  SMALL_BATCH: "warning",
-  MASS_SUPPLY: "success",
-  PAUSED: "warning",
-  FAILED: "danger",
-  CLOSED: "neutral",
-};
-
-const PRIORITY_LABELS: Record<string, string> = {
-  HIGH: "高",
-  MEDIUM: "中",
-  LOW: "低",
-};
-
-const PAYMENT_LABELS: Record<string, string> = {
-  UNPAID: "未回款",
-  PARTIAL: "部分回款",
-  PAID: "已回款",
-  OVERDUE: "逾期",
-};
-
-const TASK_STATUS_LABELS: Record<string, string> = {
-  TODO: "待办",
-  IN_PROGRESS: "进行中",
-  DONE: "已完成",
-  CANCELLED: "已取消",
-};
-
-const RISK_STATUS_LABELS: Record<string, string> = {
-  OPEN: "开启",
-  MITIGATING: "应对中",
-  CLOSED: "已关闭",
-};
-
-const RISK_PROBABILITY_LABELS: Record<string, string> = {
-  HIGH: "高",
-  MEDIUM: "中",
-  LOW: "低",
-};
-
-const MILESTONE_STATUS_LABELS: Record<string, string> = {
-  PLANNED: "计划中",
-  IN_PROGRESS: "进行中",
-  COMPLETED: "已完成",
-  DELAYED: "已延期",
-};
-
-const STAKEHOLDER_ROLE_LABELS: Record<string, string> = {
-  REQUESTER: "需求人",
-  TECHNICAL: "技术人",
-  PURCHASER: "采购人",
-  DECISION_MAKER: "决策人",
-  END_USER: "使用人",
-};
-
-const SUBRESOURCE_LABELS: Record<string, string> = {
-  stakeholder: "关系人",
-  member: "成员",
-  milestone: "里程碑",
-  task: "任务",
-  risk: "风险",
-  visit: "走访记录",
-  product: "产品",
-  tag: "标签",
-  budget: "预算",
-  expense: "费用",
-  progress: "进度记录",
-  acceptance: "验收项",
-};
-
-const VISIT_TYPE_LABELS: Record<string, string> = {
-  VISIT: "走访",
-  PHONE: "电话",
-  VIDEO: "视频",
-  MEETING: "会议",
-  OTHER: "其他",
-};
-
-const ACCEPTANCE_RESULT_LABELS: Record<string, string> = {
-  PASSED: "通过",
-  CONDITIONAL_PASS: "有条件通过",
-  FAILED: "不通过",
-  PENDING: "待验收",
-};
-
-const ACCEPTANCE_TONE_MAP: Record<string, "success" | "neutral" | "warning" | "danger" | "info"> = {
-  PASSED: "success",
-  CONDITIONAL_PASS: "warning",
-  FAILED: "danger",
-  PENDING: "neutral",
-};
 
 type TabKey =
   | "overview"
@@ -372,38 +287,6 @@ function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <h2 className="text-ink-primary mb-3 text-sm font-semibold">{children}</h2>;
-}
-
-function Table({ headers, children }: { headers: string[]; children: React.ReactNode }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="divide-border min-w-full divide-y text-sm">
-        <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
-          <tr>
-            {headers.map((h) => (
-              <th key={h} className="px-3 py-2 font-medium">
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-border divide-y">{children}</tbody>
-      </table>
-    </div>
-  );
-}
-
-function EmptyRow({ colSpan, text }: { colSpan: number; text: string }) {
-  return (
-    <tr>
-      <td colSpan={colSpan} className="px-3 py-6 text-center text-sm text-ink-muted">
-        {text}
-      </td>
-    </tr>
-  );
-}
 
 /** B2-2B：date 时区转换纪律（用户指令 2026-08-21：全站取消分钟格式 → date YYYY-MM-DD）
  * toLocalInput：ISO UTC → 本地 date（YYYY-MM-DD）
@@ -423,6 +306,7 @@ function toIso(value: string): string {
 
 function ProjectDetailPage() {
   const { state } = useSession();
+  const toast = useToast();
   const roles =
     state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
   const canEdit =
@@ -963,6 +847,7 @@ function ProjectDetailPage() {
         });
       }
       closeStakeholderDialog();
+      toast.success("关系人已保存");
       await reloadProject();
     } catch (err) {
       setDialogError(
@@ -1028,6 +913,7 @@ function ProjectDetailPage() {
         });
       }
       closeMemberDialog();
+      toast.success("成员已保存");
       await reloadProject();
     } catch (err) {
       setDialogError(
@@ -1089,6 +975,7 @@ function ProjectDetailPage() {
         });
       }
       closeMilestoneDialog();
+      toast.success("里程碑已保存");
       await reloadProject();
     } catch (err) {
       setDialogError(
@@ -1154,6 +1041,7 @@ function ProjectDetailPage() {
         });
       }
       closeTaskDialog();
+      toast.success("任务已保存");
       await reloadProject();
     } catch (err) {
       setDialogError(
@@ -1217,6 +1105,7 @@ function ProjectDetailPage() {
         });
       }
       closeRiskDialog();
+      toast.success("风险已保存");
       await reloadProject();
     } catch (err) {
       setDialogError(
@@ -1281,6 +1170,7 @@ function ProjectDetailPage() {
         });
       }
       closeVisitDialog();
+      toast.success("走访记录已保存");
       await reloadProject();
     } catch (err) {
       setDialogError(
@@ -1353,6 +1243,7 @@ function ProjectDetailPage() {
         });
       }
       closeProductDialog();
+      toast.success("产品已保存");
       await reloadProject();
     } catch (err) {
       setDialogError(
@@ -1404,6 +1295,7 @@ function ProjectDetailPage() {
         body: JSON.stringify({ tagId: tagForm.tagId }),
       });
       closeTagDialog();
+      toast.success("标签已添加");
       await reloadProject();
     } catch (err) {
       setDialogError(
@@ -1456,6 +1348,7 @@ function ProjectDetailPage() {
         });
       }
       closeBudgetDialog();
+      toast.success("预算已保存");
       await reloadProject();
     } catch (err) {
       setDialogError(
@@ -1538,6 +1431,7 @@ function ProjectDetailPage() {
         });
       }
       closeExpenseDialog();
+      toast.success("费用已保存");
       await reloadProject();
     } catch (err) {
       setDialogError(
@@ -1629,6 +1523,7 @@ function ProjectDetailPage() {
         });
       }
       closeProgressDialog();
+      toast.success("进度记录已保存");
       // 红线：Project.progressPercent 是唯一 authoritative aggregate，mutation 后 re-GET aggregate（不前端自算）
       await reloadProject();
     } catch (err) {
@@ -1727,6 +1622,7 @@ function ProjectDetailPage() {
         });
       }
       closeAcceptanceDialog();
+      toast.success("验收项已保存");
       await reloadProject();
     } catch (err) {
       setDialogError(
@@ -1808,6 +1704,7 @@ function ProjectDetailPage() {
         }),
       });
       setTransitionDialog((prev) => ({ ...prev, open: false }));
+      toast.success("阶段已流转");
       // mutation 后 authoritative re-GET（不本地 patch stage/version）
       await reloadProject();
     } catch (err) {
@@ -1864,6 +1761,7 @@ function ProjectDetailPage() {
         }),
       });
       setCloseDialog((prev) => ({ ...prev, open: false }));
+      toast.success("项目已结项");
       // mutation 后 authoritative re-GET（不本地 patch stage/version）
       await reloadProject();
     } catch (err) {
@@ -1928,6 +1826,7 @@ function ProjectDetailPage() {
         await apiFetch(`/api/projects/${id}/tasks/${deleteTarget.id}`, { method: "DELETE" });
       }
       setDeleteTarget(null);
+      toast.success("已删除");
       await reloadProject();
     } catch (err) {
       setDeleteTarget(null);
@@ -1942,8 +1841,8 @@ function ProjectDetailPage() {
   if (initialLoading) {
     return (
       <AppPage>
-        <div className="border-border bg-surface rounded-lg border p-6 text-sm text-ink-muted">
-          加载中…
+        <div className="border-border bg-surface shadow-elevation-sm overflow-hidden rounded-lg border">
+          <PageLoading rows={5} />
         </div>
       </AppPage>
     );
@@ -2206,15 +2105,14 @@ function ProjectDetailPage() {
               label="回款状态"
               value={PAYMENT_LABELS[detail.paymentStatus] ?? detail.paymentStatus}
             />
-            <InfoItem label="预计合同金额" value={detail.expectedContractAmount} />
-            <InfoItem label="预计利润" value={detail.expectedProfit} />
+            <InfoItem label="预计合同金额" value={formatMoneyValue(detail.expectedContractAmount)} />
+            <InfoItem label="预计利润" value={formatMoneyValue(detail.expectedProfit)} />
             <InfoItem
               label="预计毛利率"
               value={detail.expectedGrossMarginRate != null ? `${detail.expectedGrossMarginRate}%` : null}
             />
-            <InfoItem label="已回款金额" value={detail.receivedAmount} />
-            <InfoItem label="应收余额" value={detail.receivableBalance} />
-            <InfoItem label="负责人" value={detail.ownerId} />
+            <InfoItem label="已回款金额" value={formatMoneyValue(detail.receivedAmount)} />
+            <InfoItem label="应收余额" value={formatMoneyValue(detail.receivableBalance)} />
             <InfoItem label="创建时间" value={formatDate(detail.createdAt)} />
             <InfoItem
               label="结项"
@@ -2227,8 +2125,8 @@ function ProjectDetailPage() {
           </div>
         }
       >
-        {/* Tabs 导航（F2-4B1 capability-aware：capability=false 的 Tab 不出现；组合 Tab 按 OR） */}
-        <div className="border-border flex flex-wrap gap-1 border-b">
+        {/* Tabs 导航（F2-4B1 capability-aware：capability=false 的 Tab 不出现；组合 Tab 按 OR；UI-06 动效 150ms） */}
+        <div className="border-border flex flex-wrap gap-1 border-b" role="tablist" aria-label="项目详情页签">
           {TABS.filter((t) => {
             if (t.key === "overview") return true; // 核心事实始终可见
             if (t.key === "financial") return detail.capabilities.budgets || detail.capabilities.expenses || detail.capabilities.progresses;
@@ -2238,11 +2136,13 @@ function ProjectDetailPage() {
             <button
               key={t.key}
               type="button"
+              role="tab"
+              aria-selected={activeTab === t.key}
               onClick={() => setActiveTab(t.key)}
-              className={`rounded-t-md px-3 py-2 text-sm font-medium transition-colors ${
+              className={`-mb-px rounded-t-md border-b-2 px-3 py-2 text-sm transition-colors duration-150 ease-out ${
                 activeTab === t.key
-                  ? "border-brand-600 text-brand-700 border-b-2"
-                  : "text-ink-secondary hover:bg-canvas hover:text-ink-primary"
+                  ? "border-brand-600 font-semibold text-brand-700"
+                  : "border-transparent text-ink-secondary hover:bg-canvas hover:text-ink-primary"
               }`}
             >
               {t.label}
@@ -2251,25 +2151,26 @@ function ProjectDetailPage() {
         </div>
 
         <div className="space-y-6 pt-4">
+
           {activeTab === "overview" && (
             <div className="space-y-6">
-              <section className="border-border rounded-md border p-4">
-                <SectionTitle>项目描述</SectionTitle>
+              <section className="rounded-lg border border-border bg-surface p-4">
+                <h3 className="mb-3 text-sm font-semibold text-ink-primary">项目描述</h3>
                 <p className="text-sm whitespace-pre-wrap text-ink-secondary">
                   {detail.description ?? "暂无描述"}
                 </p>
               </section>
-              <section className="border-border rounded-md border p-4">
-                <SectionTitle>商务信息</SectionTitle>
+              <section className="rounded-lg border border-border bg-surface p-4">
+                <h3 className="mb-3 text-sm font-semibold text-ink-primary">商务信息</h3>
                 <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                  <InfoItem label="预计合同金额" value={detail.expectedContractAmount} />
-                  <InfoItem label="预计利润" value={detail.expectedProfit} />
+                  <InfoItem label="预计合同金额" value={formatMoneyValue(detail.expectedContractAmount)} />
+                  <InfoItem label="预计利润" value={formatMoneyValue(detail.expectedProfit)} />
                   <InfoItem
                     label="预计毛利率"
                     value={detail.expectedGrossMarginRate != null ? `${detail.expectedGrossMarginRate}%` : null}
                   />
-                  <InfoItem label="已回款金额" value={detail.receivedAmount} />
-                  <InfoItem label="应收余额" value={detail.receivableBalance} />
+                  <InfoItem label="已回款金额" value={formatMoneyValue(detail.receivedAmount)} />
+                  <InfoItem label="应收余额" value={formatMoneyValue(detail.receivableBalance)} />
                   <InfoItem
                     label="回款状态"
                     value={PAYMENT_LABELS[detail.paymentStatus] ?? detail.paymentStatus}
@@ -2285,20 +2186,22 @@ function ProjectDetailPage() {
           )}
 
           {activeTab === "stakeholders" && (
-            <section className="border-border rounded-md border p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <SectionTitle>项目关系人（{detail.stakeholders?.length ?? 0}）</SectionTitle>
-                {canAddStakeholder && (
+            <SubresourceCard
+              title="项目关系人"
+              count={detail.stakeholders?.length ?? 0}
+              action={
+                canAddStakeholder ? (
                   <button
                     type="button"
                     onClick={openStakeholderCreate}
                     className={BUTTON_PRIMARY_CLASS}
                   >
-                    添加关系人
+                    + 添加关系人
                   </button>
-                )}
-              </div>
-              <Table
+                ) : undefined
+              }
+            >
+              <DetailTable
                 headers={[
                   "角色",
                   "姓名",
@@ -2309,68 +2212,56 @@ function ProjectDetailPage() {
                   "备注",
                   ...(canEditStakeholder || canDeleteStakeholder ? ["操作"] : []),
                 ]}
+                colSpan={canEditStakeholder || canDeleteStakeholder ? 8 : 7}
+                emptyText="暂无关系人"
               >
                 {(detail.stakeholders ?? []).map((s) => (
-                  <tr key={s.id}>
-                    <td className="px-3 py-2 text-ink-secondary">
+                  <tr key={s.id} className="transition-colors hover:bg-brand-50/40">
+                    <td className="px-4 py-3 text-ink-secondary">
                       {STAKEHOLDER_ROLE_LABELS[s.role] ?? s.role}
                     </td>
-                    <td className="px-3 py-2 text-ink-primary">{s.name}</td>
-                    <td className="px-3 py-2 text-ink-secondary">{s.title ?? "—"}</td>
-                    <td className="px-3 py-2 text-ink-secondary">{s.department ?? "—"}</td>
-                    <td className="px-3 py-2 text-ink-secondary">{s.phone ?? "—"}</td>
-                    <td className="px-3 py-2 text-ink-secondary">{s.email ?? "—"}</td>
-                    <td className="px-3 py-2 text-ink-secondary">{s.note ?? "—"}</td>
+                    <td className="px-4 py-3 font-medium text-ink-primary">{s.name}</td>
+                    <td className="px-4 py-3 text-ink-secondary"><TruncatedCell text={s.title} /></td>
+                    <td className="px-4 py-3 text-ink-secondary"><TruncatedCell text={s.department} /></td>
+                    <td className="px-4 py-3 text-ink-secondary">{s.phone ?? "—"}</td>
+                    <td className="px-4 py-3 text-ink-secondary"><TruncatedCell text={s.email} /></td>
+                    <td className="px-4 py-3 text-ink-secondary"><TruncatedCell text={s.note} /></td>
                     {(canEditStakeholder || canDeleteStakeholder) && (
-                      <td className="px-3 py-2">
-                        <div className="flex gap-2">
-                          {canEditStakeholder && (
-                            <button
-                              type="button"
-                              onClick={() => openStakeholderEdit(s)}
-                              className="text-brand-600 text-sm hover:underline"
-                            >
-                              编辑
-                            </button>
-                          )}
-                          {canDeleteStakeholder && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setDeleteTarget({ resource: "stakeholder", id: s.id, name: s.name })
-                              }
-                              className="text-sm text-status-danger-text hover:underline"
-                            >
-                              删除
-                            </button>
-                          )}
-                        </div>
+                      <td className="px-4 py-3 text-right">
+                        <RowActionButtons
+                          onEdit={canEditStakeholder ? () => openStakeholderEdit(s) : undefined}
+                          onDelete={
+                            canDeleteStakeholder
+                              ? () =>
+                                  setDeleteTarget({ resource: "stakeholder", id: s.id, name: s.name })
+                              : undefined
+                          }
+                        />
                       </td>
                     )}
                   </tr>
                 ))}
-                {(detail.stakeholders ?? []).length === 0 && (
-                  <EmptyRow colSpan={canEditStakeholder || canDeleteStakeholder ? 8 : 7} text="暂无关系人" />
-                )}
-              </Table>
-            </section>
+              </DetailTable>
+            </SubresourceCard>
           )}
 
           {activeTab === "members" && (
-            <section className="border-border rounded-md border p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <SectionTitle>项目成员（{detail.members?.length ?? 0}）</SectionTitle>
-                {canAddMember && (
+            <SubresourceCard
+              title="项目成员"
+              count={detail.members?.length ?? 0}
+              action={
+                canAddMember ? (
                   <button
                     type="button"
                     onClick={openMemberCreate}
                     className={BUTTON_PRIMARY_CLASS}
                   >
-                    添加成员
+                    + 添加成员
                   </button>
-                )}
-              </div>
-              <Table
+                ) : undefined
+              }
+            >
+              <DetailTable
                 headers={[
                   "姓名",
                   "项目内角色",
@@ -2378,63 +2269,50 @@ function ProjectDetailPage() {
                   "离开时间",
                   ...(canEditMember || canDeleteMember ? ["操作"] : []),
                 ]}
+                colSpan={canEditMember || canDeleteMember ? 5 : 4}
+                emptyText="暂无成员"
               >
                 {(detail.members ?? []).map((m) => (
-                  <tr key={m.id}>
-                    <td className="px-3 py-2 text-ink-primary">{m.name}</td>
-                    <td className="px-3 py-2 text-ink-secondary">{m.roleInProject ?? "—"}</td>
-                    <td className="px-3 py-2 text-ink-secondary">{formatDate(m.joinedAt)}</td>
-                    <td className="px-3 py-2 text-ink-secondary">{formatDate(m.leftAt)}</td>
+                  <tr key={m.id} className="transition-colors hover:bg-brand-50/40">
+                    <td className="px-4 py-3 font-medium text-ink-primary">{m.name}</td>
+                    <td className="px-4 py-3 text-ink-secondary"><TruncatedCell text={m.roleInProject} /></td>
+                    <td className="px-4 py-3 text-ink-secondary">{formatDate(m.joinedAt)}</td>
+                    <td className="px-4 py-3 text-ink-secondary">{formatDate(m.leftAt)}</td>
                     {(canEditMember || canDeleteMember) && (
-                      <td className="px-3 py-2">
-                        <div className="flex gap-2">
-                          {canEditMember && (
-                            <button
-                              type="button"
-                              onClick={() => openMemberEdit(m)}
-                              className="text-brand-600 text-sm hover:underline"
-                            >
-                              编辑
-                            </button>
-                          )}
-                          {canDeleteMember && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setDeleteTarget({ resource: "member", id: m.id, name: m.name })
-                              }
-                              className="text-sm text-status-danger-text hover:underline"
-                            >
-                              删除
-                            </button>
-                          )}
-                        </div>
+                      <td className="px-4 py-3 text-right">
+                        <RowActionButtons
+                          onEdit={canEditMember ? () => openMemberEdit(m) : undefined}
+                          onDelete={
+                            canDeleteMember
+                              ? () => setDeleteTarget({ resource: "member", id: m.id, name: m.name })
+                              : undefined
+                          }
+                        />
                       </td>
                     )}
                   </tr>
                 ))}
-                {(detail.members ?? []).length === 0 && (
-                  <EmptyRow colSpan={canEditMember || canDeleteMember ? 5 : 4} text="暂无成员" />
-                )}
-              </Table>
-            </section>
+              </DetailTable>
+            </SubresourceCard>
           )}
 
           {activeTab === "milestones" && (
-            <section className="border-border rounded-md border p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <SectionTitle>里程碑（{detail.milestones?.length ?? 0}）</SectionTitle>
-                {canAddMilestone && (
+            <SubresourceCard
+              title="里程碑"
+              count={detail.milestones?.length ?? 0}
+              action={
+                canAddMilestone ? (
                   <button
                     type="button"
                     onClick={openMilestoneCreate}
                     className={BUTTON_PRIMARY_CLASS}
                   >
-                    添加里程碑
+                    + 添加里程碑
                   </button>
-                )}
-              </div>
-              <Table
+                ) : undefined
+              }
+            >
+              <DetailTable
                 headers={[
                   "名称",
                   "状态",
@@ -2444,73 +2322,57 @@ function ProjectDetailPage() {
                   "延期原因",
                   ...(canEditMilestone || canDeleteMilestone ? ["操作"] : []),
                 ]}
+                colSpan={canEditMilestone || canDeleteMilestone ? 7 : 6}
+                emptyText="暂无里程碑"
               >
                 {(detail.milestones ?? []).map((m) => (
-                  <tr key={m.id}>
-                    <td className="px-3 py-2 text-ink-primary">{m.name}</td>
-                    <td className="px-3 py-2">
+                  <tr key={m.id} className="transition-colors hover:bg-brand-50/40">
+                    <td className="px-4 py-3 font-medium text-ink-primary">{m.name}</td>
+                    <td className="px-4 py-3">
                       <StatusBadge
                         status={m.status}
                         label={MILESTONE_STATUS_LABELS[m.status] ?? m.status}
                       />
                     </td>
-                    <td className="px-3 py-2 text-ink-secondary">{formatDate(m.plannedDate)}</td>
-                    <td className="px-3 py-2 text-ink-secondary">{formatDate(m.actualDate)}</td>
-                    <td className="px-3 py-2 text-ink-secondary">{m.deliverable ?? "—"}</td>
-                    <td className="px-3 py-2 text-ink-secondary">{m.delayReason ?? "—"}</td>
+                    <td className="px-4 py-3 text-ink-secondary">{formatDate(m.plannedDate)}</td>
+                    <td className="px-4 py-3 text-ink-secondary">{formatDate(m.actualDate)}</td>
+                    <td className="px-4 py-3 text-ink-secondary"><TruncatedCell text={m.deliverable} /></td>
+                    <td className="px-4 py-3 text-ink-secondary"><TruncatedCell text={m.delayReason} /></td>
                     {(canEditMilestone || canDeleteMilestone) && (
-                      <td className="px-3 py-2">
-                        <div className="flex gap-2">
-                          {canEditMilestone && (
-                            <button
-                              type="button"
-                              onClick={() => openMilestoneEdit(m)}
-                              className="text-brand-600 text-sm hover:underline"
-                            >
-                              编辑
-                            </button>
-                          )}
-                          {canDeleteMilestone && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setDeleteTarget({ resource: "milestone", id: m.id, name: m.name })
-                              }
-                              className="text-sm text-status-danger-text hover:underline"
-                            >
-                              删除
-                            </button>
-                          )}
-                        </div>
+                      <td className="px-4 py-3 text-right">
+                        <RowActionButtons
+                          onEdit={canEditMilestone ? () => openMilestoneEdit(m) : undefined}
+                          onDelete={
+                            canDeleteMilestone
+                              ? () => setDeleteTarget({ resource: "milestone", id: m.id, name: m.name })
+                              : undefined
+                          }
+                        />
                       </td>
                     )}
                   </tr>
                 ))}
-                {(detail.milestones ?? []).length === 0 && (
-                  <EmptyRow
-                    colSpan={canEditMilestone || canDeleteMilestone ? 7 : 6}
-                    text="暂无里程碑"
-                  />
-                )}
-              </Table>
-            </section>
+              </DetailTable>
+            </SubresourceCard>
           )}
 
           {activeTab === "tasks" && (
-            <section className="border-border rounded-md border p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <SectionTitle>任务（{detail.tasks?.length ?? 0}）</SectionTitle>
-                {canAddTask && (
+            <SubresourceCard
+              title="任务"
+              count={detail.tasks?.length ?? 0}
+              action={
+                canAddTask ? (
                   <button
                     type="button"
                     onClick={openTaskCreate}
                     className={BUTTON_PRIMARY_CLASS}
                   >
-                    添加任务
+                    + 添加任务
                   </button>
-                )}
-              </div>
-              <Table
+                ) : undefined
+              }
+            >
+              <DetailTable
                 headers={[
                   "名称",
                   "状态",
@@ -2518,139 +2380,114 @@ function ProjectDetailPage() {
                   "截止日期",
                   ...(canEditTask || canDeleteTask ? ["操作"] : []),
                 ]}
+                colSpan={canEditTask || canDeleteTask ? 5 : 4}
+                emptyText="暂无任务"
               >
                 {(detail.tasks ?? []).map((t) => (
-                  <tr key={t.id}>
-                    <td className="px-3 py-2 text-ink-primary">{t.name}</td>
-                    <td className="px-3 py-2">
+                  <tr key={t.id} className="transition-colors hover:bg-brand-50/40">
+                    <td className="px-4 py-3 font-medium text-ink-primary"><TruncatedCell text={t.name} maxWidth="max-w-[14rem]" /></td>
+                    <td className="px-4 py-3">
                       <StatusBadge status={t.status} label={TASK_STATUS_LABELS[t.status] ?? t.status} />
                     </td>
-                    <td className="px-3 py-2 text-ink-secondary">
+                    <td className="px-4 py-3 text-ink-secondary">
                       {t.priority ? PRIORITY_LABELS[t.priority] ?? t.priority : "—"}
                     </td>
-                    <td className="px-3 py-2 text-ink-secondary">{formatDate(t.dueDate)}</td>
+                    <td className="px-4 py-3 text-ink-secondary">{formatDate(t.dueDate)}</td>
                     {(canEditTask || canDeleteTask) && (
-                      <td className="px-3 py-2">
-                        <div className="flex gap-2">
-                          {canEditTask && (
-                            <button
-                              type="button"
-                              onClick={() => openTaskEdit(t)}
-                              className="text-brand-600 text-sm hover:underline"
-                            >
-                              编辑
-                            </button>
-                          )}
-                          {canDeleteTask && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setDeleteTarget({ resource: "task", id: t.id, name: t.name })
-                              }
-                              className="text-sm text-status-danger-text hover:underline"
-                            >
-                              删除
-                            </button>
-                          )}
-                        </div>
+                      <td className="px-4 py-3 text-right">
+                        <RowActionButtons
+                          onEdit={canEditTask ? () => openTaskEdit(t) : undefined}
+                          onDelete={
+                            canDeleteTask
+                              ? () => setDeleteTarget({ resource: "task", id: t.id, name: t.name })
+                              : undefined
+                          }
+                        />
                       </td>
                     )}
                   </tr>
                 ))}
-                {(detail.tasks ?? []).length === 0 && (
-                  <EmptyRow colSpan={canEditTask || canDeleteTask ? 5 : 4} text="暂无任务" />
-                )}
-              </Table>
-            </section>
+              </DetailTable>
+            </SubresourceCard>
           )}
 
           {activeTab === "products" && (
-            <section className="border-border rounded-md border p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <SectionTitle>产品（{detail.products?.length ?? 0}）</SectionTitle>
-                {canAddProduct && (
+            <SubresourceCard
+              title="产品"
+              count={detail.products?.length ?? 0}
+              action={
+                canAddProduct ? (
                   <button
                     type="button"
                     onClick={openProductCreate}
                     className={BUTTON_PRIMARY_CLASS}
                   >
-                    添加产品
+                    + 添加产品
                   </button>
-                )}
-              </div>
-              <Table
+                ) : undefined
+              }
+            >
+              <DetailTable
                 headers={[
                   "物料编码",
                   "物料名称",
                   "型号",
-                  "数量",
-                  "单价",
+                  { text: "数量", align: "right" },
+                  { text: "单价", align: "right" },
                   "备注",
                   ...(canEditProduct || canDeleteProduct ? ["操作"] : []),
                 ]}
+                colSpan={canEditProduct || canDeleteProduct ? 7 : 6}
+                emptyText="暂无产品"
               >
                 {(detail.products ?? []).map((p) => (
-                  <tr key={p.id}>
-                    <td className="px-3 py-2 text-ink-secondary">{p.item?.code ?? "—"}</td>
-                    <td className="px-3 py-2 text-ink-primary">{p.item?.name ?? "—"}</td>
-                    <td className="px-3 py-2 text-ink-secondary">{p.item?.model ?? "—"}</td>
-                    <td className="px-3 py-2 text-ink-primary">{p.quantity ?? "—"}</td>
-                    <td className="px-3 py-2 text-ink-secondary">{p.unitPrice ?? "—"}</td>
-                    <td className="px-3 py-2 text-ink-secondary">{p.note ?? "—"}</td>
+                  <tr key={p.id} className="transition-colors hover:bg-brand-50/40">
+                    <td className="px-4 py-3 text-ink-secondary">{p.item?.code ?? "—"}</td>
+                    <td className="px-4 py-3 font-medium text-ink-primary">{p.item?.name ?? "—"}</td>
+                    <td className="px-4 py-3 text-ink-secondary">{p.item?.model ?? "—"}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-ink-primary">{p.quantity ?? "—"}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-ink-primary">{formatMoneyValue(p.unitPrice)}</td>
+                    <td className="px-4 py-3 text-ink-secondary"><TruncatedCell text={p.note} /></td>
                     {(canEditProduct || canDeleteProduct) && (
-                      <td className="px-3 py-2">
-                        <div className="flex gap-2">
-                          {canEditProduct && (
-                            <button
-                              type="button"
-                              onClick={() => openProductEdit(p)}
-                              className="text-brand-600 text-sm hover:underline"
-                            >
-                              编辑
-                            </button>
-                          )}
-                          {canDeleteProduct && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setDeleteTarget({
-                                  resource: "product",
-                                  id: p.id,
-                                  name: `${p.item?.code ?? ""} ${p.item?.name ?? ""}`.trim() || "产品",
-                                })
-                              }
-                              className="text-sm text-status-danger-text hover:underline"
-                            >
-                              删除
-                            </button>
-                          )}
-                        </div>
+                      <td className="px-4 py-3 text-right">
+                        <RowActionButtons
+                          onEdit={canEditProduct ? () => openProductEdit(p) : undefined}
+                          onDelete={
+                            canDeleteProduct
+                              ? () =>
+                                  setDeleteTarget({
+                                    resource: "product",
+                                    id: p.id,
+                                    name: `${p.item?.code ?? ""} ${p.item?.name ?? ""}`.trim() || "产品",
+                                  })
+                              : undefined
+                          }
+                        />
                       </td>
                     )}
                   </tr>
                 ))}
-                {(detail.products ?? []).length === 0 && (
-                  <EmptyRow colSpan={canEditProduct || canDeleteProduct ? 7 : 6} text="暂无产品" />
-                )}
-              </Table>
-            </section>
+              </DetailTable>
+            </SubresourceCard>
           )}
 
           {activeTab === "risks" && (
-            <section className="border-border rounded-md border p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <SectionTitle>风险（{detail.risks?.length ?? 0}）</SectionTitle>
-                {canAddRisk && (
+            <SubresourceCard
+              title="风险"
+              count={detail.risks?.length ?? 0}
+              action={
+                canAddRisk ? (
                   <button
                     type="button"
                     onClick={openRiskCreate}
                     className={BUTTON_PRIMARY_CLASS}
                   >
-                    添加风险
+                    + 添加风险
                   </button>
-                )}
-              </div>
-              <Table
+                ) : undefined
+              }
+            >
+              <DetailTable
                 headers={[
                   "描述",
                   "状态",
@@ -2659,68 +2496,55 @@ function ProjectDetailPage() {
                   "应对方案",
                   ...(canEditRisk || canDeleteRisk ? ["操作"] : []),
                 ]}
+                colSpan={canEditRisk || canDeleteRisk ? 6 : 5}
+                emptyText="暂无风险"
               >
                 {(detail.risks ?? []).map((r) => (
-                  <tr key={r.id}>
-                    <td className="px-3 py-2 text-ink-primary">{r.description}</td>
-                    <td className="px-3 py-2">
+                  <tr key={r.id} className="transition-colors hover:bg-brand-50/40">
+                    <td className="px-4 py-3 font-medium text-ink-primary"><TruncatedCell text={r.description} maxWidth="max-w-[14rem]" /></td>
+                    <td className="px-4 py-3">
                       <StatusBadge status={r.status} label={RISK_STATUS_LABELS[r.status] ?? r.status} />
                     </td>
-                    <td className="px-3 py-2 text-ink-secondary">
+                    <td className="px-4 py-3 text-ink-secondary">
                       {r.probability ? RISK_PROBABILITY_LABELS[r.probability] ?? r.probability : "—"}
                     </td>
-                    <td className="px-3 py-2 text-ink-secondary">{r.impact ?? "—"}</td>
-                    <td className="px-3 py-2 text-ink-secondary">{r.mitigation ?? "—"}</td>
+                    <td className="px-4 py-3 text-ink-secondary"><TruncatedCell text={r.impact} maxWidth="max-w-[10rem]" /></td>
+                    <td className="px-4 py-3 text-ink-secondary"><TruncatedCell text={r.mitigation} maxWidth="max-w-[14rem]" /></td>
                     {(canEditRisk || canDeleteRisk) && (
-                      <td className="px-3 py-2">
-                        <div className="flex gap-2">
-                          {canEditRisk && (
-                            <button
-                              type="button"
-                              onClick={() => openRiskEdit(r)}
-                              className="text-brand-600 text-sm hover:underline"
-                            >
-                              编辑
-                            </button>
-                          )}
-                          {canDeleteRisk && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setDeleteTarget({ resource: "risk", id: r.id, name: r.description })
-                              }
-                              className="text-sm text-status-danger-text hover:underline"
-                            >
-                              删除
-                            </button>
-                          )}
-                        </div>
+                      <td className="px-4 py-3 text-right">
+                        <RowActionButtons
+                          onEdit={canEditRisk ? () => openRiskEdit(r) : undefined}
+                          onDelete={
+                            canDeleteRisk
+                              ? () => setDeleteTarget({ resource: "risk", id: r.id, name: r.description })
+                              : undefined
+                          }
+                        />
                       </td>
                     )}
                   </tr>
                 ))}
-                {(detail.risks ?? []).length === 0 && (
-                  <EmptyRow colSpan={canEditRisk || canDeleteRisk ? 6 : 5} text="暂无风险" />
-                )}
-              </Table>
-            </section>
+              </DetailTable>
+            </SubresourceCard>
           )}
 
           {activeTab === "visits" && (
-            <section className="border-border rounded-md border p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <SectionTitle>走访（{detail.visits?.length ?? 0}）</SectionTitle>
-                {canAddVisit && (
+            <SubresourceCard
+              title="走访"
+              count={detail.visits?.length ?? 0}
+              action={
+                canAddVisit ? (
                   <button
                     type="button"
                     onClick={openVisitCreate}
                     className={BUTTON_PRIMARY_CLASS}
                   >
-                    添加走访
+                    + 添加走访
                   </button>
-                )}
-              </div>
-              <Table
+                ) : undefined
+              }
+            >
+              <DetailTable
                 headers={[
                   "类型",
                   "走访时间",
@@ -2729,266 +2553,207 @@ function ProjectDetailPage() {
                   "下次行动",
                   ...(canEditVisit || canDeleteVisit ? ["操作"] : []),
                 ]}
+                colSpan={canEditVisit || canDeleteVisit ? 6 : 5}
+                emptyText="暂无走访记录"
               >
                 {(detail.visits ?? []).map((v) => (
-                  <tr key={v.id}>
-                    <td className="px-3 py-2 text-ink-secondary">
+                  <tr key={v.id} className="transition-colors hover:bg-brand-50/40">
+                    <td className="px-4 py-3 text-ink-secondary">
                       {VISIT_TYPE_LABELS[v.visitType] ?? v.visitType}
                     </td>
-                    <td className="px-3 py-2 text-ink-secondary">{formatDate(v.visitedAt)}</td>
-                    <td className="px-3 py-2 text-ink-secondary">{v.contactName ?? "—"}</td>
-                    <td className="px-3 py-2 text-ink-secondary">{v.summary ?? "—"}</td>
-                    <td className="px-3 py-2 text-ink-secondary">{v.nextAction ?? "—"}</td>
+                    <td className="px-4 py-3 text-ink-secondary">{formatDate(v.visitedAt)}</td>
+                    <td className="px-4 py-3 text-ink-secondary">{v.contactName ?? "—"}</td>
+                    <td className="px-4 py-3 text-ink-secondary"><TruncatedCell text={v.summary} maxWidth="max-w-[14rem]" /></td>
+                    <td className="px-4 py-3 text-ink-secondary"><TruncatedCell text={v.nextAction} maxWidth="max-w-[12rem]" /></td>
                     {(canEditVisit || canDeleteVisit) && (
-                      <td className="px-3 py-2">
-                        <div className="flex gap-2">
-                          {canEditVisit && (
-                            <button
-                              type="button"
-                              onClick={() => openVisitEdit(v)}
-                              className="text-brand-600 text-sm hover:underline"
-                            >
-                              编辑
-                            </button>
-                          )}
-                          {canDeleteVisit && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setDeleteTarget({
-                                  resource: "visit",
-                                  id: v.id,
-                                  name: v.summary ?? v.visitType,
-                                })
-                              }
-                              className="text-sm text-status-danger-text hover:underline"
-                            >
-                              删除
-                            </button>
-                          )}
-                        </div>
+                      <td className="px-4 py-3 text-right">
+                        <RowActionButtons
+                          onEdit={canEditVisit ? () => openVisitEdit(v) : undefined}
+                          onDelete={
+                            canDeleteVisit
+                              ? () =>
+                                  setDeleteTarget({
+                                    resource: "visit",
+                                    id: v.id,
+                                    name: v.summary ?? v.visitType,
+                                  })
+                              : undefined
+                          }
+                        />
                       </td>
                     )}
                   </tr>
                 ))}
-                {(detail.visits ?? []).length === 0 && (
-                  <EmptyRow colSpan={canEditVisit || canDeleteVisit ? 6 : 5} text="暂无走访记录" />
-                )}
-              </Table>
-            </section>
+              </DetailTable>
+            </SubresourceCard>
           )}
 
           {activeTab === "financial" && (
             <div className="space-y-6">
               {detail.capabilities.budgets && (
-                <section className="border-border rounded-md border p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <SectionTitle>预算（{detail.budgets?.length ?? 0}）</SectionTitle>
-                    {canAddBudget && (
+                <SubresourceCard
+                  title="预算"
+                  count={detail.budgets?.length ?? 0}
+                  action={
+                    canAddBudget ? (
                       <button
                         type="button"
                         onClick={openBudgetCreate}
                         className={BUTTON_PRIMARY_CLASS}
                       >
-                        添加预算
+                        + 添加预算
                       </button>
-                    )}
-                  </div>
-                  <Table
+                    ) : undefined
+                  }
+                >
+                  <DetailTable
                     headers={[
                       "科目",
-                      "金额",
+                      { text: "金额", align: "right" },
                       "币种",
                       "备注",
                       ...(canEditBudget || canDeleteBudget ? ["操作"] : []),
                     ]}
+                    colSpan={canEditBudget || canDeleteBudget ? 5 : 4}
+                    emptyText="暂无预算"
                   >
                     {(detail.budgets ?? []).map((b) => (
-                      <tr key={b.id}>
-                        <td className="px-3 py-2 text-ink-primary">{b.category}</td>
-                        <td className="px-3 py-2 text-ink-primary">{b.amount}</td>
-                        <td className="px-3 py-2 text-ink-secondary">{b.currency}</td>
-                        <td className="px-3 py-2 text-ink-secondary">{b.note ?? "—"}</td>
+                      <tr key={b.id} className="transition-colors hover:bg-brand-50/40">
+                        <td className="px-4 py-3 font-medium text-ink-primary">{b.category}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-ink-primary">{formatMoneyValue(b.amount)}</td>
+                        <td className="px-4 py-3 text-ink-secondary">{b.currency}</td>
+                        <td className="px-4 py-3 text-ink-secondary"><TruncatedCell text={b.note} /></td>
                         {(canEditBudget || canDeleteBudget) && (
-                          <td className="px-3 py-2">
-                            <div className="flex gap-2">
-                              {canEditBudget && (
-                                <button
-                                  type="button"
-                                  onClick={() => openBudgetEdit(b)}
-                                  className="text-brand-600 text-sm hover:underline"
-                                >
-                                  编辑
-                                </button>
-                              )}
-                              {canDeleteBudget && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setDeleteTarget({
-                                      resource: "budget",
-                                      id: b.id,
-                                      name: b.category,
-                                    })
-                                  }
-                                  className="text-sm text-status-danger-text hover:underline"
-                                >
-                                  删除
-                                </button>
-                              )}
-                            </div>
+                          <td className="px-4 py-3 text-right">
+                            <RowActionButtons
+                              onEdit={canEditBudget ? () => openBudgetEdit(b) : undefined}
+                              onDelete={
+                                canDeleteBudget
+                                  ? () =>
+                                      setDeleteTarget({
+                                        resource: "budget",
+                                        id: b.id,
+                                        name: b.category,
+                                      })
+                                  : undefined
+                              }
+                            />
                           </td>
                         )}
                       </tr>
                     ))}
-                    {(detail.budgets ?? []).length === 0 && (
-                      <EmptyRow
-                        colSpan={canEditBudget || canDeleteBudget ? 5 : 4}
-                        text="暂无预算"
-                      />
-                    )}
-                  </Table>
-                </section>
+                  </DetailTable>
+                </SubresourceCard>
               )}
               {detail.capabilities.expenses && (
-                <section className="border-border rounded-md border p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <SectionTitle>费用（{detail.expenses?.length ?? 0}）</SectionTitle>
-                    {canAddExpense && (
+                <SubresourceCard
+                  title="费用"
+                  count={detail.expenses?.length ?? 0}
+                  action={
+                    canAddExpense ? (
                       <button
                         type="button"
                         onClick={openExpenseCreate}
                         className={BUTTON_PRIMARY_CLASS}
                       >
-                        添加费用
+                        + 添加费用
                       </button>
-                    )}
-                  </div>
-                  <Table
+                    ) : undefined
+                  }
+                >
+                  <DetailTable
                     headers={[
                       "科目",
-                      "金额",
+                      { text: "金额", align: "right" },
                       "币种",
                       "发生时间",
                       "备注",
                       ...(canEditExpense || canDeleteExpense ? ["操作"] : []),
                     ]}
+                    colSpan={canEditExpense || canDeleteExpense ? 6 : 5}
+                    emptyText="暂无费用"
                   >
                     {(detail.expenses ?? []).map((e) => (
-                      <tr key={e.id}>
-                        <td className="px-3 py-2 text-ink-primary">{e.category}</td>
-                        <td className="px-3 py-2 text-ink-primary">{e.amount}</td>
-                        <td className="px-3 py-2 text-ink-secondary">{e.currency}</td>
-                        <td className="px-3 py-2 text-ink-secondary">{formatDate(e.incurredAt)}</td>
-                        <td className="px-3 py-2 text-ink-secondary">{e.note ?? "—"}</td>
+                      <tr key={e.id} className="transition-colors hover:bg-brand-50/40">
+                        <td className="px-4 py-3 font-medium text-ink-primary">{e.category}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-ink-primary">{formatMoneyValue(e.amount)}</td>
+                        <td className="px-4 py-3 text-ink-secondary">{e.currency}</td>
+                        <td className="px-4 py-3 text-ink-secondary">{formatDate(e.incurredAt)}</td>
+                        <td className="px-4 py-3 text-ink-secondary"><TruncatedCell text={e.note} /></td>
                         {(canEditExpense || canDeleteExpense) && (
-                          <td className="px-3 py-2">
-                            <div className="flex gap-2">
-                              {canEditExpense && (
-                                <button
-                                  type="button"
-                                  onClick={() => openExpenseEdit(e)}
-                                  className="text-brand-600 text-sm hover:underline"
-                                >
-                                  编辑
-                                </button>
-                              )}
-                              {canDeleteExpense && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setDeleteTarget({
-                                      resource: "expense",
-                                      id: e.id,
-                                      name: e.category,
-                                    })
-                                  }
-                                  className="text-sm text-status-danger-text hover:underline"
-                                >
-                                  删除
-                                </button>
-                              )}
-                            </div>
+                          <td className="px-4 py-3 text-right">
+                            <RowActionButtons
+                              onEdit={canEditExpense ? () => openExpenseEdit(e) : undefined}
+                              onDelete={
+                                canDeleteExpense
+                                  ? () =>
+                                      setDeleteTarget({
+                                        resource: "expense",
+                                        id: e.id,
+                                        name: e.category,
+                                      })
+                                  : undefined
+                              }
+                            />
                           </td>
                         )}
                       </tr>
                     ))}
-                    {(detail.expenses ?? []).length === 0 && (
-                      <EmptyRow
-                        colSpan={canEditExpense || canDeleteExpense ? 6 : 5}
-                        text="暂无费用"
-                      />
-                    )}
-                  </Table>
-                </section>
+                  </DetailTable>
+                </SubresourceCard>
               )}
               {detail.capabilities.progresses && (
-                <section className="border-border rounded-md border p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <SectionTitle>进度记录（{detail.progresses?.length ?? 0}）</SectionTitle>
-                    {canAddProgress && (
+                <SubresourceCard
+                  title="进度记录"
+                  count={detail.progresses?.length ?? 0}
+                  action={
+                    canAddProgress ? (
                       <button
                         type="button"
                         onClick={openProgressCreate}
                         className={BUTTON_PRIMARY_CLASS}
                       >
-                        添加进度
+                        + 添加进度
                       </button>
-                    )}
-                  </div>
-                  <Table
+                    ) : undefined
+                  }
+                >
+                  <DetailTable
                     headers={[
                       "记录时间",
-                      "进度",
+                      { text: "进度", align: "right" },
                       "进展说明",
                       ...(canEditProgress || canDeleteProgress ? ["操作"] : []),
                     ]}
+                    colSpan={canEditProgress || canDeleteProgress ? 4 : 3}
+                    emptyText="暂无进度记录"
                   >
                     {(detail.progresses ?? []).map((p) => (
-                      <tr key={p.id}>
-                        <td className="px-3 py-2 text-ink-secondary">{formatDate(p.recordedAt)}</td>
-                        <td className="px-3 py-2 text-ink-primary">{p.progressPercent}%</td>
-                        <td className="px-3 py-2 text-ink-secondary">{p.summary}</td>
+                      <tr key={p.id} className="transition-colors hover:bg-brand-50/40">
+                        <td className="px-4 py-3 text-ink-secondary">{formatDate(p.recordedAt)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-ink-primary">{p.progressPercent}%</td>
+                        <td className="px-4 py-3 text-ink-secondary"><TruncatedCell text={p.summary} maxWidth="max-w-[20rem]" /></td>
                         {(canEditProgress || canDeleteProgress) && (
-                          <td className="px-3 py-2">
-                            <div className="flex gap-2">
-                              {canEditProgress && (
-                                <button
-                                  type="button"
-                                  onClick={() => openProgressEdit(p)}
-                                  className="text-brand-600 text-sm hover:underline"
-                                >
-                                  编辑
-                                </button>
-                              )}
-                              {canDeleteProgress && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setDeleteTarget({
-                                      resource: "progress",
-                                      id: p.id,
-                                      name: p.summary,
-                                    })
-                                  }
-                                  className="text-sm text-status-danger-text hover:underline"
-                                >
-                                  删除
-                                </button>
-                              )}
-                            </div>
+                          <td className="px-4 py-3 text-right">
+                            <RowActionButtons
+                              onEdit={canEditProgress ? () => openProgressEdit(p) : undefined}
+                              onDelete={
+                                canDeleteProgress
+                                  ? () =>
+                                      setDeleteTarget({
+                                        resource: "progress",
+                                        id: p.id,
+                                        name: p.summary,
+                                      })
+                                  : undefined
+                              }
+                            />
                           </td>
                         )}
                       </tr>
                     ))}
-                    {(detail.progresses ?? []).length === 0 && (
-                      <EmptyRow
-                        colSpan={canEditProgress || canDeleteProgress ? 4 : 3}
-                        text="暂无进度记录"
-                      />
-                    )}
-                  </Table>
-                </section>
+                  </DetailTable>
+                </SubresourceCard>
               )}
             </div>
           )}
@@ -2996,20 +2761,22 @@ function ProjectDetailPage() {
           {activeTab === "acceptance" && (
             <div className="space-y-6">
               {detail.capabilities.acceptances && (
-                <section className="border-border rounded-md border p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <SectionTitle>验收项（{detail.acceptances?.length ?? 0}）</SectionTitle>
-                    {canAddAcceptance && (
+                <SubresourceCard
+                  title="验收项"
+                  count={detail.acceptances?.length ?? 0}
+                  action={
+                    canAddAcceptance ? (
                       <button
                         type="button"
                         onClick={openAcceptanceCreate}
                         className={BUTTON_PRIMARY_CLASS}
                       >
-                        添加验收项
+                        + 添加验收项
                       </button>
-                    )}
-                  </div>
-                  <Table
+                    ) : undefined
+                  }
+                >
+                  <DetailTable
                     headers={[
                       "验收项",
                       "计划日期",
@@ -3018,63 +2785,46 @@ function ProjectDetailPage() {
                       "结果说明",
                       ...(canEditAcceptance || canDeleteAcceptance ? ["操作"] : []),
                     ]}
+                    colSpan={canEditAcceptance || canDeleteAcceptance ? 6 : 5}
+                    emptyText="暂无验收项"
                   >
                     {(detail.acceptances ?? []).map((a) => (
-                      <tr key={a.id}>
-                        <td className="px-3 py-2 text-ink-primary">{a.name}</td>
-                        <td className="px-3 py-2 text-ink-secondary">{formatDate(a.expectedDate)}</td>
-                        <td className="px-3 py-2 text-ink-secondary">{formatDate(a.actualDate)}</td>
-                        <td className="px-3 py-2">
+                      <tr key={a.id} className="transition-colors hover:bg-brand-50/40">
+                        <td className="px-4 py-3 font-medium text-ink-primary"><TruncatedCell text={a.name} maxWidth="max-w-[14rem]" /></td>
+                        <td className="px-4 py-3 text-ink-secondary">{formatDate(a.expectedDate)}</td>
+                        <td className="px-4 py-3 text-ink-secondary">{formatDate(a.actualDate)}</td>
+                        <td className="px-4 py-3">
                           <StatusBadge
                             status={a.result}
                             label={ACCEPTANCE_RESULT_LABELS[a.result] ?? a.result}
                             tone={ACCEPTANCE_TONE_MAP[a.result] ?? "neutral"}
                           />
                         </td>
-                        <td className="px-3 py-2 text-ink-secondary">{a.resultNote ?? "—"}</td>
+                        <td className="px-4 py-3 text-ink-secondary"><TruncatedCell text={a.resultNote} maxWidth="max-w-[14rem]" /></td>
                         {(canEditAcceptance || canDeleteAcceptance) && (
-                          <td className="px-3 py-2">
-                            <div className="flex items-center gap-2">
-                              {canEditAcceptance && (
-                                <button
-                                  type="button"
-                                  onClick={() => openAcceptanceEdit(a)}
-                                  className="text-sm text-brand-600 hover:underline"
-                                >
-                                  编辑
-                                </button>
-                              )}
-                              {canDeleteAcceptance && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setDeleteTarget({ resource: "acceptance", id: a.id, name: a.name })
-                                  }
-                                  className="text-sm text-status-danger-text hover:underline"
-                                >
-                                  删除
-                                </button>
-                              )}
-                            </div>
+                          <td className="px-4 py-3 text-right">
+                            <RowActionButtons
+                              onEdit={canEditAcceptance ? () => openAcceptanceEdit(a) : undefined}
+                              onDelete={
+                                canDeleteAcceptance
+                                  ? () =>
+                                      setDeleteTarget({ resource: "acceptance", id: a.id, name: a.name })
+                                  : undefined
+                              }
+                            />
                           </td>
                         )}
                       </tr>
                     ))}
-                    {(detail.acceptances ?? []).length === 0 && (
-                      <EmptyRow
-                        colSpan={canEditAcceptance || canDeleteAcceptance ? 6 : 5}
-                        text="暂无验收项"
-                      />
-                    )}
-                  </Table>
-                </section>
+                  </DetailTable>
+                </SubresourceCard>
               )}
               {detail.capabilities.closure && detail.closure && (
-                <section className="border-border rounded-md border p-4">
-                  <SectionTitle>结项</SectionTitle>
+                <section className="rounded-lg border border-border bg-surface p-4">
+                  <h3 className="mb-3 text-sm font-semibold text-ink-primary">结项</h3>
                   <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                     <InfoItem label="结项时间" value={formatDate(detail.closure.closedAt)} />
-                    <InfoItem label="结项原因" value={detail.closure.reason} />
+                    <InfoItem label="结项原因" value={<TruncatedCell text={detail.closure.reason} maxWidth="max-w-[16rem]" />} />
                   </div>
                 </section>
               )}
@@ -3082,24 +2832,26 @@ function ProjectDetailPage() {
           )}
 
           {activeTab === "tags" && (
-            <section className="border-border rounded-md border p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <SectionTitle>标签（{detail.tags?.length ?? 0}）</SectionTitle>
-                {canAddTag && (
+            <SubresourceCard
+              title="标签"
+              count={detail.tags?.length ?? 0}
+              action={
+                canAddTag ? (
                   <button
                     type="button"
                     onClick={openTagCreate}
                     className={BUTTON_PRIMARY_CLASS}
                   >
-                    添加标签
+                    + 添加标签
                   </button>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-2">
+                ) : undefined
+              }
+            >
+              <div className="flex flex-wrap gap-2 px-4 py-4">
                 {(detail.tags ?? []).map((t) => (
                   <span
                     key={t.id}
-                    className="rounded-md border px-2.5 py-1 text-sm text-ink-secondary"
+                    className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm text-ink-secondary"
                     style={{
                       backgroundColor: t.tag?.color ? `${t.tag.color}1a` : undefined,
                       borderColor: t.tag?.color ?? undefined,
@@ -3116,9 +2868,12 @@ function ProjectDetailPage() {
                             name: t.tag?.name ?? t.tag?.code ?? "标签",
                           })
                         }
-                        className="ml-1.5 text-xs text-status-danger-text hover:underline"
+                        aria-label="删除标签"
+                        className="ml-1 rounded p-0.5 text-xs text-status-danger-text transition-colors hover:bg-red-50"
                       >
-                        删除
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
                       </button>
                     )}
                   </span>
@@ -3127,7 +2882,7 @@ function ProjectDetailPage() {
                   <p className="text-sm text-ink-muted">暂无标签</p>
                 )}
               </div>
-            </section>
+            </SubresourceCard>
           )}
         </div>
       </EntityDetailWorkspace>
@@ -3361,11 +3116,11 @@ function ProjectDetailPage() {
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          className="animate-fade-in fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-[2px]"
           onClick={closeTransition}
         >
           <div
-            className="border-border bg-surface shadow-elevation-lg w-full max-w-md rounded-lg border p-5"
+            className="animate-dialog-in border-border bg-surface shadow-elevation-lg w-full max-w-md rounded-lg border p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-ink-primary text-base font-semibold">阶段流转</h2>
@@ -3425,7 +3180,7 @@ function ProjectDetailPage() {
                 type="button"
                 onClick={closeTransition}
                 disabled={transitionDialog.saving}
-                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-50"
+                className={BUTTON_SECONDARY_CLASS + " disabled:cursor-not-allowed disabled:opacity-50"}
               >
                 取消
               </button>
@@ -3448,11 +3203,11 @@ function ProjectDetailPage() {
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          className="animate-fade-in fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-[2px]"
           onClick={closeClose}
         >
           <div
-            className="border-border bg-surface shadow-elevation-lg w-full max-w-md rounded-lg border p-5"
+            className="animate-dialog-in border-border bg-surface shadow-elevation-lg w-full max-w-md rounded-lg border p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-ink-primary text-base font-semibold">项目结项</h2>
@@ -3511,7 +3266,7 @@ function ProjectDetailPage() {
                 type="button"
                 onClick={closeClose}
                 disabled={closeDialog.saving}
-                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-50"
+                className={BUTTON_SECONDARY_CLASS + " disabled:cursor-not-allowed disabled:opacity-50"}
               >
                 取消
               </button>

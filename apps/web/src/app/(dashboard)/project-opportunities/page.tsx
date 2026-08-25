@@ -1,21 +1,28 @@
 "use client";
 
 /**
- * Project Opportunities — 项目机会列表页（F2-4A CRM/Project Workspace，CTO #11974）
+ * Project Opportunities — 项目机会列表页（UI-06 Opportunity + Project 现代重构）
  *
  * 依据 Contract Card（project-opportunities.md）：backend CRUD FINAL + convert，
- * 本 Wave 开放 List/Detail。结构：AppPage + EntityListWorkspace（Header → Toolbar → Table → Pagination）。
+ * 本线开放 List/Detail 现代视觉。结构：AppPage + EntityListWorkspace（Header → Toolbar → Table → Pagination）。
  * 不改 backend / 状态机 / action；Create/Edit 表单见 F2-4A2（customer selector 数据源 /api/business-partners?type=CUSTOMER，P0-1 SSOT）。
+ * UI-06：阶段文案/语义色统一消费 lib/project-stage.ts；金额列右对齐 tabular-nums；行操作收进右侧浮现区。
  */
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatMoneyValue } from "@/lib/format";
+import {
+  PROJECT_STAGE_LABELS,
+  PROJECT_STAGE_OPTIONS,
+  PROJECT_STAGE_TONES,
+} from "@/lib/project-stage";
 
 interface OpportunityRow {
   id: string;
@@ -35,54 +42,17 @@ interface OpportunityRow {
   followUpThresholdDays: number;
 }
 
-const STAGE_OPTIONS = [
-  "LEAD",
-  "QUALIFIED",
-  "SOLUTION",
-  "QUOTATION",
-  "SAMPLING",
-  "TESTING",
-  "SMALL_BATCH",
-  "MASS_SUPPLY",
-  "PAUSED",
-  "FAILED",
-  "CLOSED",
-] as const;
-
-const STAGE_LABELS: Record<string, string> = {
-  LEAD: "线索",
-  QUALIFIED: "准入",
-  SOLUTION: "方案",
-  QUOTATION: "报价",
-  SAMPLING: "试样",
-  TESTING: "测试",
-  SMALL_BATCH: "小批量",
-  MASS_SUPPLY: "批量供货",
-  PAUSED: "暂停",
-  FAILED: "失败",
-  CLOSED: "结项",
-};
-
-const STAGE_TONE_MAP: Record<string, "success" | "neutral" | "warning" | "danger" | "info"> = {
-  LEAD: "neutral",
-  QUALIFIED: "info",
-  SOLUTION: "info",
-  QUOTATION: "warning",
-  SAMPLING: "neutral",
-  TESTING: "warning",
-  SMALL_BATCH: "warning",
-  MASS_SUPPLY: "success",
-  PAUSED: "warning",
-  FAILED: "danger",
-  CLOSED: "neutral",
-};
-
 function OpportunityList() {
   const { state } = useSession();
+  const router = useRouter();
   const canCreate =
     state.status === "authenticated" &&
     state.user !== null &&
     hasPermission(state.user.roles as RoleCode[], actionPermission("project-opportunity", "create"));
+  const canEdit =
+    state.status === "authenticated" &&
+    state.user !== null &&
+    hasPermission(state.user.roles as RoleCode[], actionPermission("project-opportunity", "edit"));
   const [codeInput, setCodeInput] = useState("");
   const [nameInput, setNameInput] = useState("");
   const [stageInput, setStageInput] = useState("");
@@ -150,9 +120,9 @@ function OpportunityList() {
               className={SELECT_CLASS}
             >
               <option value="">全部阶段</option>
-              {STAGE_OPTIONS.map((s) => (
-                <option key={s} value={s}>
-                  {STAGE_LABELS[s]}
+              {PROJECT_STAGE_OPTIONS.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
                 </option>
               ))}
             </select>
@@ -194,7 +164,11 @@ function OpportunityList() {
             key: "stage",
             header: "阶段",
             render: (row) => (
-              <StatusBadge status={row.stage} label={STAGE_LABELS[row.stage]} tone={STAGE_TONE_MAP[row.stage]} />
+              <StatusBadge
+                status={row.stage}
+                label={PROJECT_STAGE_LABELS[row.stage] ?? row.stage}
+                tone={PROJECT_STAGE_TONES[row.stage] ?? "neutral"}
+              />
             ),
           },
           { key: "customer", header: "客户", render: (row) => row.customer?.name ?? "—" },
@@ -238,11 +212,25 @@ function OpportunityList() {
                 "—"
               ),
           },
-          { key: "expectedRevenue", header: "预计营收", render: (row) => row.expectedRevenue ?? "—" },
+          {
+            key: "expectedRevenue",
+            header: "预计营收",
+            align: "right",
+            render: (row) => (
+              <span className="tabular-nums text-ink-primary">
+                {formatMoneyValue(row.expectedRevenue)}
+              </span>
+            ),
+          },
           {
             key: "successProbability",
             header: "成功率",
-            render: (row) => (row.successProbability != null ? `${row.successProbability}%` : "—"),
+            align: "right",
+            render: (row) => (
+              <span className="tabular-nums text-ink-primary">
+                {row.successProbability != null ? `${row.successProbability}%` : "—"}
+              </span>
+            ),
           },
           { key: "createdAt", header: "创建时间", render: (row) => formatDate(row.createdAt) },
         ]}
@@ -255,6 +243,26 @@ function OpportunityList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        rowActions={(row) => (
+          <div className="flex justify-end gap-1">
+            <button
+              type="button"
+              onClick={() => router.push("/project-opportunities/" + row.id)}
+              className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary transition-colors hover:bg-slate-100"
+            >
+              详情
+            </button>
+            {canEdit ? (
+              <button
+                type="button"
+                onClick={() => router.push("/project-opportunities/" + row.id + "/edit")}
+                className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary transition-colors hover:bg-slate-100"
+              >
+                编辑
+              </button>
+            ) : null}
+          </div>
+        )}
       />
     </AppPage>
   );

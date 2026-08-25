@@ -1,13 +1,14 @@
 "use client";
 
 /**
- * Project Opportunities — 编辑项目机会（F2-4A2 CRM/Project Workspace，CTO #12030）
+ * Project Opportunities — 编辑项目机会（UI-06 Opportunity + Project 现代重构）
  *
  * 依据 Contract Card（project-opportunities.md）与 opportunityUpdateSchema 事实：
  * - PATCH 不含 code/customerId → 两项锁定展示（Create 可写 ≠ Edit 可改）
  * - 已转换机会（convertedAt != null）：stage 不允许修改（backend 409；前端镜像：禁用 + 不发送）
  * - 复用 EntityFormWorkspace + dirty guard + version CAS + isVersionConflict；reload 成功后才 clear dirty
  * - Convert（FRT-05 已开放）不在本页——唯一入口在商机详情页「转为项目」按钮
+ * UI-06：Skeleton 加载态；不暴露 raw ownerId 输入；保存成功 Toast。
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -16,9 +17,12 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { AppPage, EntityFormWorkspace, ErrorPanel } from "@/components/workspace";
+import { PageLoading } from "@/components/ui/skeleton";
+import { useToast } from "@/components/ui/toast";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
+import { PROJECT_PAYMENT_OPTIONS, PROJECT_STAGE_OPTIONS } from "@/lib/project-stage";
 
 interface OpportunityDetail {
   id: string;
@@ -42,27 +46,6 @@ interface OpportunityDetail {
   customer?: { id: string; code: string | null; name: string | null; type: string | null } | null;
 }
 
-const STAGE_OPTIONS = [
-  { value: "LEAD", label: "线索" },
-  { value: "QUALIFIED", label: "准入" },
-  { value: "SOLUTION", label: "方案" },
-  { value: "QUOTATION", label: "报价" },
-  { value: "SAMPLING", label: "试样" },
-  { value: "TESTING", label: "测试" },
-  { value: "SMALL_BATCH", label: "小批量" },
-  { value: "MASS_SUPPLY", label: "批量供货" },
-  { value: "PAUSED", label: "暂停" },
-  { value: "FAILED", label: "失败" },
-  { value: "CLOSED", label: "结项" },
-];
-
-const PAYMENT_OPTIONS = [
-  { value: "UNPAID", label: "未回款" },
-  { value: "PARTIAL", label: "部分回款" },
-  { value: "PAID", label: "已回款" },
-  { value: "OVERDUE", label: "逾期" },
-];
-
 const inputClass = INPUT_CLASS;
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -74,16 +57,15 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-
 function OpportunityEditForm() {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
   const router = useRouter();
+  const toast = useToast();
 
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [stage, setStage] = useState("LEAD");
-  const [ownerId, setOwnerId] = useState("");
   const [customerInvestment, setCustomerInvestment] = useState("");
   const [expectedRevenue, setExpectedRevenue] = useState("");
   const [expectedCost, setExpectedCost] = useState("");
@@ -115,7 +97,6 @@ function OpportunityEditForm() {
         setCode(d.code);
         setName(d.name);
         setStage(d.stage);
-        setOwnerId(d.ownerId ?? "");
         setCustomerInvestment(d.customerInvestment ?? "");
         setExpectedRevenue(d.expectedRevenue ?? "");
         setExpectedCost(d.expectedCost ?? "");
@@ -184,7 +165,6 @@ function OpportunityEditForm() {
     // 已转换机会：stage 不允许修改（不发送，backend 也会 409 拦截）
     const payload: Record<string, unknown> = {
       name: name.trim(),
-      ownerId: ownerId.trim() || null,
       customerInvestment: numOrNull(customerInvestment),
       expectedRevenue: numOrNull(expectedRevenue),
       expectedCost: numOrNull(expectedCost),
@@ -205,7 +185,10 @@ function OpportunityEditForm() {
       method: "PATCH",
       body: JSON.stringify(payload),
     })
-      .then(() => router.push(`/project-opportunities/${id}`))
+      .then(() => {
+        toast.success("项目机会已保存");
+        router.push(`/project-opportunities/${id}`);
+      })
       .catch((err: unknown) => {
         setError(
           err instanceof ApiClientError ? err : new ApiClientError(0, "网络错误", "NETWORK_ERROR"),
@@ -228,8 +211,8 @@ function OpportunityEditForm() {
   if (loading) {
     return (
       <AppPage>
-        <div className="border-border bg-surface rounded-lg border p-6 text-sm text-ink-muted">
-          加载中…
+        <div className="border-border bg-surface shadow-elevation-sm overflow-hidden rounded-lg border">
+          <PageLoading rows={4} />
         </div>
       </AppPage>
     );
@@ -267,15 +250,12 @@ function OpportunityEditForm() {
               disabled={Boolean(convertedAt)}
               className={inputClass}
             >
-              {STAGE_OPTIONS.map((s) => (
+              {PROJECT_STAGE_OPTIONS.map((s) => (
                 <option key={s.value} value={s.value}>
                   {s.label}
                 </option>
               ))}
             </select>
-          </FormField>
-          <FormField label="负责人">
-            <input value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className={inputClass} placeholder="负责人 ID（可选）" />
           </FormField>
         </Section>
 
@@ -303,7 +283,7 @@ function OpportunityEditForm() {
           </FormField>
           <FormField label="回款状态">
             <select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)} className={inputClass}>
-              {PAYMENT_OPTIONS.map((p) => (
+              {PROJECT_PAYMENT_OPTIONS.map((p) => (
                 <option key={p.value} value={p.value}>
                   {p.label}
                 </option>

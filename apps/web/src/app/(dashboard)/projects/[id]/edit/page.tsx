@@ -1,16 +1,17 @@
 "use client";
 
 /**
- * Projects — 编辑项目（F2-4A2 CRM/Project Workspace，CTO #12030）
+ * Projects — 编辑项目（UI-06 Opportunity + Project 现代重构）
  *
  * 依据 Contract Card（projects.md）与 projectUpdateSchema 事实（backend PATCH 极窄）：
  * 只允许：name / priority / ownerId / description / progressPercent / projectRating / version
  * 以下必须 readonly：code / customer / opportunity / stage / expectedContractAmount /
  * expectedProfit / expectedGrossMarginRate / paymentStatus
- * stage 绝不能通过 Edit 表单直接修改（只能走 /projects/:id/transition，本轮 HOLD）。
+ * stage 绝不能通过 Edit 表单直接修改（只能走 /projects/:id/transition）。
  * closure 可见性不影响结项判断：结项由 stage === "CLOSED" 决定（CTO #12142，无 project-closure:view 时
  * backend 不返回 closure 字段，但 stage 始终返回；backend 结项同事务把 stage 置为 CLOSED，PATCH 返回 409）。
  * 复用 EntityFormWorkspace + dirty guard + version CAS + isVersionConflict；reload 成功后才 clear dirty。
+ * UI-06：Skeleton 加载态；不暴露 raw ownerId 输入；只读金额 formatMoneyValue；保存成功 Toast。
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -19,9 +20,13 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { AppPage, EntityFormWorkspace, ErrorPanel } from "@/components/workspace";
+import { PageLoading } from "@/components/ui/skeleton";
+import { useToast } from "@/components/ui/toast";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
+import { formatMoneyValue } from "@/lib/format";
+import { PROJECT_PAYMENT_LABELS, PROJECT_PRIORITY_OPTIONS, PROJECT_STAGE_LABELS } from "@/lib/project-stage";
 
 interface ProjectDetail {
   id: string;
@@ -43,33 +48,6 @@ interface ProjectDetail {
   closure?: { id: string; closedAt: string | null; reason: string | null } | null;
 }
 
-const PRIORITY_OPTIONS = [
-  { value: "HIGH", label: "高" },
-  { value: "MEDIUM", label: "中" },
-  { value: "LOW", label: "低" },
-];
-
-const STAGE_LABELS: Record<string, string> = {
-  LEAD: "线索",
-  QUALIFIED: "准入",
-  SOLUTION: "方案",
-  QUOTATION: "报价",
-  SAMPLING: "试样",
-  TESTING: "测试",
-  SMALL_BATCH: "小批量",
-  MASS_SUPPLY: "批量供货",
-  PAUSED: "暂停",
-  FAILED: "失败",
-  CLOSED: "结项",
-};
-
-const PAYMENT_LABELS: Record<string, string> = {
-  UNPAID: "未回款",
-  PARTIAL: "部分回款",
-  PAID: "已回款",
-  OVERDUE: "逾期",
-};
-
 const inputClass = INPUT_CLASS;
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -81,15 +59,14 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-
 function ProjectEditForm() {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
   const router = useRouter();
+  const toast = useToast();
 
   const [name, setName] = useState("");
   const [priority, setPriority] = useState("");
-  const [ownerId, setOwnerId] = useState("");
   const [description, setDescription] = useState("");
   const [progressPercent, setProgressPercent] = useState("");
   const [projectRating, setProjectRating] = useState("");
@@ -124,7 +101,6 @@ function ProjectEditForm() {
         setName(d.name);
         setStage(d.stage);
         setPriority(d.priority ?? "");
-        setOwnerId(d.ownerId ?? "");
         setDescription(d.description ?? "");
         setProgressPercent(d.progressPercent ?? "");
         setProjectRating(d.projectRating ?? "");
@@ -172,11 +148,10 @@ function ProjectEditForm() {
     setSubmitting(true);
     setError(null);
 
-    // 只发送 backend PATCH 允许的字段（projectUpdateSchema 极窄）
+    // 只发送 backend PATCH 允许的字段（projectUpdateSchema 极窄；ownerId 不暴露 raw ID 输入）
     const payload: Record<string, unknown> = {
       name: name.trim(),
       priority: priority || null,
-      ownerId: ownerId.trim() || null,
       description: description.trim() || null,
       progressPercent:
         progressPercent.trim() === "" ? null : Number(progressPercent),
@@ -188,7 +163,10 @@ function ProjectEditForm() {
       method: "PATCH",
       body: JSON.stringify(payload),
     })
-      .then(() => router.push(`/projects/${id}`))
+      .then(() => {
+        toast.success("项目已保存");
+        router.push(`/projects/${id}`);
+      })
       .catch((err: unknown) => {
         setError(
           err instanceof ApiClientError ? err : new ApiClientError(0, "网络错误", "NETWORK_ERROR"),
@@ -211,8 +189,8 @@ function ProjectEditForm() {
   if (loading) {
     return (
       <AppPage>
-        <div className="border-border bg-surface rounded-lg border p-6 text-sm text-ink-muted">
-          加载中…
+        <div className="border-border bg-surface shadow-elevation-sm overflow-hidden rounded-lg border">
+          <PageLoading rows={4} />
         </div>
       </AppPage>
     );
@@ -262,20 +240,17 @@ function ProjectEditForm() {
             <input value={opportunityLabel} disabled className={inputClass} />
           </FormField>
           <FormField label="阶段">
-            <input value={STAGE_LABELS[stage] ?? stage} disabled className={inputClass} />
+            <input value={PROJECT_STAGE_LABELS[stage] ?? stage} disabled className={inputClass} />
           </FormField>
           <FormField label="优先级">
             <select value={priority} onChange={(e) => setPriority(e.target.value)} className={inputClass}>
               <option value="">请选择</option>
-              {PRIORITY_OPTIONS.map((p) => (
+              {PROJECT_PRIORITY_OPTIONS.map((p) => (
                 <option key={p.value} value={p.value}>
                   {p.label}
                 </option>
               ))}
             </select>
-          </FormField>
-          <FormField label="负责人">
-            <input value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className={inputClass} placeholder="负责人 ID（可选）" />
           </FormField>
           <FormField label="进度（%）">
             <input type="number" min={0} max={100} value={progressPercent} onChange={(e) => setProgressPercent(e.target.value)} className={inputClass} />
@@ -287,16 +262,16 @@ function ProjectEditForm() {
 
         <Section title="商务字段（只读，Edit 不可修改）">
           <FormField label="预计合同金额">
-            <input value={expectedContractAmount} disabled className={inputClass} />
+            <input value={formatMoneyValue(expectedContractAmount)} disabled className={inputClass} />
           </FormField>
           <FormField label="预计利润">
-            <input value={expectedProfit} disabled className={inputClass} />
+            <input value={formatMoneyValue(expectedProfit)} disabled className={inputClass} />
           </FormField>
           <FormField label="预计毛利率（%）">
             <input value={expectedGrossMarginRate} disabled className={inputClass} />
           </FormField>
           <FormField label="回款状态">
-            <input value={PAYMENT_LABELS[paymentStatus] ?? paymentStatus} disabled className={inputClass} />
+            <input value={PROJECT_PAYMENT_LABELS[paymentStatus] ?? paymentStatus} disabled className={inputClass} />
           </FormField>
         </Section>
 

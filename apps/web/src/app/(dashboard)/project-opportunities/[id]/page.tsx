@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Project Opportunities — 项目机会详情页（F2-4A CRM/Project Workspace，CTO #11974）
+ * Project Opportunities — 项目机会详情页（UI-06 Opportunity + Project 现代重构）
  *
  * 依据 Contract Card（project-opportunities.md）：backend CRUD FINAL + convert。
  * 结构：AppPage + EntityDetailWorkspace（Header Summary → Status → Actions → Sections）。
@@ -13,6 +13,7 @@
  *  - 409 ALREADY_CONVERTED（并发/重复点击）→ 展示真实错误并允许重试
  * 商机→报价→订单 MVP：新增「创建报价」入口（→ /sales/quotations/new?opportunityId=…）与
  * 关联报价只读区块（GET 详情 include quotations 投影，数据真实、零 mock）。
+ * UI-06：Skeleton 加载态；金额 formatMoneyValue；转换成功 Toast；不展示 raw ownerId（红线：raw DB ID 不显示）。
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -22,9 +23,12 @@ import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shar
 import { useSession } from "@/lib/session-context";
 import { AppPage, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
 import { StatusBadge } from "@/components/workspace/status-badge";
+import { PageLoading } from "@/components/ui/skeleton";
+import { useToast } from "@/components/ui/toast";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
-import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
-import { formatDate, formatMoney } from "@/lib/format";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
+import { formatDate, formatMoney, formatMoneyValue } from "@/lib/format";
+import { PROJECT_STAGE_LABELS, PROJECT_STAGE_TONES } from "@/lib/project-stage";
 
 interface OpportunityDetail {
   id: string;
@@ -63,34 +67,6 @@ interface OpportunityDetail {
     salesOrderId: string | null;
   }>;
 }
-
-const STAGE_LABELS: Record<string, string> = {
-  LEAD: "线索",
-  QUALIFIED: "准入",
-  SOLUTION: "方案",
-  QUOTATION: "报价",
-  SAMPLING: "试样",
-  TESTING: "测试",
-  SMALL_BATCH: "小批量",
-  MASS_SUPPLY: "批量供货",
-  PAUSED: "暂停",
-  FAILED: "失败",
-  CLOSED: "结项",
-};
-
-const STAGE_TONE_MAP: Record<string, "success" | "neutral" | "warning" | "danger" | "info"> = {
-  LEAD: "neutral",
-  QUALIFIED: "info",
-  SOLUTION: "info",
-  QUOTATION: "warning",
-  SAMPLING: "neutral",
-  TESTING: "warning",
-  SMALL_BATCH: "warning",
-  MASS_SUPPLY: "success",
-  PAUSED: "warning",
-  FAILED: "danger",
-  CLOSED: "neutral",
-};
 
 const PAYMENT_LABELS: Record<string, string> = {
   UNPAID: "未回款",
@@ -134,6 +110,7 @@ function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
 
 function OpportunityDetailPage() {
   const { state } = useSession();
+  const toast = useToast();
   const canEdit =
     state.status === "authenticated" &&
     state.user !== null &&
@@ -192,6 +169,7 @@ function OpportunityDetailPage() {
         setConvertError(new ApiClientError(500, "转换成功但未返回项目信息", "INVALID_RESPONSE"));
         return;
       }
+      toast.success("商机已转为项目");
       router.push(`/projects/${projectId}`);
     } catch (err) {
       setConvertError(
@@ -205,8 +183,8 @@ function OpportunityDetailPage() {
   if (loading) {
     return (
       <AppPage>
-        <div className="border-border bg-surface rounded-lg border p-6 text-sm text-ink-muted">
-          加载中…
+        <div className="border-border bg-surface shadow-elevation-sm overflow-hidden rounded-lg border">
+          <PageLoading rows={4} />
         </div>
       </AppPage>
     );
@@ -229,8 +207,8 @@ function OpportunityDetailPage() {
         title={`项目机会详情 — ${detail.code}`}
         backHref="/project-opportunities"
         status={detail.stage}
-        statusLabel={STAGE_LABELS[detail.stage] ?? detail.stage}
-        statusTone={STAGE_TONE_MAP[detail.stage] ?? "neutral"}
+        statusLabel={PROJECT_STAGE_LABELS[detail.stage] ?? detail.stage}
+        statusTone={PROJECT_STAGE_TONES[detail.stage] ?? "neutral"}
         actions={
           canEdit || canCreateQuotation || canConvert || detail.project ? (
             <>
@@ -263,7 +241,7 @@ function OpportunityDetailPage() {
               {canEdit && (
                 <Link
                   href={"/project-opportunities/" + id + "/edit"}
-                  className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-canvas"
+                  className={BUTTON_SECONDARY_CLASS}
                 >
                   编辑
                 </Link>
@@ -277,18 +255,17 @@ function OpportunityDetailPage() {
             <InfoItem label="机会名称" value={detail.name} />
             <InfoItem label="客户" value={detail.customer?.name} />
             <InfoItem label="客户类型" value={detail.customer?.type} />
-            <InfoItem label="预计营收" value={detail.expectedRevenue} />
-            <InfoItem label="预计成本" value={detail.expectedCost} />
-            <InfoItem label="毛利" value={detail.grossProfit} />
+            <InfoItem label="预计营收" value={formatMoneyValue(detail.expectedRevenue)} />
+            <InfoItem label="预计成本" value={formatMoneyValue(detail.expectedCost)} />
+            <InfoItem label="毛利" value={formatMoneyValue(detail.grossProfit)} />
             <InfoItem
               label="成功率"
               value={detail.successProbability != null ? `${detail.successProbability}%` : null}
             />
             <InfoItem label="回款状态" value={PAYMENT_LABELS[detail.paymentStatus] ?? detail.paymentStatus} />
-            <InfoItem label="费用预算" value={detail.expenseBudget} />
-            <InfoItem label="销售目标" value={detail.salesTarget} />
-            <InfoItem label="客户投入" value={detail.customerInvestment} />
-            <InfoItem label="负责人" value={detail.ownerId} />
+            <InfoItem label="费用预算" value={formatMoneyValue(detail.expenseBudget)} />
+            <InfoItem label="销售目标" value={formatMoneyValue(detail.salesTarget)} />
+            <InfoItem label="客户投入" value={formatMoneyValue(detail.customerInvestment)} />
             <InfoItem
               label="已转项目"
               value={
@@ -354,7 +331,7 @@ function OpportunityDetailPage() {
               <button
                 type="button"
                 onClick={() => setConvertError(null)}
-                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-canvas"
+                className={BUTTON_SECONDARY_CLASS}
               >
                 关闭
               </button>
@@ -373,19 +350,19 @@ function OpportunityDetailPage() {
               相关报价（{detail.quotations.length}）
             </h2>
             <div className="overflow-x-auto">
-              <table className="divide-border min-w-full divide-y text-sm">
+              <table className="min-w-full divide-y divide-border text-sm">
                 <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
                   <tr>
-                    <th className="px-3 py-2 font-medium">报价单号</th>
-                    <th className="px-3 py-2 font-medium">状态</th>
-                    <th className="px-3 py-2 font-medium">报价日期</th>
-                    <th className="px-3 py-2 text-right font-medium">含税合计</th>
-                    <th className="px-3 py-2 font-medium">销售订单</th>
+                    <th className="px-3 py-2 font-semibold">报价单号</th>
+                    <th className="px-3 py-2 font-semibold">状态</th>
+                    <th className="px-3 py-2 font-semibold">报价日期</th>
+                    <th className="px-3 py-2 text-right font-semibold">含税合计</th>
+                    <th className="px-3 py-2 font-semibold">销售订单</th>
                   </tr>
                 </thead>
-                <tbody className="divide-border divide-y">
+                <tbody className="divide-y divide-border">
                   {detail.quotations.map((q) => (
-                    <tr key={q.id}>
+                    <tr key={q.id} className="transition-colors hover:bg-brand-50/40">
                       <td className="px-3 py-2">
                         <Link href={"/sales/quotations/" + q.id} className="text-brand-600 hover:underline">
                           {q.code}

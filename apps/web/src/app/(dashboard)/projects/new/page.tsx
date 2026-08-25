@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Projects — 新建项目（F2-4A2 CRM/Project Workspace，CTO #12030）
+ * Projects — 新建项目（UI-06 Opportunity + Project 现代重构）
  *
  * 依据 Contract Card（projects.md）与 projectCreateSchema 事实：
  * code/name/customerId 必填；stage 默认 SAMPLING；priority/ownerId/description/
@@ -9,6 +9,7 @@
  * 纪律：Project Create 是独立项目创建，**不模拟 Opportunity → Project conversion**
  * （唯一正确入口是 /project-opportunities/:id/convert，FRT-05 已开放，不在本页）。
  * Customer 使用 /api/business-partners?type=CUSTOMER 选择器（P0-1 SSOT：option.id = BusinessPartner.id = POST customerId = 后端校验 id）。
+ * UI-06：不暴露 raw ownerId 输入（红线：无真实用户选择器 API 时不渲染 raw DB ID 输入）；保存成功 Toast。
  */
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -16,38 +17,12 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { AppPage, EntityFormWorkspace, ReferenceSelector } from "@/components/workspace";
+import { useToast } from "@/components/ui/toast";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { loadCustomerOptions, type CustomerOption } from "@/lib/frontend/customer-options";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
-
-
-const STAGE_OPTIONS = [
-  { value: "LEAD", label: "线索" },
-  { value: "QUALIFIED", label: "准入" },
-  { value: "SOLUTION", label: "方案" },
-  { value: "QUOTATION", label: "报价" },
-  { value: "SAMPLING", label: "试样" },
-  { value: "TESTING", label: "测试" },
-  { value: "SMALL_BATCH", label: "小批量" },
-  { value: "MASS_SUPPLY", label: "批量供货" },
-  { value: "PAUSED", label: "暂停" },
-  { value: "FAILED", label: "失败" },
-  { value: "CLOSED", label: "结项" },
-];
-
-const PRIORITY_OPTIONS = [
-  { value: "HIGH", label: "高" },
-  { value: "MEDIUM", label: "中" },
-  { value: "LOW", label: "低" },
-];
-
-const PAYMENT_OPTIONS = [
-  { value: "UNPAID", label: "未回款" },
-  { value: "PARTIAL", label: "部分回款" },
-  { value: "PAID", label: "已回款" },
-  { value: "OVERDUE", label: "逾期" },
-];
+import { PROJECT_PAYMENT_OPTIONS, PROJECT_PRIORITY_OPTIONS, PROJECT_STAGE_OPTIONS } from "@/lib/project-stage";
 
 const inputClass = INPUT_CLASS;
 
@@ -60,9 +35,9 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-
 function ProjectCreateForm() {
   const router = useRouter();
+  const toast = useToast();
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [selectorsLoading, setSelectorsLoading] = useState(true);
 
@@ -71,7 +46,6 @@ function ProjectCreateForm() {
   const [customerId, setCustomerId] = useState("");
   const [stage, setStage] = useState("SAMPLING");
   const [priority, setPriority] = useState("");
-  const [ownerId, setOwnerId] = useState("");
   const [description, setDescription] = useState("");
   const [expectedContractAmount, setExpectedContractAmount] = useState("");
   const [expectedProfit, setExpectedProfit] = useState("");
@@ -119,7 +93,6 @@ function ProjectCreateForm() {
       customerId,
       stage: stage || undefined,
       priority: priority || null,
-      ownerId: ownerId.trim() || null,
       description: description.trim() || null,
       expectedContractAmount: numOrUndefined(expectedContractAmount),
       expectedProfit: numOrUndefined(expectedProfit),
@@ -132,6 +105,7 @@ function ProjectCreateForm() {
       body: JSON.stringify(payload),
     })
       .then((body) => {
+        toast.success("项目已创建");
         router.push(`/projects/${body.data.id}`);
       })
       .catch((err: unknown) => {
@@ -175,7 +149,7 @@ function ProjectCreateForm() {
           </FormField>
           <FormField label="阶段">
             <select value={stage} onChange={(e) => setStage(e.target.value)} className={inputClass}>
-              {STAGE_OPTIONS.map((s) => (
+              {PROJECT_STAGE_OPTIONS.map((s) => (
                 <option key={s.value} value={s.value}>
                   {s.label}
                 </option>
@@ -185,15 +159,12 @@ function ProjectCreateForm() {
           <FormField label="优先级">
             <select value={priority} onChange={(e) => setPriority(e.target.value)} className={inputClass}>
               <option value="">请选择</option>
-              {PRIORITY_OPTIONS.map((p) => (
+              {PROJECT_PRIORITY_OPTIONS.map((p) => (
                 <option key={p.value} value={p.value}>
                   {p.label}
                 </option>
               ))}
             </select>
-          </FormField>
-          <FormField label="负责人">
-            <input value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className={inputClass} placeholder="负责人 ID（可选）" />
           </FormField>
         </Section>
 
@@ -209,7 +180,7 @@ function ProjectCreateForm() {
           </FormField>
           <FormField label="回款状态">
             <select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)} className={inputClass}>
-              {PAYMENT_OPTIONS.map((p) => (
+              {PROJECT_PAYMENT_OPTIONS.map((p) => (
                 <option key={p.value} value={p.value}>
                   {p.label}
                 </option>
