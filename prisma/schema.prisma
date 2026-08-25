@@ -1484,6 +1484,8 @@ model ProjectExpense {
   projectId   String
   project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   category    String // 费用科目
+  expenseType String? // 费用类型（差旅/业务招待/办公/通讯/交通/培训/其他；与科目区分的高层分类；Migration 0054）
+  expenseAttribution String? // 费用归属（公司承担/客户承担/项目承担/其他；Migration 0054）
   amount      Decimal  @db.Decimal(14, 2)
   currency    String   @default("CNY")
   incurredAt  DateTime?
@@ -1492,6 +1494,8 @@ model ProjectExpense {
   createdById String?
   updatedById String?
   approvedById String?
+  rejectionReason String? // 驳回原因（REJECTED 时记录；Migration 0054）
+  rejectedById   String? // 驳回人（REJECTED 时记录；Migration 0054）
   approvalStatus ApprovalStatus @default(DRAFT)
   version     Int      @default(1)
   deletedAt   DateTime?
@@ -6887,6 +6891,34 @@ model ActivityComment {
   @@index([activityId])
   @@index([createdAt])
 }
+
+// ============================================================================
+// 经营目标（feat(crm) expense-analytics，Migration 0054）
+// 固定看板「目标值/达成率」最小目标表：period / dimensionType / dimensionValue / targetAmount。
+// 复用决策：无既有全局目标模型（Project/Opportunity.salesTarget 为单项目字段，非看板目标），故新建最小表。
+// period 键 = Asia/Shanghai 业务期（day=YYYY-MM-DD / month=YYYY-MM / year=YYYY）；
+// dimensionType ∈ { SALES_AMOUNT, NEW_CUSTOMERS, NEW_OPPORTUNITIES, QUOTATIONS, VISITS, FOLLOW_UPS }；
+// dimensionValue：全局目标 = "ALL"；区域目标 = BusinessPartner.region 值。
+// HOLD：Metric Engine / OLAP / DW / BI Platform / Rule DSL（目标仅静态配置 + 只读聚合达成率）。
+// ============================================================================
+model ReportTarget {
+  id             String   @id @default(cuid())
+  period         String // 期间键（如 2026-08 / 2026 / 2026-08-21）
+  dimensionType  String // 维度类型（SALES_AMOUNT / NEW_CUSTOMERS / NEW_OPPORTUNITIES / QUOTATIONS / VISITS / FOLLOW_UPS）
+  dimensionValue String   @default("ALL") // 维度值（全局 "ALL"；区域 = BusinessPartner.region）
+  targetAmount   Decimal  @db.Decimal(18, 2) // 目标值（金额或数量，按 dimensionType 语义）
+  isActive       Boolean  @default(true)
+  createdById    String?
+  updatedById    String?
+  version        Int      @default(1)
+  deletedAt      DateTime?
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([period, dimensionType, dimensionValue])
+  @@index([deletedAt])
+}
+
 
 // ============================================================================
 // Phase 3 MVP - Customer Profile Relations（客户档案剩余能力：单客户多产品 / 单客户多供应商）

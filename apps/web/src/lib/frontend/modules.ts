@@ -101,6 +101,15 @@ const CONTRACT_CRUD_ACTIONS: CapabilityFlags = {
   workflow: false,
   factActions: true,
 };
+/** 单据型：CRUD + 提交审批流（无事实动作——报销提交/批准/驳回仅状态迁移，不触发付款/GL） */
+const CONTRACT_CRUD_WORKFLOW: CapabilityFlags = {
+  list: true,
+  detail: true,
+  create: true,
+  edit: true,
+  workflow: true,
+  factActions: false,
+};
 /** 单据型：CRUD + 提交审批流 + 事实动作 */
 const CONTRACT_FULL: CapabilityFlags = {
   list: true,
@@ -238,13 +247,13 @@ const UI_LIST_DETAIL_CREATE_ACTIONS: CapabilityFlags = {
   workflow: false,
   factActions: true,
 };
-/** 列表 + 详情 + Create（报销申请 MVP：无 Edit 页、无审批流/事实动作；创建走既有项目费用 API） */
-const UI_LIST_DETAIL_CREATE: CapabilityFlags = {
+/** 列表 + 详情 + Create + 提交流（报销流程补齐：详情页提交/批准/驳回按钮；无独立 Edit 页、无事实动作） */
+const UI_LIST_DETAIL_CREATE_WORKFLOW: CapabilityFlags = {
   list: true,
   detail: true,
   create: true,
   edit: false,
-  workflow: false,
+  workflow: true,
   factActions: false,
 };
 /** 列表 + Create + 提交流 + 事实动作（F2-6B 批 2 贷项/借项通知单：无详情 GET 端点，submit/apply 内联在列表） */
@@ -369,9 +378,10 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     createPermission: actionPermission('customer-pool', 'create'),
     order: 5,
   },
-  // 报销申请（feat(crm) 报销申请 MVP）：复用 ProjectExpense 事实——客户归属直接走 Project → BusinessPartner，
+  // 报销申请（feat(crm) 报销申请 MVP + expense-analytics 流程补齐）：复用 ProjectExpense 事实——客户归属直接走 Project → BusinessPartner，
   // 不新造平行 Reimbursement/ExpenseClaim 模型；列表/详情消费只读 GET /api/expenses(+ /:id)，
-  // 创建复用既有 POST /api/projects/:id/expenses（单一写入源）。权限复用 project-expense:view/create。
+  // 创建复用既有 POST /api/projects/:id/expenses（单一写入源）；提交/批准/驳回走 /api/expenses/:id/{submit|approve|reject}
+  // （复用 approvalStatus 枚举，不新增工作流模型；权限复用 project-expense:view/create/edit/approve）。Migration 0051。
   {
     id: 'expenses',
     domain: 'customer-project',
@@ -379,7 +389,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/expenses',
     permission: actionPermission('project-expense', 'view'),
     availability: 'ready',
-    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_DETAIL_CREATE },
+    capabilities: { contract: CONTRACT_CRUD_WORKFLOW, ui: UI_LIST_DETAIL_CREATE_WORKFLOW },
     createRoute: '/expenses/new',
     createPermission: actionPermission('project-expense', 'create'),
     order: 6,

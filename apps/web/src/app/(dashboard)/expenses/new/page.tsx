@@ -45,6 +45,12 @@ const CATEGORY_SUGGESTIONS = [
   "其他",
 ];
 
+// 费用类型（高层分类，与科目区分；复用 ProjectExpense.expenseType 字符串字段）
+const EXPENSE_TYPE_SUGGESTIONS = ["差旅", "业务招待", "办公", "通讯", "交通", "培训", "其他"];
+
+// 费用归属（谁承担；复用 ProjectExpense.expenseAttribution 字符串字段）
+const EXPENSE_ATTRIBUTION_OPTIONS = ["公司承担", "客户承担", "项目承担", "其他"];
+
 const inputClass = INPUT_CLASS;
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -67,6 +73,8 @@ function ExpenseCreateForm() {
   const [values, setValues] = useState<Record<string, string>>({ customerId: "", projectId: "" });
 
   const [category, setCategory] = useState("");
+  const [expenseType, setExpenseType] = useState("");
+  const [expenseAttribution, setExpenseAttribution] = useState("");
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState("CNY");
   const [incurredAt, setIncurredAt] = useState("");
@@ -151,6 +159,8 @@ function ExpenseCreateForm() {
       method: "POST",
       body: JSON.stringify({
         category: category.trim(),
+        expenseType: expenseType.trim() || null,
+        expenseAttribution: expenseAttribution.trim() || null,
         amount: amountNum,
         currency: currency.trim() || "CNY",
         incurredAt: incurredAt ? new Date(incurredAt + "T00:00:00.000Z").toISOString() : null,
@@ -194,6 +204,31 @@ function ExpenseCreateForm() {
         </div>
       </Section>
       <Section title="费用信息">
+        <FormField label="费用类型">
+          <input
+            value={expenseType}
+            onChange={(e) => setExpenseType(e.target.value)}
+            maxLength={50}
+            list="expense-type-suggestions"
+            placeholder="如：差旅 / 业务招待 / 办公"
+            className={inputClass}
+          />
+          <datalist id="expense-type-suggestions">
+            {EXPENSE_TYPE_SUGGESTIONS.map((c) => (
+              <option key={c} value={c} />
+            ))}
+          </datalist>
+        </FormField>
+        <FormField label="费用归属">
+          <select value={expenseAttribution} onChange={(e) => setExpenseAttribution(e.target.value)} className={inputClass}>
+            <option value="">请选择归属</option>
+            {EXPENSE_ATTRIBUTION_OPTIONS.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </select>
+        </FormField>
         <FormField label="费用科目" required>
           <input
             value={category}

@@ -24,12 +24,16 @@ interface ExpenseRow {
   id: string;
   projectId: string;
   category: string;
+  expenseType: string | null;
+  expenseAttribution: string | null;
   amount: string;
   currency: string;
   incurredAt: string | null;
   note: string | null;
   approvalStatus: string;
   createdAt: string;
+  createdBy?: { id: string; name: string | null; email: string } | null;
+  approvedBy?: { id: string; name: string | null; email: string } | null;
   project?: {
     id: string;
     code: string | null;
@@ -58,6 +62,20 @@ const CUSTOMER_TYPE_LABELS: Record<string, string> = {
   BOTH: "客户兼供应商",
 };
 
+// 报销审批状态（Migration 0051：复用 ProjectExpense.approvalStatus 枚举）
+const APPROVAL_LABELS: Record<string, string> = {
+  DRAFT: "草稿",
+  PENDING: "待审批",
+  APPROVED: "已批准",
+  REJECTED: "已驳回",
+};
+const APPROVAL_TONE: Record<string, string> = {
+  DRAFT: "bg-slate-100 text-slate-600",
+  PENDING: "bg-amber-100 text-amber-700",
+  APPROVED: "bg-emerald-100 text-emerald-700",
+  REJECTED: "bg-rose-100 text-rose-700",
+};
+
 function ExpensesList() {
   const router = useRouter();
   const { state } = useSession();
@@ -72,7 +90,8 @@ function ExpensesList() {
   const [customerInput, setCustomerInput] = useState("");
   const [projectInput, setProjectInput] = useState("");
   const [categoryInput, setCategoryInput] = useState("");
-  const [filters, setFilters] = useState<{ customerId?: string; projectId?: string; category?: string }>({});
+  const [statusInput, setStatusInput] = useState("");
+  const [filters, setFilters] = useState<{ customerId?: string; projectId?: string; category?: string; status?: string }>({});
 
   const { items, total, page, pageSize, loading, error, setPage, refresh } =
     useListQuery<ExpenseRow>("/api/expenses", filters);
@@ -124,10 +143,11 @@ function ExpensesList() {
   };
 
   const applyFilter = () => {
-    const next: { customerId?: string; projectId?: string; category?: string } = {};
+    const next: { customerId?: string; projectId?: string; category?: string; status?: string } = {};
     if (customerInput) next.customerId = customerInput;
     if (projectInput) next.projectId = projectInput;
     if (categoryInput.trim()) next.category = categoryInput.trim();
+    if (statusInput) next.status = statusInput;
     setFilters(next);
     setPage(1);
   };
@@ -136,6 +156,7 @@ function ExpensesList() {
     setCustomerInput("");
     setProjectInput("");
     setCategoryInput("");
+    setStatusInput("");
     setFilters({});
     setPage(1);
   };
@@ -185,6 +206,13 @@ function ExpensesList() {
               placeholder="按费用科目搜索"
               className={"w-40 " + SELECT_CLASS}
             />
+            <select value={statusInput} onChange={(e) => setStatusInput(e.target.value)} className={"w-32 " + SELECT_CLASS}>
+              <option value="">全部状态</option>
+              <option value="DRAFT">草稿</option>
+              <option value="PENDING">待审批</option>
+              <option value="APPROVED">已批准</option>
+              <option value="REJECTED">已驳回</option>
+            </select>
           </>
         }
         toolbarActions={
@@ -222,9 +250,33 @@ function ExpensesList() {
               </Link>
             ),
           },
+          {
+            key: "expenseType",
+            header: "费用类型",
+            render: (row) => row.expenseType ?? "—",
+          },
           { key: "category", header: "费用科目" },
           { key: "amount", header: "金额", align: "right", render: (row) => formatMoneyValue(row.amount) },
           { key: "incurredAt", header: "发生日期", render: (row) => formatDateOnly(row.incurredAt) },
+          {
+            key: "approvalStatus",
+            header: "状态",
+            render: (row) => (
+              <span
+                className={
+                  "inline-block rounded-full px-2 py-0.5 text-xs font-medium " +
+                  (APPROVAL_TONE[row.approvalStatus] ?? "bg-slate-100 text-slate-600")
+                }
+              >
+                {APPROVAL_LABELS[row.approvalStatus] ?? row.approvalStatus}
+              </span>
+            ),
+          },
+          {
+            key: "applicant",
+            header: "申请人",
+            render: (row) => row.createdBy?.name ?? row.createdBy?.email ?? "—",
+          },
           { key: "note", header: "备注", render: (row) => row.note ?? "—" },
           { key: "createdAt", header: "创建时间", render: (row) => formatDateOnly(row.createdAt) },
         ]}

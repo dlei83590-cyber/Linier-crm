@@ -12,6 +12,8 @@ export const dynamic = "force-dynamic";
 const expenseUpdateSchema = z
   .object({
     category: z.string().min(1).max(100).optional(),
+    expenseType: z.string().max(50).nullable().optional(),
+    expenseAttribution: z.string().max(50).nullable().optional(),
     amount: z.coerce.number().nonnegative().optional(),
     currency: z.string().max(10).optional(),
     incurredAt: z.string().datetime().nullable().optional(),
@@ -52,6 +54,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const existing = await tx.projectExpense.findFirst({ where: { id: eid, projectId: id, deletedAt: null } });
     if (!existing) return { error: failNotFound(ERROR_CODES.NOT_FOUND, "费用不存在") };
+
+    // 审批流门禁（Migration 0051）：仅 DRAFT / REJECTED 可编辑；PENDING / APPROVED 冻结（审批中/已批准禁改）
+    if (existing.approvalStatus !== "DRAFT" && existing.approvalStatus !== "REJECTED") {
+      return { error: failConflict(ERROR_CODES.EXPENSE_INVALID_STATE, "仅草稿或已驳回状态可编辑报销申请") };
+    }
 
     // A4-CAS：原子乐观锁（消除 read-check-update TOCTOU）
     const cas = await casUpdate(tx, "projectExpense", eid, version, {
@@ -96,6 +103,11 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     const existing = await tx.projectExpense.findFirst({ where: { id: eid, projectId: id, deletedAt: null } });
     if (!existing) return { error: failNotFound(ERROR_CODES.NOT_FOUND, "费用不存在") };
+
+    // 审批流门禁（Migration 0051）：仅 DRAFT / REJECTED 可删除
+    if (existing.approvalStatus !== "DRAFT" && existing.approvalStatus !== "REJECTED") {
+      return { error: failConflict(ERROR_CODES.EXPENSE_INVALID_STATE, "仅草稿或已驳回状态可删除报销申请") };
+    }
 
     await tx.projectExpense.update({
       where: { id: eid },

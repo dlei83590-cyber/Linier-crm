@@ -5,6 +5,7 @@ import { authenticate, requirePermission } from "@/lib/api-helpers";
 import { ok, failValidation } from "@/lib/api/response";
 import { requestLog } from "@/lib/api/logger";
 import { BUSINESS_TIMEZONE_OFFSET_MS } from "@/lib/gl/period";
+import { reportPeriodKey, TARGET_DIMENSION_TYPES, achievementRate } from "@/lib/reports/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,13 @@ export const dynamic = "force-dynamic";
  * - quotations：期间内（createdAt）报价数/金额，status != CANCELLED
  * - customers.total：在册客户总数（type = CUSTOMER | BOTH）；newInPeriod：期间内新增客户
  * - opportunities.total / funnel：在册商机总数 + 按 stage 漏斗（当前管线快照）；newInPeriod：期间内新增商机
- * - visits：期间内拜访（visitType=VISIT）/ 跟进（visitType!=VISIT，电话/视频/会议/其他）次数（ProjectVisit）
+ * - visits：期间内拜访（CHECK_IN）/ 跟进（FOLLOW_UP）次数（CustomerActivity）
+ *
+ * 追加（feat(crm) expense-analytics，Migration 0051）：
+ * - targets：目标值/达成率 —— ReportTarget（period 键 + dimensionValue=ALL）静态目标 × 本期实际，rate = actual/target×100%（1 位小数）
+ * - customerTiers：客户分层（事实计算，非 AI）—— 有成交（非草稿/非取消 SO）> 有报价未成交（非取消 Quotation）>
+ *   有商机无报价（ProjectOpportunity）> 普通客户（其余在册客户）；点态快照（跨全史），不计期间
+ * - regions：固定区域维度（BusinessPartner.region）—— 区域客户数 + 期间内订单数/金额（未设置区域归 "未设置"）
  *
  * RBAC：reports:view（shared PERMISSION_MODULES + prisma/seed.ts SEED_ACTION_MODULES 同步注册，ADR-0028）。
  */
@@ -57,6 +64,7 @@ export async function GET(request: NextRequest) {
   }
   const { start, end } = periodRange(rawPeriod);
   const range: Prisma.DateTimeFilter = { gte: start, lt: end };
+  const pKey = reportPeriodKey(rawPeriod);
 
   const orderWhere: Prisma.SalesOrderWhereInput = { deletedAt: null, createdAt: range };
   // CTO 口径（MUST-FIX）：经营金额/数量不含 DRAFT（草稿非成交）；groupBy 状态构成仍保留全状态透明展示
@@ -96,6 +104,137 @@ export async function GET(request: NextRequest) {
     prisma.customerActivity.count({ where: { ...activityRange, activityType: "FOLLOW_UP" } }),
   ]);
 
+  // ===== 目标值/达成率（ReportTarget 静态目标 × 本期实际；维度值 ALL 全局目标） =====
+  const targetsRaw = await prisma.reportTarget.findMany({
+    where: { deletedAt: null, isActive: true, period: pKey, dimensionValue: "ALL" },
+    orderBy: { dimensionType: "asc" },
+  });
+  const actuals: Record<string, string | number> = {
+    SALES_AMOUNT: orderAmount._sum.totalAmount?.toString() ?? "0",
+    NEW_CUSTOMERS: customerNew,
+    NEW_OPPORTUNITIES: opportunityNew,
+    QUOTATIONS: quotationCount,
+    VISITS: visitCount,
+    FOLLOW_UPS: followUpCount,
+  };
+  const targets = targetsRaw
+    .filter((t) => (TARGET_DIMENSION_TYPES as readonly string[]).includes(t.dimensionType))
+    .map((t) => ({
+      id: t.id,
+      dimensionType: t.dimensionType,
+      dimensionValue: t.dimensionValue,
+      targetAmount: t.targetAmount.toString(),
+      actual: String(actuals[t.dimensionType] ?? 0),
+      rate: achievementRate(t.targetAmount.toString(), actuals[t.dimensionType] ?? 0),
+    }));
+
+  // ===== 客户分层（事实计算，非 AI）：有成交 > 有报价未成交 > 有商机无报价 > 普通客户 =====
+  const [dealCustomers, quotedCustomers, oppCustomers] = await Promise.all([
+    prisma.salesOrder.findMany({
+      where: { deletedAt: null, status: { notIn: ["DRAFT", "CANCELLED"] } },
+      select: { customerId: true },
+      distinct: ["customerId"],
+    }),
+    prisma.quotation.findMany({
+      where: { deletedAt: null, status: { not: "CANCELLED" } },
+      select: { customerId: true },
+      distinct: ["customerId"],
+    }),
+    prisma.projectOpportunity.findMany({
+      where: { deletedAt: null },
+      select: { customerId: true },
+      distinct: ["customerId"],
+    }),
+  ]);
+  const dealSet = new Set(dealCustomers.map((r) => r.customerId));
+  const quoteSet = new Set(quotedCustomers.map((r) => r.customerId));
+  const oppSet = new Set(oppCustomers.map((r) => r.customerId));
+  const quotedOnly = new Set([...quoteSet].filter((id) => !dealSet.has(id)));
+  const opportunityOnly = new Set([...oppSet].filter((id) => !dealSet.has(id) && !quoteSet.has(id)));
+  const customerTiers = {
+    total: customerTotal,
+    deal: dealSet.size,
+    quoted: quotedOnly.size,
+    opportunity: opportunityOnly.size,
+    normal: Math.max(customerTotal - dealSet.size - quotedOnly.size - opportunityOnly.size, 0),
+  };
+
+  // ===== 固定区域维度（BusinessPartner.region）：区域客户数 + 期间订单数/金额 =====
+  const [regionCustomerGroups, regionOrders] = await Promise.all([
+    prisma.businessPartner.groupBy({ by: ["region"], where: customerWhere, _count: { _all: true } }),
+    prisma.salesOrder.findMany({
+      where: orderActiveWhere,
+      select: { customerId: true, totalAmount: true },
+    }),
+  ]);
+  const regionCustomerIds = Array.from(new Set(regionOrders.map((o) => o.customerId)));
+  const regionCustomers = regionCustomerIds.length
+    ? await prisma.businessPartner.findMany({
+        where: { id: { in: regionCustomerIds } },
+        select: { id: true, region: true },
+      })
+    : [];
+  const regionByCustomer = new Map(regionCustomers.map((c) => [c.id, c.region]));
+  const regionAgg = new Map<
+    string,
+    { customerCount: number; salesOrderCount: number; salesAmount: Prisma.Decimal }
+  >();
+  for (const o of regionOrders) {
+    const region = regionByCustomer.get(o.customerId) ?? "未设置";
+    const cur = regionAgg.get(region) ?? {
+      customerCount: 0,
+      salesOrderCount: 0,
+      salesAmount: new Prisma.Decimal(0),
+    };
+    cur.salesOrderCount += 1;
+    cur.salesAmount = cur.salesAmount.plus(o.totalAmount ?? 0);
+    regionAgg.set(region, cur);
+  }
+  for (const g of regionCustomerGroups) {
+    const region = g.region ?? "未设置";
+    const cur = regionAgg.get(region) ?? {
+      customerCount: 0,
+      salesOrderCount: 0,
+      salesAmount: new Prisma.Decimal(0),
+    };
+    cur.customerCount += g._count._all;
+    regionAgg.set(region, cur);
+  }
+  const regions = [...regionAgg.entries()]
+    .map(([region, v]) => ({
+      region,
+      customerCount: v.customerCount,
+      salesOrderCount: v.salesOrderCount,
+      salesAmount: v.salesAmount.toString(),
+    }))
+    .sort((a, b) => b.salesOrderCount - a.salesOrderCount);
+
+  // ===== 固定品牌维度（Item.brand 真实事实源）：SalesOrderLine → Item.brand → 行数/金额（未设置归「未设置」）=====
+  const brandLines = await prisma.salesOrderLine.findMany({
+    where: {
+      deletedAt: null,
+      salesOrder: { deletedAt: null, status: { notIn: ["DRAFT", "CANCELLED"] }, createdAt: range },
+    },
+    select: { itemId: true, totalAmount: true },
+  });
+  const brandItemIds = [...new Set(brandLines.map((l) => l.itemId).filter((x): x is string => x !== null))];
+  const brandItems = brandItemIds.length
+    ? await prisma.item.findMany({ where: { id: { in: brandItemIds } }, select: { id: true, brand: true } })
+    : [];
+  const brandByItem = new Map(brandItems.map((i) => [i.id, i.brand]));
+  const brandAgg = new Map<string, { lineCount: number; amount: Prisma.Decimal }>();
+  for (const l of brandLines) {
+    if (!l.itemId) continue;
+    const brand = brandByItem.get(l.itemId) ?? "未设置";
+    const cur = brandAgg.get(brand) ?? { lineCount: 0, amount: new Prisma.Decimal(0) };
+    cur.lineCount += 1;
+    cur.amount = cur.amount.plus(l.totalAmount ?? 0);
+    brandAgg.set(brand, cur);
+  }
+  const brands = [...brandAgg.entries()]
+    .map(([brand, v]) => ({ brand, lineCount: v.lineCount, amount: v.amount.toString() }))
+    .sort((a, b) => b.lineCount - a.lineCount);
+
   return ok({
     period: rawPeriod,
     range: { from: start.toISOString(), to: end.toISOString() },
@@ -115,5 +254,11 @@ export async function GET(request: NextRequest) {
       funnel: Object.fromEntries(opportunityFunnel.map((g) => [g.stage, g._count._all])),
     },
     visits: { visits: visitCount, followUps: followUpCount },
+    targets,
+    customerTiers,
+    regions,
+    brands,
+    // channel：当前无明确 SSOT 事实源 → 前端显示「暂无渠道事实数据」（CTO ⑦；禁造字段）
+    channelAvailable: false,
   });
 }

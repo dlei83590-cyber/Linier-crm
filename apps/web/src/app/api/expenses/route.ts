@@ -25,12 +25,21 @@ export async function GET(request: NextRequest) {
   const customerId = searchParams.get("customerId")?.trim();
   const projectId = searchParams.get("projectId")?.trim();
   const category = searchParams.get("category")?.trim();
+  // 报销流程补齐（Migration 0051）：按审批状态精确筛选（待审批列表等）
+  // approvalStatus 为 Prisma 枚举，需白名单校验后按枚举字面量透传（where 类型门禁）
+  const status = searchParams.get("status")?.trim();
+  const APPROVAL_STATUSES = ["DRAFT", "PENDING", "APPROVED", "REJECTED"] as const;
+  const statusFilter =
+    status && (APPROVAL_STATUSES as readonly string[]).includes(status)
+      ? (status as (typeof APPROVAL_STATUSES)[number])
+      : undefined;
 
   const where = {
     deletedAt: null,
     ...(projectId ? { projectId } : {}),
     ...(customerId ? { project: { customerId } } : {}),
     ...(category ? { category: { contains: category } } : {}),
+    ...(statusFilter ? { approvalStatus: statusFilter } : {}),
   };
 
   const [total, items] = await Promise.all([
@@ -54,5 +63,23 @@ export async function GET(request: NextRequest) {
     }),
   ]);
 
-  return ok(items, { page, pageSize, total });
+  // 申请人/审批人投影（无 User 关系字段，按 *ById 一次查询组装）
+  const userIds = Array.from(
+    new Set(items.flatMap((i) => [i.createdById, i.approvedById, i.rejectedById]).filter((v): v is string => Boolean(v))),
+  );
+  const users = userIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, name: true, email: true },
+      })
+    : [];
+  const userMap = new Map(users.map((u) => [u.id, u]));
+  const rows = items.map((i) => ({
+    ...i,
+    createdBy: i.createdById ? (userMap.get(i.createdById) ?? null) : null,
+    approvedBy: i.approvedById ? (userMap.get(i.approvedById) ?? null) : null,
+    rejectedBy: i.rejectedById ? (userMap.get(i.rejectedById) ?? null) : null,
+  }));
+
+  return ok(rows, { page, pageSize, total });
 }

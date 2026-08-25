@@ -404,6 +404,13 @@ export const ERROR_CODES = {
   // 拜访/签到规则（feat(crm) 拜访周/月视图 + 签到规则 MVP，Migration 0051；复用 project-visit RBAC）
   CHECK_IN_OUT_OF_RANGE: 'CHECK_IN_OUT_OF_RANGE', // 签到超出客户签到范围（服务端 Haversine 距离 > allowedRadiusMeters），400
   CHECK_IN_ALREADY_CHECKED_OUT: 'CHECK_IN_ALREADY_CHECKED_OUT', // 已签退，禁止重复签退（幂等），409
+  // 报销流程补齐（feat(crm) expense-analytics；Migration 0051；复用 ProjectExpense.approvalStatus，不新增工作流模型）
+  EXPENSE_NOT_FOUND: 'EXPENSE_NOT_FOUND', // 报销申请不存在或已删除，404
+  EXPENSE_INVALID_STATE: 'EXPENSE_INVALID_STATE', // 状态门禁：提交/批准/驳回/编辑/删除只能在允许的状态，409
+  EXPENSE_REJECT_REASON_REQUIRED: 'EXPENSE_REJECT_REASON_REQUIRED', // 驳回必须提供原因，400
+
+  // 经营目标 ReportTarget（固定看板目标值/达成率；Migration 0051；校验走 zod failValidation，仅删除用 404）
+  REPORT_TARGET_NOT_FOUND: 'REPORT_TARGET_NOT_FOUND', // 目标不存在，404
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
