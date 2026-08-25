@@ -75,6 +75,7 @@ describe('POST /api/projects/:id/close — 项目结项（FRT-05 结项按钮消
     const res = await POST(makeRequest({ reason: '客户验收通过', version: 2 }), {
       params: Promise.resolve({ id: 'proj-1' }),
     });
+    if (!res) throw new Error('expected response');
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data.stage).toBe('CLOSED');
@@ -96,6 +97,7 @@ describe('POST /api/projects/:id/close — 项目结项（FRT-05 结项按钮消
     const res = await POST(makeRequest({ reason: '结项', version: 1 }), {
       params: Promise.resolve({ id: 'proj-1' }),
     });
+    if (!res) throw new Error('expected response');
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error.code).toBe('VERSION_CONFLICT');
@@ -109,6 +111,7 @@ describe('POST /api/projects/:id/close — 项目结项（FRT-05 结项按钮消
     const res = await POST(makeRequest({ reason: '想结项', version: 2 }), {
       params: Promise.resolve({ id: 'proj-1' }),
     });
+    if (!res) throw new Error('expected response');
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error.code).toBe('CONFLICT');
@@ -127,6 +130,7 @@ describe('POST /api/projects/:id/close — 项目结项（FRT-05 结项按钮消
     const res = await POST(makeRequest({ reason: '强制', version: 2, force: true }), {
       params: Promise.resolve({ id: 'proj-1' }),
     });
+    if (!res) throw new Error('expected response');
     expect(res.status).toBe(403);
     expect(mockPrisma.$transaction).not.toHaveBeenCalled();
   });
@@ -138,6 +142,7 @@ describe('POST /api/projects/:id/close — 项目结项（FRT-05 结项按钮消
     const res = await POST(makeRequest({ reason: '客户要求提前结束', version: 2, force: true }), {
       params: Promise.resolve({ id: 'proj-1' }),
     });
+    if (!res) throw new Error('expected response');
     expect(res.status).toBe(200);
     const projArgs = (tx.project.update as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(projArgs.data.stage).toBe('CLOSED');
