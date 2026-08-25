@@ -247,15 +247,6 @@ const UI_LIST_DETAIL_CREATE_ACTIONS: CapabilityFlags = {
   workflow: false,
   factActions: true,
 };
-/** 列表 + 详情 + Create（报销申请 MVP：无 Edit 页、无审批流/事实动作；创建走既有项目费用 API） */
-const UI_LIST_DETAIL_CREATE: CapabilityFlags = {
-  list: true,
-  detail: true,
-  create: true,
-  edit: false,
-  workflow: false,
-  factActions: false,
-};
 /** 列表 + 详情 + Create + 提交流（报销流程补齐：详情页提交/批准/驳回按钮；无独立 Edit 页、无事实动作） */
 const UI_LIST_DETAIL_CREATE_WORKFLOW: CapabilityFlags = {
   list: true,
