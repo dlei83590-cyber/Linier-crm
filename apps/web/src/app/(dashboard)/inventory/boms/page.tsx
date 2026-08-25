@@ -1,10 +1,12 @@
 "use client";
 
 /**
- * BOM — 物料配方列表页（P-4 Item Sourcing，ADR-0049）
+ * BOM — 物料配方列表页（P-4 Item Sourcing，ADR-0049 + UI-09 FE2.0 统一）
  *
  * 成品物料组合固定配方（系数 + 损耗率；吨→米/件/个在系数表达）。
  * AppPage → EntityListWorkspace → useListQuery；PermissionGuard 对齐 bom:view。
+ * UI-09：按钮收敛至 BUTTON_PRIMARY_CLASS / BUTTON_SECONDARY_CLASS；
+ * 行操作移入 rowActions（hover 浮现，现代表格交互）；数字列右对齐 tabular-nums。
  */
 import { useState } from "react";
 import Link from "next/link";
@@ -12,7 +14,7 @@ import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shar
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { useSession } from "@/lib/session-context";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
-import { SELECT_CLASS } from "@/lib/ui-classes";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { useToast } from "@/components/ui/toast";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
@@ -91,27 +93,25 @@ function BomList() {
         emptyMessage="暂无配方——点击「+ 新建配方」为成品维护物料组合配方"
         headerActions={
           canCreate ? (
-            <Link href="/inventory/boms/new" className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
+            <Link href="/inventory/boms/new" className={BUTTON_PRIMARY_CLASS}>
               + 新建配方
             </Link>
           ) : undefined
         }
         filters={
-          <>
-            <select value={statusInput} onChange={(e) => setStatusInput(e.target.value)} className={SELECT_CLASS}>
-              <option value="">全部状态</option>
-              <option value="DRAFT">草稿</option>
-              <option value="ACTIVE">生效</option>
-              <option value="ARCHIVED">归档</option>
-            </select>
-          </>
+          <select value={statusInput} onChange={(e) => setStatusInput(e.target.value)} className={SELECT_CLASS}>
+            <option value="">全部状态</option>
+            <option value="DRAFT">草稿</option>
+            <option value="ACTIVE">生效</option>
+            <option value="ARCHIVED">归档</option>
+          </select>
         }
         toolbarActions={
           <>
-            <button type="button" onClick={applyFilter} className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
+            <button type="button" onClick={applyFilter} className={BUTTON_PRIMARY_CLASS}>
               查询
             </button>
-            <button type="button" onClick={resetFilter} className="rounded-md border border-border px-4 py-2 text-sm text-ink-primary hover:bg-canvas">
+            <button type="button" onClick={resetFilter} className={BUTTON_SECONDARY_CLASS}>
               重置
             </button>
           </>
@@ -140,34 +140,8 @@ function BomList() {
               <StatusBadge status={row.status} label={STATUS_LABELS[row.status] ?? row.status} toneMap={STATUS_TONE_MAP} />
             ),
           },
-          { key: "lines", header: "原料行数", render: (row) => String(row._count?.lines ?? 0) },
+          { key: "lines", header: "原料行数", align: "right", render: (row) => String(row._count?.lines ?? 0) },
           { key: "isDefault", header: "默认", render: (row) => (row.isDefault ? "是" : "—") },
-          {
-            key: "actions",
-            header: "操作",
-            render: (row) => (
-              <div className="flex items-center gap-2">
-                <Link href={`/inventory/boms/${row.id}`} className="rounded-md border border-border px-2 py-1 text-xs text-ink-primary hover:bg-canvas">
-                  详情
-                </Link>
-                {row.status === "DRAFT" && canEdit && (
-                  <Link href={`/inventory/boms/${row.id}/edit`} className="rounded-md border border-border px-2 py-1 text-xs text-ink-primary hover:bg-canvas">
-                    编辑
-                  </Link>
-                )}
-                {row.status === "DRAFT" && canDelete && (
-                  <button
-                    type="button"
-                    onClick={() => setDeleting(row)}
-                    disabled={deleteBusy}
-                    className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text hover:bg-status-danger-bg/10 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    删除
-                  </button>
-                )}
-              </div>
-            ),
-          },
         ]}
         rows={items}
         rowKey={(row) => row.id}
@@ -178,6 +152,34 @@ function BomList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        rowActions={(row) => (
+          <>
+            <Link
+              href={`/inventory/boms/${row.id}`}
+              className="border-border text-ink-secondary rounded-md border px-2 py-1 text-xs hover:bg-canvas"
+            >
+              详情
+            </Link>
+            {row.status === "DRAFT" && canEdit ? (
+              <Link
+                href={`/inventory/boms/${row.id}/edit`}
+                className="border-border text-ink-secondary rounded-md border px-2 py-1 text-xs hover:bg-canvas"
+              >
+                编辑
+              </Link>
+            ) : null}
+            {row.status === "DRAFT" && canDelete ? (
+              <button
+                type="button"
+                onClick={() => setDeleting(row)}
+                disabled={deleteBusy}
+                className="border-status-danger-border text-status-danger-text rounded-md border px-2 py-1 text-xs hover:bg-status-danger-bg/10 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                删除
+              </button>
+            ) : null}
+          </>
+        )}
       />
 
       <ConfirmActionDialog

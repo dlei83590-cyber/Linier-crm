@@ -1,19 +1,24 @@
 "use client";
 
 /**
- * Inventory Adjustment Edit — 编辑库存调整单（F2-6B 批 3，头字段）
+ * Inventory Adjustment Edit — 编辑库存调整单（F2-6B 批 3 + UI-09 FE2.0 表单统一，头字段）
  *
  * 契约：PATCH /api/inventory-adjustments/:id，仅 DRAFT，乐观锁 version CAS。
  * 可编辑：reasonCode / remark（行整体替换本轮不做，创建后行如需调整请取消后新建）。
  * PermissionGuard 对齐 API requirePermission("inventory-adjustment:edit")。
+ *
+ * UI-09：迁移至 EntityFormWorkspace（Dirty-State Guard / 409 冲突面板 / ErrorPanel /
+ * 统一 Save/Cancel），移除页面级 window.confirm。
  */
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
 import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
 import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
-import { CARD_CLASS } from "@/lib/ui-classes";
+import { AppPage, EntityFormWorkspace } from "@/components/workspace";
+import { FormField } from "@/components/ui/form-field";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { INPUT_CLASS } from "@/lib/ui-classes";
 
 /** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
 const STATUS_LABELS: Record<string, string> = {
@@ -38,6 +43,7 @@ const REASON_CODES = ["COUNT_VARIANCE", "DAMAGE", "LOSS", "GIFT", "SYSTEM_CORREC
 function AdjustmentEditForm() {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
+  const router = useRouter();
   const [detail, setDetail] = useState<AdjustmentDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | null>(null);
@@ -71,16 +77,6 @@ function AdjustmentEditForm() {
     loadDetail();
   }, [loadDetail]);
 
-  useEffect(() => {
-    if (!dirty) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = "";
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [dirty]);
-
   const save = async () => {
     if (!detail || submitting) return;
     const changes: Record<string, unknown> = {};
@@ -110,129 +106,91 @@ function AdjustmentEditForm() {
   };
 
   if (loading) {
-    return <div className="rounded-lg border border-border bg-surface p-6 text-sm text-ink-muted">加载中…</div>;
-  }
-
-  if (error && !detail) {
     return (
-      <div className="rounded-lg border border-status-danger-border bg-status-danger-bg p-6 text-sm text-status-danger-text">
-        {describeStatus(error.status)}：{error.message}
-        <div className="mt-3">
-          <Link href={`/inventory/adjustments/${id}`} className="text-brand-600 hover:underline">返回详情</Link>
+      <AppPage>
+        <div className="border-border bg-surface shadow-elevation-sm rounded-lg border p-6 text-sm text-ink-muted">
+          加载中…
         </div>
-      </div>
+      </AppPage>
     );
   }
 
   if (notEditable && detail) {
     return (
-      <div className={CARD_CLASS}>
-        <div className="flex items-center justify-between border-b border-border p-4">
-          <h1 className="text-lg font-semibold text-ink-primary">编辑库存调整 — {detail.adjustmentNo}</h1>
-          <Link href={`/inventory/adjustments/${id}`} className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas">返回详情</Link>
+      <AppPage>
+        <div className="border-border bg-surface shadow-elevation-sm overflow-hidden rounded-lg border">
+          <div className="border-border flex items-center justify-between border-b px-4 py-4 md:px-6">
+            <h1 className="text-ink-primary text-lg font-semibold md:text-xl">
+              编辑库存调整 — {detail.adjustmentNo}
+            </h1>
+            <Link
+              href={`/inventory/adjustments/${id}`}
+              className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-canvas"
+            >
+              返回详情
+            </Link>
+          </div>
+          <div className="p-6">
+            <p className="text-sm text-status-warning-text">仅草稿状态可编辑（当前 {detail.status}）。</p>
+          </div>
         </div>
-        <div className="p-6">
-          <p className="text-sm text-status-warning-text">仅草稿状态可编辑（当前 {detail.status}）。</p>
-        </div>
-      </div>
+      </AppPage>
     );
   }
 
   return (
-    <div className={CARD_CLASS}>
-      <div className="flex items-center justify-between border-b border-border p-4">
-        <h1 className="text-lg font-semibold text-ink-primary">
-          编辑库存调整 — {detail?.adjustmentNo}
-          <span className="ml-2 text-xs font-normal text-ink-muted">
-            {STATUS_LABELS[detail?.status ?? ""] ?? detail?.status}
-          </span>
-        </h1>
-        <div className="flex items-center gap-2">
-          {dirty && <span className="text-xs text-status-warning-text">有未保存的更改</span>}
-          <Link
-            href={`/inventory/adjustments/${id}`}
-            onClick={(e) => {
-              if (dirty && !window.confirm("有未保存的更改，确定离开？")) e.preventDefault();
-            }}
-            className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
-          >
-            返回详情
-          </Link>
+    <EntityFormWorkspace
+      title={`编辑库存调整 — ${detail?.adjustmentNo ?? ""}`}
+      description={`当前状态：${STATUS_LABELS[detail?.status ?? ""] ?? detail?.status ?? ""}；仅 DRAFT 可编辑头字段。`}
+      backHref={`/inventory/adjustments/${id}`}
+      mode="edit"
+      submitting={submitting}
+      error={error}
+      dirty={dirty}
+      onReload={() => {
+        setError(null);
+        setNotEditable(false);
+        void loadDetail();
+      }}
+      onSave={save}
+      onCancel={() => router.push(`/inventory/adjustments/${id}`)}
+      saveLabel="保存头字段"
+    >
+      {fieldErrors.scope ? (
+        <div className="rounded-md border border-status-warning-border bg-status-warning-bg p-3 text-sm text-status-warning-text">
+          {fieldErrors.scope}
         </div>
-      </div>
-
-      <div className="p-4">
-        {error && (
-          <div className="mb-4 rounded-md bg-status-danger-bg p-3 text-sm text-status-danger-text">
-            <p>
-              {describeStatus(error.status)}：{error.message}
-              {error.code ? `（${error.code}）` : ""}
-            </p>
-            {error.code === "VERSION_CONFLICT" && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (window.confirm("未保存的更改将丢失，确定重新载入最新数据？")) {
-                    setError(null);
-                    setNotEditable(false);
-                    loadDetail();
-                  }
-                }}
-                className="bg-brand-600 hover:bg-brand-700 mt-2 rounded-md px-3 py-1 text-xs font-medium text-white"
-              >
-                重新载入最新数据
-              </button>
-            )}
-          </div>
-        )}
-        {fieldErrors.scope && (
-          <div className="mb-4 rounded-md border border-status-warning-border bg-status-warning-bg p-3 text-sm text-status-warning-text">{fieldErrors.scope}</div>
-        )}
-
-        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-canvas p-4 text-sm md:grid-cols-2">
-          <div>
-            <label className="block text-xs text-ink-secondary">原因码</label>
-            <select
-              value={reasonCode}
-              onChange={(e) => setReasonCode(e.target.value)}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
-            >
+      ) : null}
+      <section className="rounded-md border border-border p-4">
+        <h2 className="mb-3 text-sm font-semibold text-ink-primary">调整信息</h2>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <FormField label="原因码" required>
+            <select value={reasonCode} onChange={(e) => setReasonCode(e.target.value)} className={INPUT_CLASS}>
               {REASON_CODES.map((r) => (
                 <option key={r} value={r}>{r}</option>
               ))}
             </select>
-          </div>
-          <div>
-            <label className="block text-xs text-ink-secondary">备注（可选，≤500）</label>
+          </FormField>
+          <FormField label="备注（可选，≤500）">
             <input
               value={remark}
               onChange={(e) => setRemark(e.target.value)}
               maxLength={500}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+              className={INPUT_CLASS}
             />
-          </div>
+          </FormField>
         </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={save}
-            disabled={submitting}
-            className="bg-brand-600 hover:bg-brand-700 rounded-md px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {submitting ? "保存中…" : "保存头字段"}
-          </button>
-          {dirty && <span className="text-xs text-status-warning-text">有未保存的更改</span>}
-        </div>
-      </div>
-    </div>
+      </section>
+    </EntityFormWorkspace>
   );
 }
 
 export default function Page() {
   return (
     <PermissionGuard permission={actionPermission("inventory-adjustment", "edit")}>
-      <AdjustmentEditForm />
+      <AppPage>
+        <AdjustmentEditForm />
+      </AppPage>
     </PermissionGuard>
   );
 }

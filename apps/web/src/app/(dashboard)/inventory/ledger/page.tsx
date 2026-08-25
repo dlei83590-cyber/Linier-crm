@@ -246,7 +246,7 @@ function MovementList() {
             header: "仓库/库位",
             render: (r) => [r.warehouse?.name, r.location?.name].filter(Boolean).join(" / ") || "—",
           },
-          { key: "quantity", header: "数量", render: (r) => r.quantity },
+          { key: "quantity", header: "数量", align: "right", render: (r) => r.quantity },
           { key: "referenceNo", header: "业务单号", render: (r) => r.referenceNo ?? "—" },
         ]}
         rows={items}

@@ -1,19 +1,21 @@
 "use client";
 
 /**
- * BOM Detail — 配方详情页（P-4 Item Sourcing，ADR-0049）
+ * BOM Detail — 配方详情页（P-4 Item Sourcing，ADR-0049 + UI-09 FE2.0 统一）
  *
  * 展示配方头 + 原料行（系数/损耗率/需求量公式）；动作：激活（DRAFT/ARCHIVED→ACTIVE，bom:approve）/ 编辑 / 删除（仅 DRAFT）。
+ * UI-09：迁移至 EntityDetailWorkspace（Header + Status + Actions + Summary + Lines 统一结构）。
  */
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, ErrorPanel, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
+import { AppPage, EntityDetailWorkspace, ConfirmActionDialog } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useSession } from "@/lib/session-context";
 import { useToast } from "@/components/ui/toast";
+import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
 
 interface BomDetail {
   id: string;
@@ -127,80 +129,91 @@ function BomDetailPage() {
   if (loadError) {
     return (
       <AppPage>
-        <ErrorPanel error={loadError} />
+        <div className="border-border bg-surface shadow-elevation-sm rounded-lg border p-6">
+          <p className="text-sm text-status-danger-text">加载配方失败：{loadError.message}</p>
+          <Link href="/inventory/boms" className="text-brand-600 mt-3 inline-block text-sm hover:underline">
+            返回配方列表
+          </Link>
+        </div>
       </AppPage>
     );
   }
   if (!detail) {
     return (
       <AppPage>
-        <div className="text-sm text-ink-muted">加载中…</div>
+        <div className="border-border bg-surface shadow-elevation-sm rounded-lg border p-6 text-sm text-ink-muted">
+          加载中…
+        </div>
       </AppPage>
     );
   }
 
   return (
-    <AppPage maxWidth="6xl">
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-semibold text-ink-primary">{detail.bomNo}</h1>
-              <StatusBadge status={detail.status} label={STATUS_LABELS[detail.status] ?? detail.status} toneMap={STATUS_TONE_MAP} />
-              {detail.isDefault ? (
-                <span className="rounded bg-brand-50 px-2 py-0.5 text-xs text-brand-700">默认配方</span>
-              ) : null}
-            </div>
-            <p className="mt-1 text-sm text-ink-secondary">成品配方 · v{detail.bomVersion}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {["DRAFT", "ARCHIVED"].includes(detail.status) && canActivate && (
+    <AppPage>
+      <EntityDetailWorkspace
+        title={`配方详情 — ${detail.bomNo}`}
+        description={`成品配方 · v${detail.bomVersion}${detail.isDefault ? " · 默认配方" : ""}`}
+        backHref="/inventory/boms"
+        status={detail.status}
+        statusLabel={STATUS_LABELS[detail.status] ?? detail.status}
+        statusTone={STATUS_TONE_MAP[detail.status]}
+        actions={
+          <>
+            {["DRAFT", "ARCHIVED"].includes(detail.status) && canActivate ? (
               <button
                 type="button"
                 onClick={() => setConfirmActivate(true)}
                 disabled={activating}
-                className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-40"
+                className={BUTTON_PRIMARY_CLASS}
               >
-                激活配方
+                {activating ? "处理中…" : "激活配方"}
               </button>
-            )}
-            {detail.status === "DRAFT" && canEdit && (
-              <Link href={`/inventory/boms/${id}/edit`} className="rounded-md border border-border px-4 py-2 text-sm text-ink-primary hover:bg-canvas">
+            ) : null}
+            {detail.status === "DRAFT" && canEdit ? (
+              <Link
+                href={`/inventory/boms/${id}/edit`}
+                className="border-border text-ink-secondary rounded-md border bg-surface px-3 py-1.5 text-sm font-medium hover:bg-canvas"
+              >
                 编辑
               </Link>
-            )}
-            {detail.status === "DRAFT" && canDelete && (
+            ) : null}
+            {detail.status === "DRAFT" && canDelete ? (
               <button
                 type="button"
                 onClick={() => setDeleting(true)}
-                className="rounded-md border border-status-danger-border px-4 py-2 text-sm text-status-danger-text hover:bg-status-danger-bg/10"
+                className="border-status-danger-border text-status-danger-text rounded-md border bg-surface px-3 py-1.5 text-sm font-medium hover:bg-status-danger-bg/10"
               >
                 删除
               </button>
-            )}
-          </div>
-        </div>
-
-        <section className="rounded-md border border-border p-4">
+            ) : null}
+          </>
+        }
+        summary={
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <InfoItem label="成品" value={detail.finishedItem ? `${detail.finishedItem.code ?? ""} ${detail.finishedItem.name ?? ""}`.trim() : null} />
-            <InfoItem label="商品来源" value={detail.finishedItem?.sourcingType ? SOURCING_LABELS[detail.finishedItem.sourcingType] ?? detail.finishedItem.sourcingType : null} />
+            <InfoItem
+              label="成品"
+              value={detail.finishedItem ? `${detail.finishedItem.code ?? ""} ${detail.finishedItem.name ?? ""}`.trim() : null}
+            />
+            <InfoItem
+              label="商品来源"
+              value={detail.finishedItem?.sourcingType ? SOURCING_LABELS[detail.finishedItem.sourcingType] ?? detail.finishedItem.sourcingType : null}
+            />
             <InfoItem label="版本" value={`v${detail.bomVersion}`} />
             <InfoItem label="备注" value={detail.remark} />
           </div>
-        </section>
-
-        <section className="rounded-md border border-border p-4">
-          <h2 className="mb-3 text-sm font-semibold text-ink-primary">原料行（配方系数）</h2>
+        }
+      >
+        <section className="border-border rounded-md border p-4">
+          <h2 className="text-ink-primary mb-3 text-sm font-semibold">原料行（配方系数）</h2>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-border text-sm">
               <thead className="text-ink-secondary bg-canvas text-left text-xs font-medium">
                 <tr>
                   <th className="px-4 py-2 font-semibold">原料</th>
                   <th className="px-4 py-2 font-semibold">单位</th>
-                  <th className="px-4 py-2 font-semibold">系数（1 成品消耗量）</th>
-                  <th className="px-4 py-2 font-semibold">损耗率</th>
-                  <th className="px-4 py-2 font-semibold">每 100 成品需求</th>
+                  <th className="px-4 py-2 text-right font-semibold">系数（1 成品消耗量）</th>
+                  <th className="px-4 py-2 text-right font-semibold">损耗率</th>
+                  <th className="px-4 py-2 text-right font-semibold">每 100 成品需求</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -210,21 +223,22 @@ function BomDetailPage() {
                     <tr key={l.id}>
                       <td className="px-4 py-2">{`${l.componentItem?.code ?? ""} ${l.componentItem?.name ?? ""}`.trim() || "—"}</td>
                       <td className="px-4 py-2">{l.componentUom?.symbol ?? l.componentUom?.code ?? "—"}</td>
-                      <td className="px-4 py-2 tabular-nums">{l.qtyPerFinishedUnit}</td>
-                      <td className="px-4 py-2 tabular-nums">{Number(l.lossRate) > 0 ? `${(Number(l.lossRate) * 100).toFixed(2)}%` : "—"}</td>
-                      <td className="px-4 py-2 tabular-nums text-ink-secondary">{per100.toFixed(4)} {l.componentUom?.symbol ?? ""}</td>
+                      <td className="px-4 py-2 text-right tabular-nums">{l.qtyPerFinishedUnit}</td>
+                      <td className="px-4 py-2 text-right tabular-nums">{Number(l.lossRate) > 0 ? `${(Number(l.lossRate) * 100).toFixed(2)}%` : "—"}</td>
+                      <td className="px-4 py-2 text-right tabular-nums text-ink-secondary">{per100.toFixed(4)} {l.componentUom?.symbol ?? ""}</td>
                     </tr>
                   );
                 })}
+                {(detail.lines ?? []).length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-8 text-center text-sm text-ink-muted">暂无原料行</td>
+                  </tr>
+                ) : null}
               </tbody>
             </table>
           </div>
         </section>
-
-        <Link href="/inventory/boms" className="text-sm text-brand-600 hover:underline">
-          ← 返回配方列表
-        </Link>
-      </div>
+      </EntityDetailWorkspace>
 
       <ConfirmActionDialog
         open={confirmActivate}
