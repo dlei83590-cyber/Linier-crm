@@ -10,8 +10,11 @@ vi.mock('@/lib/api-helpers', () => ({
   writeAuditLog: vi.fn().mockResolvedValue(undefined),
   requestLog: vi.fn(),
 }));
+const { matchCustomerPools } = vi.hoisted(() => ({ matchCustomerPools: vi.fn() }));
+vi.mock('@/lib/customer-pool/match', () => ({ matchCustomerPools }));
 
 import { POST } from '@/app/api/customer-pools/[id]/entries/[entryId]/claim/route';
+import { matchCustomerPools } from '@/lib/customer-pool/match';
 
 type TxMock = {
   $queryRaw: ReturnType<typeof vi.fn>;
@@ -51,8 +54,9 @@ describe('POST .../claim — Phase 2C-2 领取（CTO MVP 关键路径）', () =>
     mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(makeTx()));
   });
 
-  it('领取成功（201）：领给自己 + entry=CLAIMED + Outbox 同事务', async () => {
+  it('领取成功（201）：领给自己 + entry=CLAIMED + Outbox 同事务 + 负责人变更后触发自动匹配', async () => {
     const tx = makeTx();
+    matchCustomerPools.mockResolvedValue({ matched: false, poolsMatched: [], entryCreated: false });
     mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx));
     const res = await POST(makeRequest(), { params: params() });
     expect(res.status).toBe(201);
@@ -61,6 +65,9 @@ describe('POST .../claim — Phase 2C-2 领取（CTO MVP 关键路径）', () =>
     const entryUpdate = (tx.customerPoolEntry.update as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(entryUpdate.data.status).toBe('CLAIMED');
     expect(tx.outboxMessage.create).toHaveBeenCalledTimes(1);
+    // claim 后触发 DEPARTMENT 自动匹配（客户负责人变更；best-effort）
+    expect(matchCustomerPools).toHaveBeenCalledTimes(1);
+    expect(matchCustomerPools).toHaveBeenCalledWith('bp-1');
   });
 
   it('已领取客户再次领取 → 409 POOL_ENTRY_NOT_CLAIMABLE（页面提示已被领取）', async () => {

@@ -31,8 +31,9 @@ function makeTx(overrides: Partial<TxMock> = {}): TxMock {
   };
 }
 
-describe('matchCustomerPools — 客户公海自动匹配 MVP（REGION scope 触碰规则）', () => {
+describe('matchCustomerPools — 客户公海自动匹配 MVP（REGION + DEPARTMENT scope 触碰规则）', () => {
   let bpFindFirstMock: ReturnType<typeof vi.fn>;
+  let ownershipFindFirstMock: ReturnType<typeof vi.fn>;
   let poolFindManyMock: ReturnType<typeof vi.fn>;
   let transactionMock: ReturnType<typeof vi.fn>;
 
@@ -40,7 +41,9 @@ describe('matchCustomerPools — 客户公海自动匹配 MVP（REGION scope 触
     vi.clearAllMocks();
     bpFindFirstMock = vi.fn().mockResolvedValue({ id: 'bp-1', type: 'CUSTOMER', region: '华东' });
     mockPrisma.businessPartner = { findFirst: bpFindFirstMock };
-    poolFindManyMock = vi.fn().mockResolvedValue([{ id: 'pool-region-1', code: 'POOL-REGION-HD' }]);
+    ownershipFindFirstMock = vi.fn().mockResolvedValue(null);
+    mockPrisma.customerOwnership = { findFirst: ownershipFindFirstMock };
+    poolFindManyMock = vi.fn().mockResolvedValue([{ id: 'pool-region-1', code: 'POOL-REGION-HD', scopeType: 'REGION' }]);
     mockPrisma.customerPool = { findMany: poolFindManyMock };
     transactionMock = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(makeTx()));
     mockPrisma.$transaction = transactionMock;
@@ -68,6 +71,48 @@ describe('matchCustomerPools — 客户公海自动匹配 MVP（REGION scope 触
     expect(eventArgs.payload.businessPartnerId).toBe('bp-1');
   });
 
+  it('DEPARTMENT owner→departmentId 命中 → 自动创建 FIELD_RULE 条目（scopeValue = User.departmentId）', async () => {
+    // 归属快照：客户负责人（owner）部门 = 销售一部
+    ownershipFindFirstMock.mockResolvedValue({ id: 'own-1', owner: { departmentId: 'dept-sale-1' } });
+    bpFindFirstMock.mockResolvedValue({ id: 'bp-1', type: 'CUSTOMER', region: null });
+    poolFindManyMock.mockResolvedValue([{ id: 'pool-dept-1', code: 'POOL-SALE-1', scopeType: 'DEPARTMENT' }]);
+    const tx = makeTx({
+      customerOwnership: { findFirst: vi.fn().mockResolvedValue({ owner: { departmentId: 'dept-sale-1' } }) },
+    });
+    transactionMock.mockImplementation((fn: (t: unknown) => Promise<unknown>) => fn(tx));
+
+    const result = await matchCustomerPools('bp-1');
+
+    expect(result.matched).toBe(true);
+    expect(result.entryCreated).toBe(true);
+    expect(result.entryId).toBe('entry-auto-1');
+    expect(result.poolsMatched).toEqual([{ id: 'pool-dept-1', code: 'POOL-SALE-1' }]);
+    const createArgs = tx.customerPoolEntry.create.mock.calls[0][0];
+    expect(createArgs.data.poolId).toBe('pool-dept-1');
+    expect(createArgs.data.enterReason).toBe('FIELD_RULE');
+    expect(writeDomainEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it('DEPARTMENT + REGION 同时命中 → DEPARTMENT（客户负责人部门，触发源）优先入池', async () => {
+    ownershipFindFirstMock.mockResolvedValue({ id: 'own-1', owner: { departmentId: 'dept-sale-1' } });
+    poolFindManyMock.mockResolvedValue([
+      { id: 'pool-region-1', code: 'POOL-REGION-HD', scopeType: 'REGION' },
+      { id: 'pool-dept-1', code: 'POOL-SALE-1', scopeType: 'DEPARTMENT' },
+    ]);
+    const tx = makeTx({
+      customerOwnership: { findFirst: vi.fn().mockResolvedValue({ owner: { departmentId: 'dept-sale-1' } }) },
+    });
+    transactionMock.mockImplementation((fn: (t: unknown) => Promise<unknown>) => fn(tx));
+
+    const result = await matchCustomerPools('bp-1');
+
+    expect(result.poolsMatched).toEqual([
+      { id: 'pool-dept-1', code: 'POOL-SALE-1' },
+      { id: 'pool-region-1', code: 'POOL-REGION-HD' },
+    ]);
+    expect(tx.customerPoolEntry.create.mock.calls[0][0].data.poolId).toBe('pool-dept-1');
+  });
+
   it('BP region 无命中池 → 不创建（NO_MATCHING_POOL）', async () => {
     poolFindManyMock.mockResolvedValue([]);
 
@@ -79,7 +124,17 @@ describe('matchCustomerPools — 客户公海自动匹配 MVP（REGION scope 触
     expect(transactionMock).not.toHaveBeenCalled();
   });
 
-  it('BP 无 region → 不查询池、不创建（NO_MATCHING_POOL）', async () => {
+  it('BP 无 region 且负责人无部门 → 不查询池、不创建（NO_MATCHING_POOL）', async () => {
+    bpFindFirstMock.mockResolvedValue({ id: 'bp-1', type: 'CUSTOMER', region: null });
+    ownershipFindFirstMock.mockResolvedValue({ id: 'own-1', owner: { departmentId: null } });
+
+    const result = await matchCustomerPools('bp-1');
+
+    expect(result.skippedReason).toBe('NO_MATCHING_POOL');
+    expect(poolFindManyMock).not.toHaveBeenCalled();
+  });
+
+  it('BP 无 region（无归属）→ 不查询池、不创建（NO_MATCHING_POOL）', async () => {
     bpFindFirstMock.mockResolvedValue({ id: 'bp-1', type: 'CUSTOMER', region: null });
 
     const result = await matchCustomerPools('bp-1');
@@ -88,7 +143,7 @@ describe('matchCustomerPools — 客户公海自动匹配 MVP（REGION scope 触
     expect(poolFindManyMock).not.toHaveBeenCalled();
   });
 
-  it('已有 active entry（I2）→ 跳过不重复创建（HAS_ACTIVE_ENTRY）', async () => {
+  it('已有 active entry（I2）→ 跳过不重复创建（HAS_ACTIVE_ENTRY；REGION 路径）', async () => {
     const tx = makeTx({
       customerPoolEntry: {
         findFirst: vi.fn().mockResolvedValue({ id: 'entry-x' }),
@@ -105,13 +160,47 @@ describe('matchCustomerPools — 客户公海自动匹配 MVP（REGION scope 触
     expect(tx.customerPoolEntry.create).not.toHaveBeenCalled();
   });
 
-  it('已有 active ownership（I1）→ 跳过（HAS_ACTIVE_OWNERSHIP，防已负责客户流入公海）', async () => {
+  it('已有 active entry（I2）→ DEPARTMENT 路径也不重复入池（HAS_ACTIVE_ENTRY）', async () => {
+    ownershipFindFirstMock.mockResolvedValue({ id: 'own-1', owner: { departmentId: 'dept-sale-1' } });
+    bpFindFirstMock.mockResolvedValue({ id: 'bp-1', type: 'CUSTOMER', region: null });
+    poolFindManyMock.mockResolvedValue([{ id: 'pool-dept-1', code: 'POOL-SALE-1', scopeType: 'DEPARTMENT' }]);
+    const tx = makeTx({
+      customerPoolEntry: {
+        findFirst: vi.fn().mockResolvedValue({ id: 'entry-x' }),
+        create: vi.fn(),
+      },
+    });
+    transactionMock.mockImplementation((fn: (t: unknown) => Promise<unknown>) => fn(tx));
+
+    const result = await matchCustomerPools('bp-1');
+
+    expect(result.skippedReason).toBe('HAS_ACTIVE_ENTRY');
+    expect(tx.customerPoolEntry.create).not.toHaveBeenCalled();
+  });
+
+  it('已有 active ownership（I1）→ REGION 自动入池跳过（HAS_ACTIVE_OWNERSHIP，防已负责客户流入区域公海）', async () => {
+    // 归属存在但负责人部门无对应 DEPARTMENT 池 → 仅 REGION 候选 → I1 拦截
+    ownershipFindFirstMock.mockResolvedValue({ id: 'own-1', owner: { departmentId: 'dept-other' } });
     const tx = makeTx({ customerOwnership: { findFirst: vi.fn().mockResolvedValue({ id: 'own-1' }) } });
     transactionMock.mockImplementation((fn: (t: unknown) => Promise<unknown>) => fn(tx));
 
     const result = await matchCustomerPools('bp-1');
 
     expect(result.skippedReason).toBe('HAS_ACTIVE_OWNERSHIP');
+    expect(tx.customerPoolEntry.create).not.toHaveBeenCalled();
+  });
+
+  it('DEPARTMENT 事务内复核失败（归属在判定与提交间释放）→ MATCH_CONDITION_CHANGED 不创建', async () => {
+    ownershipFindFirstMock.mockResolvedValue({ id: 'own-1', owner: { departmentId: 'dept-sale-1' } });
+    bpFindFirstMock.mockResolvedValue({ id: 'bp-1', type: 'CUSTOMER', region: null });
+    poolFindManyMock.mockResolvedValue([{ id: 'pool-dept-1', code: 'POOL-SALE-1', scopeType: 'DEPARTMENT' }]);
+    const tx = makeTx({ customerOwnership: { findFirst: vi.fn().mockResolvedValue(null) } });
+    transactionMock.mockImplementation((fn: (t: unknown) => Promise<unknown>) => fn(tx));
+
+    const result = await matchCustomerPools('bp-1');
+
+    expect(result.matched).toBe(false);
+    expect(result.skippedReason).toBe('MATCH_CONDITION_CHANGED');
     expect(tx.customerPoolEntry.create).not.toHaveBeenCalled();
   });
 
