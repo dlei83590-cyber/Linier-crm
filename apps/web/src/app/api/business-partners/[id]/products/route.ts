@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
-import { ok, failValidation, failConflict, failNotFound, parsePagination } from "@/lib/api/response";
+import { ok, fail, failValidation, failConflict, failNotFound, parsePagination } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { handleServerError } from "@/lib/api/server-error";
@@ -71,17 +71,27 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   try {
     const created = await prisma.$transaction(async (tx) => {
-      const bp = await tx.businessPartner.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+      // CTO SMALL FIX：父 BusinessPartner 必须 CUSTOMER|BOTH（防 API 绕过给纯供应商建客户产品关系）
+      const bp = await tx.businessPartner.findFirst({ where: { id, deletedAt: null }, select: { id: true, type: true } });
       if (!bp) throw new Error("PARTNER_INVALID");
+      if (bp.type !== "CUSTOMER" && bp.type !== "BOTH") throw new Error("PARTNER_NOT_CUSTOMER");
 
       const item = await tx.item.findFirst({ where: { id: parsed.data.itemId, deletedAt: null }, select: { id: true } });
       if (!item) throw new Error("ITEM_INVALID");
 
-      const dup = await tx.customerProduct.findFirst({
-        where: { businessPartnerId: id, itemId: parsed.data.itemId, deletedAt: null },
-        select: { id: true },
+      // CTO SMALL FIX：soft-delete revive——查全部（含软删）；active→409；soft-deleted→恢复；无→create
+      const existing = await tx.customerProduct.findFirst({
+        where: { businessPartnerId: id, itemId: parsed.data.itemId },
+        select: { id: true, deletedAt: true },
       });
-      if (dup) throw new Error("DUPLICATE");
+      if (existing && !existing.deletedAt) throw new Error("DUPLICATE");
+      if (existing && existing.deletedAt) {
+        const restored = await tx.customerProduct.update({
+          where: { id: existing.id },
+          data: { deletedAt: null, isActive: true, note: parsed.data.note?.trim() || null, updatedById: user!.id },
+        });
+        return restored;
+      }
 
       return tx.customerProduct.create({
         data: {
@@ -113,6 +123,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     if (err instanceof Error && err.message === "DUPLICATE") {
       return failConflict(ERROR_CODES.CONFLICT, "该产品已关联到此客户");
+    }
+    if (err instanceof Error && err.message === "PARTNER_NOT_CUSTOMER") {
+      return fail(ERROR_CODES.VALIDATION_ERROR, "仅 CUSTOMER / BOTH 类型客户可关联产品", 400);
     }
     return handleServerError(request, user?.id, "customer-product.create", err);
   }

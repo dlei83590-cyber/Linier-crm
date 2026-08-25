@@ -129,7 +129,7 @@ export function CustomerDocuments({ partnerId }: { partnerId: string }) {
             ))}
           </select>
           <button onClick={submit} disabled={busy} className={BUTTON_PRIMARY_CLASS + " text-xs"}>
-            上传文档
+            登记文档
           </button>
         </div>
       </PermissionGuard>

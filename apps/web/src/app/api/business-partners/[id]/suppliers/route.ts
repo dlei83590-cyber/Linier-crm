@@ -70,8 +70,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   try {
     const created = await prisma.$transaction(async (tx) => {
-      const customer = await tx.businessPartner.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+      // CTO SMALL FIX：父 BusinessPartner 必须 CUSTOMER|BOTH（防 API 绕过给纯供应商建客户-供应商关系）
+      const customer = await tx.businessPartner.findFirst({ where: { id, deletedAt: null }, select: { id: true, type: true } });
       if (!customer) throw new Error("CUSTOMER_INVALID");
+      if (customer.type !== "CUSTOMER" && customer.type !== "BOTH") throw new Error("CUSTOMER_NOT_CUSTOMER");
 
       // 自关联禁止：客户不能把自己当作自己的供应商
       if (parsed.data.supplierId === id) throw new Error("SELF_LINK");
@@ -83,11 +85,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (!supplier) throw new Error("SUPPLIER_INVALID");
       if (supplier.type !== "SUPPLIER" && supplier.type !== "BOTH") throw new Error("SUPPLIER_TYPE_INVALID");
 
-      const dup = await tx.customerSupplier.findFirst({
-        where: { customerId: id, supplierId: parsed.data.supplierId, deletedAt: null },
-        select: { id: true },
+      // CTO SMALL FIX：soft-delete revive——查全部（含软删）；active→409；soft-deleted→恢复；无→create
+      const existing = await tx.customerSupplier.findFirst({
+        where: { customerId: id, supplierId: parsed.data.supplierId },
+        select: { id: true, deletedAt: true },
       });
-      if (dup) throw new Error("DUPLICATE");
+      if (existing && !existing.deletedAt) throw new Error("DUPLICATE");
+      if (existing && existing.deletedAt) {
+        const restored = await tx.customerSupplier.update({
+          where: { id: existing.id },
+          data: { deletedAt: null, isActive: true, note: parsed.data.note?.trim() || null, updatedById: user!.id },
+        });
+        return restored;
+      }
 
       return tx.customerSupplier.create({
         data: {
@@ -122,6 +132,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     if (err instanceof Error && err.message === "SUPPLIER_TYPE_INVALID") {
       return failValidation({ supplierId: ["所选往来单位类型不是供应商（SUPPLIER/BOTH）"] });
+    }
+    if (err instanceof Error && err.message === "CUSTOMER_NOT_CUSTOMER") {
+      return failValidation({ customerId: ["仅 CUSTOMER / BOTH 类型客户可关联供应商"] });
     }
     if (err instanceof Error && err.message === "DUPLICATE") {
       return failConflict(ERROR_CODES.CONFLICT, "该供应商已关联到此客户");
