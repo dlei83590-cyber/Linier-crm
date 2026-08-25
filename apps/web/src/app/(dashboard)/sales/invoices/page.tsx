@@ -10,12 +10,14 @@
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
-import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog, ModuleKpiStrip } from "@/components/workspace";
+import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 import type { ModuleSummaryData } from "@/lib/module-summary/types";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
+import { SALES_STATUS_OPTIONS, salesStatusLabel, salesStatusTone } from "@/lib/sales-status";
 import { useListQuery } from "@/lib/use-list-query";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
@@ -40,26 +42,8 @@ interface InvoiceRow {
   _count?: { lines: number };
 }
 
-const STATUS_OPTIONS = ["DRAFT", "ISSUED", "PARTIALLY_PAID", "PAID", "CANCELLED"] as const;
-
-/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: "草稿",
-  ISSUED: "已开票",
-  PARTIALLY_PAID: "部分收款",
-  PAID: "已收款",
-  CANCELLED: "已取消",
-};
-
-const TONE_MAP: Record<string, StatusTone> = {
-  DRAFT: "neutral",
-  ISSUED: "info",
-  PARTIALLY_PAID: "warning",
-  PAID: "success",
-  CANCELLED: "danger",
-};
-
 function InvoiceList() {
+  const router = useRouter();
   const toast = useToast();
   const { state } = useSession();
   const canDelete = hasPermission((state.user?.roles ?? []) as RoleCode[], actionPermission("invoice", "delete"));
@@ -137,7 +121,7 @@ function InvoiceList() {
   return (
     <AppPage>
       <ModuleKpiStrip
-        statuses={Object.keys(STATUS_LABELS).map((s) => ({ value: s, label: STATUS_LABELS[s] ?? s }))}
+        statuses={SALES_STATUS_OPTIONS.invoice.map((s) => ({ value: s, label: salesStatusLabel("invoice", s) }))}
         data={summary}
         activeStatus={filters.status ?? null}
         onSelectStatus={selectStatus}
@@ -163,9 +147,9 @@ function InvoiceList() {
               className={SELECT_CLASS}
             >
               <option value="">全部状态</option>
-              {STATUS_OPTIONS.map((s) => (
+              {SALES_STATUS_OPTIONS.invoice.map((s) => (
                 <option key={s} value={s}>
-                  {STATUS_LABELS[s] ?? s}
+                  {salesStatusLabel("invoice", s)}
                 </option>
               ))}
             </select>
@@ -218,8 +202,8 @@ function InvoiceList() {
             render: (row) => (
               <StatusBadge
                 status={row.status}
-                label={STATUS_LABELS[row.status] ?? row.status}
-                toneMap={TONE_MAP}
+                label={salesStatusLabel("invoice", row.status)}
+                tone={salesStatusTone("invoice", row.status)}
               />
             ),
           },
@@ -292,15 +276,17 @@ function InvoiceList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
-        rowActions={(row) =>
-          canDelete && (row.status === "CANCELLED" || (row.redLetter === true && (row.status === "DRAFT" || row.status === "ISSUED"))) ? (
-            <div className="flex justify-end gap-1">
-              <button type="button" onClick={() => setDeleting(row)} className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text transition-colors hover:bg-red-50">
-                删除
-              </button>
-            </div>
-          ) : undefined
-        }
+        rowActions={(row) => (
+          <RowActionsMenu
+            actions={[
+              { key: "view", label: "查看详情", onSelect: () => router.push("/sales/invoices/" + row.id) },
+              ...(canDelete &&
+              (row.status === "CANCELLED" || (row.redLetter === true && (row.status === "DRAFT" || row.status === "ISSUED")))
+                ? [{ key: "delete", label: "删除", tone: "danger" as const, onSelect: () => setDeleting(row) }]
+                : []),
+            ]}
+          />
+        )}
       />
       <ConfirmActionDialog
         open={deleting !== null}

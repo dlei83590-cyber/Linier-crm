@@ -15,12 +15,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
-import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge, ModuleKpiStrip } from "@/components/workspace";
 import type { ModuleSummaryData } from "@/lib/module-summary/types";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
+import { SALES_STATUS_OPTIONS, approvalStatusDef, salesStatusLabel, salesStatusTone } from "@/lib/sales-status";
 import { useListQuery } from "@/lib/use-list-query";
 import { useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
@@ -50,35 +50,11 @@ interface CnDnRow {
   lines?: CnDnLine[];
 }
 
-const STATUS_OPTIONS = ["DRAFT", "SUBMITTED", "APPLIED", "REVERSED", "CANCELLED"] as const;
 const NOTE_TYPE_OPTIONS = ["CREDIT", "DEBIT"] as const;
 
 const NOTE_TYPE_LABEL: Record<string, string> = {
   CREDIT: "贷项（冲减应收）",
   DEBIT: "借项（正向调整）",
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  DRAFT: "草稿",
-  SUBMITTED: "已提交",
-  APPLIED: "已应用",
-  REVERSED: "已反冲",
-  CANCELLED: "已取消",
-};
-
-const TONE_MAP: Record<string, StatusTone> = {
-  DRAFT: "neutral",
-  SUBMITTED: "info",
-  APPLIED: "success",
-  REVERSED: "warning",
-  CANCELLED: "danger",
-};
-
-const APPROVAL_TONE: Record<string, StatusTone> = {
-  DRAFT: "neutral",
-  PENDING: "warning",
-  APPROVED: "success",
-  REJECTED: "danger",
 };
 
 interface ConfirmTarget {
@@ -207,7 +183,7 @@ function CnDnList() {
   return (
     <AppPage>
       <ModuleKpiStrip
-        statuses={Object.keys(STATUS_LABEL).map((s) => ({ value: s, label: STATUS_LABEL[s] ?? s }))}
+        statuses={SALES_STATUS_OPTIONS.cnDn.map((s) => ({ value: s, label: salesStatusLabel("cnDn", s) }))}
         data={summary}
         activeStatus={filters.status ?? null}
         onSelectStatus={selectStatus}
@@ -239,9 +215,9 @@ function CnDnList() {
               className={SELECT_CLASS}
             >
               <option value="">全部状态</option>
-              {STATUS_OPTIONS.map((s) => (
+              {SALES_STATUS_OPTIONS.cnDn.map((s) => (
                 <option key={s} value={s}>
-                  {STATUS_LABEL[s] ?? s}
+                  {salesStatusLabel("cnDn", s)}
                 </option>
               ))}
             </select>
@@ -300,7 +276,11 @@ function CnDnList() {
             key: "status",
             header: "状态",
             render: (row) => (
-              <StatusBadge status={row.status} label={STATUS_LABEL[row.status] ?? row.status} toneMap={TONE_MAP} />
+              <StatusBadge
+                status={row.status}
+                label={salesStatusLabel("cnDn", row.status)}
+                tone={salesStatusTone("cnDn", row.status)}
+              />
             ),
           },
           {
@@ -310,7 +290,8 @@ function CnDnList() {
               row.workflowInstanceId ? (
                 <StatusBadge
                   status={row.approvalStatus ?? "DRAFT"}
-                  toneMap={APPROVAL_TONE}
+                  label={approvalStatusDef(row.approvalStatus ?? "DRAFT").label}
+                  tone={approvalStatusDef(row.approvalStatus ?? "DRAFT").tone}
                 />
               ) : (
                 <span className="text-ink-muted text-xs">无需审批</span>

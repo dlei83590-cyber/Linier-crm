@@ -17,49 +17,14 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
-import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel, StatusBadge } from "@/components/workspace";
+import { PageLoading } from "@/components/ui/skeleton";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
-import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, INPUT_CLASS } from "@/lib/ui-classes";
+import { salesStatusLabel, salesStatusTone } from "@/lib/sales-status";
 import { useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
-
-const TONE_MAP: Record<string, StatusTone> = {
-  DRAFT: "neutral",
-  READY: "info",
-  DISPATCHED: "info",
-  DELIVERED: "success",
-  COMPLETED: "success",
-  CANCELLED: "danger",
-};
-
-/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: "草稿",
-  READY: "待发运",
-  DISPATCHED: "已发运",
-  DELIVERED: "已送达",
-  COMPLETED: "已完成",
-  CANCELLED: "已取消",
-};
-
-/** 发票状态展示（与 Invoice 列表页一致；FRT-06 相关发票链接） */
-const INVOICE_TONE_MAP: Record<string, StatusTone> = {
-  DRAFT: "neutral",
-  ISSUED: "info",
-  PARTIALLY_PAID: "warning",
-  PAID: "success",
-  CANCELLED: "danger",
-};
-
-const INVOICE_STATUS_LABELS: Record<string, string> = {
-  DRAFT: "草稿",
-  ISSUED: "已开票",
-  PARTIALLY_PAID: "部分收款",
-  PAID: "已收款",
-  CANCELLED: "已取消",
-};
 
 interface DeliveryLine {
   id: string;
@@ -139,6 +104,7 @@ function DeliveryDetailPage() {
   const [selections, setSelections] = useState<Record<string, InvoiceSelection>>({});
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<"ready" | "cancel" | "unconfirm" | "delete" | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [dispatchOpen, setDispatchOpen] = useState(false);
   const [dispatchCarrier, setDispatchCarrier] = useState("");
   const [dispatchTrackingNo, setDispatchTrackingNo] = useState("");
@@ -360,13 +326,13 @@ function DeliveryDetailPage() {
       setInvoicesLoading(false);
     }
     return () => controller.abort();
-  }, [id, loadInvoices, canViewInvoice]);
+  }, [id, loadInvoices, canViewInvoice, reloadKey]);
 
   if (loading) {
     return (
       <AppPage>
-        <div className="border-border bg-surface rounded-lg border p-6 text-sm text-ink-muted">
-          加载中…
+        <div className="border-border bg-surface overflow-hidden rounded-lg border">
+          <PageLoading rows={5} />
         </div>
       </AppPage>
     );
@@ -375,7 +341,7 @@ function DeliveryDetailPage() {
   if (error || !detail) {
     return (
       <AppPage>
-        <ErrorPanel error={error} />
+        <ErrorPanel error={error} onRetry={() => setReloadKey((k) => k + 1)} />
         <Link href="/sales/deliveries" className="mt-3 inline-block text-sm text-brand-600 hover:underline">
           返回列表
         </Link>
@@ -395,8 +361,8 @@ function DeliveryDetailPage() {
         title={`送货单详情 — ${detail.code}`}
         backHref="/sales/deliveries"
         status={detail.status}
-        statusLabel={STATUS_LABELS[detail.status] ?? detail.status}
-        statusTone={TONE_MAP[detail.status] ?? "neutral"}
+        statusLabel={salesStatusLabel("delivery", detail.status)}
+        statusTone={salesStatusTone("delivery", detail.status)}
         actions={
           <>
             {detail.status === "DRAFT" && canEdit && (
@@ -628,8 +594,8 @@ function DeliveryDetailPage() {
                     <td className="px-3 py-2">
                       <StatusBadge
                         status={inv.status}
-                        label={INVOICE_STATUS_LABELS[inv.status] ?? inv.status}
-                        toneMap={INVOICE_TONE_MAP}
+                        label={salesStatusLabel("invoice", inv.status)}
+                        tone={salesStatusTone("invoice", inv.status)}
                       />
                     </td>
                     <td className="px-3 py-2 text-ink-secondary">{formatDate(inv.invoiceDate)}</td>
@@ -811,7 +777,7 @@ function DeliveryDetailPage() {
                   value={dispatchCarrier}
                   onChange={(e) => setDispatchCarrier(e.target.value)}
                   maxLength={100}
-                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+                  className={"mt-1 " + INPUT_CLASS}
                 />
               </div>
               <div>
@@ -820,7 +786,7 @@ function DeliveryDetailPage() {
                   value={dispatchTrackingNo}
                   onChange={(e) => setDispatchTrackingNo(e.target.value)}
                   maxLength={100}
-                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+                  className={"mt-1 " + INPUT_CLASS}
                 />
               </div>
             </div>
@@ -837,7 +803,7 @@ function DeliveryDetailPage() {
                 type="button"
                 onClick={handleDispatch}
                 disabled={actionBusy}
-                className="bg-brand-600 hover:bg-brand-700 rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+                className={BUTTON_PRIMARY_CLASS}
               >
                 {actionBusy ? "发运中…" : "确认发运"}
               </button>
@@ -867,7 +833,7 @@ function DeliveryDetailPage() {
               <select
                 value={podStatus}
                 onChange={(e) => setPodStatus(e.target.value as "RECEIVED" | "WAIVED")}
-                className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+                className={"mt-1 " + INPUT_CLASS}
               >
                 <option value="RECEIVED">已签收（RECEIVED）</option>
                 <option value="WAIVED">豁免签收（WAIVED）</option>
@@ -886,7 +852,7 @@ function DeliveryDetailPage() {
                 type="button"
                 onClick={handleConfirmDelivery}
                 disabled={actionBusy}
-                className="bg-brand-600 hover:bg-brand-700 rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+                className={BUTTON_PRIMARY_CLASS}
               >
                 {actionBusy ? "确认中…" : "确认收货"}
               </button>

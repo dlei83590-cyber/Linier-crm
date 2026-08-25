@@ -16,27 +16,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
-import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
+import { PageLoading } from "@/components/ui/skeleton";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
-import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, INPUT_CLASS } from "@/lib/ui-classes";
+import { salesStatusLabel, salesStatusTone } from "@/lib/sales-status";
 import { useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
-
-const STATUS_LABEL: Record<string, string> = {
-  UNALLOCATED: "未核销",
-  PARTIALLY_ALLOCATED: "部分核销",
-  FULLY_ALLOCATED: "已核销",
-  VOIDED: "已作废",
-};
-
-const TONE_MAP: Record<string, StatusTone> = {
-  UNALLOCATED: "info",
-  PARTIALLY_ALLOCATED: "warning",
-  FULLY_ALLOCATED: "success",
-  VOIDED: "danger",
-};
 
 const PAYMENT_METHOD_LABEL: Record<string, string> = {
   BANK_TRANSFER: "银行转账",
@@ -221,11 +208,11 @@ function ReceiptDetailPage() {
     for (const ar of selected) {
       const amt = Number(selections[ar.id].amount);
       if (!selections[ar.id].amount || !(amt > 0)) {
-        setDialogError(`应收 ${ar.invoice?.code ?? ar.id}：核销金额必须大于 0`);
+        setDialogError(`应收 ${ar.invoice?.code ?? "该应收项"}：核销金额必须大于 0`);
         return;
       }
       if (amt > Number(ar.balanceAmount)) {
-        setDialogError(`应收 ${ar.invoice?.code ?? ar.id}：核销金额不能超过应收余额 ${ar.balanceAmount}`);
+        setDialogError(`应收 ${ar.invoice?.code ?? "该应收项"}：核销金额不能超过应收余额 ${ar.balanceAmount}`);
         return;
       }
     }
@@ -309,8 +296,8 @@ function ReceiptDetailPage() {
   if (loading) {
     return (
       <AppPage>
-        <div className="border-border bg-surface rounded-lg border p-6 text-sm text-ink-muted">
-          加载中…
+        <div className="border-border bg-surface overflow-hidden rounded-lg border">
+          <PageLoading rows={5} />
         </div>
       </AppPage>
     );
@@ -319,7 +306,7 @@ function ReceiptDetailPage() {
   if (error || !detail) {
     return (
       <AppPage>
-        <ErrorPanel error={error} />
+        <ErrorPanel error={error} onRetry={loadDetail} />
         <Link href="/sales/receipts" className="mt-3 inline-block text-sm text-brand-600 hover:underline">
           返回列表
         </Link>
@@ -339,8 +326,8 @@ function ReceiptDetailPage() {
         title={`收款单详情 — ${detail.code}`}
         backHref="/sales/receipts"
         status={detail.status}
-        statusLabel={STATUS_LABEL[detail.status] ?? detail.status}
-        statusTone={TONE_MAP[detail.status] ?? "neutral"}
+        statusLabel={salesStatusLabel("receipt", detail.status)}
+        statusTone={salesStatusTone("receipt", detail.status)}
         actions={
           (canAllocate && canEdit) || (canVoid && canClose) ? (
             <>
@@ -391,7 +378,7 @@ function ReceiptDetailPage() {
             <table className="divide-border min-w-full divide-y text-sm">
               <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
                 <tr>
-                  <th className="px-3 py-2 font-medium">核销金额</th>
+                  <th className="px-3 py-2 text-right font-medium">核销金额</th>
                   <th className="px-3 py-2 font-medium">应收（AR）</th>
                   <th className="px-3 py-2 font-medium">核销时间</th>
                   <th className="px-3 py-2 font-medium">状态</th>
@@ -401,11 +388,20 @@ function ReceiptDetailPage() {
               <tbody className="divide-border divide-y">
                 {(detail.allocations ?? []).map((alloc) => (
                   <tr key={alloc.id}>
-                    <td className="px-3 py-2 text-ink-primary">
+                    <td className="px-3 py-2 text-right tabular-nums text-ink-primary">
                       {formatMoney(alloc.allocatedAmount, detail.currency)}
                     </td>
                     <td className="px-3 py-2 text-ink-secondary">
-                      {alloc.accountsReceivable ? `AR ${alloc.accountsReceivable.id.slice(0, 8)}…` : "—"}
+                      {alloc.accountsReceivable ? (
+                        <Link
+                          href={`/sales/invoices/${alloc.accountsReceivable.invoiceId}`}
+                          className="text-brand-600 hover:underline"
+                        >
+                          查看发票
+                        </Link>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="px-3 py-2 text-ink-secondary">{formatDate(alloc.allocatedAt)}</td>
                     <td className="px-3 py-2 text-ink-secondary">
@@ -621,7 +617,7 @@ function ReceiptDetailPage() {
               onChange={(e) => setReverseReason(e.target.value)}
               maxLength={500}
               placeholder="请填写冲销原因"
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+              className={"mt-1 " + INPUT_CLASS}
             />
             <div className="mt-5 flex justify-end gap-2">
               <button

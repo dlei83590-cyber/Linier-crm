@@ -12,28 +12,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { actionPermission } from "@nilier-crm/shared";
-import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
+import { PageLoading } from "@/components/ui/skeleton";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { salesStatusLabel, salesStatusTone } from "@/lib/sales-status";
 import { formatDate, formatMoney } from "@/lib/format";
-
-const TONE_MAP: Record<string, StatusTone> = {
-  OPEN: "warning",
-  PARTIALLY_PAID: "warning",
-  PAID: "success",
-  OVERDUE: "danger",
-  CLOSED: "neutral",
-};
-
-/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
-const STATUS_LABELS: Record<string, string> = {
-  OPEN: "未结清",
-  PARTIALLY_PAID: "部分收款",
-  PAID: "已结清",
-  OVERDUE: "已逾期",
-  CLOSED: "已关闭",
-};
 
 interface ArDetail {
   id: string;
@@ -76,6 +60,7 @@ function ArDetailPage() {
   const [detail, setDetail] = useState<ArDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -93,13 +78,13 @@ function ArDetailPage() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [id]);
+  }, [id, reloadKey]);
 
   if (loading) {
     return (
       <AppPage>
-        <div className="border-border bg-surface rounded-lg border p-6 text-sm text-ink-muted">
-          加载中…
+        <div className="border-border bg-surface overflow-hidden rounded-lg border">
+          <PageLoading rows={4} />
         </div>
       </AppPage>
     );
@@ -108,7 +93,7 @@ function ArDetailPage() {
   if (error || !detail) {
     return (
       <AppPage>
-        <ErrorPanel error={error} />
+        <ErrorPanel error={error} onRetry={() => setReloadKey((k) => k + 1)} />
         <Link href="/sales/accounts-receivable" className="mt-3 inline-block text-sm text-brand-600 hover:underline">
           返回列表
         </Link>
@@ -124,8 +109,8 @@ function ArDetailPage() {
         title={`应收账款详情 — ${detail.invoice?.code ?? "（草稿）"}`}
         backHref="/sales/accounts-receivable"
         status={displayStatus}
-        statusLabel={STATUS_LABELS[displayStatus] ?? displayStatus}
-        statusTone={TONE_MAP[displayStatus] ?? "neutral"}
+        statusLabel={salesStatusLabel("ar", displayStatus)}
+        statusTone={salesStatusTone("ar", displayStatus)}
         summary={
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <InfoItem

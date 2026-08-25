@@ -9,12 +9,14 @@
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
-import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog, ModuleKpiStrip } from "@/components/workspace";
+import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 import type { ModuleSummaryData } from "@/lib/module-summary/types";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
+import { SALES_STATUS_OPTIONS, salesStatusLabel, salesStatusTone } from "@/lib/sales-status";
 import { useListQuery } from "@/lib/use-list-query";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
@@ -31,28 +33,8 @@ interface DeliveryRow {
   _count?: { lines: number };
 }
 
-const STATUS_OPTIONS = ["DRAFT", "READY", "DISPATCHED", "DELIVERED", "COMPLETED", "CANCELLED"] as const;
-
-/** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: "草稿",
-  READY: "待发运",
-  DISPATCHED: "已发运",
-  DELIVERED: "已送达",
-  COMPLETED: "已完成",
-  CANCELLED: "已取消",
-};
-
-const TONE_MAP: Record<string, StatusTone> = {
-  DRAFT: "neutral",
-  READY: "info",
-  DISPATCHED: "info",
-  DELIVERED: "success",
-  COMPLETED: "success",
-  CANCELLED: "danger",
-};
-
 function DeliveryList() {
+  const router = useRouter();
   const toast = useToast();
   const { state } = useSession();
   const canDelete = hasPermission((state.user?.roles ?? []) as RoleCode[], actionPermission("delivery", "delete"));
@@ -130,7 +112,7 @@ function DeliveryList() {
   return (
     <AppPage>
       <ModuleKpiStrip
-        statuses={Object.keys(STATUS_LABELS).map((s) => ({ value: s, label: STATUS_LABELS[s] ?? s }))}
+        statuses={SALES_STATUS_OPTIONS.delivery.map((s) => ({ value: s, label: salesStatusLabel("delivery", s) }))}
         data={summary}
         activeStatus={filters.status ?? null}
         onSelectStatus={selectStatus}
@@ -156,9 +138,9 @@ function DeliveryList() {
               className={SELECT_CLASS}
             >
               <option value="">全部状态</option>
-              {STATUS_OPTIONS.map((s) => (
+              {SALES_STATUS_OPTIONS.delivery.map((s) => (
                 <option key={s} value={s}>
-                  {STATUS_LABELS[s] ?? s}
+                  {salesStatusLabel("delivery", s)}
                 </option>
               ))}
             </select>
@@ -201,8 +183,8 @@ function DeliveryList() {
             render: (row) => (
               <StatusBadge
                 status={row.status}
-                label={STATUS_LABELS[row.status] ?? row.status}
-                toneMap={TONE_MAP}
+                label={salesStatusLabel("delivery", row.status)}
+                tone={salesStatusTone("delivery", row.status)}
               />
             ),
           },
@@ -246,15 +228,16 @@ function DeliveryList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
-        rowActions={(row) =>
-          canDelete && (row.status === "CANCELLED" || row.status === "DISPATCHED") ? (
-            <div className="flex justify-end gap-1">
-              <button type="button" onClick={() => setDeleting(row)} className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text transition-colors hover:bg-red-50">
-                删除
-              </button>
-            </div>
-          ) : undefined
-        }
+        rowActions={(row) => (
+          <RowActionsMenu
+            actions={[
+              { key: "view", label: "查看详情", onSelect: () => router.push("/sales/deliveries/" + row.id) },
+              ...(canDelete && (row.status === "CANCELLED" || row.status === "DISPATCHED")
+                ? [{ key: "delete", label: "删除", tone: "danger" as const, onSelect: () => setDeleting(row) }]
+                : []),
+            ]}
+          />
+        )}
       />
       <ConfirmActionDialog
         open={deleting !== null}
