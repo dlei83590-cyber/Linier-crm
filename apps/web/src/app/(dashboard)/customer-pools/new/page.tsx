@@ -1,9 +1,13 @@
 "use client";
 
 /**
- * Phase 2C — 新建公海池（GLOBAL / REGION / DEPARTMENT；OQ-1：REGION 区域字符串）
+ * FRT-03 — 新建公海池（GLOBAL / REGION / DEPARTMENT）
+ *
+ * - REGION：继续使用真实区域值（客户档案 BusinessPartner.region 字符串，OQ-1 不建字典）；
+ * - DEPARTMENT：真实 Department selector（禁手打 Department ID）；
+ * - 页面明确：当前自动匹配仅 REGION；DEPARTMENT 自动匹配未实现（仅手工入池），不虚报。
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
@@ -11,6 +15,7 @@ import { AppPage, EntityFormWorkspace } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
+import { useToast } from "@/components/ui/toast";
 
 const SCOPE_OPTIONS = [
   { value: "GLOBAL", label: "全局（不限制范围）" },
@@ -18,21 +23,55 @@ const SCOPE_OPTIONS = [
   { value: "DEPARTMENT", label: "部门（按操作者部门）" },
 ];
 
+interface DepartmentOption {
+  id: string;
+  code: string;
+  name: string;
+}
+
 function PoolCreateForm() {
   const router = useRouter();
+  const toast = useToast();
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [scopeType, setScopeType] = useState("GLOBAL");
   const [scopeValue, setScopeValue] = useState("");
+  const [departments, setDepartments] = useState<DepartmentOption[]>([]);
+  const [deptLoadError, setDeptLoadError] = useState<string | null>(null);
+  const [deptLoading, setDeptLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiClientError | null>(null);
   const [dirty, setDirty] = useState(false);
+
+  const loadDepartments = () => {
+    setDeptLoading(true);
+    setDeptLoadError(null);
+    apiFetch<DepartmentOption[]>("/api/departments?pageSize=100")
+      .then(({ data }) => setDepartments(data))
+      .catch((err: unknown) =>
+        setDeptLoadError(err instanceof ApiClientError ? err.message : "部门列表加载失败"),
+      )
+      .finally(() => setDeptLoading(false));
+  };
+
+  useEffect(() => {
+    if (scopeType === "DEPARTMENT" && departments.length === 0) loadDepartments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeType]);
 
   const handleSave = () => {
     if (submitting) return;
     if (!code.trim() || !name.trim()) {
       setError(new ApiClientError(400, "编码与名称为必填项", "VALIDATION"));
+      return;
+    }
+    if (scopeType === "DEPARTMENT" && !scopeValue.trim()) {
+      setError(new ApiClientError(400, "请选择部门", "VALIDATION"));
+      return;
+    }
+    if (scopeType === "REGION" && !scopeValue.trim()) {
+      setError(new ApiClientError(400, "请填写区域值（如：华东）", "VALIDATION"));
       return;
     }
     setSubmitting(true);
@@ -44,10 +83,13 @@ function PoolCreateForm() {
         name: name.trim(),
         description: description.trim() || undefined,
         scopeType,
-        scopeValue: scopeValue.trim() || null,
+        scopeValue: scopeType === "DEPARTMENT" ? scopeValue : scopeValue.trim() || null,
       }),
     })
-      .then(({ data }) => router.push("/customer-pools/" + data.id))
+      .then(({ data }) => {
+        toast.success("公海池创建成功", `${code.trim()}（${name.trim()}）已创建`);
+        router.push("/customer-pools/" + data.id);
+      })
       .catch((err: unknown) => {
         setError(err instanceof ApiClientError ? err : new ApiClientError(0, "网络错误", "NETWORK_ERROR"));
         setSubmitting(false);
@@ -67,6 +109,12 @@ function PoolCreateForm() {
       onSave={handleSave}
       onCancel={() => router.push("/customer-pools")}
     >
+      {/* FRT-03 #8：自动匹配能力如实说明，不虚报 */}
+      <div className="rounded-md border border-status-info-border bg-status-info-bg p-3 text-sm text-status-info-text">
+        自动匹配说明：当前版本仅支持 <strong>REGION 自动入池</strong>（新建客户时，客户区域 =
+        公海区域字符串即自动进入公海，来源标记「规则自动」）。DEPARTMENT 公海暂不支持自动入池，
+        仅支持手工入池（操作者部门须与公海部门一致）；GLOBAL 公海不自动入池。
+      </div>
       <section className="rounded-md border border-border p-4">
         <h2 className="mb-3 text-sm font-semibold text-ink-primary">基本信息</h2>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -83,15 +131,52 @@ function PoolCreateForm() {
               ))}
             </select>
           </FormField>
-          <FormField label="范围值">
-            <input
-              value={scopeValue}
-              onChange={(e) => setScopeValue(e.target.value)}
-              className={INPUT_CLASS}
-              placeholder={scopeType === "GLOBAL" ? "全局池留空" : scopeType === "REGION" ? "如：华东" : "部门 ID"}
-              disabled={scopeType === "GLOBAL"}
-            />
-          </FormField>
+
+          {scopeType === "DEPARTMENT" ? (
+            <FormField label="部门" required hint="选择操作者部门；DEPARTMENT 自动匹配未实现，仅手工入池校验">
+              {deptLoading ? (
+                <p className="text-sm text-ink-muted">部门列表加载中…</p>
+              ) : deptLoadError ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-status-danger-text">部门列表加载失败：{deptLoadError}</span>
+                  <button
+                    type="button"
+                    onClick={loadDepartments}
+                    className="text-sm text-brand-600 hover:underline"
+                  >
+                    重试
+                  </button>
+                </div>
+              ) : (
+                <select
+                  value={scopeValue}
+                  onChange={(e) => setScopeValue(e.target.value)}
+                  className={INPUT_CLASS}
+                >
+                  <option value="">请选择部门</option>
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}（{d.code}）
+                    </option>
+                  ))}
+                </select>
+              )}
+            </FormField>
+          ) : (
+            <FormField
+              label="范围值"
+              hint={scopeType === "REGION" ? "填写客户档案中的真实区域字符串（如：华东），新建客户区域一致即自动入池" : "全局池留空"}
+            >
+              <input
+                value={scopeValue}
+                onChange={(e) => setScopeValue(e.target.value)}
+                className={INPUT_CLASS}
+                placeholder={scopeType === "REGION" ? "如：华东" : ""}
+                disabled={scopeType === "GLOBAL"}
+              />
+            </FormField>
+          )}
+
           <FormField label="描述">
             <input value={description} onChange={(e) => setDescription(e.target.value)} className={INPUT_CLASS} />
           </FormField>
