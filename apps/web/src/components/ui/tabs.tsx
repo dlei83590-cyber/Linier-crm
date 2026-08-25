@@ -117,7 +117,9 @@ export function Tabs({
     >
       {items.map((item, i) => {
         const active = item.value === value;
-        const tabCls = variant === 'underline' ? underlineTab(active, item.disabled) : pillTab(active, item.disabled);
+        const tabCls = variant === 'underline'
+          ? underlineTab(active, item.disabled === true)
+          : pillTab(active, item.disabled === true);
         return (
           <button
             key={item.value}

@@ -18,7 +18,7 @@ const SIZE_CLASS: Record<SelectSize, string> = {
   md: 'h-10 pl-3 pr-9 text-sm',
 };
 
-export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
+export interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'size'> {
   size?: SelectSize;
   /** 校验失败：danger 边框 */
   invalid?: boolean;

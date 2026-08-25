@@ -17,7 +17,7 @@ const SIZE_CLASS: Record<InputSize, string> = {
   md: 'h-10 px-3 text-sm',
 };
 
-export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
+export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'> {
   size?: InputSize;
   /** 校验失败：danger 边框（文案由 FormField error 负责） */
   invalid?: boolean;

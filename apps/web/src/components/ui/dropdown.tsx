@@ -29,7 +29,7 @@ export interface DropdownSeparator {
 export type DropdownEntry = DropdownItem | DropdownSeparator;
 
 function isDropdownItem(entry: DropdownEntry): entry is DropdownItem {
-  return entry.type !== 'separator';
+  return !('type' in entry);
 }
 
 export interface DropdownProps {
