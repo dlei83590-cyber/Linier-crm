@@ -219,7 +219,8 @@ describe('POST /api/business-partners/:id/activities — followup-level 跟进�
     );
     expect(res.status).toBe(400);
     const body = await res.json();
-    expect(body.error.details.responsibleUserId).toBeTruthy();
+    // zod flatten：字段错误在 fieldErrors 下（与服务端 zod superRefine path 一致）
+    expect(body.error.details.fieldErrors.responsibleUserId).toBeTruthy();
     expect(tx.customerActivity.create).not.toHaveBeenCalled();
   });
 
