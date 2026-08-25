@@ -76,7 +76,7 @@ describe('GET /api/quotations/:id — FRT-06 已转订单链接投影', () => {
     // 断言 prisma include 携带 salesOrder 投影（防止回归删除）
     const findFirst = (mockPrisma.quotation as { findFirst: ReturnType<typeof vi.fn> }).findFirst;
     const include = findFirst.mock.calls[0][0] as { include: { salesOrder: unknown } };
-    expect(include.salesOrder).toEqual({ select: { id: true, code: true, status: true } });
+    expect(include.include.salesOrder).toEqual({ select: { id: true, code: true, status: true } });
   });
 
   it('报价单不存在 → 404', async () => {
