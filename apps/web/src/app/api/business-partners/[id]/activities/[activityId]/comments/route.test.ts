@@ -48,6 +48,8 @@ describe('GET /api/business-partners/:id/activities/:activityId/comments — 评
   beforeEach(() => {
     vi.clearAllMocks();
     mockPrisma.customerActivity = { findFirst: vi.fn().mockResolvedValue({ id: 'act-1' }) };
+    // FE 2.0 评论操作人只读投影：user 摘要查询
+    mockPrisma.user = { findMany: vi.fn().mockResolvedValue([{ id: 'u-1', name: '评论人', email: 'c@x.c' }]) };
     mockPrisma.activityComment = {
       findMany: vi.fn().mockResolvedValue([
         { id: 'c-1', activityId: 'act-1', content: '第一条', createdById: 'u-1', createdAt: new Date('2026-08-25T00:00:00Z') },

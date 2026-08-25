@@ -66,8 +66,8 @@ const inputClass = INPUT_CLASS;
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-md border border-border p-4">
-      <h2 className="mb-3 text-sm font-semibold text-ink-primary">{title}</h2>
+    <section className="rounded-xl border border-border bg-surface p-5 shadow-elevation-sm">
+      <h2 className="mb-4 text-sm font-semibold text-ink-primary">{title}</h2>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{children}</div>
     </section>
   );

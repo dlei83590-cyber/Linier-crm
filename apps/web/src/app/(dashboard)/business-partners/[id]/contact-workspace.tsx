@@ -10,7 +10,10 @@ import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shar
 import { useSession } from "@/lib/session-context";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
-import { INPUT_CLASS } from "@/lib/ui-classes";
+import { ConfirmActionDialog } from "@/components/workspace";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
+import { INPUT_CLASS, BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import {
   buildContactCreatePayload,
   buildContactEditPayload,
@@ -197,27 +200,40 @@ export function ContactWorkspace({ partnerId }: { partnerId: string }) {
       )}
 
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-ink-primary">联系人（{contacts.length}）</h3>
-        {canCreate && (<button type="button" onClick={openCreate} className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">+ 新增联系人</button>)}
+        <h3 className="text-sm font-semibold text-ink-primary">联系人</h3>
+        {canCreate && (<button type="button" onClick={openCreate} className={BUTTON_PRIMARY_CLASS}>+ 新增联系人</button>)}
       </div>
 
-      {loading ? (<p className="text-sm text-ink-muted">加载中…</p>)
-        : loadError ? (<p className="text-sm text-status-danger-text">{loadError.message}</p>)
-        : contacts.length === 0 ? (<p className="text-sm text-ink-muted">暂无联系人{canCreate ? "，点击「+ 新增联系人」创建" : ""}。</p>)
+      {loading ? (
+        <div className="mt-3 space-y-2" aria-hidden="true">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 w-full" />
+          ))}
+        </div>
+      )
+        : loadError ? (
+          <div className="mt-3 flex flex-col items-center gap-2 rounded-lg border border-status-danger-border bg-status-danger-bg/30 py-8 text-center">
+            <p className="text-sm text-status-danger-text">{loadError.message}</p>
+            <button type="button" onClick={load} className={BUTTON_SECONDARY_CLASS + " text-xs"}>重试</button>
+          </div>
+        )
+        : contacts.length === 0 ? (
+          <EmptyState title="暂无联系人" description={canCreate ? "点击「+ 新增联系人」创建第一个联系人。" : "当前无可查看的联系人。"} />
+        )
         : (
-          <div className="space-y-2">
+          <div className="mt-3 space-y-2">
             {contacts.map((c) => (
-              <div key={c.id} className="rounded-md border border-border p-3">
+              <div key={c.id} className="rounded-lg border border-border bg-surface p-3.5 shadow-elevation-sm transition-shadow duration-150 hover:shadow-elevation-md">
                 <div className="flex flex-wrap items-center gap-2">
                   <button type="button" onClick={() => toggleExpand(c)} className="font-medium text-ink-primary hover:underline">{c.name}</button>
-                  {c.isPrimary && <span className="rounded bg-brand-50 px-1.5 py-0.5 text-xs text-brand-700">主联系人</span>}
-                  {!c.isActive && <span className="rounded bg-canvas px-1.5 py-0.5 text-xs text-ink-muted">已停用</span>}
+                  {c.isPrimary && <span className="rounded-full bg-domain-customer-project-50 px-2 py-0.5 text-xs font-medium text-domain-customer-project-700">主联系人</span>}
+                  {!c.isActive && <span className="rounded-full bg-canvas px-2 py-0.5 text-xs text-ink-muted">已停用</span>}
                   {c.title && <span className="text-xs text-ink-secondary">{c.title}</span>}
                   {c.department && <span className="text-xs text-ink-secondary">{c.department}</span>}
                   <div className="ml-auto flex items-center gap-1">
-                    {canEdit && !c.isPrimary && (<button type="button" onClick={() => setPrimaryTarget(c)} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary hover:bg-canvas">设为主联系人</button>)}
-                    {canEdit && (<button type="button" onClick={() => openEdit(c)} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary hover:bg-canvas">编辑</button>)}
-                    {canDelete && (<button type="button" onClick={() => setDeleteTarget(c)} className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text hover:bg-red-50">删除</button>)}
+                    {canEdit && !c.isPrimary && (<button type="button" onClick={() => setPrimaryTarget(c)} className={BUTTON_SECONDARY_CLASS + " text-xs"}>设为主联系人</button>)}
+                    {canEdit && (<button type="button" onClick={() => openEdit(c)} className={BUTTON_SECONDARY_CLASS + " text-xs"}>编辑</button>)}
+                    {canDelete && (<button type="button" onClick={() => setDeleteTarget(c)} className={BUTTON_SECONDARY_CLASS + " text-xs text-status-danger-text"}>删除</button>)}
                   </div>
                 </div>
                 <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-secondary">
@@ -277,7 +293,7 @@ export function ContactWorkspace({ partnerId }: { partnerId: string }) {
         )}
 
       {formOpen && (
-        <div className="rounded-md border border-border p-4">
+        <div className="animate-fade-in rounded-lg border border-border bg-surface p-4 shadow-elevation-sm">
           <h3 className="mb-3 text-sm font-semibold text-ink-primary">{editing ? "编辑联系人" : "新增联系人"}</h3>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
             <label className="block"><span className="block text-xs text-ink-secondary">姓名 *</span><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} /></label>
@@ -291,31 +307,33 @@ export function ContactWorkspace({ partnerId }: { partnerId: string }) {
             <label className="flex items-center gap-2"><input type="checkbox" checked={!!form.isPrimary} onChange={(e) => setForm({ ...form, isPrimary: e.target.checked })} /><span className="text-xs text-ink-secondary">设为主联系人</span></label>
           </div>
           <div className="mt-3 flex items-center justify-end gap-2">
-            <button type="button" onClick={() => setFormOpen(false)} className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-primary hover:bg-canvas">取消</button>
-            <button type="button" onClick={submitForm} disabled={submitting} className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-40">{submitting ? "保存中…" : "保存"}</button>
+            <button type="button" onClick={() => setFormOpen(false)} className={BUTTON_SECONDARY_CLASS}>取消</button>
+            <button type="button" onClick={submitForm} disabled={submitting} className={BUTTON_PRIMARY_CLASS}>{submitting ? "保存中…" : "保存"}</button>
           </div>
         </div>
       )}
 
-      {deleteTarget && (
-        <div className="rounded-md border border-status-danger-border bg-status-danger-bg/10 p-4">
-          <p className="text-sm text-ink-primary">确认删除联系人「{deleteTarget.name}」？删除后停用（历史单据仍保留该联系人快照）。</p>
-          <div className="mt-2 flex items-center gap-2">
-            <button type="button" onClick={runDelete} disabled={deleteBusy} className="rounded-md bg-status-danger-text px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40">{deleteBusy ? "删除中…" : "确认删除"}</button>
-            <button type="button" onClick={() => setDeleteTarget(null)} className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-primary hover:bg-canvas">取消</button>
-          </div>
-        </div>
-      )}
+      <ConfirmActionDialog
+        open={deleteTarget !== null}
+        title={"删除联系人「" + (deleteTarget?.name ?? "") + "」？"}
+        description="删除后联系人停用（历史单据仍保留该联系人快照）。"
+        confirmLabel="确认删除"
+        tone="danger"
+        busy={deleteBusy}
+        onConfirm={runDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
 
-      {primaryTarget && (
-        <div className="rounded-md border border-brand-200 bg-brand-50 p-4">
-          <p className="text-sm text-ink-primary">将「{primaryTarget.name}」设为主联系人？原主联系人将自动取消（后端事务权威处理）。</p>
-          <div className="mt-2 flex items-center gap-2">
-            <button type="button" onClick={runSetPrimary} className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white">确认设置</button>
-            <button type="button" onClick={() => setPrimaryTarget(null)} className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-primary hover:bg-canvas">取消</button>
-          </div>
-        </div>
-      )}
+      <ConfirmActionDialog
+        open={primaryTarget !== null}
+        title={"将「" + (primaryTarget?.name ?? "") + "」设为主联系人？"}
+        description="原主联系人将自动取消（后端事务权威处理）。"
+        confirmLabel="确认设置"
+        tone="primary"
+        busy={false}
+        onConfirm={runSetPrimary}
+        onCancel={() => setPrimaryTarget(null)}
+      />
     </div>
   );
 }

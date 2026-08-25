@@ -1,19 +1,25 @@
 "use client";
 
 /**
- * Phase 3 MVP — Customer 360「文档」Tab（客户文档/附件，复用 File Center）
+ * Phase 3 MVP — Customer 360「文档」Tab（FE 2.0：三态统一 + ConfirmActionDialog + DataTable）
  *
  * 数据：GET/POST /api/business-partners/:id/attachments + DELETE /:id/attachments/:attachmentId
  * 文件元数据：POST /api/files（file:create；FileAttachment businessType="business-partner" 零新表）
  * 权限：列表 file-attachment:view；新增 file-attachment:create；解除 file-attachment:delete
+ * 解除挂载：window.confirm → ConfirmActionDialog。
  * HOLD：真实二进制存储/预览下载（附件系统重建）/文档管理平台
  */
 import { useCallback, useEffect, useState } from "react";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { ConfirmActionDialog } from "@/components/workspace";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 import { INPUT_CLASS, BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { formatDate } from "@/lib/format";
+import { DataTable, type DataTableColumn } from "./data-table";
+import { IconAlertCircle, IconRefreshCw } from "./icons";
 
 interface AttachmentRow {
   id: string;
@@ -44,6 +50,8 @@ export function CustomerDocuments({ partnerId }: { partnerId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<{ id: string; name: string } | null>(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
 
   // 新增表单（创建文件元数据 → 挂载到客户）
   const [name, setName] = useState("");
@@ -53,6 +61,7 @@ export function CustomerDocuments({ partnerId }: { partnerId: string }) {
 
   const load = useCallback(() => {
     setLoading(true);
+    setError(null);
     apiFetch<AttachmentRow[]>("/api/business-partners/" + partnerId + "/attachments?page=1&pageSize=50")
       .then(({ data }) => setItems(data))
       .catch((err: unknown) => setError(err instanceof ApiClientError ? err.message : "加载文档失败"))
@@ -98,34 +107,64 @@ export function CustomerDocuments({ partnerId }: { partnerId: string }) {
     }
   };
 
-  const remove = async (id: string) => {
-    if (!window.confirm("确认解除该文档挂载？（文件本身保留在 File Center）")) return;
-    setError(null);
+  const runRemove = async () => {
+    if (!confirmTarget || removeBusy) return;
+    setRemoveBusy(true);
     try {
-      await apiFetch("/api/business-partners/" + partnerId + "/attachments/" + id, { method: "DELETE" });
+      await apiFetch("/api/business-partners/" + partnerId + "/attachments/" + confirmTarget.id, { method: "DELETE" });
+      setConfirmTarget(null);
       load();
     } catch (err: unknown) {
       setError(err instanceof ApiClientError ? err.message : "删除失败");
+      setConfirmTarget(null);
+    } finally {
+      setRemoveBusy(false);
     }
   };
 
+  const columns: DataTableColumn<AttachmentRow>[] = [
+    { key: "name", header: "文件名", render: (r) => (
+      <span>
+        {r.file.name}
+        {r.file.originalName && r.file.originalName !== r.file.name ? (
+          <span className="ml-1 text-xs text-ink-muted">（{r.file.originalName}）</span>
+        ) : null}
+      </span>
+    ) },
+    { key: "type", header: "类型", render: (r) => r.attachmentType ? (ATTACHMENT_TYPE_LABELS[r.attachmentType] ?? r.attachmentType) : "—" },
+    { key: "size", header: "大小", align: "right", render: (r) => <span className="tabular-nums">{formatSize(r.file.size)}</span> },
+    { key: "createdAt", header: "挂载时间", render: (r) => formatDate(r.createdAt) },
+    { key: "actions", header: "", render: (r) => (
+      <PermissionGuard permission={actionPermission("file-attachment", "delete")}>
+        <button
+          type="button"
+          onClick={() => setConfirmTarget({ id: r.id, name: r.file.name })}
+          className={BUTTON_SECONDARY_CLASS + " text-xs"}
+        >
+          解除挂载
+        </button>
+      </PermissionGuard>
+    ) },
+  ];
+
   return (
-    <section className="rounded-md border border-border p-4">
-      <h2 className="mb-3 text-sm font-semibold text-ink-primary">客户文档</h2>
-      <p className="mb-2 text-xs text-ink-muted">文档复用 File Center（元数据；真实二进制存储/预览下载后续接入对象存储）。</p>
-      {error && <p className="mb-2 rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">{error}</p>}
+    <section className="rounded-xl border border-border bg-surface p-5 shadow-elevation-sm">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-ink-primary">客户文档</h2>
+        {!loading && !error && <span className="text-xs text-ink-muted">共 {items.length} 个</span>}
+      </div>
+      <p className="mb-3 text-xs text-ink-muted">文档复用 File Center（元数据；真实二进制存储/预览下载后续接入对象存储）。</p>
+      {error && <p className="mb-3 text-xs text-status-danger-text">{error}</p>}
 
       <PermissionGuard permission={actionPermission("file-attachment", "create")}>
-        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-border p-3">
+        <div className="mb-5 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-canvas/50 p-3">
           <input value={name} onChange={(e) => setName(e.target.value)} className={INPUT_CLASS + " max-w-xs"} placeholder="文件名（必填）" />
           <input value={code} onChange={(e) => setCode(e.target.value)} className={INPUT_CLASS + " max-w-xs"} placeholder="文件编码（唯一，必填）" />
           <input value={originalName} onChange={(e) => setOriginalName(e.target.value)} className={INPUT_CLASS + " max-w-xs"} placeholder="原始文件名（可选）" />
           <select value={attachmentType} onChange={(e) => setAttachmentType(e.target.value)} className={INPUT_CLASS + " max-w-xs"}>
             <option value="">类型（可选）</option>
             {Object.entries(ATTACHMENT_TYPE_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
-              </option>
+              <option key={k} value={k}>{v}</option>
             ))}
           </select>
           <button onClick={submit} disabled={busy} className={BUTTON_PRIMARY_CLASS + " text-xs"}>
@@ -135,46 +174,38 @@ export function CustomerDocuments({ partnerId }: { partnerId: string }) {
       </PermissionGuard>
 
       {loading ? (
-        <p className="text-sm text-ink-muted">加载中…</p>
+        <div className="space-y-2" aria-hidden="true">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-9 w-full" />
+          ))}
+        </div>
       ) : error ? (
-        <p className="text-sm text-status-danger-text">文档列表加载失败：{error}</p>
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-status-danger-border bg-status-danger-bg/30 py-8 text-center">
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-status-danger-bg text-status-danger-text">
+            <IconAlertCircle className="h-5 w-5" />
+          </span>
+          <p className="text-sm text-status-danger-text">{error}</p>
+          <button type="button" onClick={load} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-secondary transition-colors duration-150 hover:bg-slate-50">
+            <IconRefreshCw className="h-3.5 w-3.5" />
+            重试
+          </button>
+        </div>
       ) : items.length === 0 ? (
-        <p className="text-sm text-ink-muted">暂无文档。</p>
+        <EmptyState title="暂无文档" description="登记文件元数据并挂载到客户；文件本体保留在 File Center。" />
       ) : (
-        <table className="min-w-full divide-y divide-border text-sm">
-          <thead className="text-ink-secondary bg-canvas text-left text-xs font-medium">
-            <tr>
-              <th className="px-4 py-2 font-semibold">文件名</th>
-              <th className="px-4 py-2 font-semibold">类型</th>
-              <th className="px-4 py-2 font-semibold">大小</th>
-              <th className="px-4 py-2 font-semibold">挂载时间</th>
-              <th className="px-4 py-2 font-semibold"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {items.map((r) => (
-              <tr key={r.id}>
-                <td className="px-4 py-2">
-                  {r.file.name}
-                  {r.file.originalName && r.file.originalName !== r.file.name ? (
-                    <span className="ml-1 text-xs text-ink-muted">（{r.file.originalName}）</span>
-                  ) : null}
-                </td>
-                <td className="px-4 py-2">{r.attachmentType ? (ATTACHMENT_TYPE_LABELS[r.attachmentType] ?? r.attachmentType) : "—"}</td>
-                <td className="px-4 py-2 tabular-nums">{formatSize(r.file.size)}</td>
-                <td className="px-4 py-2">{formatDate(r.createdAt)}</td>
-                <td className="px-4 py-2 text-right">
-                  <PermissionGuard permission={actionPermission("file-attachment", "delete")}>
-                    <button onClick={() => remove(r.id)} className={BUTTON_SECONDARY_CLASS + " text-xs"}>
-                      解除挂载
-                    </button>
-                  </PermissionGuard>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable columns={columns} rows={items} rowKey={(r) => r.id} />
       )}
+
+      <ConfirmActionDialog
+        open={confirmTarget !== null}
+        title={"解除文档挂载「" + (confirmTarget?.name ?? "") + "」？"}
+        description="解除后该文档不再展示在客户文档列表（文件本身保留在 File Center）。"
+        confirmLabel="解除挂载"
+        tone="danger"
+        busy={removeBusy}
+        onConfirm={runRemove}
+        onCancel={() => setConfirmTarget(null)}
+      />
     </section>
   );
 }

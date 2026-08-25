@@ -41,7 +41,29 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     select: { id: true, activityId: true, content: true, createdById: true, createdAt: true },
   });
 
-  return ok(comments);
+  // 评论操作人展示（只读投影，FE 2.0；禁止 raw database ID 上屏）
+  const commentUserIds = Array.from(
+    new Set(comments.map((c) => c.createdById).filter((x): x is string => Boolean(x))),
+  );
+  const commentUsers =
+    commentUserIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: commentUserIds } },
+          select: { id: true, name: true, email: true },
+        })
+      : [];
+  const commentUserMap = new Map(commentUsers.map((u) => [u.id, u]));
+  const pickCommentUser = (id: string | null) =>
+    id && commentUserMap.has(id)
+      ? { id, name: commentUserMap.get(id)!.name, email: commentUserMap.get(id)!.email }
+      : null;
+
+  return ok(
+    comments.map((c) => ({
+      ...c,
+      createdBy: pickCommentUser(c.createdById),
+    })),
+  );
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string; activityId: string }> }) {
