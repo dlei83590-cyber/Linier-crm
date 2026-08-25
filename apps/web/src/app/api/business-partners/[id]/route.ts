@@ -45,6 +45,10 @@ const businessPartnerUpdateSchema = z
     phone: z.string().max(50).nullable().optional(),
     email: z.string().max(200).nullable().optional(),
     address: z.string().max(500).nullable().optional(),
+    // 签到范围（Migration 0051）：客户坐标 + 允许半径（米）；三者齐备时签到启用距离 Gate
+    latitude: z.coerce.number().min(-90).max(90).nullable().optional(),
+    longitude: z.coerce.number().min(-180).max(180).nullable().optional(),
+    allowedRadiusMeters: z.number().int().positive().max(100000).nullable().optional(),
     isActive: z.boolean().optional(),
     // 开票资料（ADR-0043，I1：uscc GB 32100-2015 校验；I10：maker-checker 走 approvalStatus）
     taxInvoiceInfo: z

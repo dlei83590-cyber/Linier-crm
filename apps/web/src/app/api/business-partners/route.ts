@@ -46,6 +46,10 @@ const businessPartnerCreateSchema = z.object({
   phone: z.string().max(50).nullable().optional(),
   email: z.string().max(200).nullable().optional(),
   address: z.string().max(500).nullable().optional(),
+  // 签到范围（Migration 0051）：客户坐标 + 允许半径（米）；三者齐备时签到启用距离 Gate
+  latitude: z.coerce.number().min(-90).max(90).nullable().optional(),
+  longitude: z.coerce.number().min(-180).max(180).nullable().optional(),
+  allowedRadiusMeters: z.number().int().positive().max(100000).nullable().optional(),
   duplicateAcknowledged: z.boolean().optional(),
 });
 
@@ -204,6 +208,9 @@ export async function POST(request: NextRequest) {
         phone: parsed.data.phone ?? null,
         email: parsed.data.email ?? null,
         address: parsed.data.address ?? null,
+        latitude: parsed.data.latitude ?? null,
+        longitude: parsed.data.longitude ?? null,
+        allowedRadiusMeters: parsed.data.allowedRadiusMeters ?? null,
         approvalStatus: "APPROVED",
         createdById: user?.id ?? null,
         updatedById: user?.id ?? null,

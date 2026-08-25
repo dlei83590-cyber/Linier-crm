@@ -401,6 +401,9 @@ export const ERROR_CODES = {
   // 跟进协作（followup-collab MVP，Migration 0051）：CustomerActivity 审批流 + 评论
   CUSTOMER_ACTIVITY_NOT_FOUND: 'CUSTOMER_ACTIVITY_NOT_FOUND', // 跟进活动不存在或已删除，404
   CUSTOMER_ACTIVITY_INVALID_STATE: 'CUSTOMER_ACTIVITY_INVALID_STATE', // 状态不允许该操作（仅 FOLLOW_UP 参与审批 / 非 DRAFT|REJECTED 提交 / 非 SUBMITTED 审批/驳回），409
+  // 拜访/签到规则（feat(crm) 拜访周/月视图 + 签到规则 MVP，Migration 0051；复用 project-visit RBAC）
+  CHECK_IN_OUT_OF_RANGE: 'CHECK_IN_OUT_OF_RANGE', // 签到超出客户签到范围（服务端 Haversine 距离 > allowedRadiusMeters），400
+  CHECK_IN_ALREADY_CHECKED_OUT: 'CHECK_IN_ALREADY_CHECKED_OUT', // 已签退，禁止重复签退（幂等），409
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

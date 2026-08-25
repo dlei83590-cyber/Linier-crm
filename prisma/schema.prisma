@@ -702,6 +702,9 @@ model BusinessPartner {
   phone               String?
   email               String?
   address             String?
+  latitude            Decimal?       @db.Decimal(10, 7) // 签到范围：客户坐标纬度（-90..90；Migration 0051）
+  longitude           Decimal?       @db.Decimal(10, 7) // 签到范围：客户坐标经度（-180..180；Migration 0051）
+  allowedRadiusMeters Int?           // 签到范围：允许签到半径（米）；null = 不限制（Migration 0051）
   isActive            Boolean        @default(true)
   createdById         String?
   updatedById         String?
@@ -6836,6 +6839,8 @@ model CustomerActivity {
   reminderAt        DateTime? // 提醒时间（FOLLOW_UP）
   planDate          DateTime? // 计划日期（VISIT_PLAN）
   checkinAt         DateTime? // 签到时间（CHECK_IN；服务端 now 落库，不信任客户端）
+  checkoutAt        DateTime? // 签退时间（CHECK_IN；服务端 now 落库，不信任客户端；Migration 0051）
+  visitPlanId       String? // 关联拜访计划（CHECK_IN → VISIT_PLAN id；签到后 VISIT_PLAN 反馈已完成；Migration 0051）
   latitude          Decimal? @db.Decimal(10, 7) // 纬度（CHECK_IN；-90..90）
   longitude         Decimal? @db.Decimal(10, 7) // 经度（CHECK_IN；-180..180）
   locationNote      String? // 签到位置（浏览器返回/人工备注）
@@ -6861,6 +6866,7 @@ model CustomerActivity {
   @@index([businessPartnerId])
   @@index([activityType])
   @@index([status])
+  @@index([visitPlanId])
   @@index([deletedAt])
 }
 

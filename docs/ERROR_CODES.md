@@ -327,5 +327,7 @@
 | CUSTOMER_ALREADY_IN_POOL | 409 | 已有有效池条目（active entry），409 |
 | CUSTOMER_ACTIVITY_NOT_FOUND | 404 | 跟进活动不存在或已删除，404 |
 | CUSTOMER_ACTIVITY_INVALID_STATE | 409 | 状态不允许该操作（仅 FOLLOW_UP 参与审批 / 非 DRAFT｜REJECTED 提交 / 非 SUBMITTED 审批/驳回），409 |
+| CHECK_IN_OUT_OF_RANGE | 400 | 签到超出客户签到范围（服务端 Haversine 距离 > allowedRadiusMeters），400 |
+| CHECK_IN_ALREADY_CHECKED_OUT | 409 | 已签退，禁止重复签退（幂等），409 |
 
-> 合计：**322 个错误码**（自动统计）
+> 合计：**324 个错误码**（自动统计）

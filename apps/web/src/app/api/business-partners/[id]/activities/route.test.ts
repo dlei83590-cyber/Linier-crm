@@ -16,7 +16,7 @@ import { POST, GET } from '@/app/api/business-partners/[id]/activities/route';
 type TxMock = {
   businessPartner: { findFirst: ReturnType<typeof vi.fn> };
   partnerContact: { findFirst: ReturnType<typeof vi.fn> };
-  customerActivity: { create: ReturnType<typeof vi.fn> };
+  customerActivity: { findFirst: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
 };
 
 function makeTx(overrides: Partial<TxMock> = {}): TxMock {
@@ -24,6 +24,7 @@ function makeTx(overrides: Partial<TxMock> = {}): TxMock {
     businessPartner: { findFirst: vi.fn().mockResolvedValue({ id: 'bp-1' }) },
     partnerContact: { findFirst: vi.fn().mockResolvedValue(null) },
     customerActivity: {
+      findFirst: vi.fn().mockResolvedValue(null),
       create: vi.fn().mockResolvedValue({ id: 'act-1', activityType: 'FOLLOW_UP', businessPartnerId: 'bp-1' }),
     },
     ...overrides,
@@ -88,6 +89,67 @@ describe('POST /api/business-partners/:id/activities — Phase 3 MVP 跟进活�
   it('签到缺经纬度 → 400', async () => {
     const res = await POST(makeRequest({ activityType: 'CHECK_IN' }), { params: Promise.resolve({ id: 'bp-1' }) });
     expect(res.status).toBe(400);
+  });
+
+  it('签到关联 visitPlanId：计划须属本客户且为 VISIT_PLAN → 201 + 自动生成 FOLLOW_UP 草稿「签到：时间/位置」', async () => {
+    const tx = makeTx();
+    tx.customerActivity.findFirst.mockResolvedValue({ id: 'vp-1', activityType: 'VISIT_PLAN' });
+    mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx));
+    const res = await POST(
+      makeRequest({ activityType: 'CHECK_IN', latitude: 31.23, longitude: 121.47, visitPlanId: 'vp-1', locationNote: '客户现场' }),
+      { params: Promise.resolve({ id: 'bp-1' }) },
+    );
+    expect(res.status).toBe(201);
+    const calls = (tx.customerActivity.create as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls.length).toBe(2); // CHECK_IN + 自动 FOLLOW_UP
+    // 第一条 = CHECK_IN（携带 visitPlanId）
+    expect(calls[0][0].data.activityType).toBe('CHECK_IN');
+    expect(calls[0][0].data.visitPlanId).toBe('vp-1');
+    // 第二条 = 自动 FOLLOW_UP 草稿
+    expect(calls[1][0].data.activityType).toBe('FOLLOW_UP');
+    expect(calls[1][0].data.summary.startsWith('签到：')).toBe(true);
+    expect(calls[1][0].data.summary).toContain('客户现场');
+  });
+
+  it('签到关联 visitPlanId 指向不存在/跨客户计划 → 400（create 不被调用）', async () => {
+    const tx = makeTx();
+    tx.customerActivity.findFirst.mockResolvedValue(null); // 本客户 VISIT_PLAN 无命中
+    mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx));
+    const res = await POST(
+      makeRequest({ activityType: 'CHECK_IN', latitude: 31.23, longitude: 121.47, visitPlanId: 'vp-other' }),
+      { params: Promise.resolve({ id: 'bp-1' }) },
+    );
+    expect(res.status).toBe(400);
+    expect(tx.customerActivity.create).not.toHaveBeenCalled();
+  });
+
+  it('签到范围：超出客户 allowedRadiusMeters → 400 CHECK_IN_OUT_OF_RANGE（明确提示，create 不被调用）', async () => {
+    const tx = makeTx();
+    tx.businessPartner.findFirst.mockResolvedValue({ id: 'bp-1', latitude: '31.23', longitude: '121.47', allowedRadiusMeters: 100 });
+    mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx));
+    // 北京（39.90, 116.40）距上海客户约 1000+ km → 超范围
+    const res = await POST(
+      makeRequest({ activityType: 'CHECK_IN', latitude: 39.9, longitude: 116.4 }),
+      { params: Promise.resolve({ id: 'bp-1' }) },
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe('CHECK_IN_OUT_OF_RANGE');
+    expect(body.error.details.distanceMeters).toBeGreaterThan(100);
+    expect(tx.customerActivity.create).not.toHaveBeenCalled();
+  });
+
+  it('签到范围：在允许半径内 → 201（服务端距离 ≤ radius 放行）', async () => {
+    const tx = makeTx();
+    tx.businessPartner.findFirst.mockResolvedValue({ id: 'bp-1', latitude: '31.23', longitude: '121.47', allowedRadiusMeters: 500 });
+    mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx));
+    // 距客户约 15 米 → 范围内
+    const res = await POST(
+      makeRequest({ activityType: 'CHECK_IN', latitude: 31.2301, longitude: 121.4701 }),
+      { params: Promise.resolve({ id: 'bp-1' }) },
+    );
+    expect(res.status).toBe(201);
+    expect(tx.customerActivity.create).toHaveBeenCalledTimes(2);
   });
 
   it('联系人跨客户 → 事务拒绝（fail-closed：create 不被调用）', async () => {
