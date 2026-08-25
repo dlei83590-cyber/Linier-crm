@@ -3,13 +3,15 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { casUpdate } from "@/lib/api/cas";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
-import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
+import { ok, fail, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { deliveryUpdateSchema } from "@/lib/api/schemas";
 import { createDeliveryRevision } from "@/lib/delivery/helpers";
+import { buildSalesDeliveryReversalAtoms } from "@/lib/delivery/outbound-ledger";
 import { publishDeliveryEvent } from "@/lib/delivery/events";
 import { recalcSalesOrderDeliveryProjections } from "@/lib/sales-order/delivery-aggregation";
+import { executeLedgerAtoms, InventoryInsufficientStockError, InventoryLedgerIdempotencyConflictError } from "@/lib/inventory-ledger/ledger-command";
 
 export const dynamic = "force-dynamic";
 
@@ -153,21 +155,63 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   }
 
   const now = new Date();
-  await prisma.$transaction(async (tx) => {
-    // 反签收后（DISPATCHED）删除：重算 SO 交付投影（保险——本单已不计入 deliveredQty；重算后订单回未发货）
-    if (delivery.status === "DISPATCHED") {
-      const lockedSo = await tx.$queryRaw<Array<{ id: string }>>(
-        Prisma.sql`SELECT "id" FROM "SalesOrder" WHERE "id" = ${delivery.salesOrderId} AND "deletedAt" IS NULL FOR UPDATE`,
-      );
-      if (lockedSo.length > 0) {
-        await recalcSalesOrderDeliveryProjections(tx, delivery.salesOrderId, user?.id);
+  try {
+    await prisma.$transaction(async (tx) => {
+      // 反签收后（DISPATCHED）删除：① 先恢复已出库库存（REVERSAL，禁止 delete movement / 无 movement 直接加回投影）
+      if (delivery.status === "DISPATCHED") {
+        const outboundMovements = await tx.inventoryMovement.findMany({
+          where: { sourceType: "SALES_DELIVERY", sourceId: id, direction: "OUT" },
+          orderBy: { committedAt: "asc" },
+          select: {
+            id: true,
+            warehouseId: true,
+            locationId: true,
+            itemId: true,
+            batchNo: true,
+            serialNo: true,
+            quantity: true,
+            uomId: true,
+            movementAtomKey: true,
+            mfgDate: true,
+            expDate: true,
+          },
+        });
+        if (outboundMovements.length > 0) {
+          const reversalAtoms = buildSalesDeliveryReversalAtoms(
+            {
+              deliveryId: delivery.id,
+              deliveryCode: delivery.code,
+              actorId: user?.id ?? null,
+              occurredAt: now.toISOString(),
+            },
+            outboundMovements,
+          );
+          await executeLedgerAtoms(tx, reversalAtoms);
+        }
+        // ② 重算 SO 交付投影（保险——本单已不计入 deliveredQty；重算后订单回未发货）
+        const lockedSo = await tx.$queryRaw<Array<{ id: string }>>(
+          Prisma.sql`SELECT "id" FROM "SalesOrder" WHERE "id" = ${delivery.salesOrderId} AND "deletedAt" IS NULL FOR UPDATE`,
+        );
+        if (lockedSo.length > 0) {
+          await recalcSalesOrderDeliveryProjections(tx, delivery.salesOrderId, user?.id);
+        }
       }
+      await tx.delivery.update({ where: { id }, data: { deletedAt: now, isActive: false, updatedById: user!.id } });
+      await tx.deliveryLine.updateMany({ where: { deliveryId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+      await tx.deliveryRevision.updateMany({ where: { deliveryId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+      await tx.deliverySnapshot.updateMany({ where: { deliveryId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
+    });
+  } catch (err) {
+    // 恢复库存失败（幂等 immutable-fact 冲突/技术失败）→ 409/500，事务回滚（Delivery 保持可删状态）
+    if (err instanceof InventoryLedgerIdempotencyConflictError) {
+      return fail(ERROR_CODES.DELIVERY_INVALID_STATE, "删除送货单-库存冲销幂等冲突：" + (err instanceof Error ? err.message : String(err)), 409);
     }
-    await tx.delivery.update({ where: { id }, data: { deletedAt: now, isActive: false, updatedById: user!.id } });
-    await tx.deliveryLine.updateMany({ where: { deliveryId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
-    await tx.deliveryRevision.updateMany({ where: { deliveryId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
-    await tx.deliverySnapshot.updateMany({ where: { deliveryId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
-  });
+    if (err instanceof InventoryInsufficientStockError) {
+      return fail(ERROR_CODES.INVENTORY_INSUFFICIENT_STOCK, err.message, 409);
+    }
+    console.error("[delivery.delete] reversal failed", err);
+    return fail(ERROR_CODES.INTERNAL_ERROR, "删除送货单失败（库存恢复未完成，事务已回滚）", 500);
+  }
 
   await writeAuditLog({
     actorId: user?.id,

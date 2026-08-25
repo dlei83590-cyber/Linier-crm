@@ -60,7 +60,7 @@
 
 - **Reservation / ReservedQty / AvailableQty**（6A P3 Final 延续，availableQty 不作 canonical 字段）
 - **Costing / FIFO / Moving Average / valuation**（6A P4 Final 延续，连 costSnapshot 都不放）
-- **Sales shipment OUT 等其他新 sourceType**（销售出库后续独立阶段）
+- **Sales shipment OUT 等其他新 sourceType**（销售出库后续独立阶段——**已于 2026-08-25 落地**：Migration 0055 `SALES_DELIVERY`，Delivery DISPATCH 同事务经共享 LedgerCommand 扣减库存；serial 选号/批次效期精确出库仍后续）
 - 不得因为 Transfer/Conversion 需要数量操作而顺手进入成本核算
 
 ---

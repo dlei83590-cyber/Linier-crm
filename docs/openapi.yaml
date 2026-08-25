@@ -12126,7 +12126,7 @@ paths:
           schema: { type: string, description: "IN|OUT" }
         - name: sourceType
           in: query
-          schema: { type: string, description: "InventoryMovementSourceType: WAREHOUSE_RECEIPT_POSTED|PURCHASE_RETURN_RETURNED|TRANSFER|ADJUSTMENT|CONVERSION|REVERSAL|CORRECTION" }
+          schema: { type: string, description: "InventoryMovementSourceType: WAREHOUSE_RECEIPT_POSTED|PURCHASE_RETURN_RETURNED|TRANSFER|ADJUSTMENT|CONVERSION|PRODUCTION|SALES_DELIVERY|REVERSAL|CORRECTION" }
         - name: sourceId
           in: query
           schema: { type: string }

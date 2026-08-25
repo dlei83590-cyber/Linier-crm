@@ -331,11 +331,16 @@ export const deliveryReadySchema = z.object({
   changeReason: z.string().max(500).optional(),
 });
 
-/** dispatch：可更新承运方/运单号/预计到达（READY → DISPATCHED 时可选补充物流信息） */
+/** dispatch：READY → DISPATCHED（合同收口-销售出库：DISPATCH 事务内真正扣减库存）
+ * 新增必填 warehouseId + 可选 locationId——销售出库库存扣减的仓库维度（Delivery/DeliveryLine 无仓库字段，
+ * 出库事实以 InventoryMovement.warehouseId/locationId 为 durable source；五元幂等防重复扣减）。
+ */
 export const deliveryDispatchSchema = z.object({
   carrier: z.string().max(100).nullable().optional(),
   trackingNo: z.string().max(100).nullable().optional(),
   expectedArrivalDate: z.string().datetime().nullable().optional(),
+  warehouseId: z.string().min(1, "出库仓库必填"),
+  locationId: z.string().min(1).nullable().optional(),
   changeReason: z.string().max(500).optional(),
 });
 

@@ -196,6 +196,26 @@
 | N12 | 未红冲发票阻止删除 | DELETE（有 ISSUED 蓝票未红冲） | 409 DELIVERY_INVALID_STATE |
 | N13 | 反签收/删除事件 | unconfirm 后 AuditLog | action=delivery.unconfirm + DeliveryUnconfirmed 事件（EVENTS v1.44） |
 
+## O. 销售出库-库存扣减（合同收口-0055：DISPATCH 同事务真正库存扣减，禁止用状态变化冒充出库）
+
+> 关联：Migration 0055（InventoryMovementSourceType.SALES_DELIVERY）、ledger-command.ts（InventoryLedgerCommand Core）、outbound-ledger.ts（原子构造）。
+> 红线：库存算法/幂等/锁/投影全部复用共享 Core；DISPATCH 与 Movement/Projection 同一 caller 事务（全有或全无）。
+
+| # | 用例 | 方法/路径 | 预期 |
+| --- | --- | --- | --- |
+| O1 | 正常出库 | dispatch（READY，warehouseId） | 200 DISPATCHED；同事务生成 SALES_DELIVERY/OUT 原子（五元幂等 sourceType|delivery.id|line.id|OUT|BULK；movementGroupId=delivery.id）；StockProjection 扣减；InventoryMovement 可追溯 Delivery |
+| O2 | 多行统一事务 | dispatch（2 物料行 + 1 非物料行） | 物料行各生成 OUT 原子（同 movementGroupId）；非物料行（itemId=null）跳过；200 |
+| O3 | 库存不足 | dispatch（onHandQty < 出库数量） | 409 INVENTORY_INSUFFICIENT_STOCK；Movement 不写/Projection 不变/单据保持 READY（事务回滚） |
+| O4 | 重复 dispatch 幂等 | dispatch（已 DISPATCHED） | 409 DELIVERY_INVALID_STATE（状态门禁；不重复扣减） |
+| O5 | 并发 dispatch | 两请求同时 dispatch 同单 | FOR UPDATE 锁串行化；单胜出 200，另一 409 |
+| O6 | 出库仓库必填/无效 | dispatch（无 warehouseId / warehouse 停用） | 400（warehouseId 缺失 → VALIDATION_ERROR；仓库不存在 → 400） |
+| O7 | 数量 ≤ 0 | dispatch（物料行 quantity=0） | 400（禁止 0/负数量出库） |
+| O8 | 幂等 immutable-fact 冲突 | 同五元身份不同 fact（异常场景） | 409（InventoryLedgerIdempotencyConflictError → DELIVERY_INVALID_STATE） |
+| O9 | Movement 来源追溯 | 查 InventoryMovement | sourceType=SALES_DELIVERY、sourceId=delivery.id、sourceLineId=deliveryLine.id、referenceNo=delivery.code（Inventory Ledger 可按来源过滤） |
+| O10 | DISPATCHED 删除恢复库存 | DELETE（DISPATCHED，有 SALES_DELIVERY OUT movements） | 200；同事务写 REVERSAL/IN 原子（reversalOfMovementId=原 Movement id）恢复 StockProjection；禁止 delete movement / 无 movement 直接加回投影 |
+| O11 | CANCELLED 删除无冲销 | DELETE（CANCELLED） | 200 软删；无 SALES_DELIVERY movements → 不写 REVERSAL |
+| O12 | 已出库展示 | SO/Delivery 详情页 | DISPATCHED/DELIVERED 显示「已出库（库存已扣减）」；READY 前显示「未出库」 |
+
 ## M. 错误码映射（ERROR_CODES.md 对齐）
 
 | 错误码 | 场景 | HTTP |
@@ -211,4 +231,4 @@
 | VALIDATION_ERROR | Zod 校验失败 | 400 |
 | FORBIDDEN / AUTHENTICATION_ERROR | RBAC / 未认证 | 403 / 401 |
 
-> 合计：A(14) + B(8) + C(10) + D(13) + E(8) + F(19) + G(6) + H(8) + I(7) + J(5) + K(5) + L(8) + M(错误码映射) = **111 个测试用例**（不含错误码映射段）。
+> 合计：A(14) + B(8) + C(10) + D(13) + E(8) + F(19) + G(6) + H(8) + I(7) + J(5) + K(5) + L(8) + M(错误码映射) = **123 个测试用例**（不含错误码映射段）。

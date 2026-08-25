@@ -59,6 +59,9 @@ export interface LedgerAtom {
   // 成组编组（Blocking ①）：Transfer SOURCE_OUT+DESTINATION_IN / Conversion CONSUME+PRODUCE 共享同一 group id；
   // 6A Consumer（单原子）显式传 null；成组 Operation 由业务事务在执行时生成同一个 group id
   movementGroupId: string | null;
+  // 冲销引用（REVERSAL 语义，CTO #7469 Minor ②）：一笔 Movement 最多被完整冲销一次（DB @unique）；
+  // 仅 REVERSAL/IN 原子需要；普通原子省略（NULL）
+  reversalOfMovementId?: string | null;
   // 方向与细分类型（由调用方按业务语义声明；Core 不做隐式映射）
   direction: InventoryMovementDirection;
   movementType: InventoryMovementType;
@@ -203,6 +206,7 @@ async function findExistingMovement(
       direction: true,
       movementType: true,
       movementGroupId: true,
+      reversalOfMovementId: true,
       warehouseId: true,
       locationId: true,
       itemId: true,
@@ -227,6 +231,7 @@ function assertIdempotentPayloadMatches(
     direction: InventoryMovementDirection;
     movementType: InventoryMovementType;
     movementGroupId: string | null;
+    reversalOfMovementId: string | null;
     warehouseId: string;
     locationId: string | null;
     itemId: string;
@@ -248,6 +253,11 @@ function assertIdempotentPayloadMatches(
   if (norm(existing.movementGroupId) !== norm(atom.movementGroupId)) {
     mismatches.push(
       `movementGroupId ${norm(existing.movementGroupId)} != ${norm(atom.movementGroupId)}`,
+    );
+  }
+  if (norm(existing.reversalOfMovementId) !== norm(atom.reversalOfMovementId ?? null)) {
+    mismatches.push(
+      `reversalOfMovementId ${norm(existing.reversalOfMovementId)} != ${norm(atom.reversalOfMovementId ?? null)}`,
     );
   }
   if (existing.warehouseId !== atom.warehouseId)
@@ -323,7 +333,7 @@ export async function executeLedgerAtom(
   const inserted = await tx.$queryRaw<Array<{ id: string }>>(
     Prisma.sql`INSERT INTO "InventoryMovement"
       ("id", "movementNo", "sourceType", "sourceId", "sourceLineId", "movementRole", "movementAtomKey",
-       "movementGroupId", "direction", "status", "movementType",
+       "movementGroupId", "reversalOfMovementId", "direction", "status", "movementType",
        "warehouseId", "locationId", "itemId", "batchNo", "serialNo",
        "mfgDate", "expDate", "quantity", "uomId", "referenceNo", "committedById", "committedAt", "remark")
     VALUES (
@@ -335,6 +345,7 @@ export async function executeLedgerAtom(
       ${atom.movementRole}::"InventoryMovementRole",
       ${atom.movementAtomKey},
       ${atom.movementGroupId},
+      ${atom.reversalOfMovementId ?? null},
       ${atom.direction}::"InventoryMovementDirection",
       'COMMITTED'::"InventoryMovementStatus",
       ${atom.movementType}::"InventoryMovementType",
