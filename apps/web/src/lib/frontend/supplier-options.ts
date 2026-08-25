@@ -77,6 +77,6 @@ export function buildItemOptionViews(
     .filter((i) => !linked.has(i.id))
     .map((i) => ({
       id: i.id,
-      label: [i.code, i.name, i.model ? `（${i.model}）` : null].filter(Boolean).join(" — "),
+      label: [i.code, i.model ? `${i.name}（${i.model}）` : i.name].filter(Boolean).join(" — "),
     }));
 }
