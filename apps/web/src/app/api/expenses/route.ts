@@ -26,14 +26,20 @@ export async function GET(request: NextRequest) {
   const projectId = searchParams.get("projectId")?.trim();
   const category = searchParams.get("category")?.trim();
   // 报销流程补齐（Migration 0051）：按审批状态精确筛选（待审批列表等）
+  // approvalStatus 为 Prisma 枚举，需白名单校验后按枚举字面量透传（where 类型门禁）
   const status = searchParams.get("status")?.trim();
+  const APPROVAL_STATUSES = ["DRAFT", "PENDING", "APPROVED", "REJECTED"] as const;
+  const statusFilter =
+    status && (APPROVAL_STATUSES as readonly string[]).includes(status)
+      ? (status as (typeof APPROVAL_STATUSES)[number])
+      : undefined;
 
   const where = {
     deletedAt: null,
     ...(projectId ? { projectId } : {}),
     ...(customerId ? { project: { customerId } } : {}),
     ...(category ? { category: { contains: category } } : {}),
-    ...(status ? { approvalStatus: status } : {}),
+    ...(statusFilter ? { approvalStatus: statusFilter } : {}),
   };
 
   const [total, items] = await Promise.all([

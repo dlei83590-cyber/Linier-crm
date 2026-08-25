@@ -61,7 +61,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const txResult = await prisma.$transaction(async (tx) => {
     const gate = await assertProjectWritable(tx, id);
-    if (!gate.ok) return { error: gate.response };
+    if (!gate.ok) return { error: "GATE" as const, response: gate.response };
 
     const created = await tx.projectExpense.create({
       data: {
@@ -79,9 +79,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         updatedById: user!.id,
       },
     });
-    return { created };
+    return { error: null as null, created };
   });
-  if ("error" in txResult) return txResult.error;
+  if (txResult.error === "GATE") return txResult.response;
   const created = txResult.created;
 
   await writeAuditLog({
