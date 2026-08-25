@@ -104,11 +104,17 @@ describe('GET /api/project-opportunities — 商机跟进 MVP（最近跟进时�
 
     const res = await GET(listUrl());
     const body = await res.json();
-    const byId = new Map(body.data.map((r: { id: string }) => [r.id, r]));
-    expect(byId.get('oA').needsFollowUp).toBe(true);
-    expect(byId.get('oA').daysSinceFollowUp).toBe(20);
-    expect(byId.get('oB').needsFollowUp).toBe(false);
-    expect(byId.get('oB').daysSinceFollowUp).toBe(1);
+    const rows = (body.data ?? []) as Array<{
+      id: string;
+      needsFollowUp: boolean;
+      daysSinceFollowUp: number | null;
+    }>;
+    const rowA = rows.find((r) => r.id === 'oA');
+    const rowB = rows.find((r) => r.id === 'oB');
+    expect(rowA?.needsFollowUp).toBe(true);
+    expect(rowA?.daysSinceFollowUp).toBe(20);
+    expect(rowB?.needsFollowUp).toBe(false);
+    expect(rowB?.daysSinceFollowUp).toBe(1);
     // 查询按本页商机客户集合过滤（in 条件），非全量
     const whereArg = activityModel.findMany.mock.calls[0][0];
     expect(whereArg.where.businessPartnerId.in).toEqual(['bp-a', 'bp-b']);
