@@ -226,7 +226,17 @@ function OpportunityList() {
           {
             key: "project",
             header: "已转项目",
-            render: (row) => (row.project ? row.project.code ?? row.project.name ?? "—" : "—"),
+            render: (row) =>
+              row.project ? (
+                <Link
+                  href={"/projects/" + row.project.id}
+                  className="text-brand-600 hover:underline"
+                >
+                  {row.project.code ?? row.project.name ?? "—"}
+                </Link>
+              ) : (
+                "—"
+              ),
           },
           { key: "expectedRevenue", header: "预计营收", render: (row) => row.expectedRevenue ?? "—" },
           {

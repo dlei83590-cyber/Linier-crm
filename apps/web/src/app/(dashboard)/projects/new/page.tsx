@@ -7,7 +7,7 @@
  * code/name/customerId 必填；stage 默认 SAMPLING；priority/ownerId/description/
  * expectedContractAmount/expectedProfit/expectedGrossMarginRate/paymentStatus 可选。
  * 纪律：Project Create 是独立项目创建，**不模拟 Opportunity → Project conversion**
- * （唯一正确入口是 /project-opportunities/:id/convert，Tier 3 本轮 HOLD，不在本页）。
+ * （唯一正确入口是 /project-opportunities/:id/convert，FRT-05 已开放，不在本页）。
  * Customer 使用 /api/business-partners?type=CUSTOMER 选择器（P0-1 SSOT：option.id = BusinessPartner.id = POST customerId = 后端校验 id）。
  */
 import { useEffect, useState } from "react";
