@@ -1,13 +1,14 @@
 "use client";
 
 /**
- * Project Opportunities — 新建项目机会（F2-4A2 CRM/Project Workspace，CTO #12030）
+ * Project Opportunities — 新建项目机会（UI-06 Opportunity + Project 现代重构）
  *
  * 依据 Contract Card（project-opportunities.md）：opportunityCreateSchema 事实：
  * code/name/customerId 必填；stage 默认 LEAD；商业预测字段可空。
  * 分区：基本信息 / 商业预测 / 其他；不 40 行平铺。
  * Customer 使用 /api/business-partners?type=CUSTOMER 选择器（P0-1 SSOT：option.id = BusinessPartner.id = POST customerId = 后端校验 id）。
  * Convert（FRT-05 已开放）不在本页——唯一入口在商机详情页「转为项目」按钮。
+ * UI-06：不暴露 raw ownerId 输入（红线：无真实用户选择器 API 时不渲染 raw DB ID 输入）；保存成功 Toast。
  */
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -15,32 +16,12 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { AppPage, EntityFormWorkspace, ReferenceSelector } from "@/components/workspace";
+import { useToast } from "@/components/ui/toast";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { loadCustomerOptions, type CustomerOption } from "@/lib/frontend/customer-options";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
-
-
-const STAGE_OPTIONS = [
-  { value: "LEAD", label: "线索" },
-  { value: "QUALIFIED", label: "准入" },
-  { value: "SOLUTION", label: "方案" },
-  { value: "QUOTATION", label: "报价" },
-  { value: "SAMPLING", label: "试样" },
-  { value: "TESTING", label: "测试" },
-  { value: "SMALL_BATCH", label: "小批量" },
-  { value: "MASS_SUPPLY", label: "批量供货" },
-  { value: "PAUSED", label: "暂停" },
-  { value: "FAILED", label: "失败" },
-  { value: "CLOSED", label: "结项" },
-];
-
-const PAYMENT_OPTIONS = [
-  { value: "UNPAID", label: "未回款" },
-  { value: "PARTIAL", label: "部分回款" },
-  { value: "PAID", label: "已回款" },
-  { value: "OVERDUE", label: "逾期" },
-];
+import { PROJECT_PAYMENT_OPTIONS, PROJECT_STAGE_OPTIONS } from "@/lib/project-stage";
 
 const inputClass = INPUT_CLASS;
 
@@ -53,9 +34,9 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-
 function OpportunityCreateForm() {
   const router = useRouter();
+  const toast = useToast();
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [selectorsLoading, setSelectorsLoading] = useState(true);
 
@@ -63,7 +44,6 @@ function OpportunityCreateForm() {
   const [name, setName] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [stage, setStage] = useState("LEAD");
-  const [ownerId, setOwnerId] = useState("");
   const [customerInvestment, setCustomerInvestment] = useState("");
   const [expectedRevenue, setExpectedRevenue] = useState("");
   const [expectedCost, setExpectedCost] = useState("");
@@ -124,7 +104,6 @@ function OpportunityCreateForm() {
       name: name.trim(),
       customerId,
       stage: stage || undefined,
-      ownerId: ownerId.trim() || null,
       customerInvestment: numOrUndefined(customerInvestment),
       expectedRevenue: numOrUndefined(expectedRevenue),
       expectedCost: numOrUndefined(expectedCost),
@@ -142,6 +121,7 @@ function OpportunityCreateForm() {
       body: JSON.stringify(payload),
     })
       .then((body) => {
+        toast.success("项目机会已创建");
         router.push(`/project-opportunities/${body.data.id}`);
       })
       .catch((err: unknown) => {
@@ -185,15 +165,12 @@ function OpportunityCreateForm() {
           </FormField>
           <FormField label="阶段">
             <select value={stage} onChange={(e) => setStage(e.target.value)} className={inputClass}>
-              {STAGE_OPTIONS.map((s) => (
+              {PROJECT_STAGE_OPTIONS.map((s) => (
                 <option key={s.value} value={s.value}>
                   {s.label}
                 </option>
               ))}
             </select>
-          </FormField>
-          <FormField label="负责人">
-            <input value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className={inputClass} placeholder="负责人 ID（可选）" />
           </FormField>
         </Section>
 
@@ -221,7 +198,7 @@ function OpportunityCreateForm() {
           </FormField>
           <FormField label="回款状态">
             <select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)} className={inputClass}>
-              {PAYMENT_OPTIONS.map((p) => (
+              {PROJECT_PAYMENT_OPTIONS.map((p) => (
                 <option key={p.value} value={p.value}>
                   {p.label}
                 </option>
