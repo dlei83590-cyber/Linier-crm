@@ -10,7 +10,9 @@ vi.mock('@/lib/api-helpers', () => ({
   writeAuditLog: vi.fn().mockResolvedValue(undefined),
   requestLog: vi.fn(),
 }));
-const { matchCustomerPools } = vi.hoisted(() => ({ matchCustomerPools: vi.fn() }));
+const { matchCustomerPools } = vi.hoisted(() => ({
+  matchCustomerPools: vi.fn().mockResolvedValue({ matched: false, poolsMatched: [], entryCreated: false }),
+}));
 vi.mock('@/lib/customer-pool/match', () => ({ matchCustomerPools }));
 
 import { POST } from '@/app/api/customer-pools/[id]/entries/[entryId]/claim/route';
@@ -56,7 +58,6 @@ describe('POST .../claim — Phase 2C-2 领取（CTO MVP 关键路径）', () =>
 
   it('领取成功（201）：领给自己 + entry=CLAIMED + Outbox 同事务 + 负责人变更后触发自动匹配', async () => {
     const tx = makeTx();
-    matchCustomerPools.mockResolvedValue({ matched: false, poolsMatched: [], entryCreated: false });
     mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx));
     const res = await POST(makeRequest(), { params: params() });
     expect(res.status).toBe(201);
