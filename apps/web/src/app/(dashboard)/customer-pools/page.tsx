@@ -124,7 +124,8 @@ function CustomerPoolList() {
         }
         toolbarActions={
           <>
-            <button type="button" onClick={applyFilter} className={BUTTON_PRIMARY_CLASS}>
+            {/* 每页最多 1 个视觉 Primary：新建公海池为 Primary，查询/重置为 secondary */}
+            <button type="button" onClick={applyFilter} className={BUTTON_SECONDARY_CLASS}>
               查询
             </button>
             <button type="button" onClick={resetFilter} className={BUTTON_SECONDARY_CLASS}>
