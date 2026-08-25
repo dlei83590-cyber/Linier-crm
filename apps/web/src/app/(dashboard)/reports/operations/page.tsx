@@ -532,16 +532,36 @@ function OperationsBoard() {
             </section>
           </div>
 
-          {/* 渠道维度：channelAvailable=false → 明确「暂无渠道事实数据」，不造 channel 字段 */}
+          {/* 渠道维度（cc-08-channel）：BusinessPartner.channel 固定枚举 SSOT → 客户数 + 期间订单数/金额 */}
           <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-elevation-sm">
             <div className="border-b border-border px-4 py-3">
-              <h2 className="text-sm font-semibold text-ink-primary">渠道分布（{pLabel}）</h2>
+              <h2 className="text-sm font-semibold text-ink-primary">渠道分布（${pLabel}）</h2>
+              <p className="mt-0.5 text-xs text-ink-secondary">
+                BusinessPartner.channel 维度：渠道客户数 + 期间订单数/金额（未设置渠道归「未设置」）
+              </p>
             </div>
-            <p className="px-4 py-6 text-sm text-ink-secondary">
-              {data.channelAvailable
-                ? "渠道事实数据可用（按渠道聚合）"
-                : "暂无渠道事实数据：当前渠道维度无 SSOT 事实源（不造 channel 字段），渠道数据接入后自动显示。"}
-            </p>
+            <ScrollTable
+              colSpan={4}
+              showEmpty={data.channels.length === 0}
+              emptyMessage="暂无渠道分布数据"
+              headers={
+                <>
+                  <th className={th}>渠道</th>
+                  <th className={`${tdRight}`}>客户数</th>
+                  <th className={`${tdRight}`}>订单数</th>
+                  <th className={`${tdRight}`}>订单金额</th>
+                </>
+              }
+            >
+              {data.channels.map((c) => (
+                <tr key={c.channel} className="transition-colors hover:bg-slate-50">
+                  <td className={td + " text-ink-primary"}>{c.channel}</td>
+                  <td className={tdRight + " text-ink-primary"}>{c.customerCount}</td>
+                  <td className={tdRight + " text-ink-primary"}>{c.salesOrderCount}</td>
+                  <td className={tdRight + " text-ink-primary"}>¥{formatMoneyValue(c.salesAmount)}</td>
+                </tr>
+              ))}
+            </ScrollTable>
           </section>
 
           {/* 商机阶段漏斗 + 销售订单状态分布 */}

@@ -2,6 +2,20 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - cc-08-channel：销售渠道 SSOT + 经营数据渠道维度（合同收口 → 生产测试）
+
+### 新增
+
+- **销售渠道 SSOT（Migration 0055）**：BusinessPartner.channel 单一字段，固定枚举 直销/经销/电商/项目/其他（null = 未设置）；服务端 z.enum 校验 fail closed；清单唯一来源 apps/web/src/lib/business-partner/channel.ts（与 sourceChannel 获客渠道语义区分，不复用）
+- **Customer Create/Edit 渠道**：新建/编辑往来单位表单增加「销售渠道」下拉（未设置默认）；列表页渠道列 + 渠道 filter（固定枚举精确匹配；「未设置」= IS NULL）；详情页销售渠道展示
+- **经营看板渠道维度**：/api/reports/operations 新增 channels 聚合（渠道客户数 + 期间订单数/金额，未设置归「未设置」），channelAvailable 置 true；渠道分布表完整显示（BusinessPartner.channel 真实事实源）
+
+### 边界
+
+- 零事件/Outbox/错误码变更；零 BI/OLAP/DW；不引入营销归因平台/Campaign/CDP/渠道漏斗 Engine；sourceChannel 语义不变；Customer 遗留模型不动
+
+---
+
 ## [Unreleased] - FE 2.0 UI-01：GLOBAL DESIGN SYSTEM 基元升级（零 Schema / 零 API / 零业务逻辑）
 
 ### 新增

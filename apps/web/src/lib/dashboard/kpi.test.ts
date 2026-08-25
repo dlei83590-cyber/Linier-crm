@@ -15,7 +15,8 @@ const fixture: OperationsReportData = {
   customerTiers: { total: 42, deal: 5, quoted: 6, opportunity: 7, normal: 24 },
   regions: [],
   brands: [],
-  channelAvailable: false,
+  channelAvailable: true,
+  channels: [],
 };
 
 describe("buildDashboardKpis — 真实数据投影 6 个 KPI", () => {

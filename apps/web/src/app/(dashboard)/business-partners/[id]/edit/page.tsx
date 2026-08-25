@@ -13,6 +13,7 @@ import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 import { validateUscc } from "@/lib/tax-invoice";
+import { BUSINESS_PARTNER_CHANNELS } from "@/lib/business-partner/channel";
 import { useToast } from "@/components/ui/toast";
 import { PageLoading } from "@/components/ui/skeleton";
 
@@ -27,6 +28,7 @@ interface BusinessPartnerDetail {
   legalRepresentative: string | null;
   region: string | null;
   industry: string | null;
+  channel: string | null;
   companySize: string | null;
   contactPerson: string | null;
   phone: string | null;
@@ -97,6 +99,7 @@ function BusinessPartnerEditForm() {
   const [legalRepresentative, setLegalRepresentative] = useState("");
   const [region, setRegion] = useState("");
   const [industry, setIndustry] = useState("");
+  const [channel, setChannel] = useState("");
   const [companySize, setCompanySize] = useState("");
   const [contactPerson, setContactPerson] = useState("");
   const [phone, setPhone] = useState("");
@@ -137,6 +140,7 @@ function BusinessPartnerEditForm() {
         setLegalRepresentative(d.legalRepresentative ?? "");
         setRegion(d.region ?? "");
         setIndustry(d.industry ?? "");
+        setChannel(d.channel ?? "");
         setCompanySize(d.companySize ?? "");
         setContactPerson(d.contactPerson ?? "");
         setPhone(d.phone ?? "");
@@ -212,6 +216,7 @@ function BusinessPartnerEditForm() {
       legalRepresentative: legalRepresentative.trim() || null,
       region: region.trim() || null,
       industry: industry.trim() || null,
+      channel: channel.trim() || null,
       companySize: companySize.trim() || null,
       contactPerson: contactPerson.trim() || null,
       phone: phone.trim() || null,
@@ -332,6 +337,16 @@ function BusinessPartnerEditForm() {
         </FormField>
         <FormField label="行业">
           <input value={industry} onChange={(e) => setIndustry(e.target.value)} className={inputClass} />
+        </FormField>
+        <FormField label="销售渠道">
+          <select value={channel} onChange={(e) => setChannel(e.target.value)} className={inputClass}>
+            <option value="">未设置</option>
+            {BUSINESS_PARTNER_CHANNELS.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
         </FormField>
         <FormField label="企业规模">
           <input value={companySize} onChange={(e) => setCompanySize(e.target.value)} className={inputClass} />

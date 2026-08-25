@@ -10,6 +10,7 @@ import { z } from "zod";
 import { validateUscc, normalizeUscc } from "@/lib/tax-invoice";
 import { casUpdate } from "@/lib/api/cas";
 import { matchCustomerPools } from "@/lib/customer-pool/match";
+import { BUSINESS_PARTNER_CHANNELS } from "@/lib/business-partner/channel";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,8 @@ const businessPartnerUpdateSchema = z
     companySize: z.string().max(100).nullable().optional(),
     creditRating: z.string().max(100).nullable().optional(),
     sourceChannel: z.string().max(100).nullable().optional(),
+    // 销售渠道（Migration 0055；SSOT = 固定枚举，服务端校验 fail closed；null = 未设置）
+    channel: z.enum(BUSINESS_PARTNER_CHANNELS).nullable().optional(),
     foundedDate: z.string().datetime().nullable().optional(),
     registeredCapital: z.string().nullable().optional(),
     employeeCount: z.number().int().nonnegative().nullable().optional(),
