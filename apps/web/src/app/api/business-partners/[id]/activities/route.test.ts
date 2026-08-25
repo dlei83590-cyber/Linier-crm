@@ -73,6 +73,18 @@ describe('POST /api/business-partners/:id/activities — Phase 3 MVP 跟进活�
     expect(createArgs.data.latitude?.toString()).toBe('31.23');
   });
 
+  it('跟进创建：status=DRAFT（进入审批流）；拜访/签到 status=NULL（不参与审批，Migration 0051）', async () => {
+    const tx = makeTx();
+    mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx));
+    await POST(makeRequest({ activityType: 'FOLLOW_UP', summary: '确认交期' }), { params: Promise.resolve({ id: 'bp-1' }) });
+    expect((tx.customerActivity.create as ReturnType<typeof vi.fn>).mock.calls[0][0].data.status).toBe('DRAFT');
+
+    const tx2 = makeTx();
+    mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx2));
+    await POST(makeRequest({ activityType: 'VISIT_PLAN', planDate: '2026-09-01T00:00:00.000Z' }), { params: Promise.resolve({ id: 'bp-1' }) });
+    expect((tx2.customerActivity.create as ReturnType<typeof vi.fn>).mock.calls[0][0].data.status).toBeNull();
+  });
+
   it('签到缺经纬度 → 400', async () => {
     const res = await POST(makeRequest({ activityType: 'CHECK_IN' }), { params: Promise.resolve({ id: 'bp-1' }) });
     expect(res.status).toBe(400);
@@ -94,8 +106,18 @@ describe('GET /api/business-partners/:id/activities — 时间线', () => {
     mockPrisma.customerActivity = {
       count: vi.fn().mockResolvedValue(2),
       findMany: vi.fn().mockResolvedValue([
-        { id: 'a1', activityType: 'FOLLOW_UP', createdAt: new Date('2026-08-01T00:00:00Z'), planDate: null, checkinAt: null },
-        { id: 'a2', activityType: 'VISIT_PLAN', createdAt: new Date('2026-07-01T00:00:00Z'), planDate: new Date('2026-08-20T00:00:00Z'), checkinAt: null },
+        {
+          id: 'a1', activityType: 'FOLLOW_UP', createdAt: new Date('2026-08-01T00:00:00Z'), planDate: null, checkinAt: null,
+          status: 'APPROVED', submittedAt: null, approvedAt: new Date('2026-08-02T00:00:00Z'), approvedById: 'u-2',
+          rejectedAt: null, rejectedById: null, rejectReason: null,
+          _count: { comments: 2 },
+        },
+        {
+          id: 'a2', activityType: 'VISIT_PLAN', createdAt: new Date('2026-07-01T00:00:00Z'), planDate: new Date('2026-08-20T00:00:00Z'), checkinAt: null,
+          status: null, submittedAt: null, approvedAt: null, approvedById: null,
+          rejectedAt: null, rejectedById: null, rejectReason: null,
+          _count: { comments: 0 },
+        },
       ]),
     };
   });
@@ -106,5 +128,18 @@ describe('GET /api/business-partners/:id/activities — 时间线', () => {
     const body = await res.json();
     expect(body.data[0].id).toBe('a2'); // planDate 更晚 → 排前
     expect(body.data[0].occurredAt).toBeTruthy();
+  });
+
+  it('时间线返回跟进审批状态 + 评论数（Migration 0051）', async () => {
+    const res = await GET(new NextRequest('http://localhost/api/business-partners/bp-1/activities'), { params: Promise.resolve({ id: 'bp-1' }) });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const followUp = body.data.find((a: { id: string }) => a.id === 'a1');
+    expect(followUp.status).toBe('APPROVED');
+    expect(followUp.approvedById).toBe('u-2');
+    expect(followUp.commentCount).toBe(2);
+    const visitPlan = body.data.find((a: { id: string }) => a.id === 'a2');
+    expect(visitPlan.status).toBeNull(); // VISIT_PLAN 不参与审批
+    expect(visitPlan.commentCount).toBe(0);
   });
 });

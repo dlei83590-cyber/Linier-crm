@@ -6815,6 +6815,14 @@ enum CustomerActivityType {
   CHECK_IN // 定位签到（经纬度 + 签到时间）
 }
 
+/// 客户跟进活动审批状态（followup-collab MVP：仅 FOLLOW_UP 参与 DRAFT→SUBMITTED→APPROVED/REJECTED；VISIT_PLAN/CHECK_IN 不参与 → NULL）
+enum CustomerActivityStatus {
+  DRAFT // 草稿（创建后待提交）
+  SUBMITTED // 已提交待审批
+  APPROVED // 管理者已批准
+  REJECTED // 管理者已驳回（可重新提交）
+}
+
 /// 客户跟进活动（Customer 360「跟进活动」Tab；BP 维度，Migration 0050）
 model CustomerActivity {
   id                String               @id @default(cuid())
@@ -6831,6 +6839,15 @@ model CustomerActivity {
   latitude          Decimal? @db.Decimal(10, 7) // 纬度（CHECK_IN；-90..90）
   longitude         Decimal? @db.Decimal(10, 7) // 经度（CHECK_IN；-180..180）
   locationNote      String? // 签到位置（浏览器返回/人工备注）
+  // 跟进审批（followup-collab MVP，Migration 0051；仅 FOLLOW_UP 使用，VISIT_PLAN/CHECK_IN 为 NULL——不参与审批）
+  status            CustomerActivityStatus? // DRAFT→SUBMITTED→APPROVED/REJECTED；NULL=不参与审批的活动类型
+  submittedAt       DateTime? // 提交时间（DRAFT|REJECTED → SUBMITTED）
+  submittedById     String? // 提交人
+  approvedAt        DateTime? // 批准时间（SUBMITTED → APPROVED）
+  approvedById      String? // 批准人
+  rejectedAt        DateTime? // 驳回时间（SUBMITTED → REJECTED）
+  rejectedById      String? // 驳回人
+  rejectReason      String? // 驳回原因（reject 必填；重新提交时清除）
   isActive          Boolean              @default(true)
   createdById       String?
   updatedById       String?
@@ -6839,8 +6856,25 @@ model CustomerActivity {
   createdAt         DateTime             @default(now()) @db.Timestamptz(3)
   updatedAt         DateTime             @updatedAt @db.Timestamptz(3)
 
+  comments ActivityComment[]
+
   @@index([businessPartnerId])
   @@index([activityType])
+  @@index([status])
   @@index([deletedAt])
+}
+
+/// 跟进活动评论（followup-collab MVP，Migration 0051；最小评论：activityId/content/createdById/createdAt；
+/// 不可变——MVP 无编辑/删除；CASCADE 随活动删除）
+model ActivityComment {
+  id          String   @id @default(cuid())
+  activityId  String
+  activity    CustomerActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  content     String // 评论内容（1..1000，服务端校验）
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([activityId])
+  @@index([createdAt])
 }
 
