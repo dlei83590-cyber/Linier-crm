@@ -70,7 +70,10 @@ export function resolveCurrentDomain(
   const matched = groups
     .flatMap((g) => [...g.ready, ...g.preview, ...g.hold])
     .find((m) => pathname === m.route || pathname.startsWith(`${m.route}/`));
-  if (matched) return matched.domain;
+  if (matched) {
+    const group = groups.find((g) => g.domain.id === matched.domain);
+    if (group) return group.domain;
+  }
   return groups[0]?.domain ?? null;
 }
 
