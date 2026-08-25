@@ -551,6 +551,7 @@ function SalesOrderDetailPage() {
         ) : materials.length === 0 ? (
           <p className="text-ink-muted text-xs">无配方原料需求（订单行成品无 ACTIVE 配方）。</p>
         ) : (
+          <>
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="text-ink-muted border-border border-b text-xs">
@@ -607,6 +608,7 @@ function SalesOrderDetailPage() {
               </p>
             );
           })()}
+          </>
         )}
         <h2 className="text-ink-primary mt-4 mb-3 text-sm font-semibold">推荐供应商（Q 线）</h2>
         {suppliersLoading ? (
