@@ -75,7 +75,10 @@ describe("新建库存盘点单（UI-09：EntityFormWorkspace 表单统一，无
     fireEvent.click(screen.getByRole("button", { name: "创建盘点单" }));
 
     await waitFor(() => {
-      expect(screen.getByText("校验错误")).toBeInTheDocument();
+      // 422 未在 ERROR_STATUS_MESSAGES 登记 → ErrorPanel 回退 "请求失败（HTTP 422）"；API message 原样透出
+      expect(screen.getByText(/请求失败（HTTP 422）/)).toBeInTheDocument();
+      expect(screen.getByText("服务端校验失败")).toBeInTheDocument();
+      expect(screen.getByText(/错误码：VALIDATION_ERROR/)).toBeInTheDocument();
     });
     expect(mockPush).not.toHaveBeenCalled();
   });

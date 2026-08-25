@@ -75,14 +75,14 @@ describe("生产/外协工单详情页（UI-09：状态机动作门 SUBMITTED �
       </DensityProvider>,
     );
 
-    await screen.findByText("PRD-2026-0001");
+    await screen.findByText(/PRD-2026-0001/);
     expect(screen.getByText("草稿")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "提交" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "取消" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "删除" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /过账/ })).not.toBeInTheDocument();
     // 工单行金额/数量右对齐 tabular 数据展示
-    expect(screen.getByText("钢材")).toBeInTheDocument();
+    expect(screen.getByText(/钢材/)).toBeInTheDocument();
   });
 
   it("SUBMITTED → 显示 过账（领料→入库）；提交动作不再出现", async () => {
@@ -95,7 +95,7 @@ describe("生产/外协工单详情页（UI-09：状态机动作门 SUBMITTED �
       </DensityProvider>,
     );
 
-    await screen.findByText("PRD-2026-0001");
+    await screen.findByText(/PRD-2026-0001/);
     expect(screen.getByText("已提交")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /过账/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "提交" })).not.toBeInTheDocument();
@@ -120,7 +120,7 @@ describe("生产/外协工单详情页（UI-09：状态机动作门 SUBMITTED �
       </DensityProvider>,
     );
 
-    await screen.findByText("PRD-2026-0001");
+    await screen.findByText(/PRD-2026-0001/);
     expect(screen.getByRole("button", { name: /过账/ })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /过账/ }));

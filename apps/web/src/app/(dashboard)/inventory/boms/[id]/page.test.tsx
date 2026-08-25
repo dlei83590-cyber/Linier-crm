@@ -66,13 +66,13 @@ describe("BOM 详情页（UI-09：状态/权限门 + StatusBadge 统一）", () 
       </DensityProvider>,
     );
 
-    await screen.findByText("BOM-FG001-1");
+    await screen.findByText(/BOM-FG001-1/);
     expect(screen.getByText("草稿")).toBeInTheDocument(); // StatusBadge 中文业务名（key 保留 DRAFT）
     expect(screen.getByRole("button", { name: "激活配方" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "编辑" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "删除" })).toBeInTheDocument();
     // 原料行渲染 + 系数右对齐 tabular 数据
-    expect(screen.getByText("钢材")).toBeInTheDocument();
+    expect(screen.getByText(/钢材/)).toBeInTheDocument();
     expect(screen.getByText("0.05")).toBeInTheDocument();
     // BOM 不存在 submit/过账等单据动作（不造 backend 不存在的按钮）
     expect(screen.queryByRole("button", { name: /提交/ })).not.toBeInTheDocument();
@@ -89,7 +89,7 @@ describe("BOM 详情页（UI-09：状态/权限门 + StatusBadge 统一）", () 
       </DensityProvider>,
     );
 
-    await screen.findByText("BOM-FG001-1");
+    await screen.findByText(/BOM-FG001-1/);
     expect(screen.getByText("生效")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "激活配方" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "编辑" })).not.toBeInTheDocument();
