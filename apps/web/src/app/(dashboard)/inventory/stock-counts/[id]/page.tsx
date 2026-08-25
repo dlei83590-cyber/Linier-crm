@@ -19,6 +19,7 @@ import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from 
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
 import { formatDate } from "@/lib/format";
+import { filterLocationsByWarehouse } from "@/lib/inventory/transfer-form";
 
 interface StockCountDetail {
   id: string;
@@ -378,7 +379,17 @@ function StockCountDetailPage() {
                   <label className="block text-xs text-ink-secondary">仓库 *</label>
                   <select
                     value={lineForm.warehouseId}
-                    onChange={(e) => setLineForm((f) => ({ ...f, warehouseId: e.target.value }))}
+                    onChange={(e) => {
+                      const warehouseId = e.target.value;
+                      setLineForm((prev) => ({
+                        ...prev,
+                        warehouseId,
+                        ...(prev.locationId &&
+                        !filterLocationsByWarehouse(locations, warehouseId).some((l) => l.id === prev.locationId)
+                          ? { locationId: "" }
+                          : {}),
+                      }));
+                    }}
                     className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
                   >
                     <option value="">选择仓库</option>
@@ -395,7 +406,7 @@ function StockCountDetailPage() {
                     className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
                   >
                     <option value="">未指定</option>
-                    {locations.map((l) => (
+                    {filterLocationsByWarehouse(locations, lineForm.warehouseId).map((l) => (
                       <option key={l.id} value={l.id}>{l.code ?? ""} {l.name ?? ""}</option>
                     ))}
                   </select>
