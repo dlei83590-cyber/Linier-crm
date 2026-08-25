@@ -22,7 +22,7 @@ type TxMock = {
 
 function makeTx(overrides: Partial<TxMock> = {}): TxMock {
   return {
-    businessPartner: { findFirst: vi.fn().mockResolvedValue({ id: 'bp-1' }) },
+    businessPartner: { findFirst: vi.fn().mockResolvedValue({ id: 'bp-1', type: 'CUSTOMER' }) },
     item: { findFirst: vi.fn().mockResolvedValue({ id: 'it-1' }) },
     customerProduct: {
       findFirst: vi.fn().mockResolvedValue(null),
