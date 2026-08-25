@@ -16,6 +16,9 @@ export type { ListColumn } from './entity-list-workspace';
 export { ModuleKpiStrip } from './module-kpi-strip';
 export type { ModuleKpiStripProps } from './module-kpi-strip';
 
+export { KpiCard } from './kpi-card';
+export type { KpiCardProps } from './kpi-card';
+
 export { EntityDetailWorkspace } from './entity-detail-workspace';
 export { EntityFormWorkspace } from './entity-form-workspace';
 
