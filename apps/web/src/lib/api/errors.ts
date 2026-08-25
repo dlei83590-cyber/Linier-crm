@@ -397,6 +397,10 @@ export const ERROR_CODES = {
   POOL_CLAIM_CONFLICT: 'POOL_CLAIM_CONFLICT', // 并发 claim 撞唯一约束（partial unique P2002），409
   CUSTOMER_ALREADY_OWNED: 'CUSTOMER_ALREADY_OWNED', // 已有有效归属（active ownership），409
   CUSTOMER_ALREADY_IN_POOL: 'CUSTOMER_ALREADY_IN_POOL', // 已有有效池条目（active entry），409
+
+  // 跟进协作（followup-collab MVP，Migration 0051）：CustomerActivity 审批流 + 评论
+  CUSTOMER_ACTIVITY_NOT_FOUND: 'CUSTOMER_ACTIVITY_NOT_FOUND', // 跟进活动不存在或已删除，404
+  CUSTOMER_ACTIVITY_INVALID_STATE: 'CUSTOMER_ACTIVITY_INVALID_STATE', // 状态不允许该操作（仅 FOLLOW_UP 参与审批 / 非 DRAFT|REJECTED 提交 / 非 SUBMITTED 审批/驳回），409
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

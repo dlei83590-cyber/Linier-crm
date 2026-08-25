@@ -17,8 +17,10 @@ export const dynamic = "force-dynamic";
  *   VISIT_PLAN（拜访计划）：planDate + summary?(拜访目的) + contactId?
  *   CHECK_IN（定位签到）：latitude/longitude + locationNote?（checkinAt 服务端 now 落库）
  * 时间线事实：FOLLOW_UP → createdAt；VISIT_PLAN → planDate；CHECK_IN → checkinAt（响应附加 occurredAt）。
- * 权限：复用 project-visit（view/create）——尽量复用既有 RBAC 模块，不新增权限模块（ADR-0028）。
- * HOLD：审批流/评论/围栏/签退/通用 Activity Engine。
+ * 跟进审批（Migration 0051，followup-collab MVP）：仅 FOLLOW_UP 参与 DRAFT→SUBMITTED→APPROVED/REJECTED；
+ *   status/审批时间戳 + commentCount（_count 聚合）随时间线返回；VISIT_PLAN/CHECK_IN status=NULL。
+ * 权限：复用 project-visit（view/create；审批 submit→:edit、approve/reject→:approve、评论→:create）——尽量复用既有 RBAC 模块，不新增权限模块（ADR-0028）。
+ * HOLD：Workflow Designer/多级审批/会签/抄送/Notification Engine/围栏/签退/通用 Activity Engine。
  */
 
 const createSchema = z
@@ -84,7 +86,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       orderBy: { createdAt: "desc" }, // 分页边界确定性；页内按 occurredAt 稳定排序（时间线语义）
       skip,
       take,
-      include: { contact: { select: { id: true, name: true, title: true } } },
+      include: {
+        contact: { select: { id: true, name: true, title: true } },
+        _count: { select: { comments: true } },
+      },
     }),
   ]);
 
@@ -107,6 +112,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       latitude: a.latitude,
       longitude: a.longitude,
       locationNote: a.locationNote,
+      // 跟进审批（Migration 0051；仅 FOLLOW_UP 有值）
+      status: a.status,
+      submittedAt: a.submittedAt,
+      submittedById: a.submittedById,
+      approvedAt: a.approvedAt,
+      approvedById: a.approvedById,
+      rejectedAt: a.rejectedAt,
+      rejectedById: a.rejectedById,
+      rejectReason: a.rejectReason,
+      commentCount: a._count.comments,
       createdById: a.createdById,
       createdAt: a.createdAt,
       occurredAt: occurredAt(a),
@@ -156,6 +171,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           latitude: d.activityType === "CHECK_IN" ? d.latitude ?? null : null,
           longitude: d.activityType === "CHECK_IN" ? d.longitude ?? null : null,
           locationNote: d.locationNote?.trim() || null,
+          // 跟进审批（Migration 0051）：仅 FOLLOW_UP 进入审批流，初始 DRAFT；VISIT_PLAN/CHECK_IN 不参与 → NULL
+          status: d.activityType === "FOLLOW_UP" ? "DRAFT" : null,
           createdById: user!.id,
           updatedById: user!.id,
         },

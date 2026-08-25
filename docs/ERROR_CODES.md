@@ -325,5 +325,7 @@
 | POOL_CLAIM_CONFLICT | 200 | 并发 claim 撞唯一约束（partial unique P2002），409 |
 | CUSTOMER_ALREADY_OWNED | 409 | 已有有效归属（active ownership），409 |
 | CUSTOMER_ALREADY_IN_POOL | 409 | 已有有效池条目（active entry），409 |
+| CUSTOMER_ACTIVITY_NOT_FOUND | 404 | 跟进活动不存在或已删除，404 |
+| CUSTOMER_ACTIVITY_INVALID_STATE | 409 | 状态不允许该操作（仅 FOLLOW_UP 参与审批 / 非 DRAFT｜REJECTED 提交 / 非 SUBMITTED 审批/驳回），409 |
 
-> 合计：**320 个错误码**（自动统计）
+> 合计：**322 个错误码**（自动统计）

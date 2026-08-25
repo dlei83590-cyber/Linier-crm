@@ -1,11 +1,14 @@
 "use client";
 
 /**
- * Phase 3 MVP — Customer 360「跟进活动」Tab（跟进 / 拜访计划 / 定位签到时间线）
+ * Customer 360「跟进活动」Tab（跟进 / 拜访计划 / 定位签到时间线）
  *
  * 数据：GET/POST /api/business-partners/:id/activities（CustomerActivity，Migration 0050）
+ * 跟进审批（Migration 0051，followup-collab MVP）：仅 FOLLOW_UP 参与
+ *   DRAFT →（提交 project-visit:edit）→ SUBMITTED →（批准/驳回 project-visit:approve）→ APPROVED / REJECTED
+ *   时间线显示状态徽标 + 评论数；评论 = ActivityComment 最小评论（GET/POST /activities/:activityId/comments）
  * 签到：浏览器 navigator.geolocation 获取经纬度 → POST CHECK_IN（checkinAt 服务端 now 落库）
- * HOLD：审批/评论/群消息/酷卡片/签退/围栏/引擎
+ * HOLD：Workflow Designer/多级审批/会签/抄送/Notification Engine/群消息/酷卡片/签退/围栏/引擎
  */
 import { useCallback, useEffect, useState } from "react";
 import { PermissionGuard } from "@/components/guard/permission-guard";
@@ -26,16 +29,36 @@ interface ActivityRow {
   latitude: string | null;
   longitude: string | null;
   locationNote: string | null;
+  status: "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" | null;
+  submittedAt: string | null;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  rejectReason: string | null;
+  commentCount: number;
   occurredAt: string;
 }
 
+interface ActivityCommentRow {
+  id: string;
+  content: string;
+  createdById: string | null;
+  createdAt: string;
+}
+
 const TYPE_LABELS: Record<string, string> = { FOLLOW_UP: "跟进", VISIT_PLAN: "拜访计划", CHECK_IN: "签到" };
+
+const STATUS_META: Record<string, { label: string; cls: string }> = {
+  DRAFT: { label: "待提交", cls: "bg-slate-100 text-slate-600" },
+  SUBMITTED: { label: "待审批", cls: "bg-amber-50 text-amber-700" },
+  APPROVED: { label: "已批准", cls: "bg-green-50 text-green-700" },
+  REJECTED: { label: "已驳回", cls: "bg-red-50 text-red-700" },
+};
 
 export function ActivityTimeline({ partnerId }: { partnerId: string }) {
   const [items, setItems] = useState<ActivityRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null); // 进行中操作的活动 id（null=空闲）
 
   // 表单
   const [mode, setMode] = useState<"FOLLOW_UP" | "VISIT_PLAN" | "CHECK_IN">("FOLLOW_UP");
@@ -43,6 +66,11 @@ export function ActivityTimeline({ partnerId }: { partnerId: string }) {
   const [nextAction, setNextAction] = useState("");
   const [planDate, setPlanDate] = useState("");
   const [geo, setGeo] = useState<{ lat: string; lng: string } | null>(null);
+
+  // 评论
+  const [comments, setComments] = useState<Record<string, ActivityCommentRow[]>>({});
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [commentText, setCommentText] = useState<Record<string, string>>({});
 
   const load = useCallback(() => {
     setLoading(true);
@@ -55,6 +83,71 @@ export function ActivityTimeline({ partnerId }: { partnerId: string }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  const fetchComments = useCallback(
+    async (activityId: string) => {
+      try {
+        const { data } = await apiFetch<ActivityCommentRow[]>(
+          "/api/business-partners/" + partnerId + "/activities/" + activityId + "/comments",
+        );
+        setComments((prev) => ({ ...prev, [activityId]: data }));
+      } catch {
+        // 评论加载失败不阻断时间线
+      }
+    },
+    [partnerId],
+  );
+
+  const toggleComments = (activityId: string) => {
+    const next = !expanded[activityId];
+    setExpanded((prev) => ({ ...prev, [activityId]: next }));
+    if (next && !comments[activityId]) fetchComments(activityId);
+  };
+
+  const runAction = async (activityId: string, action: "submit" | "approve" | "reject", rejectReason?: string) => {
+    setBusy(activityId);
+    setError(null);
+    try {
+      await apiFetch("/api/business-partners/" + partnerId + "/activities/" + activityId + "/" + action, {
+        method: "POST",
+        body: rejectReason ? JSON.stringify({ rejectReason }) : undefined,
+      });
+      await load();
+    } catch (err: unknown) {
+      setError(err instanceof ApiClientError ? err.message : "操作失败");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const rejectWithReason = (activityId: string) => {
+    const reason = window.prompt("请输入驳回原因（必填）");
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setError("驳回原因必填");
+      return;
+    }
+    runAction(activityId, "reject", reason.trim());
+  };
+
+  const addComment = async (activityId: string) => {
+    const content = (commentText[activityId] ?? "").trim();
+    if (!content) return;
+    setBusy(activityId);
+    setError(null);
+    try {
+      await apiFetch("/api/business-partners/" + partnerId + "/activities/" + activityId + "/comments", {
+        method: "POST",
+        body: JSON.stringify({ content }),
+      });
+      setCommentText((prev) => ({ ...prev, [activityId]: "" }));
+      await Promise.all([load(), fetchComments(activityId)]);
+    } catch (err: unknown) {
+      setError(err instanceof ApiClientError ? err.message : "评论失败");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const locate = () => {
     if (!("geolocation" in navigator)) {
@@ -69,7 +162,7 @@ export function ActivityTimeline({ partnerId }: { partnerId: string }) {
   };
 
   const submit = async () => {
-    setBusy(true);
+    setBusy("__form__");
     setError(null);
     try {
       const body: Record<string, unknown> = { activityType: mode };
@@ -82,7 +175,6 @@ export function ActivityTimeline({ partnerId }: { partnerId: string }) {
       } else {
         if (!geo) {
           setError("请先获取定位");
-          setBusy(false);
           return;
         }
         body.latitude = Number(geo.lat);
@@ -98,7 +190,7 @@ export function ActivityTimeline({ partnerId }: { partnerId: string }) {
     } catch (err: unknown) {
       setError(err instanceof ApiClientError ? err.message : "保存失败");
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
@@ -140,7 +232,7 @@ export function ActivityTimeline({ partnerId }: { partnerId: string }) {
               <input value={summary} onChange={(e) => setSummary(e.target.value)} className={INPUT_CLASS} placeholder="位置备注（可选）" />
             </div>
           )}
-          <button onClick={submit} disabled={busy} className={BUTTON_PRIMARY_CLASS + " text-xs"}>
+          <button onClick={submit} disabled={busy !== null} className={BUTTON_PRIMARY_CLASS + " text-xs"}>
             保存
           </button>
         </div>
@@ -152,22 +244,108 @@ export function ActivityTimeline({ partnerId }: { partnerId: string }) {
         <p className="text-sm text-ink-muted">暂无跟进记录。</p>
       ) : (
         <ul className="space-y-2">
-          {items.map((a) => (
-            <li key={a.id} className="rounded-md border border-border p-3 text-sm">
-              <div className="flex items-center gap-2 text-xs">
-                <span className="rounded bg-brand-50 px-1.5 py-0.5 text-brand-700">{TYPE_LABELS[a.activityType]}</span>
-                <span className="text-ink-muted">{formatDate(a.occurredAt)}</span>
-                {a.contact?.name && <span className="text-ink-muted">联系人：{a.contact.name}</span>}
-              </div>
-              {a.summary && <p className="mt-1 text-ink-primary">{a.summary}</p>}
-              {a.nextAction && <p className="mt-0.5 text-xs text-ink-muted">下次行动：{a.nextAction}</p>}
-              {a.activityType === "CHECK_IN" && (
-                <p className="mt-0.5 text-xs text-ink-muted">
-                  位置：{a.latitude ?? "—"}, {a.longitude ?? "—"} {a.locationNote ? "（" + a.locationNote + "）" : ""}
-                </p>
-              )}
-            </li>
-          ))}
+          {items.map((a) => {
+            const statusMeta = a.status ? STATUS_META[a.status] : null;
+            return (
+              <li key={a.id} className="rounded-md border border-border p-3 text-sm">
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="rounded bg-brand-50 px-1.5 py-0.5 text-brand-700">{TYPE_LABELS[a.activityType]}</span>
+                  {statusMeta && (
+                    <span className={"rounded px-1.5 py-0.5 font-medium " + statusMeta.cls}>{statusMeta.label}</span>
+                  )}
+                  <span className="text-ink-muted">{formatDate(a.occurredAt)}</span>
+                  {a.contact?.name && <span className="text-ink-muted">联系人：{a.contact.name}</span>}
+                </div>
+                {a.summary && <p className="mt-1 text-ink-primary">{a.summary}</p>}
+                {a.nextAction && <p className="mt-0.5 text-xs text-ink-muted">下次行动：{a.nextAction}</p>}
+                {a.activityType === "CHECK_IN" && (
+                  <p className="mt-0.5 text-xs text-ink-muted">
+                    位置：{a.latitude ?? "—"}, {a.longitude ?? "—"} {a.locationNote ? "（" + a.locationNote + "）" : ""}
+                  </p>
+                )}
+                {a.status === "REJECTED" && a.rejectReason && (
+                  <p className="mt-0.5 text-xs text-red-600">驳回原因：{a.rejectReason}</p>
+                )}
+
+                {/* 跟进审批动作（仅 FOLLOW_UP） */}
+                {a.activityType === "FOLLOW_UP" &&
+                  (a.status === "DRAFT" || a.status === "REJECTED") && (
+                    <PermissionGuard permission={actionPermission("project-visit", "edit")}>
+                      <div className="mt-1.5 flex gap-1.5">
+                        <button
+                          onClick={() => runAction(a.id, "submit")}
+                          disabled={busy !== null}
+                          className={BUTTON_SECONDARY_CLASS + " text-xs"}
+                        >
+                          提交审批
+                        </button>
+                      </div>
+                    </PermissionGuard>
+                  )}
+                {a.activityType === "FOLLOW_UP" && a.status === "SUBMITTED" && (
+                  <PermissionGuard permission={actionPermission("project-visit", "approve")}>
+                    <div className="mt-1.5 flex gap-1.5">
+                      <button
+                        onClick={() => runAction(a.id, "approve")}
+                        disabled={busy !== null}
+                        className="rounded-md bg-green-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        批准
+                      </button>
+                      <button
+                        onClick={() => rejectWithReason(a.id)}
+                        disabled={busy !== null}
+                        className="rounded-md border border-red-200 px-2 py-1 text-xs font-medium text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        驳回
+                      </button>
+                    </div>
+                  </PermissionGuard>
+                )}
+
+                {/* 评论（所有活动类型；最小 ActivityComment） */}
+                <div className="mt-1.5">
+                  <button
+                    onClick={() => toggleComments(a.id)}
+                    className="text-xs text-brand-600 hover:underline"
+                  >
+                    评论（{a.commentCount}）
+                  </button>
+                </div>
+                {expanded[a.id] && (
+                  <div className="mt-1.5 space-y-1.5 rounded-md border border-border p-2">
+                    {comments[a.id] && comments[a.id].length > 0 ? (
+                      comments[a.id].map((c) => (
+                        <p key={c.id} className="text-xs text-ink-primary">
+                          <span className="text-ink-muted">{formatDate(c.createdAt)}：</span>
+                          {c.content}
+                        </p>
+                      ))
+                    ) : (
+                      <p className="text-xs text-ink-muted">暂无评论。</p>
+                    )}
+                    <PermissionGuard permission={actionPermission("project-visit", "create")}>
+                      <div className="flex gap-2">
+                        <input
+                          value={commentText[a.id] ?? ""}
+                          onChange={(e) => setCommentText((prev) => ({ ...prev, [a.id]: e.target.value }))}
+                          className={INPUT_CLASS + " flex-1"}
+                          placeholder="添加评论…"
+                        />
+                        <button
+                          onClick={() => addComment(a.id)}
+                          disabled={busy !== null || !(commentText[a.id] ?? "").trim()}
+                          className={BUTTON_PRIMARY_CLASS + " text-xs"}
+                        >
+                          发送
+                        </button>
+                      </div>
+                    </PermissionGuard>
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>
