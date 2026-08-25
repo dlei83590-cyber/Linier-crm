@@ -76,7 +76,8 @@ export function resolveAppBaseUrl(): string {
   return (process.env.DINGTALK_APP_URL ?? process.env.APP_URL ?? "").replace(/\/$/, "");
 }
 
-/** 组装绝对 deep link（无基址时返回相对路径）。 */
+/** 组装绝对 deep link（无基址时返回相对路径；基址尾部斜杠归一化，避免双斜杠）。 */
 export function absoluteDeepLink(baseUrl: string, path: string): string {
-  return baseUrl ? baseUrl + path : path;
+  if (!baseUrl) return path;
+  return baseUrl.replace(/\/$/, "") + path;
 }

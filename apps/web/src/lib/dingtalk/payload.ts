@@ -56,8 +56,9 @@ export function formatAmount(amount: string, currency: string | null | undefined
   }
 }
 
-/** 经纬度摘要：4 位小数（≈11m），不暴露精确定位 */
+/** 经纬度摘要：4 位小数（≈11m），不暴露精确定位；null/undefined/非数值 → null（Number(null)=0 需先行排除） */
 export function coordinateSummary(lat: unknown, lng: unknown): string | null {
+  if (lat === null || lat === undefined || lng === null || lng === undefined) return null;
   const la = Number(lat);
   const ln = Number(lng);
   if (!Number.isFinite(la) || !Number.isFinite(ln)) return null;
