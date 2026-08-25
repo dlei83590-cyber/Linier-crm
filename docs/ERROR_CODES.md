@@ -326,4 +326,4 @@
 | CUSTOMER_ALREADY_OWNED | 409 | 已有有效归属（active ownership），409 |
 | CUSTOMER_ALREADY_IN_POOL | 409 | 已有有效池条目（active entry），409 |
 
-> 合计：**319 个错误码**（自动统计）
+> 合计：**320 个错误码**（自动统计）
