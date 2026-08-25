@@ -354,6 +354,7 @@ export const ERROR_CODES = {
   BOM_LINE_INVALID: 'BOM_LINE_INVALID', // 原料行非法（componentItemId == 成品 / 系数 <= 0 / 损耗率越界 / 原料单位 != 原料库存单位），400
   BOM_COMPONENT_DUPLICATE: 'BOM_COMPONENT_DUPLICATE', // 同一配方内原料重复，400
   BOM_ITEM_INVALID: 'BOM_ITEM_INVALID', // 成品/原料不存在或已停用 / 成品不可生产（sourcingType 与 isManufacturable），400
+  BOM_LINE_NOT_FOUND: 'BOM_LINE_NOT_FOUND', // 配方行不存在或已删除，404
 
   // P-1 Item Sourcing：生产/外协工单（ProductionOrder——领料 OUT + 成品 IN 同事务）
   PRODUCTION_ORDER_NOT_FOUND: 'PRODUCTION_ORDER_NOT_FOUND', // 工单不存在或已删除，404

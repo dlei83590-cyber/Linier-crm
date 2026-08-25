@@ -18,10 +18,12 @@ import {
   EntityDetailWorkspace,
   ErrorPanel,
   AuditTimeline,
+  ConfirmActionDialog,
   type AuditEvent,
 } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
-import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
+import { BUTTON_PRIMARY_CLASS, INPUT_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
+import { useToast } from "@/components/ui/toast";
 import { formatDate } from "@/lib/format";
 
 interface ItemDetail {
@@ -71,7 +73,38 @@ interface ItemDetail {
     createdAt: string;
   }>;
   // P-1B 产品/原料合同视图（详情 GET 已 include）
-  bomFinished?: Array<{ id: string; bomNo: string; bomVersion: number; status: string; isDefault: boolean }>;
+  bomFinished?: Array<{
+    id: string;
+    bomNo: string;
+    bomVersion: number;
+    status: string;
+    isDefault: boolean;
+    version: number;
+    lines?: Array<{
+      id: string;
+      componentItemId: string;
+      componentUomId: string;
+      qtyPerFinishedUnit: string;
+      lossRate: string;
+      componentItem?: {
+        id: string;
+        code: string | null;
+        name: string | null;
+        model: string | null;
+        stockProjections?: Array<{ warehouseId: string; onHandQty: string; warehouse?: { code: string | null; name: string | null } | null }>;
+      } | null;
+      componentUom?: { id: string; code: string | null; symbol: string | null } | null;
+    }>;
+  }>;
+  // 单位换算（详情 GET 已 include uomConversions）
+  uomConversions?: Array<{
+    id: string;
+    fromUomId: string;
+    toUomId: string;
+    factor: string;
+    fromUom?: { id: string; code: string | null; name: string | null } | null;
+    toUom?: { id: string; code: string | null; name: string | null } | null;
+  }>;
   bomComponents?: Array<{ id: string; bom?: { id: string; bomNo: string; finishedItem?: { id: string; code: string | null; name: string | null } | null } | null }>;
   costBalance?: { avgUnitCost?: string | null; onHandQty?: string | null; totalCost?: string | null } | null;
   productionOrderFinished?: Array<{ id: string; orderNo: string; productionType: string; status: string; plannedQty: string }>;
@@ -134,15 +167,28 @@ function ItemDetailPage() {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
   const { state } = useSession();
+  const toast = useToast();
   const canEdit =
     state.status === "authenticated" &&
     state.user !== null &&
     hasPermission(state.user.roles as RoleCode[], actionPermission("item", "edit"));
+  const canEditBom =
+    state.status === "authenticated" &&
+    state.user !== null &&
+    hasPermission(state.user.roles as RoleCode[], actionPermission("bom", "edit"));
 
   const [detail, setDetail] = useState<ItemDetail | null>(null);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | null>(null);
+  // 产品档案：原料选项（增加配方行）+ 行编辑状态
+  const [itemOptions, setItemOptions] = useState<Array<{ id: string; code: string | null; name: string | null; stockUom?: { id: string; symbol: string | null } | null }>>([]);
+  const [newLineForBom, setNewLineForBom] = useState<string | null>(null);
+  const [newLine, setNewLine] = useState<{ componentItemId: string; qty: string; lossRate: string }>({ componentItemId: "", qty: "", lossRate: "0" });
+  const [editingLine, setEditingLine] = useState<string | null>(null);
+  const [editQty, setEditQty] = useState("");
+  const [deletingLine, setDeletingLine] = useState<{ bomId: string; lineId: string; label: string } | null>(null);
+  const [lineBusy, setLineBusy] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -174,6 +220,102 @@ function ItemDetailPage() {
       });
     return () => controller.abort();
   }, [id]);
+
+  // 产品档案：加载原料选项（增加配方行下拉；复用 /api/items 列表含 stockUom）
+  useEffect(() => {
+    if (!canEditBom || !detail || !detail.bomFinished?.some((b) => b.status === "DRAFT")) return;
+    const controller = new AbortController();
+    apiFetch<Array<{ id: string; code: string | null; name: string | null; stockUom?: { id: string; symbol: string | null } | null }>>(
+      "/api/items?pageSize=200",
+      { signal: controller.signal },
+    )
+      .then((body) => setItemOptions(Array.isArray(body.data) ? body.data : []))
+      .catch(() => {
+        /* 选项加载失败不阻塞页面 */
+      });
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canEditBom, id, detail?.bomFinished?.length]);
+
+  const reloadDetail = async () => {
+    const body = await apiFetch<ItemDetail>(`/api/items/${id}`);
+    setDetail(body.data);
+  };
+
+  const startAddLine = (bomId: string) => {
+    setNewLineForBom(bomId);
+    setNewLine({ componentItemId: "", qty: "", lossRate: "0" });
+  };
+
+  const runAddLine = async (bom: NonNullable<ItemDetail["bomFinished"]>[number]) => {
+    if (lineBusy || !newLine.componentItemId || !newLine.qty || Number(newLine.qty) <= 0) return;
+    setLineBusy(true);
+    const sel = itemOptions.find((o) => o.id === newLine.componentItemId);
+    try {
+      await apiFetch(`/api/boms/${bom.id}/lines`, {
+        method: "POST",
+        body: JSON.stringify({
+          version: bom.version,
+          componentItemId: newLine.componentItemId,
+          componentUomId: sel?.stockUom?.id ?? "",
+          qtyPerFinishedUnit: Number(newLine.qty),
+          lossRate: newLine.lossRate === "" ? 0 : Number(newLine.lossRate),
+        }),
+      });
+      toast.success("已增加配方行");
+      setNewLineForBom(null);
+      await reloadDetail();
+    } catch (err) {
+      const e = err instanceof ApiClientError ? err : new ApiClientError(0, "增加配方行失败", "NETWORK_ERROR");
+      toast.error("增加配方行失败", e.message);
+    } finally {
+      setLineBusy(false);
+    }
+  };
+
+  const startEditLine = (lineId: string, qty: string) => {
+    setEditingLine(lineId);
+    setEditQty(qty);
+  };
+
+  const runUpdateLine = async (bom: NonNullable<ItemDetail["bomFinished"]>[number], lineId: string) => {
+    if (lineBusy || !editingLine || !editQty || Number(editQty) <= 0) return;
+    setLineBusy(true);
+    try {
+      await apiFetch(`/api/boms/${bom.id}/lines/${lineId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ version: bom.version, qtyPerFinishedUnit: Number(editQty) }),
+      });
+      toast.success("已更新配方行数量");
+      setEditingLine(null);
+      await reloadDetail();
+    } catch (err) {
+      const e = err instanceof ApiClientError ? err : new ApiClientError(0, "更新配方行失败", "NETWORK_ERROR");
+      toast.error("更新配方行失败", e.message);
+    } finally {
+      setLineBusy(false);
+    }
+  };
+
+  const runDeleteLine = async (bom: NonNullable<ItemDetail["bomFinished"]>[number], lineId: string) => {
+    if (lineBusy || !deletingLine) return;
+    setLineBusy(true);
+    try {
+      await apiFetch(`/api/boms/${bom.id}/lines/${lineId}`, {
+        method: "DELETE",
+        body: JSON.stringify({ version: bom.version }),
+      });
+      toast.success("已删除配方行");
+      setDeletingLine(null);
+      await reloadDetail();
+    } catch (err) {
+      const e = err instanceof ApiClientError ? err : new ApiClientError(0, "删除配方行失败", "NETWORK_ERROR");
+      toast.error("删除配方行失败", e.message);
+      setDeletingLine(null);
+    } finally {
+      setLineBusy(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -276,6 +418,34 @@ function ItemDetailPage() {
           </section>
 
           <section className="rounded-md border border-border p-4">
+            <h2 className="mb-3 text-sm font-semibold text-ink-primary">单位换算（UOM Conversion）</h2>
+            {detail.uomConversions && detail.uomConversions.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-border text-sm">
+                  <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
+                    <tr>
+                      <th className="px-4 py-2 font-semibold">从单位</th>
+                      <th className="px-4 py-2 font-semibold">系数</th>
+                      <th className="px-4 py-2 font-semibold">到单位</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {(detail.uomConversions ?? []).map((c) => (
+                      <tr key={c.id}>
+                        <td className="px-4 py-2">{c.fromUom?.name ?? c.fromUom?.code ?? "—"}</td>
+                        <td className="px-4 py-2 tabular-nums">1 = {c.factor}</td>
+                        <td className="px-4 py-2">{c.toUom?.name ?? c.toUom?.code ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-sm text-ink-muted">未配置单位换算</p>
+            )}
+          </section>
+
+          <section className="rounded-md border border-border p-4">
             <h2 className="mb-3 text-sm font-semibold text-ink-primary">状态与标记</h2>
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               <div>
@@ -307,15 +477,150 @@ function ItemDetailPage() {
             </div>
 
             {(detail.bomFinished ?? []).length > 0 && (
-              <div className="mt-3">
+              <div className="mt-3 space-y-4">
                 <p className="mb-1 text-xs text-ink-muted">作为成品的配方（BOM）</p>
-                <div className="flex flex-wrap gap-2">
-                  {(detail.bomFinished ?? []).map((b) => (
-                    <Link key={b.id} href={`/inventory/boms/${b.id}`} className="rounded-md border border-border px-2 py-1 text-xs text-brand-600 hover:bg-canvas">
-                      {b.bomNo}（v{b.bomVersion}）{b.isDefault ? " · 默认" : ""} · {b.status}
-                    </Link>
-                  ))}
-                </div>
+                {(detail.bomFinished ?? []).map((b) => (
+                  <div key={b.id} className="rounded-md border border-border p-3">
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <Link href={`/inventory/boms/${b.id}`} className="text-sm font-medium text-brand-600 hover:underline">
+                        {b.bomNo}
+                      </Link>
+                      <span className="rounded bg-canvas px-1.5 py-0.5 text-xs text-ink-secondary">v{b.bomVersion}</span>
+                      {b.isDefault ? <span className="rounded bg-brand-50 px-1.5 py-0.5 text-xs text-brand-700">默认</span> : null}
+                      <span className="rounded bg-canvas px-1.5 py-0.5 text-xs text-ink-secondary">{b.status}</span>
+                      {b.status === "DRAFT" && canEditBom && (
+                        <button
+                          type="button"
+                          onClick={() => startAddLine(b.id)}
+                          className="ml-auto rounded-md border border-border px-2 py-1 text-xs text-ink-primary hover:bg-canvas"
+                        >
+                          + 添加原料
+                        </button>
+                      )}
+                    </div>
+
+                    {(b.lines ?? []).length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-border text-sm">
+                          <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
+                            <tr>
+                              <th className="px-3 py-1.5 font-semibold">原料</th>
+                              <th className="px-3 py-1.5 font-semibold">单位</th>
+                              <th className="px-3 py-1.5 font-semibold">系数</th>
+                              <th className="px-3 py-1.5 font-semibold">损耗率</th>
+                              <th className="px-3 py-1.5 font-semibold">每 100 成品需求</th>
+                              <th className="px-3 py-1.5 font-semibold">原料当前库存（StockProjection SSOT）</th>
+                              {b.status === "DRAFT" && canEditBom ? <th className="px-3 py-1.5 font-semibold">操作</th> : null}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border">
+                            {(b.lines ?? []).map((l) => {
+                              const per100 = Number(l.qtyPerFinishedUnit) * 100 * (1 + Number(l.lossRate || 0));
+                              const stock = (l.componentItem?.stockProjections ?? []).map((sp) => `${sp.warehouse?.name ?? sp.warehouse?.code ?? "—"}：${sp.onHandQty}`).join("；") || "—";
+                              return (
+                                <tr key={l.id}>
+                                  <td className="px-3 py-2">
+                                    <Link href={`/items/${l.componentItemId}`} className="text-brand-600 hover:underline">
+                                      {`${l.componentItem?.code ?? ""} ${l.componentItem?.name ?? ""}`.trim() || "—"}
+                                    </Link>
+                                  </td>
+                                  <td className="px-3 py-2">{l.componentUom?.symbol ?? l.componentUom?.code ?? "—"}</td>
+                                  <td className="px-3 py-2 tabular-nums">
+                                    {editingLine === l.id && b.status === "DRAFT" && canEditBom ? (
+                                      <input
+                                        value={editQty}
+                                        onChange={(e) => setEditQty(e.target.value)}
+                                        className={INPUT_CLASS + " w-24 py-1"}
+                                      />
+                                    ) : (
+                                      l.qtyPerFinishedUnit
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2 tabular-nums">{Number(l.lossRate) > 0 ? `${(Number(l.lossRate) * 100).toFixed(2)}%` : "—"}</td>
+                                  <td className="px-3 py-2 tabular-nums text-ink-secondary">{per100.toFixed(4)} {l.componentUom?.symbol ?? ""}</td>
+                                  <td className="px-3 py-2 tabular-nums text-ink-secondary">{stock}</td>
+                                  {b.status === "DRAFT" && canEditBom ? (
+                                    <td className="px-3 py-2">
+                                      {editingLine === l.id ? (
+                                        <span className="flex items-center gap-2">
+                                          <button type="button" onClick={() => runUpdateLine(b, l.id)} disabled={lineBusy} className="rounded-md bg-brand-600 px-2 py-1 text-xs text-white hover:bg-brand-700 disabled:opacity-40">
+                                            保存
+                                          </button>
+                                          <button type="button" onClick={() => setEditingLine(null)} className="rounded-md border border-border px-2 py-1 text-xs hover:bg-canvas">
+                                            取消
+                                          </button>
+                                        </span>
+                                      ) : (
+                                        <span className="flex items-center gap-2">
+                                          <button type="button" onClick={() => startEditLine(l.id, l.qtyPerFinishedUnit)} className="rounded-md border border-border px-2 py-1 text-xs hover:bg-canvas">
+                                            修改数量
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setDeletingLine({ bomId: b.id, lineId: l.id, label: `${l.componentItem?.code ?? ""} ${l.componentItem?.name ?? ""}`.trim() })}
+                                            className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text hover:bg-status-danger-bg/10"
+                                          >
+                                            删除
+                                          </button>
+                                        </span>
+                                      )}
+                                    </td>
+                                  ) : null}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-ink-muted">暂无配方行</p>
+                    )}
+
+                    {newLineForBom === b.id && b.status === "DRAFT" && canEditBom && (
+                      <div className="border-border mt-2 flex flex-wrap items-end gap-3 rounded-md border p-3">
+                        <div className="min-w-[180px] flex-1">
+                          <span className="block text-xs text-ink-secondary">原料 *</span>
+                          <select
+                            value={newLine.componentItemId}
+                            onChange={(e) => setNewLine((prev) => ({ ...prev, componentItemId: e.target.value }))}
+                            className={SELECT_CLASS + " w-full"}
+                          >
+                            <option value="">请选择原料</option>
+                            {itemOptions
+                              .filter((o) => o.id !== detail.id && !(b.lines ?? []).some((l) => l.componentItemId === o.id))
+                              .map((o) => (
+                                <option key={o.id} value={o.id}>
+                                  {`${o.code ?? ""} ${o.name ?? ""}`.trim()}（{o.stockUom?.symbol ?? ""}）
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                        <div className="w-28">
+                          <span className="block text-xs text-ink-secondary">数量（1 成品消耗）*</span>
+                          <input
+                            value={newLine.qty}
+                            onChange={(e) => setNewLine((prev) => ({ ...prev, qty: e.target.value }))}
+                            className={INPUT_CLASS}
+                          />
+                        </div>
+                        <div className="w-28">
+                          <span className="block text-xs text-ink-secondary">损耗率 %</span>
+                          <input
+                            value={newLine.lossRate}
+                            onChange={(e) => setNewLine((prev) => ({ ...prev, lossRate: e.target.value }))}
+                            className={INPUT_CLASS}
+                          />
+                        </div>
+                        <button type="button" onClick={() => runAddLine(b)} disabled={lineBusy} className="rounded-md bg-brand-600 px-3 py-1.5 text-sm text-white hover:bg-brand-700 disabled:opacity-40">
+                          确认添加
+                        </button>
+                        <button type="button" onClick={() => setNewLineForBom(null)} className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-canvas">
+                          取消
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
 
@@ -422,6 +727,21 @@ function ItemDetailPage() {
             </section>
           ) : null}
         </div>
+        <ConfirmActionDialog
+          open={deletingLine !== null}
+          title={deletingLine ? `删除配方行「${deletingLine.label}」？` : ""}
+          description="仅 DRAFT 配方可删除原料行；删除后该原料可重新添加。"
+          confirmLabel="确认删除"
+          tone="danger"
+          busy={lineBusy}
+          onConfirm={() => {
+            if (deletingLine) {
+              const bom = detail?.bomFinished?.find((x) => x.id === deletingLine.bomId);
+              if (bom) runDeleteLine(bom, deletingLine.lineId);
+            }
+          }}
+          onCancel={() => setDeletingLine(null)}
+        />
       </EntityDetailWorkspace>
     </AppPage>
   );

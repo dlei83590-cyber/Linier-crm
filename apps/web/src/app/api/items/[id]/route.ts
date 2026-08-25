@@ -68,7 +68,29 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       revisions: { where: { deletedAt: null }, orderBy: { revisionNo: "desc" } },
       tags: { where: { deletedAt: null }, include: { tag: { select: { id: true, code: true, name: true, color: true } } } },
       // P-1B 产品/原料合同视图（只读聚合；复用权威模型，零字段复制）
-      bomFinished: { where: { deletedAt: null }, orderBy: { bomVersion: "desc" }, select: { id: true, bomNo: true, bomVersion: true, status: true, isDefault: true } }, // 产品：作为成品的配方
+      // 产品：作为成品的配方（含行 + 原料库存 StockProjection 只读聚合，契约「产品档案」内联呈现）
+      bomFinished: {
+        where: { deletedAt: null },
+        orderBy: { bomVersion: "desc" },
+        include: {
+          lines: {
+            where: { deletedAt: null },
+            orderBy: { sort: "asc" },
+            include: {
+              componentItem: {
+                select: {
+                  id: true,
+                  code: true,
+                  name: true,
+                  model: true,
+                  stockProjections: { select: { warehouseId: true, warehouse: { select: { code: true, name: true } }, onHandQty: true } },
+                },
+              },
+              componentUom: { select: { id: true, code: true, symbol: true } },
+            },
+          },
+        },
+      },
       bomComponents: { where: { deletedAt: null }, select: { id: true, bom: { select: { id: true, bomNo: true, finishedItem: { select: { id: true, code: true, name: true } } } } } }, // 原料：被哪些配方使用
       costBalance: true, // 库存成本（移动加权平均，ADR-0038）
       productionOrderFinished: { where: { deletedAt: null }, orderBy: { createdAt: "desc" }, select: { id: true, orderNo: true, productionType: true, status: true, plannedQty: true } }, // 生产/外协工单

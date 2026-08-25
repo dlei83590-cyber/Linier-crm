@@ -290,6 +290,7 @@
 | BOM_LINE_INVALID | 400 | 原料行非法（componentItemId == 成品 / 系数 <= 0 / 损耗率越界 / 原料单位 != 原料库存单位），400 |
 | BOM_COMPONENT_DUPLICATE | 400 | 同一配方内原料重复，400 |
 | BOM_ITEM_INVALID | 400 | 成品/原料不存在或已停用 / 成品不可生产（sourcingType 与 isManufacturable），400 |
+| BOM_LINE_NOT_FOUND | 404 | 配方行不存在或已删除，404 |
 | PRODUCTION_ORDER_NOT_FOUND | 404 | 工单不存在或已删除，404 |
 | PRODUCTION_ORDER_INVALID_STATE | 409 | 非 DRAFT 操作（PATCH/DELETE）/ 非 DRAFT/SUBMITTED 过账 / 已 CANCELLED，409 |
 | PRODUCTION_ORDER_ALREADY_POSTED | 409 | 幂等：已 POSTED 禁止重复 post，409 |
@@ -325,4 +326,4 @@
 | CUSTOMER_ALREADY_OWNED | 409 | 已有有效归属（active ownership），409 |
 | CUSTOMER_ALREADY_IN_POOL | 409 | 已有有效池条目（active entry），409 |
 
-> 合计：**319 个错误码**（自动统计）
+> 合计：**320 个错误码**（自动统计）
