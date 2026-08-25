@@ -15,12 +15,15 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { actionPermission } from "@nilier-crm/shared";
-import { AppPage, EntityListWorkspace } from "@/components/workspace";
+import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
+import { AppPage, EntityListWorkspace, ProjectSubresourceDialog, ReferenceSelector, type ReferenceOption } from "@/components/workspace";
+import { useToast } from "@/components/ui/toast";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useListQuery } from "@/lib/use-list-query";
-import { BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
+import { useSession } from "@/lib/session-context";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, INPUT_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { formatDate, formatDateOnly } from "@/lib/format";
+import { GEOLOCATION_OPTIONS, geolocationErrorMessage } from "@/lib/visit/geolocation";
 
 interface VisitCheckin {
   id: string;
@@ -64,12 +67,35 @@ function VisitStatusBadge({ status }: { status: "PENDING" | "COMPLETED" }) {
   );
 }
 
+interface PlanCustomerOption {
+  id: string;
+  code: string | null;
+  name: string | null;
+  type: string | null;
+}
+
 function VisitsList() {
+  const toast = useToast();
+  const { state } = useSession();
+  const roles = (state.user?.roles ?? []) as RoleCode[];
+  const canCheckin = hasPermission(roles, actionPermission("project-visit", "create"));
+
   const [rangeInput, setRangeInput] = useState<"week" | "month">("week");
   const [statusInput, setStatusInput] = useState<"" | "PENDING" | "COMPLETED">("");
   const [filters, setFilters] = useState<{ range: string }>({ range: "week" });
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // 创建拜访计划（复用 CustomerActivity VISIT_PLAN；不建新表）
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createError, setCreateError] = useState<ApiClientError | null>(null);
+  const [planQuery, setPlanQuery] = useState("");
+  const [planSearching, setPlanSearching] = useState(false);
+  const [planCustomers, setPlanCustomers] = useState<PlanCustomerOption[]>([]);
+  const [planCustomerId, setPlanCustomerId] = useState("");
+  const [planDate, setPlanDate] = useState("");
+  const [planSummary, setPlanSummary] = useState("");
 
   const { items, total, page, pageSize, loading, error, setPage, refresh } =
     useListQuery<VisitRow>("/api/visits", filters, 100);
@@ -108,6 +134,7 @@ function VisitsList() {
           .then(() => {
             refresh();
             setBusyId(null);
+            toast.success("签到成功", "计划已反馈为已完成，可进行签退");
           })
           .catch((err: unknown) => {
             // 超范围明确提示（后端返回 CHECK_IN_OUT_OF_RANGE + 距离/半径事实）
@@ -115,10 +142,12 @@ function VisitsList() {
             setBusyId(null);
           });
       },
-      () => {
-        setActionError("定位失败，请检查浏览器定位权限后重试");
+      (err) => {
+        // 定位拒绝/信号不可用/超时 → 明确真实原因（FRT-04 错误 UX，禁止静默失败）
+        setActionError(geolocationErrorMessage(err?.code));
         setBusyId(null);
       },
+      GEOLOCATION_OPTIONS,
     );
   };
 
@@ -131,6 +160,7 @@ function VisitsList() {
       .then(() => {
         refresh();
         setBusyId(null);
+        toast.success("签退成功");
       })
       .catch((err: unknown) => {
         setActionError(err instanceof ApiClientError ? err.message : "签退失败");
@@ -146,12 +176,76 @@ function VisitsList() {
   const latestCheckin = (row: VisitRow): VisitCheckin | null =>
     row.checkins.length > 0 ? row.checkins[row.checkins.length - 1] : null;
 
+  // —— 创建拜访计划（复用 CustomerActivity VISIT_PLAN；无独立表单页，避免平行 CRUD）——
+  const searchPlanCustomers = async () => {
+    if (!planQuery.trim()) {
+      setCreateError(new ApiClientError(400, "请输入客户名称关键字", "VALIDATION_ERROR"));
+      return;
+    }
+    setPlanSearching(true);
+    setCreateError(null);
+    try {
+      const { data } = await apiFetch<PlanCustomerOption[]>(
+        "/api/business-partners?pageSize=10&name=" + encodeURIComponent(planQuery.trim()),
+      );
+      setPlanCustomers(Array.isArray(data) ? data : []);
+      if (!Array.isArray(data) || data.length === 0) {
+        setCreateError(new ApiClientError(400, "未找到匹配客户，请更换关键字", "NOT_FOUND"));
+      }
+    } catch (err: unknown) {
+      setCreateError(err instanceof ApiClientError ? err : new ApiClientError(0, "查询客户失败", "NETWORK_ERROR"));
+    } finally {
+      setPlanSearching(false);
+    }
+  };
+
+  const submitCreatePlan = async () => {
+    if (!planCustomerId) {
+      setCreateError(new ApiClientError(400, "请先搜索并选择客户", "VALIDATION_ERROR"));
+      return;
+    }
+    if (!planDate) {
+      setCreateError(new ApiClientError(400, "请选择计划日期（必填）", "VALIDATION_ERROR"));
+      return;
+    }
+    setCreateBusy(true);
+    setCreateError(null);
+    try {
+      await apiFetch("/api/business-partners/" + planCustomerId + "/activities", {
+        method: "POST",
+        body: JSON.stringify({
+          activityType: "VISIT_PLAN",
+          planDate: new Date(planDate).toISOString(),
+          summary: planSummary.trim() || undefined,
+        }),
+      });
+      toast.success("拜访计划已创建");
+      setCreateOpen(false);
+      setPlanCustomerId("");
+      setPlanDate("");
+      setPlanSummary("");
+      setPlanCustomers([]);
+      setPlanQuery("");
+      refresh();
+    } catch (err: unknown) {
+      setCreateError(err instanceof ApiClientError ? err : new ApiClientError(0, "创建拜访计划失败", "NETWORK_ERROR"));
+    } finally {
+      setCreateBusy(false);
+    }
+  };
+
+  const planCustomerOptions: ReferenceOption[] = planCustomers.map((c) => ({
+    value: c.id,
+    label: c.name ?? "—",
+    hint: c.code ?? "",
+  }));
+
   return (
     <AppPage>
       <EntityListWorkspace<VisitRow>
         title="拜访计划"
         description="本月/本周拜访视图（真实 CustomerActivity VISIT_PLAN 数据；签到后计划自动反馈已完成）"
-        emptyMessage="当前视图暂无拜访计划——可在客户 360「跟进活动」中创建拜访计划"
+        emptyMessage="当前视图暂无拜访计划——点击右上角「创建拜访计划」，或到客户 360「活动/跟进」Tab 中创建"
         filters={
           <>
             <select value={rangeInput} onChange={(e) => setRangeInput(e.target.value as "week" | "month")} className={"w-40 " + SELECT_CLASS}>
@@ -164,6 +258,20 @@ function VisitsList() {
               <option value="COMPLETED">已完成</option>
             </select>
           </>
+        }
+        headerActions={
+          canCheckin ? (
+            <button
+              type="button"
+              onClick={() => {
+                setCreateOpen(true);
+                setCreateError(null);
+              }}
+              className={BUTTON_PRIMARY_CLASS}
+            >
+              创建拜访计划
+            </button>
+          ) : undefined
         }
         toolbarActions={
           <button type="button" onClick={applyRange} className={BUTTON_SECONDARY_CLASS}>
@@ -239,7 +347,8 @@ function VisitsList() {
         onPageChange={setPage}
         rowActions={(row) => (
           <div className="flex justify-end gap-1">
-            {row.status === "PENDING" ? (
+            {/* 权限门：签到/签退需 project-visit:create（权限不足不出现假按钮） */}
+            {row.status === "PENDING" && canCheckin ? (
               <button
                 type="button"
                 disabled={busyId === row.id}
@@ -249,7 +358,7 @@ function VisitsList() {
                 {busyId === row.id ? "定位签到中…" : "签到"}
               </button>
             ) : null}
-            {row.status === "COMPLETED" && openCheckin(row) ? (
+            {row.status === "COMPLETED" && openCheckin(row) && canCheckin ? (
               <button
                 type="button"
                 disabled={busyId === row.id}
@@ -269,6 +378,77 @@ function VisitsList() {
           ) : undefined
         }
       />
+
+      {/* 创建拜访计划（复用 CustomerActivity VISIT_PLAN；服务端校验日期必填/权限） */}
+      <ProjectSubresourceDialog
+        open={createOpen}
+        mode="create"
+        title="创建拜访计划"
+        saving={createBusy}
+        error={createError}
+        submitDisabled={!planCustomerId || !planDate}
+        onSubmit={submitCreatePlan}
+        onClose={() => {
+          if (!createBusy) {
+            setCreateOpen(false);
+            setCreateError(null);
+          }
+        }}
+      >
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            <input
+              value={planQuery}
+              onChange={(e) => setPlanQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void searchPlanCustomers();
+              }}
+              className={INPUT_CLASS + " flex-1"}
+              placeholder="客户名称/编码关键字"
+            />
+            <button
+              type="button"
+              onClick={() => void searchPlanCustomers()}
+              disabled={planSearching}
+              className={BUTTON_SECONDARY_CLASS}
+            >
+              {planSearching ? "查询中…" : "查询"}
+            </button>
+          </div>
+          <ReferenceSelector
+            id="plan-customer"
+            label="客户"
+            required
+            value={planCustomerId}
+            onChange={setPlanCustomerId}
+            options={planCustomerOptions}
+            placeholder={planCustomers.length > 0 ? "请选择客户" : "先输入关键字查询"}
+            loading={planSearching}
+            disabled={planCustomers.length === 0}
+          />
+          <div className="flex flex-col gap-1">
+            <label htmlFor="plan-date" className="text-ink-secondary text-sm font-medium">
+              计划日期<span className="text-status-danger-text ml-0.5">*</span>
+            </label>
+            <input
+              id="plan-date"
+              type="date"
+              value={planDate}
+              onChange={(e) => setPlanDate(e.target.value)}
+              className={INPUT_CLASS}
+            />
+          </div>
+          <input
+            value={planSummary}
+            onChange={(e) => setPlanSummary(e.target.value)}
+            className={INPUT_CLASS}
+            placeholder="拜访目的（可选）"
+          />
+          <p className="text-xs text-ink-muted">
+            创建后显示在当前周/月视图；拜访时在列表行内完成定位签到/签退。
+          </p>
+        </div>
+      </ProjectSubresourceDialog>
     </AppPage>
   );
 }
