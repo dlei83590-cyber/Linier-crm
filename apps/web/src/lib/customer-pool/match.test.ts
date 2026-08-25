@@ -32,20 +32,23 @@ function makeTx(overrides: Partial<TxMock> = {}): TxMock {
 }
 
 describe('matchCustomerPools — 客户公海自动匹配 MVP（REGION scope 触碰规则）', () => {
+  let bpFindFirstMock: ReturnType<typeof vi.fn>;
+  let poolFindManyMock: ReturnType<typeof vi.fn>;
+  let transactionMock: ReturnType<typeof vi.fn>;
+
   beforeEach(() => {
     vi.clearAllMocks();
-    mockPrisma.businessPartner = {
-      findFirst: vi.fn().mockResolvedValue({ id: 'bp-1', type: 'CUSTOMER', region: '华东' }),
-    };
-    mockPrisma.customerPool = {
-      findMany: vi.fn().mockResolvedValue([{ id: 'pool-region-1', code: 'POOL-REGION-HD' }]),
-    };
-    mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(makeTx()));
+    bpFindFirstMock = vi.fn().mockResolvedValue({ id: 'bp-1', type: 'CUSTOMER', region: '华东' });
+    mockPrisma.businessPartner = { findFirst: bpFindFirstMock };
+    poolFindManyMock = vi.fn().mockResolvedValue([{ id: 'pool-region-1', code: 'POOL-REGION-HD' }]);
+    mockPrisma.customerPool = { findMany: poolFindManyMock };
+    transactionMock = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(makeTx()));
+    mockPrisma.$transaction = transactionMock;
   });
 
   it('REGION scopeValue === BP.region → 自动创建 FIELD_RULE 条目 + Outbox 事件（同事务）', async () => {
     const tx = makeTx();
-    mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx));
+    transactionMock.mockImplementation((fn: (t: unknown) => Promise<unknown>) => fn(tx));
 
     const result = await matchCustomerPools('bp-1');
 
@@ -66,25 +69,23 @@ describe('matchCustomerPools — 客户公海自动匹配 MVP（REGION scope 触
   });
 
   it('BP region 无命中池 → 不创建（NO_MATCHING_POOL）', async () => {
-    mockPrisma.customerPool = { findMany: vi.fn().mockResolvedValue([]) };
+    poolFindManyMock.mockResolvedValue([]);
 
     const result = await matchCustomerPools('bp-1');
 
     expect(result.matched).toBe(false);
     expect(result.entryCreated).toBe(false);
     expect(result.skippedReason).toBe('NO_MATCHING_POOL');
-    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    expect(transactionMock).not.toHaveBeenCalled();
   });
 
   it('BP 无 region → 不查询池、不创建（NO_MATCHING_POOL）', async () => {
-    mockPrisma.businessPartner = {
-      findFirst: vi.fn().mockResolvedValue({ id: 'bp-1', type: 'CUSTOMER', region: null }),
-    };
+    bpFindFirstMock.mockResolvedValue({ id: 'bp-1', type: 'CUSTOMER', region: null });
 
     const result = await matchCustomerPools('bp-1');
 
     expect(result.skippedReason).toBe('NO_MATCHING_POOL');
-    expect(mockPrisma.customerPool.findMany).not.toHaveBeenCalled();
+    expect(poolFindManyMock).not.toHaveBeenCalled();
   });
 
   it('已有 active entry（I2）→ 跳过不重复创建（HAS_ACTIVE_ENTRY）', async () => {
@@ -94,7 +95,7 @@ describe('matchCustomerPools — 客户公海自动匹配 MVP（REGION scope 触
         create: vi.fn(),
       },
     });
-    mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx));
+    transactionMock.mockImplementation((fn: (t: unknown) => Promise<unknown>) => fn(tx));
 
     const result = await matchCustomerPools('bp-1');
 
@@ -106,7 +107,7 @@ describe('matchCustomerPools — 客户公海自动匹配 MVP（REGION scope 触
 
   it('已有 active ownership（I1）→ 跳过（HAS_ACTIVE_OWNERSHIP，防已负责客户流入公海）', async () => {
     const tx = makeTx({ customerOwnership: { findFirst: vi.fn().mockResolvedValue({ id: 'own-1' }) } });
-    mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx));
+    transactionMock.mockImplementation((fn: (t: unknown) => Promise<unknown>) => fn(tx));
 
     const result = await matchCustomerPools('bp-1');
 
@@ -115,29 +116,25 @@ describe('matchCustomerPools — 客户公海自动匹配 MVP（REGION scope 触
   });
 
   it('SUPPLIER 客户 → 跳过（NOT_POOL_ELIGIBLE）', async () => {
-    mockPrisma.businessPartner = {
-      findFirst: vi.fn().mockResolvedValue({ id: 'bp-1', type: 'SUPPLIER', region: '华东' }),
-    };
+    bpFindFirstMock.mockResolvedValue({ id: 'bp-1', type: 'SUPPLIER', region: '华东' });
 
     const result = await matchCustomerPools('bp-1');
 
     expect(result.skippedReason).toBe('NOT_POOL_ELIGIBLE');
-    expect(mockPrisma.customerPool.findMany).not.toHaveBeenCalled();
+    expect(poolFindManyMock).not.toHaveBeenCalled();
   });
 
   it('BP 不存在/已删除 → PARTNER_NOT_FOUND', async () => {
-    mockPrisma.businessPartner = { findFirst: vi.fn().mockResolvedValue(null) };
+    bpFindFirstMock.mockResolvedValue(null);
 
     const result = await matchCustomerPools('bp-x');
 
     expect(result.skippedReason).toBe('PARTNER_NOT_FOUND');
-    expect(mockPrisma.customerPool.findMany).not.toHaveBeenCalled();
+    expect(poolFindManyMock).not.toHaveBeenCalled();
   });
 
   it('并发双入池撞 partial unique P2002 → RACE_LOST no-op（不抛出）', async () => {
-    mockPrisma.$transaction = vi.fn().mockRejectedValue(
-      Object.assign(new Error('unique constraint'), { code: 'P2002' }),
-    );
+    transactionMock.mockRejectedValue(Object.assign(new Error('unique constraint'), { code: 'P2002' }));
 
     const result = await matchCustomerPools('bp-1');
 
