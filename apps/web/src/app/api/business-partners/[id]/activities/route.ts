@@ -231,7 +231,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           data: {
             businessPartnerId: id,
             activityType: "FOLLOW_UP",
+<<<<<<< HEAD
             status: "DRAFT", // #238 审批状态机：新跟进必须 DRAFT（可提交审批）
+=======
+            status: "DRAFT", // #238 审批状态机：新 FOLLOW_UP 必须 DRAFT（可提交审批）
+>>>>>>> 834f0d9 (fix(crm): O+P——签到自动 FOLLOW_UP 加 status=DRAFT（对齐 #238 审批状态机）；Migration 0051→0052（CTO SMALL FIX）)
             summary: autoFollowUpSummary(now, d.latitude as number, d.longitude as number, d.locationNote),
             createdById: user!.id,
             updatedById: user!.id,
