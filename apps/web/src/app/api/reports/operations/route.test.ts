@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 
 const { mockPrisma } = vi.hoisted(() => ({ mockPrisma: {} as Record<string, unknown> }));
 vi.mock('@/lib/prisma', () => ({ prisma: mockPrisma }));
@@ -155,8 +156,8 @@ describe('GET /api/reports/operations — 经营数据固定看板（只读聚�
     so.findMany
       .mockResolvedValueOnce([]) // 分层（无成交）
       .mockResolvedValueOnce([
-        { customerId: 'bp-1', totalAmount: { toString: () => '8000.00' } },
-        { customerId: 'bp-9', totalAmount: { toString: () => '4000.00' } },
+        { customerId: 'bp-1', totalAmount: new Prisma.Decimal('8000.00') },
+        { customerId: 'bp-9', totalAmount: new Prisma.Decimal('4000.00') },
       ]);
     bp.findMany.mockResolvedValue([
       { id: 'bp-1', region: '华东' },
