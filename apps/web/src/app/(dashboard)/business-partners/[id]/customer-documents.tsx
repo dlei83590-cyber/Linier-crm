@@ -136,6 +136,8 @@ export function CustomerDocuments({ partnerId }: { partnerId: string }) {
 
       {loading ? (
         <p className="text-sm text-ink-muted">加载中…</p>
+      ) : error ? (
+        <p className="text-sm text-status-danger-text">文档列表加载失败：{error}</p>
       ) : items.length === 0 ? (
         <p className="text-sm text-ink-muted">暂无文档。</p>
       ) : (

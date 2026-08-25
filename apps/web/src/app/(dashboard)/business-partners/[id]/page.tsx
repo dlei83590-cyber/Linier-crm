@@ -13,7 +13,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { actionPermission } from "@nilier-crm/shared";
+import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, ErrorPanel } from "@/components/workspace";
 import { ContactWorkspace } from "./contact-workspace";
@@ -22,7 +22,9 @@ import { ActivityTimeline } from "./activity-timeline";
 import { CustomerProducts } from "./customer-products";
 import { CustomerSuppliers } from "./customer-suppliers";
 import { CustomerDocuments } from "./customer-documents";
+import { SupplierProfile } from "./supplier-profile";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { useSession } from "@/lib/session-context";
 import { formatDate, formatMoney, formatMoneyValue } from "@/lib/format";
 
 interface PartnerDetail {
@@ -129,23 +131,6 @@ const TYPE_LABELS: Record<string, string> = { CUSTOMER: "客户", SUPPLIER: "供
 const ADDRESS_TYPE_LABELS: Record<string, string> = { REGISTERED: "注册", DELIVERY: "收货", INVOICE: "开票", CONTACT: "联系" };
 const CREDIT_RATING_LABELS: Record<string, string> = { A: "A", B: "B", C: "C", D: "D" };
 const CREDIT_STATUS_LABELS: Record<string, string> = { NORMAL: "正常", WARNING: "预警", RESTRICTED: "受限" };
-const SUPPLIER_STATUS_LABELS: Record<string, string> = {
-  POTENTIAL: "潜在",
-  QUALIFIED: "合格",
-  PREFERRED: "优选",
-  SUSPENDED: "暂停",
-  BLACKLISTED: "黑名单",
-};
-const QUALIFICATION_TYPE_LABELS: Record<string, string> = {
-  BUSINESS_LICENSE: "营业执照",
-  ISO9001: "ISO9001",
-  ISO14001: "ISO14001",
-  IATF16949: "IATF16949",
-  CE: "CE",
-  ROHS: "RoHS",
-  OTHER: "其他",
-};
-const QUALIFICATION_STATUS_LABELS: Record<string, string> = { VALID: "有效", EXPIRING: "临期", EXPIRED: "已过期" };
 const PO_STATUS_LABELS: Record<string, string> = {
   DRAFT: "草稿",
   SUBMITTED: "已提交",
@@ -168,9 +153,13 @@ function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
 function PartnerDetailPage() {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
+  const { state } = useSession();
+  const roles = (state.user?.roles ?? []) as RoleCode[];
+  const canEdit = hasPermission(roles, actionPermission("business-partner", "edit"));
   const [detail, setDetail] = useState<PartnerDetail | null>(null);
   const [loadError, setLoadError] = useState<ApiClientError | null>(null);
   const [tab, setTab] = useState<TabKey>("overview");
+  const [reloadKey, setReloadKey] = useState(0);
 
   const [opportunities, setOpportunities] = useState<Array<{ id: string; code: string; name: string; stage: string }>>([]);
   const [projects, setProjects] = useState<Array<{ id: string; code: string; name: string; stage: string }>>([]);
@@ -192,7 +181,7 @@ function PartnerDetailPage() {
         setLoadError(err instanceof ApiClientError ? err : new ApiClientError(0, "加载客户失败", "NETWORK_ERROR"));
       });
     return () => controller.abort();
-  }, [id]);
+  }, [id, reloadKey]);
 
   // 供应商档案：采购订单（PurchaseOrder.supplierId → Supplier，只读聚合最近 5 条）
   const supplier = detail?.suppliers?.[0];
@@ -279,7 +268,6 @@ function PartnerDetailPage() {
   ];
 
   const cr = detail.partnerCredit;
-  const supplierSettlement = supplier?.settlements?.[0];
 
   return (
     <AppPage maxWidth="6xl">
@@ -294,9 +282,11 @@ function PartnerDetailPage() {
             </div>
             <p className="mt-1 text-sm text-ink-secondary">编码 {detail.code}（{detail.shortName || detail.fullName || "—"}）</p>
           </div>
-          <Link href={`/business-partners/${id}/edit`} className="rounded-md border border-border px-4 py-2 text-sm text-ink-primary hover:bg-canvas">
-            编辑
-          </Link>
+          {canEdit && (
+            <Link href={`/business-partners/${id}/edit`} className="rounded-md border border-border px-4 py-2 text-sm text-ink-primary hover:bg-canvas">
+              编辑
+            </Link>
+          )}
         </div>
 
         {/* Tab 导航 */}
@@ -555,69 +545,10 @@ function PartnerDetailPage() {
 
         {tab === "supplierProfile" && (
           <section className="rounded-md border border-border p-4">
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              {supplier ? (
-                <>
-                  <span className="rounded bg-canvas px-2 py-0.5 text-xs text-ink-secondary">
-                    供应商状态：{SUPPLIER_STATUS_LABELS[supplier.status] ?? supplier.status}
-                  </span>
-                  {supplier.isPreferred ? (
-                    <span className="rounded bg-brand-50 px-2 py-0.5 text-xs text-brand-700">优选</span>
-                  ) : null}
-                  {supplier.rating != null ? (
-                    <span className="rounded bg-canvas px-2 py-0.5 text-xs text-ink-secondary">
-                      资质评级：{"★".repeat(supplier.rating)}
-                      <span className="text-ink-muted">{"☆".repeat(5 - supplier.rating)}</span>
-                    </span>
-                  ) : null}
-                </>
-              ) : (
-                <span className="rounded bg-canvas px-2 py-0.5 text-xs text-ink-muted">暂无供应商档案（在往来单位编辑页维护后，由采购流程建档）</span>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-              <InfoItem label="信用等级" value={detail.creditRating} />
-              <InfoItem label="结算条款" value={detail.settlementTerms} />
-              <InfoItem label="账期（天）" value={supplierSettlement?.creditDays != null ? String(supplierSettlement.creditDays) : null} />
-              <InfoItem label="付款条款" value={supplierSettlement?.paymentTerms} />
-              <InfoItem label="付款方式" value={supplierSettlement?.paymentMethod} />
-              <InfoItem label="默认交期（天）" value={supplier?.defaultLeadTime != null ? String(supplier.defaultLeadTime) : null} />
-              <InfoItem label="最小起订量" value={supplier?.minOrderQty != null ? formatMoneyValue(supplier.minOrderQty) : null} />
-              <InfoItem label="币种" value={supplier?.currency ?? "CNY"} />
-              <InfoItem label="联系人" value={detail.contactPerson} />
-              <InfoItem label="电话" value={detail.phone} />
-              <InfoItem label="邮箱" value={detail.email} />
-              <InfoItem label="地址" value={detail.address} />
-              <InfoItem label="启用" value={detail.isActive == null ? null : detail.isActive ? "是" : "否"} />
-            </div>
-            <h3 className="mb-2 mt-5 text-sm font-semibold text-ink-primary">资质证书</h3>
-            {(supplier?.qualifications ?? []).length > 0 ? (
-              <table className="min-w-full divide-y divide-border text-sm">
-                <thead className="text-ink-secondary bg-canvas text-left text-xs font-medium">
-                  <tr>
-                    <th className="px-4 py-2 font-semibold">类型</th>
-                    <th className="px-4 py-2 font-semibold">资质名称</th>
-                    <th className="px-4 py-2 font-semibold">证书编号</th>
-                    <th className="px-4 py-2 font-semibold">发证日期</th>
-                    <th className="px-4 py-2 font-semibold">有效期至</th>
-                    <th className="px-4 py-2 font-semibold">状态</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {(supplier?.qualifications ?? []).map((q) => (
-                    <tr key={q.id}>
-                      <td className="px-4 py-2">{QUALIFICATION_TYPE_LABELS[q.qualType] ?? q.qualType}</td>
-                      <td className="px-4 py-2">{q.qualName}</td>
-                      <td className="px-4 py-2">{q.certNo ?? "—"}</td>
-                      <td className="px-4 py-2">{formatDate(q.issueDate)}</td>
-                      <td className="px-4 py-2">{formatDate(q.expireDate)}</td>
-                      <td className="px-4 py-2">{QUALIFICATION_STATUS_LABELS[q.status] ?? q.status}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {supplier ? (
+              <SupplierProfile supplierId={supplier.id} onChanged={() => setReloadKey((k) => k + 1)} />
             ) : (
-              <p className="text-sm text-ink-muted">暂无资质记录。</p>
+              <p className="text-sm text-ink-muted">暂无供应商档案（供应商建档由供应商主数据/采购流程负责；建档后本页可维护资质/账期/信用）。</p>
             )}
           </section>
         )}
