@@ -39,6 +39,11 @@ interface OpportunityDetail {
   convertedAt: string | null;
   convertedBy: string | null;
   createdAt: string;
+  /** 商机跟进 MVP：该商机关联客户最近一次 FOLLOW_UP（服务端计算） */
+  lastFollowUpAt: string | null;
+  daysSinceFollowUp: number | null;
+  needsFollowUp: boolean;
+  followUpThresholdDays: number;
   customer?: { id: string; code: string | null; name: string | null; type: string | null } | null;
   project?: { id: string; code: string | null; name: string | null; stage: string | null } | null;
   /** 关联报价（商机→报价→订单 MVP：详情只读投影，GET API 已 include） */
@@ -236,6 +241,28 @@ function OpportunityDetailPage() {
             />
             <InfoItem label="转换时间" value={formatDate(detail.convertedAt)} />
             <InfoItem label="创建时间" value={formatDate(detail.createdAt)} />
+            <InfoItem
+              label="最近跟进时间"
+              value={detail.lastFollowUpAt ? formatDate(detail.lastFollowUpAt) : "从未跟进"}
+            />
+            <InfoItem
+              label="距今"
+              value={detail.daysSinceFollowUp != null ? detail.daysSinceFollowUp + " 天" : "—"}
+            />
+            <InfoItem
+              label="跟进状态"
+              value={
+                detail.needsFollowUp ? (
+                  <StatusBadge
+                    status="FOLLOWUP_DUE"
+                    label={"待跟进（超 " + detail.followUpThresholdDays + " 天）"}
+                    tone="warning"
+                  />
+                ) : (
+                  "正常"
+                )
+              }
+            />
           </div>
         }
       >
