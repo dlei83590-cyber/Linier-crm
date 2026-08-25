@@ -14,7 +14,7 @@ vi.mock('@/lib/api-helpers', () => ({
 import { GET, POST } from '@/app/api/reports/targets/route';
 
 function makeRequest(url: string, init?: RequestInit): NextRequest {
-  return new NextRequest(url, { headers: { authorization: 'Bearer test-token' }, ...init });
+  return new NextRequest(url, { headers: { authorization: 'Bearer test-token', 'content-type': 'application/json' }, ...init });
 }
 
 function buildMocks() {
