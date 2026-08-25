@@ -6,6 +6,7 @@
  * 只读消费 GET /api/expenses/:id（ProjectExpense 事实 + Project → BusinessPartner 归属 + 申请人/审批人/驳回人）。
  * 报销流程（Migration 0051）：DRAFT/REJECTED → 提交(PENDING) → 批准(APPROVED) / 驳回(REJECTED)；
  * 复用 ProjectExpense.approvalStatus 枚举，不新增工作流模型。动作后刷新详情（version CAS 由服务端保证）。
+ * FRT-09：DRAFT/REJECTED 详情直接提供「编辑/改稿」入口（复用 ProjectExpense PATCH，跳转 /expenses/:id/edit）。
  */
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -169,6 +170,7 @@ function ExpenseDetailPage() {
 
   const customer = detail.project?.customer;
   const status = detail.approvalStatus;
+  const showEdit = canEdit && (status === "DRAFT" || status === "REJECTED");
   const showSubmit = canEdit && (status === "DRAFT" || status === "REJECTED");
   const showApprove = canApprove && status === "PENDING";
   const showReject = canApprove && status === "PENDING";
@@ -184,6 +186,14 @@ function ExpenseDetailPage() {
         statusTone={APPROVAL_TONE_MAP[status]}
         actions={
           <div className="flex items-center gap-2">
+            {showEdit ? (
+              <Link
+                href={"/expenses/" + id + "/edit"}
+                className={status === "REJECTED" ? BUTTON_PRIMARY_CLASS : BUTTON_SECONDARY_CLASS}
+              >
+                {status === "REJECTED" ? "改稿并重新提交" : "编辑"}
+              </Link>
+            ) : null}
             {showSubmit ? (
               <button type="button" onClick={handleSubmit} disabled={acting} className={BUTTON_PRIMARY_CLASS}>
                 {acting ? "处理中…" : "提交审批"}

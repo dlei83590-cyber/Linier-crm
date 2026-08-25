@@ -1,7 +1,9 @@
 "use client";
 
 /** GL 试算平衡 — 只读页（Sprint 7 Finance，ADR-0034；实时聚合，余额为派生投影） */
+// FRT-09：与利润表互链（利润表页无独立菜单入口，详见 PR body REGISTRY DELTA REQUIRED）
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, ErrorPanel } from "@/components/workspace";
@@ -53,6 +55,12 @@ function TrialBalanceView() {
         <div>
           <h1 className="text-lg font-semibold text-ink-primary">试算平衡</h1>
           <p className="text-sm text-ink-secondary">按科目实时聚合借贷发生额与余额（派生投影，事实源 = 记账凭证）</p>
+          <div className="mt-2 flex items-center gap-1 text-sm">
+            <span className="rounded-md bg-brand-600 px-2.5 py-1 font-medium text-white">试算平衡</span>
+            <Link href="/finance/gl-profit-statement" className="rounded-md border border-border px-2.5 py-1 text-ink-secondary hover:bg-slate-50">
+              利润表
+            </Link>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-md border border-border px-2 py-1.5 text-sm" />
