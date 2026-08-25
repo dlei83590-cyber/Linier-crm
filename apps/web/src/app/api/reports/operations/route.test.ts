@@ -168,9 +168,10 @@ describe('GET /api/reports/operations — 经营数据固定看板（只读聚�
     const body = await res.json();
     const regions = body.data.regions;
     const east = regions.find((r: { region: string }) => r.region === '华东');
-    expect(east).toEqual({ region: '华东', customerCount: 5, salesOrderCount: 1, salesAmount: '8000.00' });
+    // Decimal.toString() 会去掉尾随零（8000.00 → '8000'），与仓库金额字符串口径一致
+    expect(east).toEqual({ region: '华东', customerCount: 5, salesOrderCount: 1, salesAmount: '8000' });
     const unset = regions.find((r: { region: string }) => r.region === '未设置');
-    expect(unset).toEqual({ region: '未设置', customerCount: 0, salesOrderCount: 1, salesAmount: '4000.00' });
+    expect(unset).toEqual({ region: '未设置', customerCount: 0, salesOrderCount: 1, salesAmount: '4000' });
   });
 
   it('period=day → Asia/Shanghai 业务日边界（UTC 16:00 起，跨度 24h）', async () => {
