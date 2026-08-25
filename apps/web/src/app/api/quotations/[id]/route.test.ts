@@ -74,7 +74,8 @@ describe('GET /api/quotations/:id — FRT-06 已转订单链接投影', () => {
     expect(body.data.salesOrderId).toBe('so-1');
     expect(body.data.salesOrder).toEqual({ id: 'so-1', code: 'SO-2026-0001', status: 'DRAFT' });
     // 断言 prisma include 携带 salesOrder 投影（防止回归删除）
-    const include = mockPrisma.quotation.findFirst.mock.calls[0][0].include;
+    const findFirst = (mockPrisma.quotation as { findFirst: ReturnType<typeof vi.fn> }).findFirst;
+    const include = findFirst.mock.calls[0][0] as { include: { salesOrder: unknown } };
     expect(include.salesOrder).toEqual({ select: { id: true, code: true, status: true } });
   });
 
