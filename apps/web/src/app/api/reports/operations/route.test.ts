@@ -56,6 +56,13 @@ function buildMocks() {
   mockPrisma['reportTarget'] = {
     findMany: vi.fn().mockResolvedValue([]),
   };
+  // brand 维度（CTO ⑦）：SalesOrderLine → Item.brand
+  mockPrisma['salesOrderLine'] = {
+    findMany: vi.fn().mockResolvedValue([]),
+  };
+  mockPrisma['item'] = {
+    findMany: vi.fn().mockResolvedValue([]),
+  };
 }
 
 describe('GET /api/reports/operations — 经营数据固定看板（只读聚合）', () => {
