@@ -1,21 +1,22 @@
 "use client";
 
 /**
- * ProductionOrder Detail — 生产/外协工单详情页（P-4 Item Sourcing，ADR-0049）
+ * ProductionOrder Detail — 生产/外协工单详情页（P-4 Item Sourcing，ADR-0049 + UI-09 FE2.0 统一）
  *
  * 状态机：DRAFT → SUBMITTED → POSTED / CANCELLED。
  * 动作：提交（DRAFT→SUBMITTED）/ 过账（SUBMITTED→POSTED，同事务领料→成品+成本）/ 取消（DRAFT/SUBMITTED→CANCELLED）。
+ * UI-09：迁移至 EntityDetailWorkspace（Header + Status + Actions + Summary + Lines 统一结构）；金额/数量列右对齐 tabular-nums。
  */
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, ErrorPanel, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
+import { AppPage, EntityDetailWorkspace, ConfirmActionDialog } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useSession } from "@/lib/session-context";
 import { useToast } from "@/components/ui/toast";
 import { formatDate, formatMoney } from "@/lib/format";
+import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
 
 interface OrderDetail {
   id: string;
@@ -125,14 +126,21 @@ function OrderDetailPage() {
   if (loadError) {
     return (
       <AppPage>
-        <ErrorPanel error={loadError} />
+        <div className="border-border bg-surface shadow-elevation-sm rounded-lg border p-6">
+          <p className="text-sm text-status-danger-text">加载工单失败：{loadError.message}</p>
+          <a href="/inventory/production-orders" className="text-brand-600 mt-3 inline-block text-sm hover:underline">
+            返回工单列表
+          </a>
+        </div>
       </AppPage>
     );
   }
   if (!detail) {
     return (
       <AppPage>
-        <div className="text-sm text-ink-muted">加载中…</div>
+        <div className="border-border bg-surface shadow-elevation-sm rounded-lg border p-6 text-sm text-ink-muted">
+          加载中…
+        </div>
       </AppPage>
     );
   }
@@ -165,64 +173,59 @@ function OrderDetailPage() {
   };
 
   return (
-    <AppPage maxWidth="6xl">
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-semibold text-ink-primary">{detail.orderNo}</h1>
-              <StatusBadge status={detail.status} label={STATUS_LABELS[detail.status] ?? detail.status} toneMap={STATUS_TONE_MAP} />
-              <span className="rounded bg-canvas px-2 py-0.5 text-xs text-ink-secondary">
-                {TYPE_LABELS[detail.productionType] ?? detail.productionType}
-              </span>
-            </div>
-            <p className="mt-1 text-sm text-ink-secondary">生产/外协工单</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {detail.status === "DRAFT" && canEdit && (
+    <AppPage>
+      <EntityDetailWorkspace
+        title={`生产/外协工单 — ${detail.orderNo}`}
+        description={`${TYPE_LABELS[detail.productionType] ?? detail.productionType} · 生产/外协工单`}
+        backHref="/inventory/production-orders"
+        status={detail.status}
+        statusLabel={STATUS_LABELS[detail.status] ?? detail.status}
+        statusTone={STATUS_TONE_MAP[detail.status]}
+        actions={
+          <>
+            {detail.status === "DRAFT" && canEdit ? (
               <button
                 type="button"
                 onClick={() => setConfirm("submit")}
                 disabled={busy}
-                className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-40"
+                className={BUTTON_PRIMARY_CLASS}
               >
-                提交
+                {busy ? "处理中…" : "提交"}
               </button>
-            )}
-            {detail.status === "SUBMITTED" && canEdit && (
+            ) : null}
+            {detail.status === "SUBMITTED" && canEdit ? (
               <button
                 type="button"
                 onClick={() => setConfirm("post")}
                 disabled={busy}
-                className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-40"
+                className={BUTTON_PRIMARY_CLASS}
               >
-                过账（领料→入库）
+                {busy ? "处理中…" : "过账（领料→入库）"}
               </button>
-            )}
-            {["DRAFT", "SUBMITTED"].includes(detail.status) && canClose && (
+            ) : null}
+            {["DRAFT", "SUBMITTED"].includes(detail.status) && canClose ? (
               <button
                 type="button"
                 onClick={() => setConfirm("cancel")}
                 disabled={busy}
-                className="rounded-md border border-status-danger-border px-4 py-2 text-sm text-status-danger-text hover:bg-status-danger-bg/10 disabled:cursor-not-allowed disabled:opacity-40"
+                className="border-status-danger-border text-status-danger-text rounded-md border bg-surface px-3 py-1.5 text-sm font-medium hover:bg-status-danger-bg/10 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 取消
               </button>
-            )}
-            {detail.status === "DRAFT" && canDelete && (
+            ) : null}
+            {detail.status === "DRAFT" && canDelete ? (
               <button
                 type="button"
                 onClick={() => setConfirm("delete")}
                 disabled={busy}
-                className="rounded-md border border-status-danger-border px-4 py-2 text-sm text-status-danger-text hover:bg-status-danger-bg/10 disabled:cursor-not-allowed disabled:opacity-40"
+                className="border-status-danger-border text-status-danger-text rounded-md border bg-surface px-3 py-1.5 text-sm font-medium hover:bg-status-danger-bg/10 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 删除
               </button>
-            )}
-          </div>
-        </div>
-
-        <section className="rounded-md border border-border p-4">
+            ) : null}
+          </>
+        }
+        summary={
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <InfoItem label="成品" value={detail.finishedItem ? `${detail.finishedItem.code ?? ""} ${detail.finishedItem.name ?? ""}`.trim() : null} />
             <InfoItem label="产出数量" value={detail.plannedQty} />
@@ -239,10 +242,10 @@ function OrderDetailPage() {
               </>
             ) : null}
           </div>
-        </section>
-
-        <section className="rounded-md border border-border p-4">
-          <h2 className="mb-3 text-sm font-semibold text-ink-primary">工单行</h2>
+        }
+      >
+        <section className="border-border rounded-md border p-4">
+          <h2 className="text-ink-primary mb-3 text-sm font-semibold">工单行</h2>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-border text-sm">
               <thead className="text-ink-secondary bg-canvas text-left text-xs font-medium">
@@ -250,10 +253,10 @@ function OrderDetailPage() {
                   <th className="px-4 py-2 font-semibold">类型</th>
                   <th className="px-4 py-2 font-semibold">物料</th>
                   <th className="px-4 py-2 font-semibold">单位</th>
-                  <th className="px-4 py-2 font-semibold">数量</th>
+                  <th className="px-4 py-2 text-right font-semibold">数量</th>
                   <th className="px-4 py-2 font-semibold">仓库</th>
-                  <th className="px-4 py-2 font-semibold">单位成本</th>
-                  <th className="px-4 py-2 font-semibold">金额</th>
+                  <th className="px-4 py-2 text-right font-semibold">单位成本</th>
+                  <th className="px-4 py-2 text-right font-semibold">金额</th>
                   <th className="px-4 py-2 font-semibold">备注</th>
                 </tr>
               </thead>
@@ -267,22 +270,23 @@ function OrderDetailPage() {
                     </td>
                     <td className="px-4 py-2">{`${l.item?.code ?? ""} ${l.item?.name ?? ""}`.trim() || "—"}</td>
                     <td className="px-4 py-2">{l.uom?.symbol ?? "—"}</td>
-                    <td className="px-4 py-2 tabular-nums">{l.quantity}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{l.quantity}</td>
                     <td className="px-4 py-2">{l.warehouse?.name ?? "—"}</td>
-                    <td className="px-4 py-2 tabular-nums">{l.unitCost != null ? l.unitCost : "—"}</td>
-                    <td className="px-4 py-2 tabular-nums">{l.amount != null ? l.amount : "—"}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{l.unitCost != null ? l.unitCost : "—"}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{l.amount != null ? l.amount : "—"}</td>
                     <td className="px-4 py-2 text-ink-muted">{l.remark ?? "—"}</td>
                   </tr>
                 ))}
+                {(detail.lines ?? []).length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-8 text-center text-sm text-ink-muted">暂无工单行</td>
+                  </tr>
+                ) : null}
               </tbody>
             </table>
           </div>
         </section>
-
-        <Link href="/inventory/production-orders" className="text-sm text-brand-600 hover:underline">
-          ← 返回工单列表
-        </Link>
-      </div>
+      </EntityDetailWorkspace>
 
       {confirm ? (
         <ConfirmActionDialog

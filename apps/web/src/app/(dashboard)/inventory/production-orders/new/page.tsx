@@ -1,18 +1,22 @@
 "use client";
 
 /**
- * ProductionOrder Create — 新建生产/外协工单（P-4 Item Sourcing，ADR-0049）
+ * ProductionOrder Create — 新建生产/外协工单（P-4 Item Sourcing，ADR-0049 + UI-09 FE2.0 表单统一）
  *
  * 契约：POST /api/production-orders（production-order:create），orderNo PRD 创建即取号。
  * - 有 BOM（ACTIVE）：服务端按配方计算领料量（需求 = 成品数 × 系数 × (1+损耗率)）——前端展示预估，提交后服务端权威重算
  * - 无 BOM（手工）：前端提供物料行（数量/单位/领料仓库）
  * - OEM 外协：必选外协厂（供应商）+ 加工费（计入成品成本）
+ *
+ * UI-09：迁移至 EntityFormWorkspace（Dirty-State Guard / 409 冲突面板 / ErrorPanel /
+ * 统一 Save/Cancel），移除页面级 window.confirm；数字列右对齐 tabular-nums。
  */
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, ErrorPanel } from "@/components/workspace";
+import { AppPage, EntityFormWorkspace } from "@/components/workspace";
+import { FormField } from "@/components/ui/form-field";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 
@@ -111,16 +115,6 @@ function OrderCreateForm() {
       });
     return () => controller.abort();
   }, []);
-
-  useEffect(() => {
-    if (!dirty) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = "";
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [dirty]);
 
   const markDirty = () => setDirty(true);
 
@@ -231,222 +225,203 @@ function OrderCreateForm() {
   if (loadError) {
     return (
       <AppPage>
-        <ErrorPanel error={loadError} />
+        <div className="border-border bg-surface shadow-elevation-sm rounded-lg border p-6">
+          <p className="text-sm text-status-danger-text">加载基础数据失败：{loadError.message}</p>
+        </div>
       </AppPage>
     );
   }
 
   return (
-    <AppPage maxWidth="6xl">
-      <div className="space-y-4">
-        <div>
-          <h1 className="text-xl font-semibold text-ink-primary">新建生产/外协工单</h1>
-          <p className="mt-1 text-sm text-ink-secondary">
-            自产或 OEM 外协（我方供料 + 加工费）：POSTED 时同事务领料出库 → 成品入库（成本 = Σ原料成本 + 加工费）
-          </p>
-        </div>
-
-        <section className="rounded-md border border-border p-4">
-          <h2 className="mb-3 text-sm font-semibold text-ink-primary">工单信息</h2>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-            <label className="block">
-              <span className="block text-xs text-ink-secondary">工单类型 *</span>
-              <select value={productionType} onChange={(e) => { setProductionType(e.target.value); markDirty(); }} className={inputClass}>
-                <option value="SELF_MANUFACTURE">自产（本厂加工）</option>
-                <option value="OEM_OUTSOURCING">OEM 外协（我方供料 + 加工费）</option>
-              </select>
-            </label>
-            <label className="block">
-              <span className="block text-xs text-ink-secondary">成品 *</span>
-              <select value={finishedItemId} onChange={(e) => handleItemChange(e.target.value)} className={inputClass}>
-                <option value="">请选择成品</option>
-                {items.map((it) => (
-                  <option key={it.id} value={it.id}>
-                    {`${it.code ?? ""} ${it.name ?? ""}`.trim()}
-                  </option>
-                ))}
-              </select>
-              {fieldErrors.finishedItemId ? <span className="text-xs text-status-danger-text">{fieldErrors.finishedItemId}</span> : null}
-            </label>
-            <label className="block">
-              <span className="block text-xs text-ink-secondary">产出数量 *</span>
-              <input value={plannedQty} onChange={(e) => { setPlannedQty(e.target.value); markDirty(); }} className={inputClass} />
-              {fieldErrors.plannedQty ? <span className="text-xs text-status-danger-text">{fieldErrors.plannedQty}</span> : null}
-            </label>
-            <label className="block">
-              <span className="block text-xs text-ink-secondary">成品仓库 *</span>
-              <select value={warehouseId} onChange={(e) => { setWarehouseId(e.target.value); markDirty(); }} className={inputClass}>
-                <option value="">请选择仓库</option>
+    <EntityFormWorkspace
+      title="新建生产/外协工单"
+      description="自产或 OEM 外协（我方供料 + 加工费）：POSTED 时同事务领料出库 → 成品入库（成本 = Σ原料成本 + 加工费）"
+      backHref="/inventory/production-orders"
+      mode="create"
+      submitting={submitting}
+      error={error}
+      dirty={dirty}
+      onDirty={() => setDirty(true)}
+      onSave={handleSubmit}
+      onCancel={() => router.push("/inventory/production-orders")}
+      saveLabel="保存工单"
+    >
+      <section className="rounded-md border border-border p-4">
+        <h2 className="mb-3 text-sm font-semibold text-ink-primary">工单信息</h2>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+          <FormField label="工单类型" required>
+            <select value={productionType} onChange={(e) => { setProductionType(e.target.value); markDirty(); }} className={inputClass}>
+              <option value="SELF_MANUFACTURE">自产（本厂加工）</option>
+              <option value="OEM_OUTSOURCING">OEM 外协（我方供料 + 加工费）</option>
+            </select>
+          </FormField>
+          <FormField label="成品" required>
+            <select value={finishedItemId} onChange={(e) => handleItemChange(e.target.value)} className={inputClass}>
+              <option value="">请选择成品</option>
+              {items.map((it) => (
+                <option key={it.id} value={it.id}>
+                  {`${it.code ?? ""} ${it.name ?? ""}`.trim()}
+                </option>
+              ))}
+            </select>
+            {fieldErrors.finishedItemId ? <span className="text-xs text-status-danger-text">{fieldErrors.finishedItemId}</span> : null}
+          </FormField>
+          <FormField label="产出数量" required>
+            <input value={plannedQty} onChange={(e) => { setPlannedQty(e.target.value); markDirty(); }} className={`${inputClass} tabular-nums`} />
+            {fieldErrors.plannedQty ? <span className="text-xs text-status-danger-text">{fieldErrors.plannedQty}</span> : null}
+          </FormField>
+          <FormField label="成品仓库" required>
+            <select value={warehouseId} onChange={(e) => { setWarehouseId(e.target.value); markDirty(); }} className={inputClass}>
+              <option value="">请选择仓库</option>
+              {warehouses.map((w) => (
+                <option key={w.id} value={w.id}>{w.name ?? w.code ?? ""}</option>
+              ))}
+            </select>
+            {fieldErrors.warehouseId ? <span className="text-xs text-status-danger-text">{fieldErrors.warehouseId}</span> : null}
+          </FormField>
+          <FormField label="配方（ACTIVE）">
+            <select value={bomId} onChange={(e) => handleBomChange(e.target.value)} className={inputClass} disabled={!finishedItemId}>
+              <option value="">手工工单（无配方）</option>
+              {boms.map((b) => (
+                <option key={b.id} value={b.id}>{`${b.bomNo}（v${b.bomVersion}）`}</option>
+              ))}
+            </select>
+            {finishedItemId && boms.length === 0 ? (
+              <span className="text-xs text-ink-muted">该成品暂无生效配方，可用手工工单</span>
+            ) : null}
+          </FormField>
+          {bomId ? (
+            <FormField label="领料仓库" required hint="BOM 模式">
+              <select value={materialWarehouseId} onChange={(e) => { setMaterialWarehouseId(e.target.value); markDirty(); }} className={inputClass}>
+                <option value="">请选择领料仓库</option>
                 {warehouses.map((w) => (
                   <option key={w.id} value={w.id}>{w.name ?? w.code ?? ""}</option>
                 ))}
               </select>
-              {fieldErrors.warehouseId ? <span className="text-xs text-status-danger-text">{fieldErrors.warehouseId}</span> : null}
-            </label>
-            <label className="block">
-              <span className="block text-xs text-ink-secondary">配方（ACTIVE）</span>
-              <select value={bomId} onChange={(e) => handleBomChange(e.target.value)} className={inputClass} disabled={!finishedItemId}>
-                <option value="">手工工单（无配方）</option>
-                {boms.map((b) => (
-                  <option key={b.id} value={b.id}>{`${b.bomNo}（v${b.bomVersion}）`}</option>
-                ))}
-              </select>
-              {finishedItemId && boms.length === 0 ? (
-                <span className="text-xs text-ink-muted">该成品暂无生效配方，可用手工工单</span>
-              ) : null}
-            </label>
-            {bomId ? (
-              <label className="block">
-                <span className="block text-xs text-ink-secondary">领料仓库 *（BOM 模式）</span>
-                <select value={materialWarehouseId} onChange={(e) => { setMaterialWarehouseId(e.target.value); markDirty(); }} className={inputClass}>
-                  <option value="">请选择领料仓库</option>
-                  {warehouses.map((w) => (
-                    <option key={w.id} value={w.id}>{w.name ?? w.code ?? ""}</option>
+              {fieldErrors.materialWarehouseId ? <span className="text-xs text-status-danger-text">{fieldErrors.materialWarehouseId}</span> : null}
+            </FormField>
+          ) : null}
+          {productionType === "OEM_OUTSOURCING" ? (
+            <>
+              <FormField label="外协厂（OEM）" required>
+                <select value={supplierId} onChange={(e) => { setSupplierId(e.target.value); markDirty(); }} className={inputClass}>
+                  <option value="">请选择外协厂</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name ?? s.code ?? ""}</option>
                   ))}
                 </select>
-                {fieldErrors.materialWarehouseId ? <span className="text-xs text-status-danger-text">{fieldErrors.materialWarehouseId}</span> : null}
-              </label>
-            ) : null}
-            {productionType === "OEM_OUTSOURCING" ? (
-              <>
-                <label className="block">
-                  <span className="block text-xs text-ink-secondary">外协厂（OEM）*</span>
-                  <select value={supplierId} onChange={(e) => { setSupplierId(e.target.value); markDirty(); }} className={inputClass}>
-                    <option value="">请选择外协厂</option>
-                    {suppliers.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name ?? s.code ?? ""}</option>
-                    ))}
-                  </select>
-                  {fieldErrors.supplierId ? <span className="text-xs text-status-danger-text">{fieldErrors.supplierId}</span> : null}
-                </label>
-                <label className="block">
-                  <span className="block text-xs text-ink-secondary">加工费（计入成品成本）*</span>
-                  <input value={processingFee} onChange={(e) => { setProcessingFee(e.target.value); markDirty(); }} className={inputClass} />
-                  {fieldErrors.processingFee ? <span className="text-xs text-status-danger-text">{fieldErrors.processingFee}</span> : null}
-                </label>
-              </>
-            ) : null}
-            <label className="block">
-              <span className="block text-xs text-ink-secondary">批次</span>
-              <input value={batchNo} onChange={(e) => { setBatchNo(e.target.value); markDirty(); }} className={inputClass} />
-            </label>
-            <label className="block">
-              <span className="block text-xs text-ink-secondary">完工日期</span>
-              <input type="date" value={productionDate} onChange={(e) => { setProductionDate(e.target.value); markDirty(); }} className={inputClass} />
-            </label>
-            <label className="block">
-              <span className="block text-xs text-ink-secondary">备注</span>
-              <input value={remark} onChange={(e) => { setRemark(e.target.value); markDirty(); }} className={inputClass} />
-            </label>
+                {fieldErrors.supplierId ? <span className="text-xs text-status-danger-text">{fieldErrors.supplierId}</span> : null}
+              </FormField>
+              <FormField label="加工费（计入成品成本）" required>
+                <input value={processingFee} onChange={(e) => { setProcessingFee(e.target.value); markDirty(); }} className={`${inputClass} tabular-nums`} />
+                {fieldErrors.processingFee ? <span className="text-xs text-status-danger-text">{fieldErrors.processingFee}</span> : null}
+              </FormField>
+            </>
+          ) : null}
+          <FormField label="批次">
+            <input value={batchNo} onChange={(e) => { setBatchNo(e.target.value); markDirty(); }} className={inputClass} />
+          </FormField>
+          <FormField label="完工日期">
+            <input type="date" value={productionDate} onChange={(e) => { setProductionDate(e.target.value); markDirty(); }} className={inputClass} />
+          </FormField>
+          <FormField label="备注">
+            <input value={remark} onChange={(e) => { setRemark(e.target.value); markDirty(); }} className={inputClass} />
+          </FormField>
+        </div>
+      </section>
+
+      {bomId && bomDetail ? (
+        <section className="rounded-md border border-border p-4">
+          <h2 className="mb-2 text-sm font-semibold text-ink-primary">
+            配方领料预估（{bomDetail.bomNo}）——提交后服务端按配方权威计算
+          </h2>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-border text-sm">
+              <thead className="text-ink-secondary bg-canvas text-left text-xs font-medium">
+                <tr>
+                  <th className="px-4 py-2 font-semibold">原料</th>
+                  <th className="px-4 py-2 font-semibold">单位</th>
+                  <th className="px-4 py-2 text-right font-semibold">系数</th>
+                  <th className="px-4 py-2 text-right font-semibold">损耗率</th>
+                  <th className="px-4 py-2 text-right font-semibold">预估领料量</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {(bomDetail.lines ?? []).map((l, i) => (
+                  <tr key={i}>
+                    <td className="px-4 py-2">{`${l.componentItem?.code ?? ""} ${l.componentItem?.name ?? ""}`.trim() || "—"}</td>
+                    <td className="px-4 py-2">{l.componentUom?.symbol ?? "—"}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{l.qtyPerFinishedUnit}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{Number(l.lossRate) > 0 ? `${(Number(l.lossRate) * 100).toFixed(2)}%` : "—"}</td>
+                    <td className="px-4 py-2 text-right font-medium tabular-nums text-brand-700">
+                      {estimatedQty(l.qtyPerFinishedUnit, l.lossRate)} {l.componentUom?.symbol ?? ""}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </section>
-
-        {bomId && bomDetail ? (
-          <section className="rounded-md border border-border p-4">
-            <h2 className="mb-2 text-sm font-semibold text-ink-primary">
-              配方领料预估（{bomDetail.bomNo}）——提交后服务端按配方权威计算
-            </h2>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-border text-sm">
-                <thead className="text-ink-secondary bg-canvas text-left text-xs font-medium">
-                  <tr>
-                    <th className="px-4 py-2 font-semibold">原料</th>
-                    <th className="px-4 py-2 font-semibold">单位</th>
-                    <th className="px-4 py-2 font-semibold">系数</th>
-                    <th className="px-4 py-2 font-semibold">损耗率</th>
-                    <th className="px-4 py-2 font-semibold">预估领料量</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {(bomDetail.lines ?? []).map((l, i) => (
-                    <tr key={i}>
-                      <td className="px-4 py-2">{`${l.componentItem?.code ?? ""} ${l.componentItem?.name ?? ""}`.trim() || "—"}</td>
-                      <td className="px-4 py-2">{l.componentUom?.symbol ?? "—"}</td>
-                      <td className="px-4 py-2 tabular-nums">{l.qtyPerFinishedUnit}</td>
-                      <td className="px-4 py-2 tabular-nums">{Number(l.lossRate) > 0 ? `${(Number(l.lossRate) * 100).toFixed(2)}%` : "—"}</td>
-                      <td className="px-4 py-2 tabular-nums font-medium text-brand-700">
-                        {estimatedQty(l.qtyPerFinishedUnit, l.lossRate)} {l.componentUom?.symbol ?? ""}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        ) : !bomId ? (
-          <section className="rounded-md border border-border p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-ink-primary">手工领料行（无配方）</h2>
-              <button type="button" onClick={addMaterialLine} className="rounded-md border border-border px-3 py-1 text-xs text-ink-primary hover:bg-canvas">
-                + 添加物料
-              </button>
-            </div>
-            {fieldErrors.materialLines ? <p className="mb-2 text-xs text-status-danger-text">{fieldErrors.materialLines}</p> : null}
-            <div className="space-y-2">
-              {materialLines.map((l, i) => (
-                <div key={l.key} className="border-border flex flex-wrap items-end gap-3 rounded-md border p-3">
-                  <div className="min-w-[180px] flex-1">
-                    <span className="block text-xs text-ink-secondary">物料</span>
-                    <select value={l.itemId} onChange={(e) => handleMaterialItemChange(i, e.target.value)} className={inputClass}>
-                      <option value="">请选择物料</option>
-                      {items.map((it) => (
-                        <option key={it.id} value={it.id}>
-                          {`${it.code ?? ""} ${it.name ?? ""}`.trim()}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="w-32">
-                    <span className="block text-xs text-ink-secondary">领料数量 *</span>
-                    <input value={l.quantity} onChange={(e) => updateMaterialLine(i, { quantity: e.target.value })} className={inputClass} />
-                    {fieldErrors["qty:" + l.key] ? <span className="text-xs text-status-danger-text">{fieldErrors["qty:" + l.key]}</span> : null}
-                  </div>
-                  <div className="w-28">
-                    <span className="block text-xs text-ink-secondary">单位（库存单位）</span>
-                    <input value={l.uomId ? uoms.find((u) => u.id === l.uomId)?.symbol ?? "" : ""} readOnly className={inputClass} />
-                  </div>
-                  <div className="w-40">
-                    <span className="block text-xs text-ink-secondary">领料仓库 *</span>
-                    <select value={l.warehouseId} onChange={(e) => updateMaterialLine(i, { warehouseId: e.target.value })} className={inputClass}>
-                      <option value="">请选择仓库</option>
-                      {warehouses.map((w) => (
-                        <option key={w.id} value={w.id}>{w.name ?? w.code ?? ""}</option>
-                      ))}
-                    </select>
-                    {fieldErrors["wh:" + l.key] ? <span className="text-xs text-status-danger-text">{fieldErrors["wh:" + l.key]}</span> : null}
-                  </div>
-                  <button type="button" onClick={() => removeMaterialLine(i)} className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text hover:bg-status-danger-bg/10">
-                    删除
-                  </button>
-                </div>
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        {error ? (
-          <div className="border-status-danger-border rounded-md border bg-status-danger-bg/10 p-3 text-sm text-status-danger-text">
-            {error.message}
+      ) : !bomId ? (
+        <section className="rounded-md border border-border p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-ink-primary">手工领料行（无配方）</h2>
+            <button type="button" onClick={addMaterialLine} className="rounded-md border border-border px-3 py-1 text-xs font-medium text-ink-primary hover:bg-canvas">
+              + 添加物料
+            </button>
           </div>
-        ) : null}
-
-        <div className="flex items-center justify-end gap-3">
-          <button type="button" onClick={() => router.push("/inventory/production-orders")} className="rounded-md border border-border px-4 py-2 text-sm text-ink-primary hover:bg-canvas">
-            取消
-          </button>
-          <button type="button" onClick={handleSubmit} disabled={submitting} className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-40">
-            {submitting ? "保存中…" : "保存工单"}
-          </button>
-        </div>
-      </div>
-    </AppPage>
+          {fieldErrors.materialLines ? <p className="mb-2 text-xs text-status-danger-text">{fieldErrors.materialLines}</p> : null}
+          <div className="space-y-2">
+            {materialLines.map((l, i) => (
+              <div key={l.key} className="border-border flex flex-wrap items-end gap-3 rounded-md border p-3">
+                <div className="min-w-[180px] flex-1">
+                  <span className="block text-xs text-ink-secondary">物料</span>
+                  <select value={l.itemId} onChange={(e) => handleMaterialItemChange(i, e.target.value)} className={inputClass}>
+                    <option value="">请选择物料</option>
+                    {items.map((it) => (
+                      <option key={it.id} value={it.id}>
+                        {`${it.code ?? ""} ${it.name ?? ""}`.trim()}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="w-32">
+                  <span className="block text-xs text-ink-secondary">领料数量 *</span>
+                  <input value={l.quantity} onChange={(e) => updateMaterialLine(i, { quantity: e.target.value })} className={`${inputClass} tabular-nums`} />
+                  {fieldErrors["qty:" + l.key] ? <span className="text-xs text-status-danger-text">{fieldErrors["qty:" + l.key]}</span> : null}
+                </div>
+                <div className="w-28">
+                  <span className="block text-xs text-ink-secondary">单位（库存单位）</span>
+                  <input value={l.uomId ? uoms.find((u) => u.id === l.uomId)?.symbol ?? "" : ""} readOnly className={inputClass} />
+                </div>
+                <div className="w-40">
+                  <span className="block text-xs text-ink-secondary">领料仓库 *</span>
+                  <select value={l.warehouseId} onChange={(e) => updateMaterialLine(i, { warehouseId: e.target.value })} className={inputClass}>
+                    <option value="">请选择仓库</option>
+                    {warehouses.map((w) => (
+                      <option key={w.id} value={w.id}>{w.name ?? w.code ?? ""}</option>
+                    ))}
+                  </select>
+                  {fieldErrors["wh:" + l.key] ? <span className="text-xs text-status-danger-text">{fieldErrors["wh:" + l.key]}</span> : null}
+                </div>
+                <button type="button" onClick={() => removeMaterialLine(i)} className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text hover:bg-status-danger-bg/10">
+                  删除
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </EntityFormWorkspace>
   );
 }
 
 export default function Page() {
   return (
     <PermissionGuard permission={actionPermission("production-order", "create")}>
-      <OrderCreateForm />
+      <AppPage>
+        <OrderCreateForm />
+      </AppPage>
     </PermissionGuard>
   );
 }

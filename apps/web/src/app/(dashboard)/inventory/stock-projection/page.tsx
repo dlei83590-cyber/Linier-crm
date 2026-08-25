@@ -151,7 +151,7 @@ function StockProjectionList() {
           { key: "location", header: "库位", render: (r) => r.location?.name ?? "—" },
           { key: "batchNo", header: "批次", render: (r) => r.batchNo ?? "—" },
           { key: "serialNo", header: "序列号", render: (r) => r.serialNo ?? "—" },
-          { key: "onHandQty", header: "在库数量", render: (r) => r.onHandQty },
+          { key: "onHandQty", header: "在库数量", align: "right", render: (r) => r.onHandQty },
           { key: "lastMovementAt", header: "最后变动", render: (r) => formatDate(r.lastMovementAt) },
         ]}
         rows={items}

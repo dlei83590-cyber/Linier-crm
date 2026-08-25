@@ -1,20 +1,24 @@
 "use client";
 
 /**
- * Inventory Conversion Create — 新建库存转换单（F2-6B 批 3）
+ * Inventory Conversion Create — 新建库存转换单（F2-6B 批 3 + UI-09 FE2.0 表单统一）
  *
  * 契约：POST /api/inventory-conversions（inventory-conversion:create），创建即取号 CVT。
  * 同一 itemId；恰好 1 CONSUME + 1 PRODUCE；baseQuantity 服务端计算（前端只提交 quantity + uomToBaseRate）。
  * baseUomId 必须 == item.stockUomId（选择物料自动带出）。
  * PermissionGuard 对齐 API requirePermission("inventory-conversion:create")。
+ *
+ * UI-09：迁移至 EntityFormWorkspace（Dirty-State Guard / 409 冲突面板 / ErrorPanel /
+ * 统一 Save/Cancel），移除页面级 window.confirm；数字列右对齐 tabular-nums。
  */
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
-import { CARD_CLASS } from "@/lib/ui-classes";
+import { AppPage, EntityFormWorkspace } from "@/components/workspace";
+import { FormField } from "@/components/ui/form-field";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { INPUT_CLASS } from "@/lib/ui-classes";
 
 interface ItemOption { id: string; code: string | null; name: string | null; stockUom?: { id: string; code: string | null; symbol: string | null } | null }
 interface UomOption { id: string; code: string | null; symbol: string | null }
@@ -70,16 +74,6 @@ function ConversionCreateForm() {
       });
     return () => controller.abort();
   }, []);
-
-  useEffect(() => {
-    if (!dirty) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = "";
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [dirty]);
 
   const markDirty = () => setDirty(true);
 
@@ -154,164 +148,152 @@ function ConversionCreateForm() {
       setError(
         err instanceof ApiClientError ? err : new ApiClientError(0, "创建失败", "NETWORK_ERROR"),
       );
-    } finally {
       setSubmitting(false);
     }
   };
 
   const renderLine = (role: "consume" | "produce", line: LineForm, title: string) => (
-    <div className="mb-3 rounded-md border border-border p-3">
-      <h3 className="text-ink-primary mb-2 text-sm font-semibold">{title}</h3>
-      <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-3">
-        <div>
-          <label className="block text-xs text-ink-secondary">数量 *</label>
+    <section className="rounded-md border border-border p-4">
+      <h3 className="text-ink-primary mb-3 text-sm font-semibold">{title}</h3>
+      <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+        <FormField label="数量" required>
           <input
             type="number" min="0" step="any" value={line.quantity}
             onChange={(e) => updateLine(role, { quantity: e.target.value })}
-            className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
+            className={`${INPUT_CLASS} tabular-nums`}
           />
-        </div>
-        <div>
-          <label className="block text-xs text-ink-secondary">业务单位 *</label>
+          {fieldErrors[`${role}.quantity`] ? (
+            <span className="text-xs text-status-danger-text">{fieldErrors[`${role}.quantity`]}</span>
+          ) : null}
+        </FormField>
+        <FormField label="业务单位" required>
           <select
             value={line.uomId}
             onChange={(e) => updateLine(role, { uomId: e.target.value })}
-            className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
+            className={INPUT_CLASS}
           >
             <option value="">选择单位</option>
             {uoms.map((u) => (
               <option key={u.id} value={u.id}>{u.symbol ?? u.code ?? u.id}</option>
             ))}
           </select>
-        </div>
-        <div>
-          <label className="block text-xs text-ink-secondary">换算率（业务→基准）*</label>
+          {fieldErrors[`${role}.uomId`] ? (
+            <span className="text-xs text-status-danger-text">{fieldErrors[`${role}.uomId`]}</span>
+          ) : null}
+        </FormField>
+        <FormField label="换算率（业务→基准）" required>
           <input
             type="number" min="0" step="any" value={line.uomToBaseRate}
             onChange={(e) => updateLine(role, { uomToBaseRate: e.target.value })}
-            className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
+            className={`${INPUT_CLASS} tabular-nums`}
           />
-        </div>
-        <div>
-          <label className="block text-xs text-ink-secondary">仓库 *</label>
+          {fieldErrors[`${role}.rate`] ? (
+            <span className="text-xs text-status-danger-text">{fieldErrors[`${role}.rate`]}</span>
+          ) : null}
+        </FormField>
+        <FormField label="仓库" required>
           <select
             value={line.warehouseId}
             onChange={(e) => updateLine(role, { warehouseId: e.target.value })}
-            className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
+            className={INPUT_CLASS}
           >
             <option value="">选择仓库</option>
             {warehouses.map((w) => (
               <option key={w.id} value={w.id}>{w.code ?? ""} {w.name ?? ""}</option>
             ))}
           </select>
-        </div>
-        <div>
-          <label className="block text-xs text-ink-secondary">库位（可选）</label>
+          {fieldErrors[`${role}.warehouseId`] ? (
+            <span className="text-xs text-status-danger-text">{fieldErrors[`${role}.warehouseId`]}</span>
+          ) : null}
+        </FormField>
+        <FormField label="库位（可选）">
           <select
             value={line.locationId}
             onChange={(e) => updateLine(role, { locationId: e.target.value })}
-            className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
+            className={INPUT_CLASS}
           >
             <option value="">未指定</option>
             {locations.map((l) => (
               <option key={l.id} value={l.id}>{l.code ?? ""} {l.name ?? ""}</option>
             ))}
           </select>
-        </div>
-        <div>
-          <label className="block text-xs text-ink-secondary">批次（可选）</label>
+        </FormField>
+        <FormField label="批次（可选）">
           <input
             value={line.batchNo}
             onChange={(e) => updateLine(role, { batchNo: e.target.value })}
             maxLength={100}
-            className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
+            className={INPUT_CLASS}
           />
-        </div>
+        </FormField>
       </div>
-    </div>
+    </section>
   );
 
   return (
-    <div className={CARD_CLASS}>
-      <div className="flex items-center justify-between border-b border-border p-4">
-        <h1 className="text-lg font-semibold text-ink-primary">新建库存转换单</h1>
-        <Link
-          href="/inventory/conversions"
-          onClick={(e) => {
-            if (dirty && !window.confirm("有未保存的更改，确定离开？")) e.preventDefault();
-          }}
-          className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
-        >
-          返回列表
-        </Link>
-      </div>
-
-      <div className="p-4">
-        {error && (
-          <div className="mb-4 rounded-md bg-status-danger-bg p-3 text-sm text-status-danger-text">
-            <p>
-              {describeStatus(error.status)}：{error.message}
-              {error.code ? `（${error.code}）` : ""}
-            </p>
-          </div>
-        )}
-
-        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-canvas p-4 text-sm md:grid-cols-3">
-          <div>
-            <label className="block text-xs text-ink-secondary">物料 *（同一物料，Repack/UOM 转换）</label>
+    <EntityFormWorkspace
+      title="新建库存转换单"
+      description="同一物料 Repack / UOM 转换：恰好 1 消耗（CONSUME）+ 1 产出（PRODUCE），守恒校验由后端执行。"
+      backHref="/inventory/conversions"
+      mode="create"
+      submitting={submitting}
+      error={error}
+      dirty={dirty}
+      onDirty={() => setDirty(true)}
+      onSave={handleSubmit}
+      onCancel={() => router.push("/inventory/conversions")}
+      saveLabel="创建（草稿）"
+    >
+      <section className="rounded-md border border-border p-4">
+        <h2 className="mb-3 text-sm font-semibold text-ink-primary">转换信息</h2>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <FormField label="物料" required hint="同一物料，Repack / UOM 转换">
             <select
               value={itemId}
               onChange={(e) => handleItemChange(e.target.value)}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+              className={INPUT_CLASS}
             >
               <option value="">选择物料</option>
               {items.map((it) => (
                 <option key={it.id} value={it.id}>{it.code ?? ""} {it.name ?? ""}</option>
               ))}
             </select>
-            {fieldErrors.itemId && <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.itemId}</p>}
-          </div>
+            {fieldErrors.itemId ? (
+              <span className="text-xs text-status-danger-text">{fieldErrors.itemId}</span>
+            ) : null}
+          </FormField>
           <div>
-            <label className="block text-xs text-ink-secondary">基准单位（自动）</label>
-            <p className="mt-1 text-ink-secondary">
+            <span className="text-sm font-medium text-ink-secondary">基准单位（自动）</span>
+            <p className="mt-2 text-sm text-ink-secondary">
               {baseUomId ? (items.find((it) => it.id === itemId)?.stockUom?.symbol ?? baseUomId) : "—"}
             </p>
-            {fieldErrors.baseUomId && <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.baseUomId}</p>}
+            {fieldErrors.baseUomId ? (
+              <span className="text-xs text-status-danger-text">{fieldErrors.baseUomId}</span>
+            ) : null}
           </div>
-          <div>
-            <label className="block text-xs text-ink-secondary">备注（可选，≤500）</label>
+          <FormField label="备注（可选，≤500）">
             <input
               value={remark}
               onChange={(e) => { setRemark(e.target.value); markDirty(); }}
               maxLength={500}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+              className={INPUT_CLASS}
             />
-          </div>
+          </FormField>
         </div>
+      </section>
 
-        {renderLine("consume", consume, "消耗（CONSUME）")}
-        {renderLine("produce", produce, "产出（PRODUCE）")}
-
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="bg-brand-600 hover:bg-brand-700 rounded-md px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {submitting ? "提交中…" : "创建（草稿）"}
-          </button>
-          {dirty && <span className="text-xs text-status-warning-text">有未保存的更改</span>}
-        </div>
-      </div>
-    </div>
+      {renderLine("consume", consume, "消耗（CONSUME）")}
+      {renderLine("produce", produce, "产出（PRODUCE）")}
+    </EntityFormWorkspace>
   );
 }
 
 export default function Page() {
   return (
     <PermissionGuard permission={actionPermission("inventory-conversion", "create")}>
-      <ConversionCreateForm />
+      <AppPage>
+        <ConversionCreateForm />
+      </AppPage>
     </PermissionGuard>
   );
 }

@@ -1,9 +1,11 @@
 "use client";
 
 /**
- * Production Orders — 生产/外协工单列表页（P-4 Item Sourcing，ADR-0049）
+ * Production Orders — 生产/外协工单列表页（P-4 Item Sourcing，ADR-0049 + UI-09 FE2.0 统一）
  *
  * AppPage → EntityListWorkspace → useListQuery；PermissionGuard 对齐 production-order:view。
+ * UI-09：按钮收敛至 BUTTON_PRIMARY_CLASS / BUTTON_SECONDARY_CLASS；
+ * 行操作移入 rowActions（hover 浮现）；数字列右对齐 tabular-nums。
  */
 import { useState } from "react";
 import Link from "next/link";
@@ -11,7 +13,7 @@ import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shar
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { useSession } from "@/lib/session-context";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
-import { SELECT_CLASS } from "@/lib/ui-classes";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
 
@@ -78,7 +80,7 @@ function ProductionOrderList() {
         emptyMessage="暂无工单——点击「+ 新建工单」创建第一张生产/外协工单"
         headerActions={
           canCreate ? (
-            <Link href="/inventory/production-orders/new" className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
+            <Link href="/inventory/production-orders/new" className={BUTTON_PRIMARY_CLASS}>
               + 新建工单
             </Link>
           ) : undefined
@@ -101,10 +103,10 @@ function ProductionOrderList() {
         }
         toolbarActions={
           <>
-            <button type="button" onClick={applyFilter} className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
+            <button type="button" onClick={applyFilter} className={BUTTON_PRIMARY_CLASS}>
               查询
             </button>
-            <button type="button" onClick={resetFilter} className="rounded-md border border-border px-4 py-2 text-sm text-ink-primary hover:bg-canvas">
+            <button type="button" onClick={resetFilter} className={BUTTON_SECONDARY_CLASS}>
               重置
             </button>
           </>
@@ -125,7 +127,7 @@ function ProductionOrderList() {
             header: "成品",
             render: (row) => (row.finishedItem ? `${row.finishedItem.code ?? ""} ${row.finishedItem.name ?? ""}`.trim() : "—"),
           },
-          { key: "plannedQty", header: "产出数量", render: (row) => row.plannedQty },
+          { key: "plannedQty", header: "产出数量", align: "right", render: (row) => row.plannedQty },
           {
             key: "status",
             header: "状态",
@@ -136,15 +138,6 @@ function ProductionOrderList() {
           { key: "supplier", header: "外协厂", render: (row) => row.supplier?.name ?? "—" },
           { key: "batchNo", header: "批次", render: (row) => row.batchNo ?? "—" },
           { key: "productionDate", header: "完工日期", render: (row) => formatDate(row.productionDate) },
-          {
-            key: "actions",
-            header: "操作",
-            render: (row) => (
-              <Link href={`/inventory/production-orders/${row.id}`} className="rounded-md border border-border px-2 py-1 text-xs text-ink-primary hover:bg-canvas">
-                详情
-              </Link>
-            ),
-          },
         ]}
         rows={items}
         rowKey={(row) => row.id}
@@ -155,6 +148,14 @@ function ProductionOrderList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        rowActions={(row) => (
+          <Link
+            href={`/inventory/production-orders/${row.id}`}
+            className="border-border text-ink-secondary rounded-md border px-2 py-1 text-xs hover:bg-canvas"
+          >
+            详情
+          </Link>
+        )}
       />
     </AppPage>
   );

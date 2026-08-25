@@ -219,6 +219,7 @@ function TransferList() {
           {
             key: "lines",
             header: "行数",
+            align: "right",
             render: (row) => String(row._count?.lines ?? 0),
           },
           {
@@ -226,25 +227,7 @@ function TransferList() {
             header: "执行日期",
             render: (row) => formatDate(row.executedAt),
           },
-          {
-            key: "actions",
-            header: "操作",
-            render: (row) => (
-              <div className="flex items-center gap-2">
-                {["DRAFT", "CANCELLED"].includes(row.status) && canDelete && (
-                  <button
-                    type="button"
-                    onClick={() => setDeleting(row)}
-                    disabled={deleteBusy}
-                    className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text hover:bg-status-danger-bg/10 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    删除
-                  </button>
-                )}
-              </div>
-            ),
-          },
-        ]}
+        ]
         rows={items}
         rowKey={(row) => row.id}
         loading={loading}
@@ -254,6 +237,21 @@ function TransferList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        rowActions={
+          canDelete
+            ? (row) =>
+                ["DRAFT", "CANCELLED"].includes(row.status) ? (
+                  <button
+                    type="button"
+                    onClick={() => setDeleting(row)}
+                    disabled={deleteBusy}
+                    className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text hover:bg-status-danger-bg/10 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    删除
+                  </button>
+                ) : null
+            : undefined
+        }
       />
 
       <ConfirmActionDialog

@@ -1,16 +1,20 @@
 "use client";
 
 /**
- * BOM Create — 新建物料配方（P-4 Item Sourcing，ADR-0049）
+ * BOM Create — 新建物料配方（P-4 Item Sourcing，ADR-0049 + UI-09 FE2.0 表单统一）
  *
  * 契约：POST /api/boms（bom:create），bomVersion = max+1，bomNo 自动生成（BOM-{成品code}-{version}）。
  * 原料行：系数 qtyPerFinishedUnit（吨→米/件/个在此表达）+ 损耗率 lossRate；单位必须 = 原料库存单位（选择物料自动带出）。
+ *
+ * UI-09：迁移至 EntityFormWorkspace（Dirty-State Guard / 409 冲突面板 / ErrorPanel /
+ * 统一 Save/Cancel），移除页面级 window.confirm。
  */
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, ErrorPanel } from "@/components/workspace";
+import { AppPage, EntityFormWorkspace } from "@/components/workspace";
+import { FormField } from "@/components/ui/form-field";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 
@@ -62,16 +66,6 @@ function BomCreateForm() {
       });
     return () => controller.abort();
   }, []);
-
-  useEffect(() => {
-    if (!dirty) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = "";
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [dirty]);
 
   const markDirty = () => setDirty(true);
 
@@ -140,126 +134,116 @@ function BomCreateForm() {
   if (loadError) {
     return (
       <AppPage>
-        <ErrorPanel error={loadError} />
+        <div className="border-border bg-surface shadow-elevation-sm rounded-lg border p-6">
+          <p className="text-sm text-status-danger-text">加载物料失败：{loadError.message}</p>
+        </div>
       </AppPage>
     );
   }
 
   return (
-    <AppPage maxWidth="6xl">
-      <div className="space-y-4">
-        <div>
-          <h1 className="text-xl font-semibold text-ink-primary">新建物料配方</h1>
-          <p className="mt-1 text-sm text-ink-secondary">
-            为成品维护物料组合固定配方：1 成品 = N 行原料；需求 = 成品数 × 系数 × (1 + 损耗率)（吨→米/件/个在系数表达）
-          </p>
+    <EntityFormWorkspace
+      title="新建物料配方"
+      description="为成品维护物料组合固定配方：1 成品 = N 行原料；需求 = 成品数 × 系数 × (1 + 损耗率)（吨→米/件/个在系数表达）"
+      backHref="/inventory/boms"
+      mode="create"
+      submitting={submitting}
+      error={error}
+      dirty={dirty}
+      onDirty={() => setDirty(true)}
+      onSave={handleSubmit}
+      onCancel={() => router.push("/inventory/boms")}
+      saveLabel="保存配方"
+    >
+      <section className="rounded-md border border-border p-4">
+        <h2 className="mb-3 text-sm font-semibold text-ink-primary">配方信息</h2>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <FormField label="成品" required>
+            <select
+              value={finishedItemId}
+              onChange={(e) => {
+                setFinishedItemId(e.target.value);
+                markDirty();
+              }}
+              className={inputClass}
+            >
+              <option value="">请选择成品</option>
+              {items.map((it) => (
+                <option key={it.id} value={it.id}>
+                  {`${it.code ?? ""} ${it.name ?? ""}`.trim()}
+                </option>
+              ))}
+            </select>
+            {fieldErrors.finishedItemId ? (
+              <span className="text-xs text-status-danger-text">{fieldErrors.finishedItemId}</span>
+            ) : null}
+          </FormField>
+          <FormField label="备注">
+            <input value={remark} onChange={(e) => { setRemark(e.target.value); markDirty(); }} className={inputClass} />
+          </FormField>
         </div>
+      </section>
 
-        <section className="rounded-md border border-border p-4">
-          <h2 className="mb-3 text-sm font-semibold text-ink-primary">配方信息</h2>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <label className="block">
-              <span className="block text-xs text-ink-secondary">成品 *</span>
-              <select
-                value={finishedItemId}
-                onChange={(e) => {
-                  setFinishedItemId(e.target.value);
-                  markDirty();
-                }}
-                className={inputClass}
-              >
-                <option value="">请选择成品</option>
-                {items.map((it) => (
-                  <option key={it.id} value={it.id}>
-                    {`${it.code ?? ""} ${it.name ?? ""}`.trim()}
-                  </option>
-                ))}
-              </select>
-              {fieldErrors.finishedItemId ? (
-                <span className="text-xs text-status-danger-text">{fieldErrors.finishedItemId}</span>
-              ) : null}
-            </label>
-            <label className="block">
-              <span className="block text-xs text-ink-secondary">备注</span>
-              <input value={remark} onChange={(e) => { setRemark(e.target.value); markDirty(); }} className={inputClass} />
-            </label>
-          </div>
-        </section>
-
-        <section className="rounded-md border border-border p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-ink-primary">原料行（配方系数）</h2>
-            <button type="button" onClick={addLine} className="rounded-md border border-border px-3 py-1 text-xs text-ink-primary hover:bg-canvas">
-              + 添加原料
-            </button>
-          </div>
-          <div className="space-y-2">
-            {lines.map((l, i) => (
-              <div key={l.key} className="border-border flex flex-wrap items-end gap-3 rounded-md border p-3">
-                <div className="min-w-[200px] flex-1">
-                  <span className="block text-xs text-ink-secondary">原料</span>
-                  <select value={l.componentItemId} onChange={(e) => handleComponentChange(i, e.target.value)} className={inputClass}>
-                    <option value="">请选择原料</option>
-                    {items
-                      .filter((it) => it.id !== finishedItemId)
-                      .map((it) => (
-                        <option key={it.id} value={it.id}>
-                          {`${it.code ?? ""} ${it.name ?? ""}`.trim()}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-                <div className="w-28">
-                  <span className="block text-xs text-ink-secondary">单位（库存单位）</span>
-                  <input value={l.componentUomId ? items.find((it) => it.id === l.componentItemId)?.stockUom?.symbol ?? "" : ""} readOnly className={inputClass} />
-                </div>
-                <div className="w-32">
-                  <span className="block text-xs text-ink-secondary">系数（1 成品消耗量）*</span>
-                  <input
-                    value={l.qtyPerFinishedUnit}
-                    onChange={(e) => updateLine(i, { qtyPerFinishedUnit: e.target.value })}
-                    placeholder="如 0.05（吨）"
-                    className={inputClass}
-                  />
-                  {fieldErrors["qty:" + l.key] ? <span className="text-xs text-status-danger-text">{fieldErrors["qty:" + l.key]}</span> : null}
-                </div>
-                <div className="w-28">
-                  <span className="block text-xs text-ink-secondary">损耗率 %</span>
-                  <input value={l.lossRate} onChange={(e) => updateLine(i, { lossRate: e.target.value })} className={inputClass} />
-                  {fieldErrors["loss:" + l.key] ? <span className="text-xs text-status-danger-text">{fieldErrors["loss:" + l.key]}</span> : null}
-                </div>
-                <button type="button" onClick={() => removeLine(i)} className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text hover:bg-status-danger-bg/10">
-                  删除
-                </button>
+      <section className="rounded-md border border-border p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-ink-primary">原料行（配方系数）</h2>
+          <button type="button" onClick={addLine} className="rounded-md border border-border px-3 py-1 text-xs font-medium text-ink-primary hover:bg-canvas">
+            + 添加原料
+          </button>
+        </div>
+        <div className="space-y-2">
+          {lines.map((l, i) => (
+            <div key={l.key} className="border-border flex flex-wrap items-end gap-3 rounded-md border p-3">
+              <div className="min-w-[200px] flex-1">
+                <span className="block text-xs text-ink-secondary">原料</span>
+                <select value={l.componentItemId} onChange={(e) => handleComponentChange(i, e.target.value)} className={inputClass}>
+                  <option value="">请选择原料</option>
+                  {items
+                    .filter((it) => it.id !== finishedItemId)
+                    .map((it) => (
+                      <option key={it.id} value={it.id}>
+                        {`${it.code ?? ""} ${it.name ?? ""}`.trim()}
+                      </option>
+                    ))}
+                </select>
               </div>
-            ))}
-          </div>
-          {fieldErrors.lines ? <p className="mt-2 text-xs text-status-danger-text">{fieldErrors.lines}</p> : null}
-        </section>
-
-        {error ? (
-          <div className="border-status-danger-border rounded-md border bg-status-danger-bg/10 p-3 text-sm text-status-danger-text">
-            {error.message}
-          </div>
-        ) : null}
-
-        <div className="flex items-center justify-end gap-3">
-          <button type="button" onClick={() => router.push("/inventory/boms")} className="rounded-md border border-border px-4 py-2 text-sm text-ink-primary hover:bg-canvas">
-            取消
-          </button>
-          <button type="button" onClick={handleSubmit} disabled={submitting} className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-40">
-            {submitting ? "保存中…" : "保存配方"}
-          </button>
+              <div className="w-28">
+                <span className="block text-xs text-ink-secondary">单位（库存单位）</span>
+                <input value={l.componentUomId ? items.find((it) => it.id === l.componentItemId)?.stockUom?.symbol ?? "" : ""} readOnly className={inputClass} />
+              </div>
+              <div className="w-32">
+                <span className="block text-xs text-ink-secondary">系数（1 成品消耗量）*</span>
+                <input
+                  value={l.qtyPerFinishedUnit}
+                  onChange={(e) => updateLine(i, { qtyPerFinishedUnit: e.target.value })}
+                  placeholder="如 0.05（吨）"
+                  className={`${inputClass} tabular-nums`}
+                />
+                {fieldErrors["qty:" + l.key] ? <span className="text-xs text-status-danger-text">{fieldErrors["qty:" + l.key]}</span> : null}
+              </div>
+              <div className="w-28">
+                <span className="block text-xs text-ink-secondary">损耗率 %</span>
+                <input value={l.lossRate} onChange={(e) => updateLine(i, { lossRate: e.target.value })} className={`${inputClass} tabular-nums`} />
+                {fieldErrors["loss:" + l.key] ? <span className="text-xs text-status-danger-text">{fieldErrors["loss:" + l.key]}</span> : null}
+              </div>
+              <button type="button" onClick={() => removeLine(i)} className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text hover:bg-status-danger-bg/10">
+                删除
+              </button>
+            </div>
+          ))}
         </div>
-      </div>
-    </AppPage>
+        {fieldErrors.lines ? <p className="mt-2 text-xs text-status-danger-text">{fieldErrors.lines}</p> : null}
+      </section>
+    </EntityFormWorkspace>
   );
 }
 
 export default function Page() {
   return (
     <PermissionGuard permission={actionPermission("bom", "create")}>
-      <BomCreateForm />
+      <AppPage>
+        <BomCreateForm />
+      </AppPage>
     </PermissionGuard>
   );
 }
