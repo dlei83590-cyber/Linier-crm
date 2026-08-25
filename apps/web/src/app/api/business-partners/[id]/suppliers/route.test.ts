@@ -79,6 +79,9 @@ describe('POST /api/business-partners/:id/suppliers — 客户档案多供应商
 
   it('重复关联 → 409 CONFLICT', async () => {
     const tx = makeTx();
+    tx.businessPartner.findFirst
+      .mockResolvedValueOnce({ id: 'bp-1', type: 'CUSTOMER' }) // 客户校验
+      .mockResolvedValueOnce({ id: 'sup-1', type: 'SUPPLIER' }); // 供应商校验
     tx.customerSupplier.findFirst.mockResolvedValue({ id: 'cs-existing' });
     mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx));
     const res = await POST(makeRequest({ supplierId: 'sup-1' }), { params: Promise.resolve({ id: 'bp-1' }) });
