@@ -18,14 +18,11 @@ const PADDING_CLASS: Record<CardPadding, string> = {
 };
 
 export interface CardProps extends HTMLAttributes<HTMLDivElement> {
-  /** 内容内边距（默认 md） */
-  padding?: CardPadding;
-  /** 阴影：sm=轻（默认）/ md / none */
+  /** 阴影：sm=轻（默认）/ md / none（内容内边距由 CardContent 的 padding 控制） */
   elevation?: 'sm' | 'md' | 'none';
 }
 
 export function Card({
-  padding = 'md',
   elevation = 'sm',
   className = '',
   children,
