@@ -63,17 +63,18 @@ export function EntityFormWorkspace({
   dirtyMessage = "有未保存的修改，确定离开吗？",
 }: EntityFormWorkspaceProps) {
   const saveText = saveLabel ?? (mode === "create" ? "保存" : "保存修改");
-  const { confirmLeave } = useDirtyStateGuard({ dirty, message: dirtyMessage });
+  const { confirmLeave, leaveConfirmDialog } = useDirtyStateGuard({ dirty, message: dirtyMessage });
 
-  const handleCancel = () => {
-    if (!confirmLeave()) return;
+  const handleCancel = async () => {
+    if (!(await confirmLeave())) return;
     onCancel();
   };
 
   const isConflict = isVersionConflict(error);
 
   return (
-    <div className="border-border bg-surface shadow-elevation-sm overflow-hidden rounded-lg border">
+    <>
+      <div className="border-border bg-surface shadow-elevation-sm overflow-hidden rounded-lg border">
       <PageHeader
         title={title}
         description={description}
@@ -130,6 +131,7 @@ export function EntityFormWorkspace({
         ) : null}
         {children}
       </div>
-    </div>
+      {leaveConfirmDialog}
+    </>
   );
 }
