@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
+import { Prisma } from '@prisma/client';
 
 const { mockPrisma } = vi.hoisted(() => ({ mockPrisma: {} as Record<string, unknown> }));
 vi.mock('@/lib/prisma', () => ({ prisma: mockPrisma }));
@@ -98,5 +99,102 @@ describe('GET /api/reports/performance — 按员工聚合客观事实', () => {
   it('period 非法 → 400', async () => {
     const res = await GET(makeRequest('http://localhost/api/reports/performance?period=year'));
     expect(res.status).toBe(400);
+  });
+});
+
+describe('GET /api/reports/performance?view=region — 按 BusinessPartner.region 聚合', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // businessPartner.findMany 区分两次调用：select 含 id = 区域映射；仅 region = 周期内新增客户
+    mockPrisma.businessPartner = {
+      findMany: vi.fn().mockImplementation((args: { select?: Record<string, boolean> }) => {
+        if (args.select && 'id' in args.select) {
+          return Promise.resolve([
+            { id: 'bp-1', region: '华东' },
+            { id: 'bp-2', region: null },
+          ]);
+        }
+        return Promise.resolve([{ region: '华东' }, { region: null }]); // 新增客户：华东 1 + 未设置 1
+      }),
+      groupBy: vi.fn().mockResolvedValue([]),
+    };
+    mockPrisma.customerActivity = {
+      findMany: vi.fn().mockImplementation((args: { where?: { activityType?: string } }) => {
+        if (args.where?.activityType === 'CHECK_IN') {
+          return Promise.resolve([{ businessPartnerId: 'bp-1' }]); // 华东 拜访 1
+        }
+        return Promise.resolve([
+          { businessPartnerId: 'bp-1' }, // 华东 跟进 1
+          { businessPartnerId: 'bp-2' }, // 未设置 跟进 1
+        ]);
+      }),
+      groupBy: vi.fn().mockResolvedValue([]),
+    };
+    mockPrisma.projectOpportunity = {
+      findMany: vi.fn().mockResolvedValue([{ customerId: 'bp-1' }]), // 华东 商机 1
+      groupBy: vi.fn().mockResolvedValue([]),
+    };
+    mockPrisma.quotation = {
+      findMany: vi.fn().mockResolvedValue([{ customerId: 'bp-2' }]), // 未设置 报价 1
+      groupBy: vi.fn().mockResolvedValue([]),
+    };
+    mockPrisma.salesOrder = {
+      findMany: vi.fn().mockResolvedValue([
+        { customerId: 'bp-1', totalAmount: '100.00' }, // 华东 成交 2 笔 / 金额 150.00
+        { customerId: 'bp-1', totalAmount: '50.00' },
+      ]),
+      groupBy: vi.fn().mockResolvedValue([]),
+    };
+  });
+
+  it('区域聚合：华东/未设置各维度计数与成交金额（Decimal 求和）', async () => {
+    const res = await GET(makeRequest('http://localhost/api/reports/performance?period=week&view=region'));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.view).toBe('region');
+    expect(body.data.regions).toHaveLength(2);
+
+    const hd = body.data.regions.find((r: { region: string }) => r.region === '华东');
+    expect(hd.newCustomerCount).toBe(1);
+    expect(hd.followUpCount).toBe(1);
+    expect(hd.visitCount).toBe(1);
+    expect(hd.opportunityCount).toBe(1);
+    expect(hd.quotationCount).toBe(0);
+    expect(hd.salesOrderCount).toBe(2);
+    expect(hd.salesAmount).toBe(new Prisma.Decimal('100.00').plus('50.00').toString());
+
+    const unset = body.data.regions.find((r: { region: string }) => r.region === '未设置');
+    expect(unset.newCustomerCount).toBe(1);
+    expect(unset.followUpCount).toBe(1);
+    expect(unset.visitCount).toBe(0);
+    expect(unset.opportunityCount).toBe(0);
+    expect(unset.quotationCount).toBe(1);
+    expect(unset.salesOrderCount).toBe(0);
+    expect(unset.salesAmount).toBe('0');
+  });
+
+  it('区域行按成交订单数降序（华东在前）', async () => {
+    const res = await GET(makeRequest('http://localhost/api/reports/performance?period=month&view=region'));
+    const body = await res.json();
+    expect(body.data.regions[0].region).toBe('华东');
+  });
+
+  it('view 非法 → 400', async () => {
+    const res = await GET(makeRequest('http://localhost/api/reports/performance?period=week&view=team'));
+    expect(res.status).toBe(400);
+  });
+
+  it('不传 view 默认 person（回归）', async () => {
+    mockPrisma.user = {
+      findMany: vi.fn().mockResolvedValue([
+        { id: 'u-1', email: 'a@b.c', name: '张三', department: { name: '销售部' } },
+      ]),
+    };
+    const res = await GET(makeRequest('http://localhost/api/reports/performance?period=week'));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.view).toBe('person');
+    expect(body.data.rows).toHaveLength(1);
+    expect(body.data.regions).toBeUndefined();
   });
 });
