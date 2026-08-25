@@ -19,6 +19,9 @@ import { AppPage, ErrorPanel } from "@/components/workspace";
 import { ContactWorkspace } from "./contact-workspace";
 import { PoolStatusCard } from "./pool-status-card";
 import { ActivityTimeline } from "./activity-timeline";
+import { CustomerProducts } from "./customer-products";
+import { CustomerSuppliers } from "./customer-suppliers";
+import { CustomerDocuments } from "./customer-documents";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { formatDate, formatMoney, formatMoneyValue } from "@/lib/format";
 
@@ -119,7 +122,8 @@ type TabKey =
   | "overview" | "business" | "invoice" | "contacts" | "addresses" | "credit" | "tags"
   | "opportunities" | "projects" | "quotations" | "orders" | "ar"
   | "activity" | "pool"
-  | "supplierProfile" | "purchaseOrders" | "supplierItems";
+  | "supplierProfile" | "purchaseOrders" | "supplierItems"
+  | "products" | "suppliers" | "documents";
 
 const TYPE_LABELS: Record<string, string> = { CUSTOMER: "客户", SUPPLIER: "供应商", BOTH: "客户/供应商" };
 const ADDRESS_TYPE_LABELS: Record<string, string> = { REGISTERED: "注册", DELIVERY: "收货", INVOICE: "开票", CONTACT: "联系" };
@@ -269,6 +273,9 @@ function PartnerDetailPage() {
       : []),
     { key: "activity", label: "活动/跟进" },
     { key: "pool", label: "公海" },
+    { key: "products", label: "产品" },
+    { key: "suppliers", label: "供应商" },
+    { key: "documents", label: "文档" },
   ];
 
   const cr = detail.partnerCredit;
@@ -685,6 +692,9 @@ function PartnerDetailPage() {
 
         {tab === "activity" && <ActivityTimeline partnerId={id} />}
         {tab === "pool" && <PoolStatusCard partnerId={id} />}
+        {tab === "products" && <CustomerProducts partnerId={id} />}
+        {tab === "suppliers" && <CustomerSuppliers partnerId={id} />}
+        {tab === "documents" && <CustomerDocuments partnerId={id} />}
 
         <Link href="/business-partners" className="text-sm text-brand-600 hover:underline">← 返回往来单位列表</Link>
       </div>
