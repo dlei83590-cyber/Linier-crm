@@ -74,6 +74,7 @@ interface QuotationDetail {
   lines?: QuotationLine[];
   convertedAt?: string | null;
   salesOrderId?: string | null;
+  salesOrder?: { id: string; code: string | null; status: string | null } | null;
   createdAt: string;
 }
 
@@ -317,6 +318,21 @@ function QuotationDetailPage() {
             <InfoItem label="税额" value={formatMoney(detail.taxAmount ?? "0", detail.currency)} />
             <InfoItem label="含税合计" value={formatMoney(detail.totalAmount, detail.currency)} />
             <InfoItem label="备注" value={detail.remark} />
+            <InfoItem
+              label="转换订单"
+              value={
+                detail.salesOrder ? (
+                  <Link
+                    href={`/sales/orders/${detail.salesOrder.id}`}
+                    className="text-brand-600 hover:underline"
+                  >
+                    {detail.salesOrder.code ?? "查看销售订单"}
+                  </Link>
+                ) : (
+                  "—"
+                )
+              }
+            />
           </div>
         }
       >

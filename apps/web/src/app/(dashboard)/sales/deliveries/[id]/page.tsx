@@ -13,17 +13,17 @@
  * dispatch/confirm-delivery 等其它 factActions 仍不开放；不提供 Edit 入口。
  * PermissionGuard 对齐 API requirePermission("delivery:view")。
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
+import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel, StatusBadge } from "@/components/workspace";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { useSession } from "@/lib/session-context";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatMoney } from "@/lib/format";
 
 const TONE_MAP: Record<string, StatusTone> = {
   DRAFT: "neutral",
@@ -41,6 +41,23 @@ const STATUS_LABELS: Record<string, string> = {
   DISPATCHED: "已发运",
   DELIVERED: "已送达",
   COMPLETED: "已完成",
+  CANCELLED: "已取消",
+};
+
+/** 发票状态展示（与 Invoice 列表页一致；FRT-06 相关发票链接） */
+const INVOICE_TONE_MAP: Record<string, StatusTone> = {
+  DRAFT: "neutral",
+  ISSUED: "info",
+  PARTIALLY_PAID: "warning",
+  PAID: "success",
+  CANCELLED: "danger",
+};
+
+const INVOICE_STATUS_LABELS: Record<string, string> = {
+  DRAFT: "草稿",
+  ISSUED: "已开票",
+  PARTIALLY_PAID: "部分收款",
+  PAID: "已收款",
   CANCELLED: "已取消",
 };
 
@@ -64,12 +81,34 @@ interface DeliveryDetail {
   code: string;
   status: string;
   deliveryDate: string;
+  expectedArrivalDate?: string | null;
+  carrier?: string | null;
+  trackingNo?: string | null;
+  podStatus?: string | null;
+  podReceivedAt?: string | null;
   remark?: string | null;
   customer?: { id: string; code: string | null; name: string | null } | null;
   salesOrder?: { id: string; code: string | null; status: string | null } | null;
   lines?: DeliveryLine[];
   createdAt: string;
 }
+
+/** 本送货单已创建的发票（GET /api/invoices?deliveryId=…；FRT-06 下一单据链接） */
+interface DeliveryInvoiceRef {
+  id: string;
+  code: string | null;
+  status: string;
+  invoiceDate: string;
+  invoiceTotal: string;
+  currency: string;
+}
+
+/** POD 签收状态中文标签 */
+const POD_STATUS_LABELS: Record<string, string> = {
+  PENDING: "待签收",
+  RECEIVED: "已签收",
+  WAIVED: "豁免签收",
+};
 
 /** dialog 选择状态：行 id → 是否勾选 + 开票数量 */
 interface InvoiceSelection {
@@ -105,9 +144,14 @@ function DeliveryDetailPage() {
   const [dispatchTrackingNo, setDispatchTrackingNo] = useState("");
   const [confirmDeliverOpen, setConfirmDeliverOpen] = useState(false);
   const [podStatus, setPodStatus] = useState<"RECEIVED" | "WAIVED">("RECEIVED");
+  // 相关发票（FRT-06：下一单据链接；独立 loading/error/retry，禁止把接口失败当空列表）
+  const [invoices, setInvoices] = useState<DeliveryInvoiceRef[]>([]);
+  const [invoicesLoading, setInvoicesLoading] = useState(true);
+  const [invoicesError, setInvoicesError] = useState<ApiClientError | null>(null);
 
   const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
   const canCreateInvoice = hasPermission(roles, actionPermission("invoice", "create"));
+  const canViewInvoice = hasPermission(roles, actionPermission("invoice", "view"));
   const canEdit = hasPermission(roles, actionPermission("delivery", "edit"));
   const canApprove = hasPermission(roles, actionPermission("delivery", "approve"));
   const canClose = hasPermission(roles, actionPermission("delivery", "close"));
@@ -276,6 +320,25 @@ function DeliveryDetailPage() {
     }
   };
 
+  // ── 相关发票（GET /api/invoices?deliveryId=…；只读，FRT-06 下一单据链接） ──
+  const loadInvoices = useCallback((signal?: AbortSignal) => {
+    setInvoicesLoading(true);
+    setInvoicesError(null);
+    apiFetch<DeliveryInvoiceRef[]>(`/api/invoices?deliveryId=${id}&pageSize=100`, { signal })
+      .then((body) => setInvoices(body.data))
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setInvoicesError(
+          err instanceof ApiClientError ? err : new ApiClientError(0, "加载相关发票失败", "NETWORK_ERROR"),
+        );
+      })
+      .finally(() => {
+        if (!signal?.aborted) setInvoicesLoading(false);
+      });
+  }, [id]);
+
+  const retryInvoices = () => loadInvoices();
+
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -291,8 +354,13 @@ function DeliveryDetailPage() {
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
+    if (canViewInvoice) {
+      loadInvoices(controller.signal);
+    } else {
+      setInvoicesLoading(false);
+    }
     return () => controller.abort();
-  }, [id]);
+  }, [id, loadInvoices, canViewInvoice]);
 
   if (loading) {
     return (
@@ -439,6 +507,25 @@ function DeliveryDetailPage() {
               }
             />
             <InfoItem label="交付日期" value={formatDate(detail.deliveryDate)} />
+            <InfoItem
+              label="预计到达"
+              value={detail.expectedArrivalDate ? formatDate(detail.expectedArrivalDate) : "—"}
+            />
+            <InfoItem label="承运方" value={detail.carrier ?? "—"} />
+            <InfoItem label="运单号" value={detail.trackingNo ?? "—"} />
+            <InfoItem
+              label="签收状态（POD）"
+              value={
+                detail.podStatus ? (
+                  <span>
+                    {POD_STATUS_LABELS[detail.podStatus] ?? detail.podStatus}
+                    {detail.podReceivedAt ? `（${formatDate(detail.podReceivedAt)}）` : ""}
+                  </span>
+                ) : (
+                  "—"
+                )
+              }
+            />
             <InfoItem label="备注" value={detail.remark} />
             <InfoItem label="创建时间" value={formatDate(detail.createdAt)} />
           </div>
@@ -493,6 +580,70 @@ function DeliveryDetailPage() {
           </div>
         </section>
       </EntityDetailWorkspace>
+
+      {/* ── 相关发票（FRT-06：下一单据链接；独立 loading/error/retry；无 invoice:view 不展示） ── */}
+      {canViewInvoice && (
+      <section className="border-border bg-surface mt-4 rounded-lg border p-4">
+        <h2 className="text-ink-primary mb-3 text-sm font-semibold">相关发票（{invoices.length}）</h2>
+        {invoicesLoading ? (
+          <p className="text-ink-muted text-xs">正在加载相关发票…</p>
+        ) : invoicesError ? (
+          <div role="alert" className="rounded-md border border-status-danger-border bg-status-danger-bg/10 p-3 text-sm text-status-danger-text">
+            <p>
+              {describeStatus(invoicesError.status)}：{invoicesError.message}
+              {invoicesError.code ? `（${invoicesError.code}）` : ""}
+            </p>
+            <button
+              type="button"
+              onClick={retryInvoices}
+              className="mt-2 rounded-md border border-border bg-surface px-2 py-1 text-xs font-medium hover:bg-canvas"
+            >
+              重试
+            </button>
+          </div>
+        ) : invoices.length === 0 ? (
+          <p className="text-ink-muted text-xs">暂无相关发票——确认收货（DELIVERED）后可从本页「创建发票」生成。</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="divide-border min-w-full divide-y text-sm">
+              <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
+                <tr>
+                  <th className="px-3 py-2 font-medium">发票号</th>
+                  <th className="px-3 py-2 font-medium">状态</th>
+                  <th className="px-3 py-2 font-medium">开票日期</th>
+                  <th className="px-3 py-2 text-right font-medium">含税金额</th>
+                </tr>
+              </thead>
+              <tbody className="divide-border divide-y">
+                {invoices.map((inv) => (
+                  <tr key={inv.id}>
+                    <td className="px-3 py-2">
+                      <Link
+                        href={`/sales/invoices/${inv.id}`}
+                        className="font-medium text-brand-600 hover:underline"
+                      >
+                        {inv.code ?? "（草稿）"}
+                      </Link>
+                    </td>
+                    <td className="px-3 py-2">
+                      <StatusBadge
+                        status={inv.status}
+                        label={INVOICE_STATUS_LABELS[inv.status] ?? inv.status}
+                        toneMap={INVOICE_TONE_MAP}
+                      />
+                    </td>
+                    <td className="px-3 py-2 text-ink-secondary">{formatDate(inv.invoiceDate)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-ink-primary">
+                      {formatMoney(inv.invoiceTotal, inv.currency)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+      )}
 
       {/* ── 创建发票：source-selection dialog（Partial Billing） ── */}
       {dialogOpen && (
