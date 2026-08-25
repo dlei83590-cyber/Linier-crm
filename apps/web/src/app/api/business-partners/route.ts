@@ -7,6 +7,7 @@ import { ok, fail, failValidation, failConflict, parsePagination } from "@/lib/a
 import { handleServerError } from "@/lib/api/server-error";
 import { normalizeUscc, isValidUscc } from "@/lib/business-partner/normalize";
 import { findBusinessPartnerDuplicates } from "@/lib/business-partner/duplicate-check";
+import { matchCustomerPools } from "@/lib/customer-pool/match";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { z } from "zod";
@@ -246,6 +247,13 @@ export async function POST(request: NextRequest) {
     afterData: { code: created?.code, name: created?.name, type: created?.type },
     ...meta,
   });
+
+  // 客户公海自动匹配（合同「触碰规则客户自动流入公海」；MVP REGION scope；best-effort 不回滚主档）
+  if (created) {
+    await matchCustomerPools(created.id).catch((err) => {
+      console.error("[customer-pool] matchCustomerPools best-effort 失败（不影响 BP 主档）:", err);
+    });
+  }
 
   return ok(created, undefined, 201);
 }

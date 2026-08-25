@@ -17,8 +17,9 @@
 
 - POST /api/customer-pools/:poolId/entries/:entryId/claim（挑入；ownerId 可选需 assign 权限；事务行锁 + Outbox CustomerPoolEntryClaimed）
 - POST .../release（回池 / 移出池；单事务；Outbox CustomerOwnershipReleased）
-- POST /api/customer-pools/sweep（customer-pool:consume；batch/idempotent/sorted/FOR UPDATE SKIP LOCKED；返回 scanned/entered/unchanged/ambiguous/blocked/failed）
-- BP create/update 后同步 evaluate-and-sync（失败不回滚 BP 主档事务）
+- POST /api/customer-pools/sweep（customer-pool:consume；batch/idempotent/sorted/FOR UPDATE SKIP LOCKED；返回 scanned/entered/unchanged/ambiguous/blocked/failed）——**HOLD（本 MVP 不实现）**
+- BP create/update 后同步 matchCustomerPools（自动匹配 MVP：REGION scopeValue === BP.region 触碰 → FIELD_RULE 自动入池；
+  DEPARTMENT 自动路径跳过（BP 无部门字段）；GLOBAL 不自动入池；失败不回滚 BP 主档事务，best-effort）
 
 ## 不变量（DB partial unique，Migration 0049）
 
@@ -51,6 +52,14 @@
 | CP-17 | claim（2C-2） | 单事务行锁 → ownership + entry=CLAIMED + Outbox；P2002 → 409 POOL_CLAIM_CONFLICT |
 | CP-18 | release 回池（2C-2） | ownership.releasedAt=now + entry=IN_POOL |
 | CP-19 | release 移出池（2C-2） | ownership close + entry=RELEASED + releasedAt=now |
-| CP-20 | sweep（2C-2） | 统计 scanned/entered/unchanged/ambiguous/blocked/failed；多池同 priority → NO AUTO ENTRY + ambiguous |
+| CP-20 | sweep（2C-2） | 统计 scanned/entered/unchanged/ambiguous/blocked/failed；多池同 priority → NO AUTO ENTRY + ambiguous（**HOLD**） |
+| CP-21 | BP create（CUSTOMER，region=华东；存在 REGION 池 scopeValue=华东） | 201 + 自动创建 FIELD_RULE entry + Outbox CustomerPoolEntryEntered（matchCustomerPools 同事务） |
+| CP-22 | BP create SUPPLIER / BP 无 region / region 无命中池 | 不自动入池（NOT_POOL_ELIGIBLE / NO_MATCHING_POOL） |
+| CP-23 | 已有 active entry（I2）/ active ownership（I1） | 跳过自动入池（HAS_ACTIVE_ENTRY / HAS_ACTIVE_OWNERSHIP） |
+| CP-24 | 并发双自动入池撞 partial unique | P2002 → RACE_LOST no-op（不抛错、不回滚 BP 主档） |
+| CP-25 | BP update（PATCH）后自动匹配 | 更新成功 → matchCustomerPools best-effort；失败仅日志，不回滚主档 |
+| CP-26 | matchCustomerPools 意外错误 | BP create/update 仍成功（best-effort）；手工入池 POST entries 可兜底 |
 
-> 单测证据：apps/web/src/lib/customer-pool/validators.test.ts；apps/web/src/app/api/customer-pools/**/route.test.ts（2C-1 全套 + entries 全校验 + Outbox 同事务）。
+> 单测证据：apps/web/src/lib/customer-pool/validators.test.ts；apps/web/src/lib/customer-pool/match.test.ts（自动匹配 8 用例）；
+> apps/web/src/app/api/customer-pools/**/route.test.ts（2C-1 全套 + entries 全校验 + Outbox 同事务）；
+> apps/web/src/app/api/business-partners/route.test.ts（create 后 matchCustomerPools 钩子）。

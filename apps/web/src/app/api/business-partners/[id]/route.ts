@@ -9,6 +9,7 @@ import { requestLog } from "@/lib/api/logger";
 import { z } from "zod";
 import { validateUscc, normalizeUscc } from "@/lib/tax-invoice";
 import { casUpdate } from "@/lib/api/cas";
+import { matchCustomerPools } from "@/lib/customer-pool/match";
 
 export const dynamic = "force-dynamic";
 
@@ -209,6 +210,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     beforeData: { code: existing.code, name: existing.name },
     afterData: { code: updated.code, name: updated.name },
     ...meta,
+  });
+
+  // 客户公海自动匹配（合同「触碰规则客户自动流入公海」；MVP REGION scope；best-effort 不回滚主档）
+  await matchCustomerPools(updated.id).catch((err) => {
+    console.error("[customer-pool] matchCustomerPools best-effort 失败（不影响 BP 主档）:", err);
   });
 
   return ok(updated);

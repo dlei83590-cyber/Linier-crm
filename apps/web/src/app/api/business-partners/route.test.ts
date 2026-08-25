@@ -10,8 +10,12 @@ vi.mock('@/lib/api-helpers', () => ({
   writeAuditLog: vi.fn().mockResolvedValue(undefined),
   requestLog: vi.fn(),
 }));
+vi.mock('@/lib/customer-pool/match', () => ({
+  matchCustomerPools: vi.fn().mockResolvedValue({ matched: false, poolsMatched: [], entryCreated: false }),
+}));
 
 import { POST } from '@/app/api/business-partners/route';
+import { matchCustomerPools } from '@/lib/customer-pool/match';
 
 type BpRow = {
   id: string;
@@ -187,5 +191,12 @@ describe('POST /api/business-partners — Phase 2B create guard', () => {
   it('非法 USCC（长度/禁用字母）→ 400 VALIDATION_ERROR', async () => {
     const res = await POST(makeRequest({ ...baseBody, uscc: '91310000MA1K35L88I' }));
     expect(res.status).toBe(400);
+  });
+
+  it('23. 创建成功 → 调用 matchCustomerPools（自动入池钩子；best-effort 不回滚主档）', async () => {
+    const res = await POST(makeRequest(baseBody));
+    expect(res.status).toBe(201);
+    expect(matchCustomerPools).toHaveBeenCalledTimes(1);
+    expect(matchCustomerPools).toHaveBeenCalledWith('bp-new');
   });
 });
