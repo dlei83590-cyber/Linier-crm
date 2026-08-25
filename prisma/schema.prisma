@@ -520,6 +520,7 @@ model Item {
   uomConversions UomConversion[]
   costs          ItemCost[]
   supplierItems  SupplierItem[]
+  customerProducts CustomerProduct[] // K：客户→多产品（CustomerProduct.item 方向）
   revisions      ItemRevision[]
   tags           ItemTag[]
   quotationLines QuotationLine[]
@@ -719,6 +720,9 @@ model BusinessPartner {
   partnerContacts     PartnerContact[]
   poolEntries         CustomerPoolEntry[] // 2C：公海成员（Entry 方向）
   customerOwnerships  CustomerOwnership[] // 2C：客户归属事实流（SSOT：客户级 owner 唯一权威）
+  customerProducts    CustomerProduct[] // K：客户→多产品（CustomerProduct 方向）
+  customerSuppliersAsCustomer CustomerSupplier[] @relation("CustomerSupplierCustomer") // K：作为客户关联供应商
+  customerSuppliersAsSupplier CustomerSupplier[] @relation("CustomerSupplierSupplier") // K：作为供应商被客户关联
   activities          CustomerActivity[] // Phase 3：客户跟进/拜访计划/定位签到（CustomerActivity 方向）
   partnerAddresses    PartnerAddress[]
   partnerTags         PartnerTag[]
