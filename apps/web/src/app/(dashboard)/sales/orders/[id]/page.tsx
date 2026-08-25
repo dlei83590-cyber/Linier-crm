@@ -130,6 +130,8 @@ function SalesOrderDetailPage() {
   const { state } = useSession();
   const id = typeof params.id === "string" ? params.id : "";
   const [detail, setDetail] = useState<SalesOrderDetail | null>(null);
+  const [materials, setMaterials] = useState<Array<{ itemCode: string | null; itemName: string | null; uom: string | null; requiredQty: number; onHandQty: number }>>([]);
+  const [suppliers, setSuppliers] = useState<Array<{ supplierName: string | null; creditRating: string | null; itemCount: number; preferredCount: number }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
@@ -260,6 +262,13 @@ function SalesOrderDetailPage() {
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
+    // Q 线：BOM 预计用料 + 推荐供应商（只读投影）
+    apiFetch<Array<{ itemCode: string | null; itemName: string | null; uom: string | null; requiredQty: number; onHandQty: number }>>(`/api/sales-orders/${id}/material-requirements`, { signal: controller.signal })
+      .then((body) => setMaterials(body.data))
+      .catch(() => undefined);
+    apiFetch<Array<{ supplierName: string | null; creditRating: string | null; itemCount: number; preferredCount: number }>>(`/api/sales-orders/${id}/supplier-recommendations`, { signal: controller.signal })
+      .then((body) => setSuppliers(body.data))
+      .catch(() => undefined);
     return () => controller.abort();
   }, [id]);
 
@@ -487,6 +496,60 @@ function SalesOrderDetailPage() {
           </div>
         </section>
       </EntityDetailWorkspace>
+
+      {/* Q 线：BOM 预计用料 + 推荐供应商（只读投影） */}
+      <section className="border-border bg-surface rounded-lg border p-4">
+        <h2 className="text-ink-primary mb-3 text-sm font-semibold">BOM 预计用料（Q 线）</h2>
+        {materials.length === 0 ? (
+          <p className="text-ink-muted text-xs">无配方原料需求（订单行成品无 ACTIVE 配方）。</p>
+        ) : (
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="text-ink-muted border-border border-b text-xs">
+                <th className="px-2 py-2">原料</th>
+                <th className="px-2 py-2">单位</th>
+                <th className="px-2 py-2">预计数量</th>
+                <th className="px-2 py-2">当前库存</th>
+              </tr>
+            </thead>
+            <tbody className="divide-border divide-y">
+              {materials.map((m) => (
+                <tr key={m.itemCode ?? m.itemName ?? ""}>
+                  <td className="px-2 py-2">{m.itemName ?? m.itemCode ?? "—"}</td>
+                  <td className="px-2 py-2">{m.uom ?? "—"}</td>
+                  <td className="px-2 py-2 tabular-nums">{m.requiredQty.toFixed(4)}</td>
+                  <td className="px-2 py-2 tabular-nums">{m.onHandQty}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <h2 className="text-ink-primary mt-4 mb-3 text-sm font-semibold">推荐供应商（Q 线）</h2>
+        {suppliers.length === 0 ? (
+          <p className="text-ink-muted text-xs">暂无推荐供应商（订单行商品无 SupplierItem 关系）。</p>
+        ) : (
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="text-ink-muted border-border border-b text-xs">
+                <th className="px-2 py-2">供应商</th>
+                <th className="px-2 py-2">信用等级</th>
+                <th className="px-2 py-2">覆盖商品数</th>
+                <th className="px-2 py-2">优选数</th>
+              </tr>
+            </thead>
+            <tbody className="divide-border divide-y">
+              {suppliers.map((s) => (
+                <tr key={s.supplierName ?? ""}>
+                  <td className="px-2 py-2">{s.supplierName ?? "—"}</td>
+                  <td className="px-2 py-2">{s.creditRating ?? "—"}</td>
+                  <td className="px-2 py-2 tabular-nums">{s.itemCount}</td>
+                  <td className="px-2 py-2 tabular-nums">{s.preferredCount}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
 
       {/* ── 创建送货单：source-selection dialog（partial delivery） ── */}
       {dialogOpen && (
