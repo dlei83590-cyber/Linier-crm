@@ -4,8 +4,13 @@
  * Phase 3 MVP — Customer 360「供应商」Tab（客户 → 多供应商，Migration 0051）
  *
  * 数据：GET/POST /api/business-partners/:id/suppliers + DELETE /:id/suppliers/:relationId
- * 选供应商：GET /api/suppliers（supplier:view 列表消费）
+ * 选供应商：GET /api/suppliers（supplier:view 列表消费）——真实 BusinessPartner supplier selector
  * 权限：列表 business-partner:view；新增/删除 business-partner:edit
+ * FRT-02：
+ *   - 禁 raw database ID：POST.supplierId 语义 = BusinessPartner.id，
+ *     选项 value 一律取 supplier.partner.id（无 partner 的 Supplier 行排除，禁止 ?? option.id 回退）；
+ *   - 排除自身（后端禁自关联）与已关联供应商（避免重复 409）；
+ *   - selector 三态（loading/error/empty，禁止加载失败显示合法空列表）。
  * HOLD：generic relation framework / 供应商关系分析
  */
 import { useCallback, useEffect, useState } from "react";
@@ -14,6 +19,7 @@ import { actionPermission } from "@nilier-crm/shared";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { INPUT_CLASS, BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { formatDate } from "@/lib/format";
+import { buildSupplierOptionViews, type SupplierOptionSource } from "@/lib/frontend/supplier-options";
 
 interface SupplierRow {
   id: string;
@@ -22,20 +28,16 @@ interface SupplierRow {
   supplier: { id: string; code: string; name: string; type: string; uscc: string | null };
 }
 
-interface SupplierOption {
-  id: string;
-  code: string;
-  name: string;
-  partner: { id: string; name: string } | null;
-}
-
 export function CustomerSuppliers({ partnerId }: { partnerId: string }) {
   const [items, setItems] = useState<SupplierRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const [options, setOptions] = useState<SupplierOption[]>([]);
+  // 选供应商 options：loading/error/empty 三态
+  const [options, setOptions] = useState<SupplierOptionSource[]>([]);
+  const [optionsLoading, setOptionsLoading] = useState(true);
+  const [optionsError, setOptionsError] = useState<string | null>(null);
   const [supplierId, setSupplierId] = useState("");
   const [note, setNote] = useState("");
 
@@ -47,12 +49,23 @@ export function CustomerSuppliers({ partnerId }: { partnerId: string }) {
       .finally(() => setLoading(false));
   }, [partnerId]);
 
+  const loadOptions = useCallback(() => {
+    setOptionsLoading(true);
+    setOptionsError(null);
+    apiFetch<SupplierOptionSource[]>("/api/suppliers?pageSize=100")
+      .then(({ data }) => setOptions(Array.isArray(data) ? data : []))
+      .catch((err: unknown) => setOptionsError(err instanceof ApiClientError ? err.message : "加载供应商选项失败"))
+      .finally(() => setOptionsLoading(false));
+  }, []);
+
   useEffect(() => {
     load();
-    apiFetch<SupplierOption[]>("/api/suppliers?pageSize=100")
-      .then(({ data }) => setOptions(data))
-      .catch(() => setOptions([]));
-  }, [load]);
+    loadOptions();
+  }, [load, loadOptions]);
+
+  // 已关联供应商（BP id）与自身从可选列表排除；option.id = BusinessPartner.id（禁 raw Supplier.id）
+  const linkedBpIds = items.map((r) => r.supplier.id);
+  const optionViews = buildSupplierOptionViews(options, { excludePartnerId: partnerId, alreadyLinkedBpIds: linkedBpIds });
 
   const submit = async () => {
     if (!supplierId) {
@@ -69,6 +82,7 @@ export function CustomerSuppliers({ partnerId }: { partnerId: string }) {
       setSupplierId("");
       setNote("");
       load();
+      loadOptions();
     } catch (err: unknown) {
       setError(err instanceof ApiClientError ? err.message : "保存失败");
     } finally {
@@ -82,6 +96,7 @@ export function CustomerSuppliers({ partnerId }: { partnerId: string }) {
     try {
       await apiFetch("/api/business-partners/" + partnerId + "/suppliers/" + id, { method: "DELETE" });
       load();
+      loadOptions();
     } catch (err: unknown) {
       setError(err instanceof ApiClientError ? err.message : "删除失败");
     }
@@ -94,23 +109,38 @@ export function CustomerSuppliers({ partnerId }: { partnerId: string }) {
 
       <PermissionGuard permission={actionPermission("business-partner", "edit")}>
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-border p-3">
-          <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className={INPUT_CLASS + " max-w-xs"}>
-            <option value="">选择供应商…</option>
-            {options.map((o) => (
-              <option key={o.id} value={o.partner?.id ?? o.id}>
-                {o.code} — {o.name}
-              </option>
-            ))}
-          </select>
-          <input value={note} onChange={(e) => setNote(e.target.value)} className={INPUT_CLASS + " max-w-xs"} placeholder="备注（合作范围，可选）" />
-          <button onClick={submit} disabled={busy} className={BUTTON_PRIMARY_CLASS + " text-xs"}>
-            关联供应商
-          </button>
+          {optionsLoading ? (
+            <span className="text-xs text-ink-muted">正在加载供应商选项…</span>
+          ) : optionsError ? (
+            <span className="text-xs text-status-danger-text">
+              供应商选项加载失败：{optionsError}
+              <button type="button" onClick={loadOptions} className="ml-2 text-brand-600 underline">重试</button>
+            </span>
+          ) : optionViews.length === 0 ? (
+            <span className="text-xs text-ink-muted">
+              {options.length === 0 ? "暂无可用供应商（往来单位类型为供应商），请先创建供应商往来单位。" : "所有可用供应商均已关联，如需再次关联请先解除。"}
+            </span>
+          ) : (
+            <>
+              <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className={INPUT_CLASS + " max-w-xs"}>
+                <option value="">选择供应商…</option>
+                {optionViews.map((o) => (
+                  <option key={o.id} value={o.id}>{o.label}</option>
+                ))}
+              </select>
+              <input value={note} onChange={(e) => setNote(e.target.value)} className={INPUT_CLASS + " max-w-xs"} placeholder="备注（合作范围，可选）" />
+              <button onClick={submit} disabled={busy} className={BUTTON_PRIMARY_CLASS + " text-xs"}>
+                关联供应商
+              </button>
+            </>
+          )}
         </div>
       </PermissionGuard>
 
       {loading ? (
         <p className="text-sm text-ink-muted">加载中…</p>
+      ) : error ? (
+        <p className="text-sm text-status-danger-text">{error}</p>
       ) : items.length === 0 ? (
         <p className="text-sm text-ink-muted">暂无供应商关联。</p>
       ) : (
