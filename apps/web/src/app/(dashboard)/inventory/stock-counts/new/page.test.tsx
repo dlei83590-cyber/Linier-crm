@@ -83,7 +83,7 @@ describe("新建库存盘点单（UI-09：EntityFormWorkspace 表单统一，无
     expect(mockPush).not.toHaveBeenCalled();
   });
 
-  it("未填写（未 dirty）时点击取消 → 直接返回列表（无 window.confirm 拦截）", () => {
+  it("未填写（未 dirty）时点击取消 → 直接返回列表（无 window.confirm 拦截）", async () => {
     const confirmSpy = vi.spyOn(window, "confirm");
     render(
       <DensityProvider>
@@ -92,7 +92,10 @@ describe("新建库存盘点单（UI-09：EntityFormWorkspace 表单统一，无
     );
 
     fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    // CC-10：EntityFormWorkspace 取消改为异步确认（await confirmLeave），导航在微任务后完成
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith("/inventory/stock-counts");
+    });
     expect(confirmSpy).not.toHaveBeenCalled();
-    expect(mockPush).toHaveBeenCalledWith("/inventory/stock-counts");
   });
 });
