@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityFormWorkspace } from "@/components/workspace";
+import { Skeleton } from "@/components/ui/skeleton";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
@@ -172,7 +173,7 @@ function CnDnCreateForm() {
                           <td className="px-3 py-2"><input type="number" min={0.0001} step="any" value={selectedLines[l.id] ?? ""} disabled={!selectedLines[l.id]} onChange={(e) => setSelectedLines((prev) => ({ ...prev, [l.id]: e.target.value }))} className={inputClass} /></td>
                         </tr>
                       ))}
-                      {lines.length === 0 ? <tr><td colSpan={4} className="px-3 py-2 text-sm text-ink-muted">加载中…</td></tr> : null}
+                      {lines.length === 0 ? <tr><td colSpan={4} className="px-3 py-2"><Skeleton className="h-4 w-full" /></td></tr> : null}
                     </tbody>
                   </table>
                 </div>

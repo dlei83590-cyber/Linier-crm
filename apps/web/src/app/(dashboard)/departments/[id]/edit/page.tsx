@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityFormWorkspace } from "@/components/workspace";
+import { PageLoading } from "@/components/ui/skeleton";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
@@ -97,7 +98,7 @@ function DepartmentEditForm() {
   if (loading) {
     return (
       <EntityFormWorkspace title="编辑部门" backHref="/departments" mode="edit" submitting={false} onSave={handleSave} onCancel={() => router.push("/departments")}>
-        <p className="px-4 py-6 text-sm text-ink-secondary">加载中…</p>
+        <PageLoading rows={4} />
       </EntityFormWorkspace>
     );
   }

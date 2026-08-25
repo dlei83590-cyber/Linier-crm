@@ -13,12 +13,14 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
+import { AppPage, EntityDetailWorkspace, ErrorPanel, ReasonDialog } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useSession } from "@/lib/session-context";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { useToast } from "@/components/ui/toast";
+import { PageLoading } from "@/components/ui/skeleton";
 import { formatDate, formatDateOnly, formatMoney } from "@/lib/format";
+import { validateRejectReason } from "@/lib/expenses/reject-reason";
 
 interface ExpenseDetail {
   id: string;
@@ -83,6 +85,10 @@ function ExpenseDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | null>(null);
   const [acting, setActing] = useState(false);
+  // 驳回原因 FormDialog（FE2.0 UI-10：替换 window.prompt，必填原因走 ReasonDialog）
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejectError, setRejectError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     const controller = new AbortController();
@@ -132,26 +138,46 @@ function ExpenseDetailPage() {
     runAction("/api/expenses/" + id + "/approve", { version: detail.version }, "已批准");
   };
 
-  const handleReject = () => {
+  /** 打开驳回原因对话框（原因校验在提交时执行，错误回显在对话框内） */
+  const openReject = () => {
     if (!detail) return;
-    const reason = window.prompt("请输入驳回原因（必填）");
-    if (reason === null) return; // 取消
-    if (!reason.trim()) {
-      setError(new ApiClientError(400, "驳回必须提供原因", "EXPENSE_REJECT_REASON_REQUIRED"));
+    setRejectReason("");
+    setRejectError(null);
+    setRejectOpen(true);
+  };
+
+  /** 提交驳回：先本地校验（与 POST /api/expenses/:id/reject zod 契约一致），失败留在对话框内 */
+  const submitReject = () => {
+    if (!detail || acting) return;
+    const validationError = validateRejectReason(rejectReason);
+    if (validationError) {
+      setRejectError(validationError);
       return;
     }
-    runAction(
-      "/api/expenses/" + id + "/reject",
-      { version: detail.version, reason: reason.trim() },
-      "已驳回",
-    );
+    setActing(true);
+    setError(null);
+    apiFetch("/api/expenses/" + id + "/reject", {
+      method: "POST",
+      body: JSON.stringify({ version: detail.version, reason: rejectReason.trim() }),
+    })
+      .then(() => {
+        setRejectOpen(false);
+        setRejectReason("");
+        toast.success("已驳回");
+        load();
+      })
+      .catch((err: unknown) => {
+        const e = err instanceof ApiClientError ? err : new ApiClientError(0, "网络错误", "NETWORK_ERROR");
+        setRejectError(e.message + (e.code ? "（" + e.code + "）" : ""));
+        setActing(false);
+      });
   };
 
   if (loading) {
     return (
       <AppPage>
-        <div className="border-border bg-surface rounded-lg border p-6 text-sm text-ink-muted">
-          加载中…
+        <div className="border-border bg-surface overflow-hidden rounded-lg border">
+          <PageLoading rows={4} />
         </div>
       </AppPage>
     );
@@ -205,7 +231,7 @@ function ExpenseDetailPage() {
               </button>
             ) : null}
             {showReject ? (
-              <button type="button" onClick={handleReject} disabled={acting} className={BUTTON_SECONDARY_CLASS}>
+              <button type="button" onClick={openReject} disabled={acting} className={BUTTON_SECONDARY_CLASS}>
                 {acting ? "处理中…" : "驳回"}
               </button>
             ) : null}
@@ -252,12 +278,29 @@ function ExpenseDetailPage() {
           <p className="text-ink-primary whitespace-pre-wrap text-sm">{detail.note ?? "—"}</p>
         </section>
         {status === "REJECTED" ? (
-          <section className="rounded-md border border-rose-200 bg-rose-50 p-4">
-            <h2 className="mb-2 text-sm font-semibold text-rose-700">驳回原因</h2>
-            <p className="text-rose-700 whitespace-pre-wrap text-sm">{detail.rejectionReason ?? "—"}</p>
+          <section className="rounded-md border border-status-danger-border bg-status-danger-bg/40 p-4">
+            <h2 className="mb-2 text-sm font-semibold text-status-danger-text">驳回原因</h2>
+            <p className="text-status-danger-text whitespace-pre-wrap text-sm">{detail.rejectionReason ?? "—"}</p>
           </section>
         ) : null}
       </EntityDetailWorkspace>
+
+      <ReasonDialog
+        open={rejectOpen}
+        title="驳回报销申请"
+        description="驳回后申请人可改稿并重新提交；驳回原因必填（≤500 字）。"
+        label="驳回原因"
+        placeholder="请填写驳回原因"
+        value={rejectReason}
+        onChange={setRejectReason}
+        maxLength={500}
+        confirmLabel="确认驳回"
+        tone="danger"
+        busy={acting}
+        error={rejectError}
+        onConfirm={submitReject}
+        onCancel={() => setRejectOpen(false)}
+      />
     </AppPage>
   );
 }

@@ -16,6 +16,7 @@ import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shar
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityFormWorkspace, ErrorPanel } from "@/components/workspace";
+import { PageLoading } from "@/components/ui/skeleton";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
@@ -189,7 +190,9 @@ function ExpenseEditForm() {
   if (loading) {
     return (
       <AppPage>
-        <div className="border-border bg-surface rounded-lg border p-6 text-sm text-ink-muted">加载中…</div>
+        <div className="border-border bg-surface overflow-hidden rounded-lg border">
+          <PageLoading rows={5} />
+        </div>
       </AppPage>
     );
   }
@@ -317,9 +320,9 @@ function ExpenseEditForm() {
           </FormField>
         </Section>
         {detail.approvalStatus === "REJECTED" && detail.rejectionReason ? (
-          <section className="rounded-md border border-rose-200 bg-rose-50 p-4">
-            <h2 className="mb-2 text-sm font-semibold text-rose-700">驳回原因（改稿请对照修改）</h2>
-            <p className="text-rose-700 whitespace-pre-wrap text-sm">{detail.rejectionReason}</p>
+          <section className="border-status-danger-border bg-status-danger-bg/40 rounded-md border p-4">
+            <h2 className="text-status-danger-text mb-2 text-sm font-semibold">驳回原因（改稿请对照修改）</h2>
+            <p className="text-status-danger-text whitespace-pre-wrap text-sm">{detail.rejectionReason}</p>
           </section>
         ) : null}
       </EntityFormWorkspace>

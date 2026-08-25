@@ -35,6 +35,11 @@ export type { StateAction, StateActionTone } from './state-action-bar';
 
 export { ConfirmActionDialog } from './confirm-action-dialog';
 
+export { ReasonDialog } from './reason-dialog';
+
+export { DetailTable } from './detail-table';
+export type { DetailColumn } from './detail-table';
+
 export { ProjectSubresourceDialog } from './project-subresource-dialog';
 export type { ProjectSubresourceDialogProps } from './project-subresource-dialog';
 
