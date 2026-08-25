@@ -26,7 +26,7 @@ interface OrderRow {
   status: string;
   orderDate?: string | null;
   supplier?: { name: string | null } | null;
-  requisition?: { code: string | null } | null;
+  requisition?: { id: string; code: string | null } | null;
   _count?: { lines: number };
 }
 
@@ -248,7 +248,17 @@ function OrderList() {
           {
             key: "requisition",
             header: "来源申请",
-            render: (row) => row.requisition?.code ?? "—",
+            render: (row) =>
+              row.requisition?.code ? (
+                <Link
+                  href={`/purchasing/requisitions/${row.requisition.id}`}
+                  className="font-medium text-brand-600 hover:underline"
+                >
+                  {row.requisition.code}
+                </Link>
+              ) : (
+                "—"
+              ),
           },
           {
             key: "lines",

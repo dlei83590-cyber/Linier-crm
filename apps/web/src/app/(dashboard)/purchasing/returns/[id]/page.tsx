@@ -33,7 +33,7 @@ interface ReturnDetail {
   returnedAt?: string | null;
   remark?: string | null;
   createdAt: string;
-  purchaseOrder?: { code: string | null; status: string | null } | null;
+  purchaseOrder?: { id: string; code: string | null; status: string | null } | null;
   supplier?: { name: string | null } | null;
   returnedBy?: { name: string | null } | null;
   lines?: Array<{
@@ -42,9 +42,9 @@ interface ReturnDetail {
     sourceRefType?: string | null;
     item?: { code: string | null; name: string | null } | null;
     uom?: { symbol: string | null } | null;
-    sourcePurchaseReceiptLine?: { lineNo: number | null; purchaseReceipt?: { code: string | null } | null } | null;
-    sourceWarehouseReceiptLine?: { warehouseReceipt?: { code: string | null; status: string | null } | null } | null;
-    sourceInspection?: { inspectionMode: string | null; result: string | null } | null;
+    sourcePurchaseReceiptLine?: { lineNo: number | null; purchaseReceipt?: { id: string; code: string | null } | null } | null;
+    sourceWarehouseReceiptLine?: { warehouseReceipt?: { id: string; code: string | null; status: string | null } | null } | null;
+    sourceInspection?: { id: string; inspectionMode: string | null; result: string | null } | null;
   }>;
 }
 
@@ -63,6 +63,20 @@ function sourceCode(line: NonNullable<ReturnDetail["lines"]>[number]): string | 
     line.sourceWarehouseReceiptLine?.warehouseReceipt?.code ??
     null
   );
+}
+
+/** 来源单据跳转目标（RECEIPT_LINE → 收货单；WAREHOUSE_RECEIPT_LINE → 入库单；INSPECTION → 质检记录） */
+function sourceHref(line: NonNullable<ReturnDetail["lines"]>[number]): string | null {
+  if (line.sourceRefType === "INSPECTION" && line.sourceInspection?.id) {
+    return `/purchasing/inspections/${line.sourceInspection.id}`;
+  }
+  if (line.sourceRefType === "WAREHOUSE_RECEIPT_LINE" && line.sourceWarehouseReceiptLine?.warehouseReceipt?.id) {
+    return `/purchasing/warehouse-receipts/${line.sourceWarehouseReceiptLine.warehouseReceipt.id}`;
+  }
+  if (line.sourceRefType === "RECEIPT_LINE" && line.sourcePurchaseReceiptLine?.purchaseReceipt?.id) {
+    return `/purchasing/receipts/${line.sourcePurchaseReceiptLine.purchaseReceipt.id}`;
+  }
+  return null;
 }
 
 function ReturnDetailPage() {
@@ -156,6 +170,21 @@ function ReturnDetailPage() {
         <div className="border-status-danger-border mb-3 rounded-md border bg-status-danger-bg/10 p-3 text-sm text-status-danger-text">
           {describeStatus(actionError.status)}：{actionError.message}
           {actionError.code ? `（${actionError.code}）` : ""}
+          {actionError.code === "VERSION_CONFLICT" && (
+            <div className="mt-2">
+              <p className="text-xs">数据已被他人修改（VERSION_CONFLICT），本次操作未生效。</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setActionError(null);
+                  void refreshDetail();
+                }}
+                className="bg-brand-600 hover:bg-brand-700 mt-2 rounded-md px-3 py-1 text-xs font-medium text-white"
+              >
+                重新加载最新数据
+              </button>
+            </div>
+          )}
         </div>
       )}
       <EntityDetailWorkspace
@@ -189,9 +218,16 @@ function ReturnDetailPage() {
             <InfoItem
               label="采购订单"
               value={
-                detail.purchaseOrder?.code
-                  ? `${detail.purchaseOrder.code}${detail.purchaseOrder.status ? `（${detail.purchaseOrder.status}）` : ""}`
-                  : null
+                detail.purchaseOrder?.code ? (
+                  <Link
+                    href={`/purchasing/orders/${detail.purchaseOrder.id}`}
+                    className="font-medium text-brand-600 hover:underline"
+                  >
+                    {`${detail.purchaseOrder.code}${detail.purchaseOrder.status ? `（${detail.purchaseOrder.status}）` : ""}`}
+                  </Link>
+                ) : (
+                  null
+                )
               }
             />
             <InfoItem label="供应商" value={detail.supplier?.name} />
@@ -226,7 +262,18 @@ function ReturnDetailPage() {
                     </td>
                     <td className="px-3 py-2 text-ink-primary">{line.quantity}</td>
                     <td className="px-3 py-2 text-ink-secondary">{line.uom?.symbol ?? "—"}</td>
-                    <td className="px-3 py-2 text-ink-secondary">{sourceCode(line) ?? "—"}</td>
+                    <td className="px-3 py-2 text-ink-secondary">
+                      {sourceCode(line) ? (
+                        <Link
+                          href={sourceHref(line) ?? "#"}
+                          className="font-medium text-brand-600 hover:underline"
+                        >
+                          {sourceCode(line)}
+                        </Link>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {(detail.lines ?? []).length === 0 && (

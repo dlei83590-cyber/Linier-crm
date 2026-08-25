@@ -238,6 +238,21 @@ function WarehouseReceiptDetailPage() {
         <div className="border-status-danger-border mb-3 rounded-md border bg-status-danger-bg/10 p-3 text-sm text-status-danger-text">
           {describeStatus(actionError.status)}：{actionError.message}
           {actionError.code ? `（${actionError.code}）` : ""}
+          {actionError.code === "VERSION_CONFLICT" && (
+            <div className="mt-2">
+              <p className="text-xs">数据已被他人修改（VERSION_CONFLICT），本次操作未生效。</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setActionError(null);
+                  void refreshDetail();
+                }}
+                className="bg-brand-600 hover:bg-brand-700 mt-2 rounded-md px-3 py-1 text-xs font-medium text-white"
+              >
+                重新加载最新数据
+              </button>
+            </div>
+          )}
         </div>
       )}
       <EntityDetailWorkspace
@@ -291,9 +306,16 @@ function WarehouseReceiptDetailPage() {
             <InfoItem
               label="来源收货单"
               value={
-                detail.purchaseReceipt?.code
-                  ? `${detail.purchaseReceipt.code}${detail.purchaseReceipt.status ? `（${detail.purchaseReceipt.status}）` : ""}`
-                  : null
+                detail.purchaseReceipt?.code ? (
+                  <Link
+                    href={`/purchasing/receipts/${detail.purchaseReceipt.id}`}
+                    className="font-medium text-brand-600 hover:underline"
+                  >
+                    {`${detail.purchaseReceipt.code}${detail.purchaseReceipt.status ? `（${detail.purchaseReceipt.status}）` : ""}`}
+                  </Link>
+                ) : (
+                  null
+                )
               }
             />
             <InfoItem label="仓库" value={detail.warehouse?.name} />

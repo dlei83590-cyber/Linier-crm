@@ -30,7 +30,7 @@ interface InspectionRow {
   inspectedBy?: { name: string | null } | null;
   purchaseReceiptLine?: {
     lineNo: number;
-    purchaseReceipt?: { code: string | null } | null;
+    purchaseReceipt?: { id: string; code: string | null } | null;
     item?: { code: string | null; name: string | null } | null;
     uom?: { symbol: string | null } | null;
   } | null;
@@ -195,14 +195,17 @@ function InspectionList() {
           {
             key: "receipt",
             header: "收货单",
-            render: (row) => (
-              <Link
-                href={`/purchasing/inspections/${row.id}`}
-                className="font-medium text-brand-600 hover:underline"
-              >
-                {row.purchaseReceiptLine?.purchaseReceipt?.code ?? "—"}
-              </Link>
-            ),
+            render: (row) =>
+              row.purchaseReceiptLine?.purchaseReceipt?.code ? (
+                <Link
+                  href={`/purchasing/receipts/${row.purchaseReceiptLine.purchaseReceipt.id}`}
+                  className="font-medium text-brand-600 hover:underline"
+                >
+                  {row.purchaseReceiptLine.purchaseReceipt.code}
+                </Link>
+              ) : (
+                "—"
+              ),
           },
           {
             key: "lineNo",
@@ -240,17 +243,26 @@ function InspectionList() {
           {
             key: "actions",
             header: "操作",
-            render: (row) =>
-              canDelete ? (
-                <button
-                  type="button"
-                  onClick={() => setDeleting(row)}
-                  disabled={deleteBusy}
-                  className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text hover:bg-status-danger-bg/10 disabled:cursor-not-allowed disabled:opacity-40"
+            render: (row) => (
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/purchasing/inspections/${row.id}`}
+                  className="rounded-md border border-border px-2 py-1 text-xs text-ink-primary hover:bg-canvas"
                 >
-                  删除
-                </button>
-              ) : null,
+                  查看
+                </Link>
+                {canDelete && (
+                  <button
+                    type="button"
+                    onClick={() => setDeleting(row)}
+                    disabled={deleteBusy}
+                    className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text hover:bg-status-danger-bg/10 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    删除
+                  </button>
+                )}
+              </div>
+            ),
           },
         ]}
         rows={items}

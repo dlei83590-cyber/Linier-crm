@@ -31,7 +31,7 @@ interface ReceiptDetail {
   status: string;
   receivedAt?: string | null;
   remark?: string | null;
-  purchaseOrder?: { code: string | null; status: string | null } | null;
+  purchaseOrder?: { id: string; code: string | null; status: string | null } | null;
   supplier?: { name: string | null } | null;
   warehouse?: { name: string | null } | null;
   receivedBy?: { name: string | null } | null;
@@ -189,9 +189,16 @@ function ReceiptDetailPage() {
             <InfoItem
               label="采购订单"
               value={
-                detail.purchaseOrder?.code
-                  ? `${detail.purchaseOrder.code}${detail.purchaseOrder.status ? `（${detail.purchaseOrder.status}）` : ""}`
-                  : null
+                detail.purchaseOrder?.code ? (
+                  <Link
+                    href={`/purchasing/orders/${detail.purchaseOrder.id}`}
+                    className="font-medium text-brand-600 hover:underline"
+                  >
+                    {`${detail.purchaseOrder.code}${detail.purchaseOrder.status ? `（${detail.purchaseOrder.status}）` : ""}`}
+                  </Link>
+                ) : (
+                  null
+                )
               }
             />
             <InfoItem label="供应商" value={detail.supplier?.name} />

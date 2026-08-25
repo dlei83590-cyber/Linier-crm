@@ -34,7 +34,7 @@ interface InspectionDetail {
     quantity: string;
     rejectedOnReceiptQty: string;
     visibleDamageQty: string;
-    purchaseReceipt?: { code: string | null; status: string | null; receivedAt?: string | null } | null;
+    purchaseReceipt?: { id: string; code: string | null; status: string | null; receivedAt?: string | null } | null;
     purchaseOrderLine?: { lineNo: number | null; quantity: string | null; fulfillmentType: string | null } | null;
     item?: { code: string | null; name: string | null; model: string | null } | null;
     uom?: { code: string | null; symbol: string | null } | null;
@@ -150,6 +150,21 @@ function InspectionDetailPage() {
         <div className="border-status-danger-border mb-3 rounded-md border bg-status-danger-bg/10 p-3 text-sm text-status-danger-text">
           {describeStatus(actionError.status)}：{actionError.message}
           {actionError.code ? `（${actionError.code}）` : ""}
+          {actionError.code === "VERSION_CONFLICT" && (
+            <div className="mt-2">
+              <p className="text-xs">数据已被他人修改（VERSION_CONFLICT），本次操作未生效。</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setActionError(null);
+                  void refreshDetail();
+                }}
+                className="bg-brand-600 hover:bg-brand-700 mt-2 rounded-md px-3 py-1 text-xs font-medium text-white"
+              >
+                重新加载最新数据
+              </button>
+            </div>
+          )}
         </div>
       )}
       <EntityDetailWorkspace
@@ -205,9 +220,16 @@ function InspectionDetailPage() {
             <InfoItem
               label="收货单"
               value={
-                src?.purchaseReceipt?.code
-                  ? `${src.purchaseReceipt.code}${src.purchaseReceipt.status ? `（${src.purchaseReceipt.status}）` : ""}`
-                  : null
+                src?.purchaseReceipt?.code ? (
+                  <Link
+                    href={`/purchasing/receipts/${src.purchaseReceipt.id}`}
+                    className="font-medium text-brand-600 hover:underline"
+                  >
+                    {`${src.purchaseReceipt.code}${src.purchaseReceipt.status ? `（${src.purchaseReceipt.status}）` : ""}`}
+                  </Link>
+                ) : (
+                  null
+                )
               }
             />
             <InfoItem label="行号" value={src?.lineNo} />

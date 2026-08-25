@@ -50,7 +50,7 @@ interface OrderDetail {
   remark?: string | null;
   confirmedAt?: string | null;
   supplier?: { name: string | null } | null;
-  requisition?: { code: string | null } | null;
+  requisition?: { id: string; code: string | null } | null;
   lines?: Array<{
     id: string;
     lineNo: number;
@@ -218,7 +218,21 @@ function OrderDetailPage() {
             <InfoItem label="单号" value={detail.code} />
             <InfoItem label="来源类型" value={SOURCE_TYPE_LABELS[detail.sourceType ?? ""] ?? detail.sourceType} />
             <InfoItem label="供应商" value={detail.supplier?.name} />
-            <InfoItem label="来源申请" value={detail.requisition?.code} />
+            <InfoItem
+              label="来源申请"
+              value={
+                detail.requisition?.code ? (
+                  <Link
+                    href={`/purchasing/requisitions/${detail.requisition.id}`}
+                    className="font-medium text-brand-600 hover:underline"
+                  >
+                    {detail.requisition.code}
+                  </Link>
+                ) : (
+                  null
+                )
+              }
+            />
             <InfoItem label="币种" value={detail.currency} />
             <InfoItem label="付款条款" value={detail.paymentTerm} />
             <InfoItem label="下单日期" value={formatDate(detail.orderDate)} />

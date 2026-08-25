@@ -25,7 +25,7 @@ interface ReceiptRow {
   code: string;
   status: string;
   receivedAt?: string | null;
-  purchaseOrder?: { code: string | null } | null;
+  purchaseOrder?: { id: string; code: string | null } | null;
   supplier?: { name: string | null } | null;
   warehouse?: { name: string | null } | null;
   _count?: { lines: number };
@@ -233,7 +233,17 @@ function ReceiptList() {
           {
             key: "purchaseOrder",
             header: "采购订单",
-            render: (row) => row.purchaseOrder?.code ?? "—",
+            render: (row) =>
+              row.purchaseOrder?.code ? (
+                <Link
+                  href={`/purchasing/orders/${row.purchaseOrder.id}`}
+                  className="font-medium text-brand-600 hover:underline"
+                >
+                  {row.purchaseOrder.code}
+                </Link>
+              ) : (
+                "—"
+              ),
           },
           {
             key: "supplier",
