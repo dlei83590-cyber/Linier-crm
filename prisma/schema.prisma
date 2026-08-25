@@ -520,6 +520,7 @@ model Item {
   uomConversions UomConversion[]
   costs          ItemCost[]
   supplierItems  SupplierItem[]
+  customerProducts CustomerProduct[] // K：客户→多产品（CustomerProduct.item 方向）
   revisions      ItemRevision[]
   tags           ItemTag[]
   quotationLines QuotationLine[]
@@ -719,6 +720,9 @@ model BusinessPartner {
   partnerContacts     PartnerContact[]
   poolEntries         CustomerPoolEntry[] // 2C：公海成员（Entry 方向）
   customerOwnerships  CustomerOwnership[] // 2C：客户归属事实流（SSOT：客户级 owner 唯一权威）
+  customerProducts    CustomerProduct[] // K：客户→多产品（CustomerProduct 方向）
+  customerSuppliersAsCustomer CustomerSupplier[] @relation("CustomerSupplierCustomer") // K：作为客户关联供应商
+  customerSuppliersAsSupplier CustomerSupplier[] @relation("CustomerSupplierSupplier") // K：作为供应商被客户关联
   activities          CustomerActivity[] // Phase 3：客户跟进/拜访计划/定位签到（CustomerActivity 方向）
   partnerAddresses    PartnerAddress[]
   partnerTags         PartnerTag[]
@@ -6883,4 +6887,60 @@ model ActivityComment {
   @@index([activityId])
   @@index([createdAt])
 }
+
+// ============================================================================
+// Phase 3 MVP - Customer Profile Relations（客户档案剩余能力：单客户多产品 / 单客户多供应商）
+// CTO 合同「客户档案」最小落地（并行任务 feat/contract-customer-profile-mvp，Migration 0053）
+// CustomerProduct：客户 → 多产品（BusinessPartner-Item 纯关联）
+// CustomerSupplier：客户 → 多供应商（BusinessPartner-BusinessPartner 纯关联）
+// 说明：SupplierItem 是「物料-供应商」采购来源（item 维度，采购侧），PartnerPrice 是「伙伴-物料」专属价
+//   （定价语义），均无法承载「客户 × 产品/供应商」的档案关联语义 → 最小关系表（不建 generic relation framework）。
+// 客户文档/附件：复用 File Center（FileAttachment businessType="business-partner"，零新表）。
+// 权限：复用 business-partner:view/edit + file-attachment:view/create/delete（不新增权限模块，ADR-0028 防漂移）。
+// ============================================================================
+
+/// 客户-产品关联（单客户多产品；Migration 0053）
+model CustomerProduct {
+  id                String          @id @default(cuid())
+  businessPartnerId String
+  businessPartner   BusinessPartner @relation(fields: [businessPartnerId], references: [id], onDelete: Cascade)
+  itemId            String
+  item              Item            @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  note              String? // 备注（客户料号 / 用途）
+  isActive          Boolean         @default(true)
+  createdById       String?
+  updatedById       String?
+  version           Int             @default(1)
+  deletedAt         DateTime?
+  createdAt         DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime        @updatedAt @db.Timestamptz(3)
+
+  @@unique([businessPartnerId, itemId])
+  @@index([businessPartnerId])
+  @@index([itemId])
+  @@index([deletedAt])
+}
+
+/// 客户-供应商关联（单客户多供应商；BP-BP；Migration 0053）
+model CustomerSupplier {
+  id          String          @id @default(cuid())
+  customerId  String
+  customer    BusinessPartner @relation("CustomerSupplierCustomer", fields: [customerId], references: [id], onDelete: Cascade)
+  supplierId  String
+  supplier    BusinessPartner @relation("CustomerSupplierSupplier", fields: [supplierId], references: [id], onDelete: Cascade)
+  note        String? // 备注（合作范围 / 供货物料）
+  isActive    Boolean         @default(true)
+  createdById String?
+  updatedById String?
+  version     Int             @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime        @updatedAt @db.Timestamptz(3)
+
+  @@unique([customerId, supplierId])
+  @@index([customerId])
+  @@index([supplierId])
+  @@index([deletedAt])
+}
+
 
