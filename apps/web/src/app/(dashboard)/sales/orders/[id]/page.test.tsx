@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+// jest-dom matchers 类型增强（vitest entry：runtime + TS Assertion 接口）
+import '@testing-library/jest-dom/vitest';
 
 vi.mock('next/navigation', () => ({
   useParams: () => ({ id: 'so-1' }),
