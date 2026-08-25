@@ -13,7 +13,7 @@ vi.mock('@/lib/api-helpers', () => ({
 
 import { GET, POST } from '@/app/api/reports/targets/route';
 
-function makeRequest(url: string, init?: RequestInit): NextRequest {
+function makeRequest(url: string, init?: { method?: string; body?: string }): NextRequest {
   return new NextRequest(url, { headers: { authorization: 'Bearer test-token', 'content-type': 'application/json' }, ...init });
 }
 
