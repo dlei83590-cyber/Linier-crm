@@ -132,6 +132,7 @@ export function EntityFormWorkspace({
         {children}
       </div>
       {leaveConfirmDialog}
+      </div>
     </>
   );
 }
