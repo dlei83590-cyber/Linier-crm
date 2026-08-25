@@ -81,6 +81,22 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       partnerAddresses: { where: { deletedAt: null }, orderBy: [{ isDefault: "desc" }, { sort: "asc" }] },
       partnerTags: { where: { deletedAt: null }, include: { tag: { select: { id: true, code: true, name: true, color: true } } } },
       partnerCredit: true,
+      // 供应商档案（Supplier 角色扩展 1:1，Sprint 3C-2）：结算条款/资质只读聚合（供应商 = BusinessPartner type SUPPLIER/BOTH）
+      suppliers: {
+        where: { deletedAt: null },
+        include: {
+          settlements: { where: { deletedAt: null }, orderBy: { createdAt: "desc" } },
+          qualifications: { where: { deletedAt: null }, orderBy: { createdAt: "desc" } },
+        },
+      },
+      // 供应物料关系（SupplierItem.supplierId → BusinessPartner，Sprint 3C-2/3C-3）：供应商-物料关联只读聚合
+      supplierItems: {
+        where: { deletedAt: null },
+        orderBy: { createdAt: "desc" },
+        include: {
+          item: { select: { id: true, code: true, name: true, spec: true, model: true, brand: true } },
+        },
+      },
     },
   });
   if (!partner) return failNotFound(ERROR_CODES.NOT_FOUND, "往来单位不存在");
