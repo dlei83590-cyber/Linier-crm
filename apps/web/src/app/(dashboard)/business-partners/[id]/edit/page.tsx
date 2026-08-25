@@ -32,6 +32,9 @@ interface BusinessPartnerDetail {
   phone: string | null;
   email: string | null;
   address: string | null;
+  latitude: string | null;
+  longitude: string | null;
+  allowedRadiusMeters: number | null;
   bankName: string | null;
   bankAccount: string | null;
   settlementTerms: string | null;
@@ -99,6 +102,10 @@ function BusinessPartnerEditForm() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [address, setAddress] = useState("");
+  // 签到范围（Migration 0051）：客户坐标 + 允许半径（米）；三者齐备时签到启用距离 Gate
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
+  const [allowedRadiusMeters, setAllowedRadiusMeters] = useState("");
   const [bankName, setBankName] = useState("");
   const [bankAccount, setBankAccount] = useState("");
   const [settlementTerms, setSettlementTerms] = useState("");
@@ -135,6 +142,9 @@ function BusinessPartnerEditForm() {
         setPhone(d.phone ?? "");
         setEmail(d.email ?? "");
         setAddress(d.address ?? "");
+        setLatitude(d.latitude ? String(d.latitude) : "");
+        setLongitude(d.longitude ? String(d.longitude) : "");
+        setAllowedRadiusMeters(d.allowedRadiusMeters ? String(d.allowedRadiusMeters) : "");
         setBankName(d.bankName ?? "");
         setBankAccount(d.bankAccount ?? "");
         setSettlementTerms(d.settlementTerms ?? "");
@@ -207,6 +217,9 @@ function BusinessPartnerEditForm() {
       phone: phone.trim() || null,
       email: email.trim() || null,
       address: address.trim() || null,
+      latitude: latitude.trim() === "" ? null : Number(latitude),
+      longitude: longitude.trim() === "" ? null : Number(longitude),
+      allowedRadiusMeters: allowedRadiusMeters.trim() === "" ? null : Number(allowedRadiusMeters),
       bankName: bankName.trim() || null,
       bankAccount: bankAccount.trim() || null,
       settlementTerms: settlementTerms.trim() || null,
@@ -334,6 +347,20 @@ function BusinessPartnerEditForm() {
         </FormField>
         <FormField label="地址">
           <input value={address} onChange={(e) => setAddress(e.target.value)} className={inputClass} />
+        </FormField>
+      </Section>
+      <Section title="签到范围">
+        <FormField label="纬度">
+          <input value={latitude} onChange={(e) => setLatitude(e.target.value)} className={inputClass} placeholder="客户坐标纬度（-90 ~ 90）" />
+        </FormField>
+        <FormField label="经度">
+          <input value={longitude} onChange={(e) => setLongitude(e.target.value)} className={inputClass} placeholder="客户坐标经度（-180 ~ 180）" />
+        </FormField>
+        <FormField label="允许签到半径（米）">
+          <input type="number" min={1} value={allowedRadiusMeters} onChange={(e) => setAllowedRadiusMeters(e.target.value)} className={inputClass} placeholder="如 500（留空 = 不限制）" />
+        </FormField>
+        <FormField label="签到范围说明">
+          <p className="text-sm text-ink-muted">纬度、经度、允许半径三者齐备后，拜访签到将在服务端校验距离，超出范围将明确提示。</p>
         </FormField>
       </Section>
       <Section title="财务与开票">

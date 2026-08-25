@@ -384,6 +384,19 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     createPermission: actionPermission('project-expense', 'create'),
     order: 6,
   },
+  // 拜访计划（feat(crm) 拜访周/月视图 + 签到规则 MVP）：/api/visits 只读周/月视图（project-visit:view）；
+  // 签到/签退复用既有 CustomerActivity 资源（POST /api/business-partners/:id/activities + checkout）；
+  // 权限复用 project-visit（不新增权限模块，ADR-0028）；HOLD：GIS/地图/GeoFence/推送/日历/拖拽排程
+  {
+    id: 'visits',
+    domain: 'customer-project',
+    label: '拜访计划',
+    route: '/visits',
+    permission: actionPermission('project-visit', 'view'),
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_LIST },
+    order: 7,
+  },
 
   // ===== 销售管理（F2-6A：List/Detail 只读产品化 → ready；create 严格按来源链，F2-6B 开放）=====
   // 权限码为真实 endpoint 码（quotation:view / sales-order:view / delivery:view / invoice:view / accounts-receivable:view / receipt:view / credit-debit-note:view）
