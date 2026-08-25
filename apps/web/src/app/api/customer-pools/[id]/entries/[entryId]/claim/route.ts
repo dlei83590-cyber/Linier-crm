@@ -7,6 +7,7 @@ import { handleServerError } from "@/lib/api/server-error";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { writeDomainEvent } from "@/lib/domain-events/writer";
+import { matchCustomerPools } from "@/lib/customer-pool/match";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -40,7 +41,7 @@ export async function POST(
   const ownerId = user?.id ?? null;
   if (!ownerId) return fail(ERROR_CODES.AUTHENTICATION_ERROR, "无法确定归属人", 401);
 
-  let result: { entryId: string; ownershipId: string; ownerId: string };
+  let result: { entryId: string; ownershipId: string; ownerId: string; businessPartnerId: string };
   try {
     result = await prisma.$transaction(async (tx) => {
       // 行锁：同客户并发 claim 串行化（先例 domain-events/consumer.ts FOR UPDATE）
@@ -88,7 +89,7 @@ export async function POST(
         idempotencyKey: "CustomerPoolEntryClaimed|" + ownership.id,
       });
 
-      return { entryId, ownershipId: ownership.id, ownerId };
+      return { entryId, ownershipId: ownership.id, ownerId, businessPartnerId: entry.businessPartnerId };
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "";
@@ -108,6 +109,11 @@ export async function POST(
     entityId: result.ownershipId,
     afterData: { entryId: result.entryId, ownerId: result.ownerId, poolId },
     ...meta,
+  });
+
+  // 客户负责人变更后触发自动匹配（DEPARTMENT 触碰规则：owner.departmentId → 部门公海；best-effort 不回滚 claim）
+  await matchCustomerPools(result.businessPartnerId).catch((err) => {
+    console.error("[customer-pool] claim 后 matchCustomerPools best-effort 失败（不影响 claim）:", err);
   });
 
   return ok(result, undefined, 201);

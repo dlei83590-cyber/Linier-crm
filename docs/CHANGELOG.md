@@ -2,6 +2,30 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Phase 2C-2 收口：客户公海 DEPARTMENT/小组自动入池（零 Schema，CustomerPool 2C 收口线）
+
+### 新增
+
+- **matchCustomerPools 增加 DEPARTMENT scope 触碰规则**：CustomerOwnership.ownerId → User.departmentId ===
+  CustomerPool.scopeValue 的激活池命中 → 自动创建 FIELD_RULE 条目 + Outbox CustomerPoolEntryEntered（同事务）；
+  BusinessPartner 无 department/team 真实字段（grep 确认，ADR-0053 §3.1/§3.3），归属 SSOT = CustomerOwnership，
+  禁止 createdById 推断；REGION scope 触碰规则保持原行为（回归不变）
+- **优先级**：DEPARTMENT（客户负责人部门 = 触发源）优先于 REGION；同 scope 内 createdAt asc / id asc；无命中 → NO_MATCHING_POOL no-op
+- **I1/I2 分区校验**：REGION 路径仍要求无 active ownership（I1，防已负责客户流入区域公海）；DEPARTMENT 路径归属即触发源，
+  事务内复核归属快照仍成立（防判定与提交间归属释放竞态 → MATCH_CONDITION_CHANGED 不创建）；两路径共享 I2（active entry 不重复，
+  复用 partial unique + P2002 → RACE_LOST no-op）
+- **触发点扩展**：claim（客户负责人变更）后同步 matchCustomerPools（best-effort 不回滚 claim），
+  与既有 BP create/update 触发点并列（ADR-0053 §6.2「写入即判定」）
+- **前端**：新建公海页 / 池详情页自动匹配说明更新为「REGION + DEPARTMENT 自动入池」；公海状态卡入池方式补「规则自动」标签
+
+### 边界
+
+- 零 Schema / 零 Migration（scopeType=DEPARTMENT 枚举与 scopeValue=Department.id 语义 Migration 0049 已定义）
+- 不造 Rule Engine / condition DSL / priority engine / scheduler / sweep；CustomerPoolRule 仍 HOLD
+- 不触碰 modules.ts（Registry SSOT）；本线仅最小前端文案接线，不做视觉重构
+
+---
+
 ## [Unreleased] - FE 2.0 UI-01：GLOBAL DESIGN SYSTEM 基元升级（零 Schema / 零 API / 零业务逻辑）
 
 ### 新增
