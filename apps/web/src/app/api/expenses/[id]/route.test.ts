@@ -53,6 +53,34 @@ describe('GET /api/expenses/:id — 报销申请详情', () => {
     expect(findFirstMock.findFirst.mock.calls[0][0].where).toEqual({ id: 'exp-1', deletedAt: null });
   });
 
+  it('详情含申请人/审批人投影（createdById → User 二次查询组装）', async () => {
+    mockPrisma.projectExpense = {
+      findFirst: vi.fn().mockResolvedValue({
+        ...expenseRow,
+        createdById: 'u-9',
+        approvedById: 'u-8',
+        rejectedById: null,
+      }),
+    };
+    mockPrisma.user = {
+      findMany: vi.fn().mockResolvedValue([
+        { id: 'u-9', name: '张三', email: 'zhang@b.c' },
+        { id: 'u-8', name: '李四', email: 'li@b.c' },
+      ]),
+    };
+    const res = await GET(new NextRequest('http://localhost/api/expenses/exp-1'), {
+      params: Promise.resolve({ id: 'exp-1' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.createdBy.name).toBe('张三');
+    expect(body.data.approvedBy.name).toBe('李四');
+    expect(body.data.rejectedBy).toBeNull();
+    const userMock = mockPrisma.user as { findMany: ReturnType<typeof vi.fn> };
+    const userWhere = userMock.findMany.mock.calls[0][0].where;
+    expect(userWhere.id.in.sort()).toEqual(['u-8', 'u-9']);
+  });
+
   it('不存在或已软删 → 404 NOT_FOUND', async () => {
     mockPrisma.projectExpense = { findFirst: vi.fn().mockResolvedValue(null) };
     const res = await GET(new NextRequest('http://localhost/api/expenses/exp-x'), {

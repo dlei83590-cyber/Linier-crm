@@ -25,6 +25,16 @@ interface OperationsData {
   customers: { total: number; newInPeriod: number };
   opportunities: { total: number; newInPeriod: number; funnel: Record<string, number> };
   visits: { visits: number; followUps: number };
+  targets: {
+    id: string;
+    dimensionType: string;
+    dimensionValue: string;
+    targetAmount: string;
+    actual: string;
+    rate: number | null;
+  }[];
+  customerTiers: { total: number; deal: number; quoted: number; opportunity: number; normal: number };
+  regions: { region: string; customerCount: number; salesOrderCount: number; salesAmount: string }[];
 }
 
 const PERIOD_LABELS: Record<Period, string> = { day: "今日", month: "本月", year: "本年" };
@@ -56,6 +66,31 @@ const SO_STATUS_LABELS: Record<string, string> = {
   CANCELLED: "已取消",
 };
 const SO_STATUS_ORDER = ["DRAFT", "CONFIRMED", "PARTIALLY_DELIVERED", "DELIVERED", "COMPLETED", "CANCELLED"];
+
+// 目标指标标签（ReportTarget.dimensionType → 中文名；Migration 0051）
+const TARGET_LABELS: Record<string, string> = {
+  SALES_AMOUNT: "销售金额",
+  NEW_CUSTOMERS: "新增客户",
+  NEW_OPPORTUNITIES: "新增商机",
+  QUOTATIONS: "报价数量",
+  VISITS: "拜访次数",
+  FOLLOW_UPS: "跟进次数",
+};
+
+// 客户分层（事实计算，非 AI）：有成交 > 有报价未成交 > 有商机无报价 > 普通客户
+const TIER_ROWS: { key: keyof OperationsData["customerTiers"]; label: string; hint: string }[] = [
+  { key: "deal", label: "有成交", hint: "存在非草稿/非取消销售订单" },
+  { key: "quoted", label: "有报价未成交", hint: "存在非取消报价，无成交" },
+  { key: "opportunity", label: "有商机无报价", hint: "存在商机，无报价无成交" },
+  { key: "normal", label: "普通客户", hint: "其余在册客户" },
+];
+
+function rateTone(rate: number | null): string {
+  if (rate === null) return "text-ink-muted";
+  if (rate >= 100) return "text-emerald-600";
+  if (rate >= 60) return "text-amber-600";
+  return "text-rose-600";
+}
 
 function KpiCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
@@ -152,11 +187,68 @@ function OperationsBoard() {
               <KpiCard label={`${pLabel}新增商机`} value={String(data.opportunities.newInPeriod)} />
               <KpiCard label={`${pLabel}报价数量`} value={String(data.quotations.count)} hint="不含已取消报价" />
               <KpiCard label={`${pLabel}报价金额`} value={`¥${formatMoneyValue(data.quotations.amount ?? "0")}`} hint="不含已取消报价" />
-              <KpiCard label={`${pLabel}拜访次数`} value={String(data.visits.visits)} hint="走访（ProjectVisit）" />
+              <KpiCard label={`${pLabel}拜访次数`} value={String(data.visits.visits)} hint="定位签到（CustomerActivity）" />
               <KpiCard label={`${pLabel}跟进次数`} value={String(data.visits.followUps)} hint="电话/视频/会议等" />
             </div>
 
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+{data.targets.length > 0 ? (
+<section className="overflow-hidden rounded-lg border border-border bg-surface shadow-elevation-sm">
+<div className="border-b border-border px-4 py-3">
+<h2 className="text-sm font-semibold text-ink-primary">目标达成率（${pLabel}）</h2>
+<p className="text-xs text-ink-secondary">目标值来自 ReportTarget（静态配置），实际为本期真实聚合；达成率 = 实际 ÷ 目标</p>
+</div>
+<table className="min-w-full divide-y divide-border text-sm">
+<thead className="text-left text-xs font-medium text-ink-secondary">
+<tr>
+<th className="px-4 py-2">指标</th>
+<th className="px-4 py-2 text-right">目标值</th>
+<th className="px-4 py-2 text-right">实际值</th>
+<th className="px-4 py-2 text-right">达成率</th>
+</tr>
+</thead>
+<tbody className="divide-y divide-border">
+{data.targets.map((t) => (
+<tr key={t.id}>
+<td className="px-4 py-2 text-ink-primary">{TARGET_LABELS[t.dimensionType] ?? t.dimensionType}</td>
+<td className="px-4 py-2 text-right tabular-nums text-ink-primary">{formatMoneyValue(t.targetAmount)}</td>
+<td className="px-4 py-2 text-right tabular-nums text-ink-primary">{formatMoneyValue(t.actual)}</td>
+<td className={"px-4 py-2 text-right tabular-nums font-medium " + rateTone(t.rate)}>
+{t.rate === null ? "—" : t.rate.toFixed(1) + "%"}
+</td>
+</tr>
+))}
+</tbody>
+</table>
+</section>
+) : null}
+
+<section className="overflow-hidden rounded-lg border border-border bg-surface shadow-elevation-sm">
+<div className="border-b border-border px-4 py-3">
+<h2 className="text-sm font-semibold text-ink-primary">客户分层（在册客户 · 事实计算）</h2>
+<p className="text-xs text-ink-secondary">有成交（非草稿/非取消订单）→ 有报价未成交 → 有商机无报价 → 普通客户；共 {data.customerTiers.total} 家</p>
+</div>
+<table className="min-w-full divide-y divide-border text-sm">
+<thead className="text-left text-xs font-medium text-ink-secondary">
+<tr>
+<th className="px-4 py-2">层级</th>
+<th className="px-4 py-2 text-right">客户数</th>
+</tr>
+</thead>
+<tbody className="divide-y divide-border">
+{TIER_ROWS.map((r) => (
+<tr key={r.key}>
+<td className="px-4 py-2 text-ink-primary">
+{r.label}
+<span className="text-ink-muted ml-2 text-xs">{r.hint}</span>
+</td>
+<td className="px-4 py-2 text-right tabular-nums text-ink-primary">{data.customerTiers[r.key]}</td>
+</tr>
+))}
+</tbody>
+</table>
+</section>
+
+<div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <section className="overflow-hidden rounded-lg border border-border bg-surface shadow-elevation-sm">
                 <div className="border-b border-border px-4 py-3">
                   <h2 className="text-sm font-semibold text-ink-primary">商机阶段漏斗（在册按阶段）</h2>

@@ -10,6 +10,8 @@ export const dynamic = "force-dynamic";
 
 const expenseCreateSchema = z.object({
   category: z.string().min(1).max(100),
+  expenseType: z.string().max(50).nullable().optional(), // 费用类型（差旅/业务招待/办公/通讯/交通/培训/其他）
+  expenseAttribution: z.string().max(50).nullable().optional(), // 费用归属（公司承担/客户承担/项目承担/其他）
   amount: z.coerce.number().nonnegative(),
   currency: z.string().max(10).optional(),
   incurredAt: z.string().datetime().nullable().optional(),
@@ -65,11 +67,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       data: {
         projectId: id,
         category: parsed.data.category,
+        expenseType: parsed.data.expenseType ?? null,
+        expenseAttribution: parsed.data.expenseAttribution ?? null,
         amount: parsed.data.amount,
         currency: parsed.data.currency ?? "CNY",
         incurredAt: parsed.data.incurredAt ? new Date(parsed.data.incurredAt) : null,
         note: parsed.data.note ?? null,
-        approvalStatus: "APPROVED",
+        // 报销流程补齐（Migration 0051）：新建默认 DRAFT，走 提交(PENDING)→批准/驳回（不再创建即 APPROVED）
+        approvalStatus: "DRAFT",
         createdById: user!.id,
         updatedById: user!.id,
       },
