@@ -97,6 +97,7 @@ describe('GET /api/business-partners/:id/products — 列表', () => {
 });
 
 describe('DELETE /api/business-partners/:id/products/:productId — 解除关联', () => {
+  const cp = () => mockPrisma.customerProduct as { findFirst: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
   beforeEach(() => {
     vi.clearAllMocks();
     mockPrisma.customerProduct = {
@@ -108,15 +109,15 @@ describe('DELETE /api/business-partners/:id/products/:productId — 解除关联
   it('软删除成功（deletedAt 落库）', async () => {
     const res = await DELETE(new NextRequest('http://localhost/api/business-partners/bp-1/products/cp-1', { method: 'DELETE', headers: { authorization: 'Bearer test-token' } }), { params: Promise.resolve({ id: 'bp-1', productId: 'cp-1' }) });
     expect(res.status).toBe(200);
-    const updateArgs = (mockPrisma.customerProduct.update as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const updateArgs = cp().update.mock.calls[0][0];
     expect(updateArgs.data.deletedAt).toBeInstanceOf(Date);
     expect(updateArgs.data.isActive).toBe(false);
   });
 
   it('关联不存在（或不属于该客户）→ 404', async () => {
-    mockPrisma.customerProduct.findFirst.mockResolvedValue(null);
+    cp().findFirst.mockResolvedValue(null);
     const res = await DELETE(new NextRequest('http://localhost/api/business-partners/bp-1/products/cp-x', { method: 'DELETE', headers: { authorization: 'Bearer test-token' } }), { params: Promise.resolve({ id: 'bp-1', productId: 'cp-x' }) });
     expect(res.status).toBe(404);
-    expect(mockPrisma.customerProduct.update).not.toHaveBeenCalled();
+    expect(cp().update).not.toHaveBeenCalled();
   });
 });

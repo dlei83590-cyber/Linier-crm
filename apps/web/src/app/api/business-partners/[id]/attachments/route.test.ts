@@ -77,6 +77,7 @@ describe('POST /api/business-partners/:id/attachments — 客户文档（复用 
 });
 
 describe('GET /api/business-partners/:id/attachments — 客户文档列表', () => {
+  const faList = () => mockPrisma.fileAttachment as { count: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn> };
   beforeEach(() => {
     vi.clearAllMocks();
     mockPrisma.businessPartner = { findFirst: vi.fn().mockResolvedValue({ id: 'bp-1' }) };
@@ -94,12 +95,13 @@ describe('GET /api/business-partners/:id/attachments — 客户文档列表', ()
     const body = await res.json();
     expect(body.data[0].file.name).toBe('营业执照.pdf');
     // 查询限定 businessType=business-partner
-    const findArgs = (mockPrisma.fileAttachment.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const findArgs = faList().findMany.mock.calls[0][0];
     expect(findArgs.where.businessType).toBe('business-partner');
   });
 });
 
 describe('DELETE /api/business-partners/:id/attachments/:attachmentId — 解除文档挂载', () => {
+  const fa = () => mockPrisma.fileAttachment as { findFirst: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
   beforeEach(() => {
     vi.clearAllMocks();
     mockPrisma.fileAttachment = {
@@ -111,14 +113,14 @@ describe('DELETE /api/business-partners/:id/attachments/:attachmentId — 解除
   it('软删除挂载（文件本身保留在 File Center）', async () => {
     const res = await DELETE(new NextRequest('http://localhost/api/business-partners/bp-1/attachments/att-1', { method: 'DELETE', headers: { authorization: 'Bearer test-token' } }), { params: Promise.resolve({ id: 'bp-1', attachmentId: 'att-1' }) });
     expect(res.status).toBe(200);
-    const updateArgs = (mockPrisma.fileAttachment.update as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const updateArgs = fa().update.mock.calls[0][0];
     expect(updateArgs.data.deletedAt).toBeInstanceOf(Date);
   });
 
   it('挂载不存在（或不属于该客户）→ 404', async () => {
-    mockPrisma.fileAttachment.findFirst.mockResolvedValue(null);
+    fa().findFirst.mockResolvedValue(null);
     const res = await DELETE(new NextRequest('http://localhost/api/business-partners/bp-1/attachments/att-x', { method: 'DELETE', headers: { authorization: 'Bearer test-token' } }), { params: Promise.resolve({ id: 'bp-1', attachmentId: 'att-x' }) });
     expect(res.status).toBe(404);
-    expect(mockPrisma.fileAttachment.update).not.toHaveBeenCalled();
+    expect(fa().update).not.toHaveBeenCalled();
   });
 });
