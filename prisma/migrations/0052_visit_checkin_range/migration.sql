@@ -1,4 +1,4 @@
--- Migration 0051 - Visit Check-in Range (Visit weekly/month view + check-in rules MVP)
+-- Migration 0052 - Visit Check-in Range (Visit weekly/month view + check-in rules MVP)
 -- 1) BusinessPartner check-in range config: latitude/longitude/allowedRadiusMeters
 --    (server computes distance at check-in; within range = success, out of range = explicit message)
 -- 2) CustomerActivity adds checkoutAt (check-out) + visitPlanId (CHECK_IN -> VISIT_PLAN completion feedback)

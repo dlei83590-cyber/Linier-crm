@@ -1,4 +1,4 @@
--- Migration 0051 - 报销流程补齐 + 经营目标/客户分层（feat(crm) contract-expense-analytics-mvp）
+-- Migration 0054 - 报销流程补齐 + 经营目标/客户分层（feat(crm) contract-expense-analytics-mvp）
 -- R：ProjectExpense 补/开放 —— 费用类型 / 费用归属 / 提交 / 批准 / 驳回（复用 approvalStatus 枚举，不新增工作流模型）
 -- S：经营目标最小目标表 ReportTarget（period / dimensionType / dimensionValue / targetAmount）
 -- 仅 CREATE/ALTER TABLE + CREATE INDEX（对齐 0048-0050 手写迁移约定；无新枚举类型）

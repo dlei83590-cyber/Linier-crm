@@ -137,6 +137,15 @@ const CONTRACT_LIST_DETAIL: CapabilityFlags = {
   workflow: false,
   factActions: false,
 };
+/** 列表 + 事实动作（无详情/创建/编辑/审批流：拜访计划签到/签退、GL 期末结转月结/重开等） */
+const CONTRACT_LIST_ACTIONS: CapabilityFlags = {
+  list: true,
+  detail: false,
+  create: false,
+  edit: false,
+  workflow: false,
+  factActions: true,
+};
 /** 列表 + 详情 + 创建（收款：无编辑，有 allocate/void 事实动作） */
 const CONTRACT_LIST_DETAIL_CREATE_ACTIONS: CapabilityFlags = {
   list: true,
@@ -183,6 +192,15 @@ const UI_LIST: CapabilityFlags = {
   edit: false,
   workflow: false,
   factActions: false,
+};
+/** 列表 + 事实动作（无详情页：拜访计划签到/签退、GL 期末结转月结/重开） */
+const UI_LIST_ACTIONS: CapabilityFlags = {
+  list: true,
+  detail: false,
+  create: false,
+  edit: false,
+  workflow: false,
+  factActions: true,
 };
 /** 列表页 + 详情页 */
 const UI_LIST_DETAIL: CapabilityFlags = {
@@ -256,6 +274,15 @@ const UI_LIST_DETAIL_CREATE_WORKFLOW: CapabilityFlags = {
   workflow: true,
   factActions: false,
 };
+/** 列表 + 详情 + Create + 提交流 + 事实动作（5C-2 供应商贷/借项：详情页 submit+apply，无独立 Edit 页） */
+const UI_LIST_DETAIL_CREATE_WORKFLOW_ACTIONS: CapabilityFlags = {
+  list: true,
+  detail: true,
+  create: true,
+  edit: false,
+  workflow: true,
+  factActions: true,
+};
 /** 列表 + Create + 提交流 + 事实动作（F2-6B 批 2 贷项/借项通知单：无详情 GET 端点，submit/apply 内联在列表） */
 const UI_LIST_CREATE_WORKFLOW_ACTIONS: CapabilityFlags = {
   list: true,
@@ -317,7 +344,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
   },
 
   // ===== 客户与项目（F2-4 开放）=====
-  // project-opportunities：contract CRUD + convert（事实动作，无审批流）；ui CRUD（F2-4A2）；convert Tier 3 HOLD
+  // project-opportunities：contract CRUD + convert（事实动作，无审批流）；ui CRUD + factActions（FRT-05 convert 已交付，POST /api/project-opportunities/:id/convert）
   {
     id: 'project-opportunities',
     domain: 'customer-project',
@@ -325,12 +352,14 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/project-opportunities',
     permission: actionPermission('project-opportunity', 'view'), // F2-6-0: 对齐 API requirePermission("project-opportunity:view")（原 PERMISSIONS 值为 read 风格，与后端强制码不一致）
     availability: 'ready',
-    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD },
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD_ACTIONS },
     createRoute: '/project-opportunities/new',
     createPermission: actionPermission('project-opportunity', 'create'),
     order: 1,
   },
-  // projects：contract CRUD + close/transition/acceptance；ui CRUD（F2-4A2）；transition/close Tier 3 HOLD
+  // projects：contract CRUD + transition/close/acceptance + 子资源 CRUD；ui CRUD + factActions——
+  // 详情页 Tab 子资源 CRUD（stakeholders/members/milestones/tasks/risks/visits/products/tags/budgets/expenses/progress/acceptance）已交付（B2-1B/L2-A）；
+  // transition / closure 事实动作已交付（L2-B1）；project-visits / project-risks 独立页仍为引导页（能力归属本模块，不建平行 CRUD）
   {
     id: 'projects',
     domain: 'customer-project',
@@ -338,7 +367,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/projects',
     permission: actionPermission('project', 'view'), // F2-6-0: 对齐 API requirePermission("project:view")（原 PERMISSIONS 值为 read 风格）
     availability: 'ready',
-    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD },
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD_ACTIONS },
     createRoute: '/projects/new',
     createPermission: actionPermission('project', 'create'),
     order: 2,
@@ -365,7 +394,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
     order: 4,
   },
-  // Phase 2C 客户公海（CTO 生产测试 MVP：列表/新建/加入客户/领取；入口注册优先级高于规则引擎/sweep）
+  // Phase 2C 客户公海（CTO 生产测试 MVP）：列表/详情/新建 + 手工入池/领取/移出（ui.detail + factActions 已交付；规则引擎/sweep HOLD）
   {
     id: 'customer-pools',
     domain: 'customer-project',
@@ -373,7 +402,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/customer-pools',
     permission: actionPermission('customer-pool', 'view'),
     availability: 'ready',
-    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_CRUD },
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CREATE_ACTIONS },
     createRoute: '/customer-pools/new',
     createPermission: actionPermission('customer-pool', 'create'),
     order: 5,
@@ -381,7 +410,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
   // 报销申请（feat(crm) 报销申请 MVP + expense-analytics 流程补齐）：复用 ProjectExpense 事实——客户归属直接走 Project → BusinessPartner，
   // 不新造平行 Reimbursement/ExpenseClaim 模型；列表/详情消费只读 GET /api/expenses(+ /:id)，
   // 创建复用既有 POST /api/projects/:id/expenses（单一写入源）；提交/批准/驳回走 /api/expenses/:id/{submit|approve|reject}
-  // （复用 approvalStatus 枚举，不新增工作流模型；权限复用 project-expense:view/create/edit/approve）。Migration 0051。
+  // （复用 approvalStatus 枚举，不新增工作流模型；权限复用 project-expense:view/create/edit/approve）。Migration 0054。
   {
     id: 'expenses',
     domain: 'customer-project',
@@ -395,7 +424,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     order: 6,
   },
   // 拜访计划（feat(crm) 拜访周/月视图 + 签到规则 MVP）：/api/visits 只读周/月视图（project-visit:view）；
-  // 签到/签退复用既有 CustomerActivity 资源（POST /api/business-partners/:id/activities + checkout）；
+  // 签到/签退（factActions）复用 CustomerActivity 资源已交付（POST /api/business-partners/:id/activities + /:activityId/checkout）；
   // 权限复用 project-visit（不新增权限模块，ADR-0028）；HOLD：GIS/地图/GeoFence/推送/日历/拖拽排程
   {
     id: 'visits',
@@ -404,7 +433,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/visits',
     permission: actionPermission('project-visit', 'view'),
     availability: 'ready',
-    capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_LIST },
+    capabilities: { contract: CONTRACT_LIST_ACTIONS, ui: UI_LIST_ACTIONS },
     order: 7,
   },
 
@@ -685,8 +714,8 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_LIST },
     order: 6,
   },
-  // supplier-cn-dn：5C-2（CTO 解锁 2026-08-19）——/api/supplier-credit-debit-notes CRUD + submit/apply
-  // 权限码 supplier-credit-debit-note:view/create/edit/approve/close（apply→:edit，maker-checker 业务层强制）
+  // supplier-cn-dn：5C-2（CTO 解锁 2026-08-19）——/api/supplier-credit-debit-notes CRUD + submit（workflow）/apply（factAction）已交付；
+  // 权限码 supplier-credit-debit-note:view/create/edit/approve/close（apply→:edit，maker-checker 业务层强制）；无独立 Edit 页（详情页展示+状态动作）
   {
     id: 'supplier-cn-dn',
     domain: 'finance',
@@ -694,7 +723,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/supplier-ap/credit-debit-notes',
     permission: actionPermission('supplier-credit-debit-note', 'view'),
     availability: 'ready',
-    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD_ACTIONS },
+    capabilities: { contract: CONTRACT_FULL, ui: UI_LIST_DETAIL_CREATE_WORKFLOW_ACTIONS },
     createRoute: '/supplier-ap/credit-debit-notes/new',
     createPermission: actionPermission('supplier-credit-debit-note', 'create'),
     order: 7,
@@ -712,7 +741,8 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     createPermission: actionPermission('supplier-payment', 'create'),
     order: 8,
   },
-  // gl：Sprint 7 Finance 首块（CTO 解锁 2026-08-20，ADR-0033）——/api/gl/journal-entries 只读（事件驱动自动过账；无手工过账 UI）
+  // gl：Sprint 7 Finance（CTO 解锁 2026-08-20，ADR-0033/0035）——/api/gl/journal-entries 列表/详情只读（事件驱动自动过账）；
+  // 手工凭证（POST /api/gl/journal-entries/manual）已交付；详情页 submit/approve/post/reject（maker-checker，MANUAL 来源）；无独立 Edit 页 → ui.edit=false
   {
     id: 'gl',
     domain: 'finance',
@@ -720,21 +750,32 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/finance/gl-journal-entries',
     permission: actionPermission('gl', 'view'),
     availability: 'ready',
-    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD_ACTIONS },
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CREATE_ACTIONS },
     createRoute: '/finance/gl-journal-entries/new',
     createPermission: actionPermission('gl', 'create'),
     order: 1,
   },
-  // gl-balance：Sprint 7 Finance（ADR-0034）——试算平衡/科目余额/利润表只读（实时聚合派生）
+  // gl-balance：Sprint 7 Finance（ADR-0034）——试算平衡只读列表（实时聚合派生；无详情页/事实动作）；利润表见 gl-profit-statement
   {
     id: 'gl-balance',
     domain: 'finance',
-    label: '试算平衡/利润表',
+    label: '试算平衡',
     route: '/finance/gl-trial-balance',
     permission: actionPermission('gl', 'view'),
     availability: 'ready',
-    capabilities: { contract: CONTRACT_LIST_DETAIL, ui: UI_LIST_DETAIL_ACTIONS },
+    capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_LIST },
     order: 9,
+  },
+  // gl-profit-statement：Sprint 7 Finance（ADR-0034）——利润表只读页（实时聚合派生；期间收入−成本−费用）
+  {
+    id: 'gl-profit-statement',
+    domain: 'finance',
+    label: '利润表',
+    route: '/finance/gl-profit-statement',
+    permission: actionPermission('gl', 'view'),
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_LIST },
+    order: 11,
   },
   // inventory-costs：成本核算（CTO 授权解除 D9 HOLD 2026-08-20，ADR-0038）——移动加权平均成本只读
   {
@@ -773,7 +814,8 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     createPermission: actionPermission('production-order', 'create'),
     order: 8,
   },
-  // gl-period-close：Sprint 7 Finance（ADR-0036）——期末结转（收入/费用 → 本年利润；防重复月结）
+  // gl-period-close：Sprint 7 Finance（ADR-0036）——期末结转（收入/费用 → 本年利润；防重复月结）；
+  // 执行结转（POST /api/gl/month-end-close）+ 期间重开（POST /api/gl/period-closes/:id/reopen）factActions 已交付；无详情页
   {
     id: 'gl-period-close',
     domain: 'finance',
@@ -781,7 +823,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/finance/gl-period-close',
     permission: actionPermission('gl', 'view'),
     availability: 'ready',
-    capabilities: { contract: CONTRACT_LIST_DETAIL, ui: UI_LIST_DETAIL_ACTIONS },
+    capabilities: { contract: CONTRACT_LIST_ACTIONS, ui: UI_LIST_ACTIONS },
     order: 10,
   },
 
@@ -840,7 +882,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     createPermission: actionPermission('technical-standard', 'create'),
     order: 4,
   },
-  // unit-of-measures：GET 列表 FINAL；main 已有列表页 → ui list 开放（无 detail/create/edit 路由）
+  // unit-of-measures：/api/unit-of-measures CRUD FINAL；main 已有列表 + 新建/编辑/删除行操作 → ui create/edit 开放（无独立详情页）
   {
     id: 'unit-of-measures',
     domain: 'master-data',
@@ -848,7 +890,9 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/unit-of-measures',
     permission: actionPermission('unit-of-measure', 'view'), // F2-6-0: 对齐 API requirePermission("unit-of-measure:view")（原 PERMISSIONS 值为 read 风格）
     availability: 'ready',
-    capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_LIST },
+    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_CRUD },
+    createRoute: '/unit-of-measures/new',
+    createPermission: actionPermission('unit-of-measure', 'create'),
     order: 5,
   },
   // commercial-terms：Pending Pages Completion Gate（Batch 1）——/api/commercial-terms CRUD FINAL
@@ -877,7 +921,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     createPermission: actionPermission('document-sequence', 'create'),
     order: 7,
   },
-  // 仓库（CRUD FINAL：POST create + [id] GET/PATCH/DELETE；删除引用检查——被库位/单据引用不可删但可编辑）
+  // 仓库（CRUD FINAL：POST create + [id] GET/PATCH/DELETE；删除引用检查——被库位/单据引用不可删但可编辑；无独立详情页，编辑页即详情）
   {
     id: 'warehouses',
     domain: 'master-data',
@@ -885,11 +929,12 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/warehouses',
     permission: PERMISSIONS.WAREHOUSE_READ,
     availability: 'ready',
-    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_DETAIL_CRUD },
+    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_CRUD },
     createRoute: '/warehouses/new',
     createPermission: actionPermission('warehouse', 'create'),
     order: 8,
   },
+  // warehouse-locations：/api/warehouse-locations CRUD FINAL；main 已有列表 + 新建/编辑/删除行操作 → ui create/edit 开放（无独立详情页）
   {
     id: 'warehouse-locations',
     domain: 'master-data',
@@ -897,7 +942,9 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/warehouse-locations',
     permission: PERMISSIONS.WAREHOUSE_LOCATION_READ,
     availability: 'ready',
-    capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_LIST },
+    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_CRUD },
+    createRoute: '/warehouse-locations/new',
+    createPermission: actionPermission('warehouse-location', 'create'),
     order: 9,
   },
 
