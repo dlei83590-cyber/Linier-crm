@@ -8,6 +8,7 @@
  * 统一 Save/Cancel），移除页面级 window.confirm。
  */
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityFormWorkspace } from "@/components/workspace";
@@ -301,12 +302,12 @@ function TransferEditForm() {
         <div className="border-border bg-surface shadow-elevation-sm overflow-hidden rounded-lg border">
           <div className="border-border flex items-center justify-between border-b px-4 py-4 md:px-6">
             <h1 className="text-ink-primary text-lg font-semibold md:text-xl">编辑库存调拨</h1>
-            <a
+            <Link
               href={`/inventory/transfers/${id}`}
               className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-canvas"
             >
               返回详情
-            </a>
+            </Link>
           </div>
           <div className="p-6">
             <p className="text-sm text-status-warning-text">

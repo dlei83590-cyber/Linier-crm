@@ -221,7 +221,7 @@ function StockCountList() {
             header: "完成日期",
             render: (row) => formatDate(row.completedAt),
           },
-        ]
+        ]}
         rows={items}
         rowKey={(row) => row.id}
         loading={loading}

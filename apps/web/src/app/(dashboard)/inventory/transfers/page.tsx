@@ -227,7 +227,7 @@ function TransferList() {
             header: "执行日期",
             render: (row) => formatDate(row.executedAt),
           },
-        ]
+        ]}
         rows={items}
         rowKey={(row) => row.id}
         loading={loading}

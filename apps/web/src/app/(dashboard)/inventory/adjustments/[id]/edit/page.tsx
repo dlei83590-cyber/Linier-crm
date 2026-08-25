@@ -11,6 +11,7 @@
  * 统一 Save/Cancel），移除页面级 window.confirm。
  */
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
@@ -122,12 +123,12 @@ function AdjustmentEditForm() {
             <h1 className="text-ink-primary text-lg font-semibold md:text-xl">
               编辑库存调整 — {detail.adjustmentNo}
             </h1>
-            <a
+            <Link
               href={`/inventory/adjustments/${id}`}
               className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-canvas"
             >
               返回详情
-            </a>
+            </Link>
           </div>
           <div className="p-6">
             <p className="text-sm text-status-warning-text">仅草稿状态可编辑（当前 {detail.status}）。</p>

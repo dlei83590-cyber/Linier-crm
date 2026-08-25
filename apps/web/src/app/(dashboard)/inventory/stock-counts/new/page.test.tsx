@@ -22,9 +22,10 @@ vi.mock("@/lib/session-context", () => ({
   }),
 }));
 
+import type * as ApiClientModule from "@/lib/api-client";
 import { ApiClientError } from "@/lib/api-client";
 vi.mock("@/lib/api-client", async (importOriginal) => {
-  const mod = await importOriginal<typeof import("@/lib/api-client")>();
+  const mod = await importOriginal<typeof ApiClientModule>();
   return { ...mod, apiFetch: mockApiFetch };
 });
 

@@ -8,6 +8,7 @@
  * UI-09：迁移至 EntityDetailWorkspace（Header + Status + Actions + Summary + Lines 统一结构）；金额/数量列右对齐 tabular-nums。
  */
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
@@ -128,9 +129,9 @@ function OrderDetailPage() {
       <AppPage>
         <div className="border-border bg-surface shadow-elevation-sm rounded-lg border p-6">
           <p className="text-sm text-status-danger-text">加载工单失败：{loadError.message}</p>
-          <a href="/inventory/production-orders" className="text-brand-600 mt-3 inline-block text-sm hover:underline">
+          <Link href="/inventory/production-orders" className="text-brand-600 mt-3 inline-block text-sm hover:underline">
             返回工单列表
-          </a>
+          </Link>
         </div>
       </AppPage>
     );

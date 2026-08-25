@@ -223,7 +223,7 @@ function AdjustmentList() {
             header: "应用日期",
             render: (row) => formatDate(row.appliedAt),
           },
-        ]
+        ]}
         rows={items}
         rowKey={(row) => row.id}
         loading={loading}

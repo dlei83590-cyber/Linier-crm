@@ -9,6 +9,7 @@
  * 统一 Save/Cancel），移除页面级 window.confirm。
  */
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
@@ -169,9 +170,9 @@ function BomEditForm() {
       <AppPage>
         <div className="border-border bg-surface shadow-elevation-sm rounded-lg border p-6">
           <p className="text-sm text-status-danger-text">{loadError?.message ?? "加载配方失败"}</p>
-          <a href={`/inventory/boms/${id}`} className="text-brand-600 mt-3 inline-block text-sm hover:underline">
+          <Link href={`/inventory/boms/${id}`} className="text-brand-600 mt-3 inline-block text-sm hover:underline">
             返回详情
-          </a>
+          </Link>
         </div>
       </AppPage>
     );
