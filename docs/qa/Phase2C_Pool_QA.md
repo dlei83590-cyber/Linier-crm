@@ -9,15 +9,18 @@
   Entry/Ownership 无 isActive；手写 partial unique I1/I2；禁 (poolId,businessPartnerId) 重复 index）+ RBAC
   （customer-pool:view/create/edit/delete/assign + customer-pool:consume SYSTEM，PERMISSION_MODULES+seed 同 PR）+ 错误码
   （POOL_*，INACTIVITY → POOL_RULE_SOURCE_UNAVAILABLE）+ pools/rules/entries API（手工入池全校验 + Outbox 同事务）
-- 2C-2：claim/release（单事务行锁 + Outbox）+ evaluateCustomerPoolRules（纯确定性 matcher，EQ/IN 白名单；
-  多池 priority 最高，同 priority NO AUTO ENTRY + ambiguous）+ sweep（batch/idempotent/FOR UPDATE SKIP LOCKED/统计）+
-  BP 写入联动 evaluate-and-sync（失败不回滚主档）+ Customer 360 公海真实能力 + Customer Pool Workspace
+- 2C-2：claim/release（单事务行锁 + Outbox）+ **自动匹配 MVP（matchCustomerPools：REGION scopeValue === BP.region 触碰 →
+  FIELD_RULE 自动入池；BP create/update 后同步调用，best-effort 失败不回滚主档）** + Customer 360 公海真实能力 + Customer Pool Workspace
+- **本 PR HOLD（不在本 MVP）**：evaluateCustomerPoolRules 规则引擎（FIELD_MATCH condition EQ/IN 白名单）、多池 priority 仲裁
+  （同 priority NO AUTO ENTRY + ambiguous）、sweep（batch/FOR UPDATE SKIP LOCKED/统计）
 - 不在范围：INACTIVITY 规则（Phase 3 前禁）；Region/Team 模型；BP 加 ownerId/customerStatus；approval workflow（OQ-5）；quota/cooldown（OQ-2）
 
 ## CI 验证（已 PASS）
 
 - 单测：validators（scope/rule 白名单/INACTIVITY/eligible）、pools route（CRUD/scope/code 冲突/P2002/CAS）、
-  rules route（INACTIVITY 400/白名单/404）、entries route（全校验/Outbox 同事务/并发 P2002）
+  rules route（INACTIVITY 400/白名单/404）、entries route（全校验/Outbox 同事务/并发 P2002）、
+  match（自动匹配 8 用例：FIELD_RULE 入池 + Outbox / 无命中池 / 无 region / I2 / I1 / SUPPLIER / 未找到 / P2002 RACE_LOST）、
+  business-partners route（create 后 matchCustomerPools 钩子）
 - PR：（待填）Quality/Build/Secret 三闸全绿
 
 ## Runtime Acceptance（人工执行，未机械勾选）
@@ -49,4 +52,6 @@
 
 - 零修改 BusinessPartner（禁 ownerId/customerStatus）；零 Legacy Customer；零 INACTIVITY 实现；
   零 approval workflow；零 quota/cooldown；零新 Region/Team 模型
+- 自动匹配 MVP 仅 REGION scope（DEPARTMENT 因 BP 无部门字段自动路径跳过；GLOBAL 不自动入池）；
+  FIELD_MATCH condition 评估 / priority 仲裁 / sweep 仍 HOLD
 - 客户级 owner 唯一权威 = CustomerOwnership（SSOT 红线）
