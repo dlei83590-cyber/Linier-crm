@@ -1,10 +1,11 @@
 "use client";
 
 /**
- * 绩效数据固定页（feat(crm) MVP）— /reports/performance
+ * 绩效数据固定页（feat(crm) MVP + FRT-10 Runtime 收口）— /reports/performance
  *
- * 只统计客观事实（新增客户/拜访/商机/报价/成交订单/成交金额），按员工分组，筛选 本周/本月。
- * 数据源缺失（如 CRM 跟进模型未建立）→ 该列显示「暂无事实数据」；禁止 mock / 主观评分 / 权重 / 奖金算法。
+ * 只统计客观事实（新增客户/跟进/拜访/商机/报价/成交订单/成交金额），按员工分组，筛选 本周/本月。
+ * 数据源缺失（后端 PERFORMANCE_DATA_SOURCES=false）→ 该列显示「暂无事实数据」，与真实 0 明确区分；
+ * 禁止 mock / 主观评分 / 权重 / 奖金算法。所有 API failure 显式 Error + Retry（ErrorPanel）。
  */
 import { useCallback, useEffect, useState } from "react";
 import { PermissionGuard } from "@/components/guard/permission-guard";
@@ -37,6 +38,17 @@ interface PerformanceData {
   rows: PerformanceRow[];
 }
 
+/** 数据源键（与后端 PERFORMANCE_DATA_SOURCES 对齐）：false = 模型不可用 → 列显示「暂无事实数据」而非 0 */
+const COLUMN_SOURCES: { key: string; header: string }[] = [
+  { key: "newCustomers", header: "新增客户" },
+  { key: "followUps", header: "跟进次数" },
+  { key: "visits", header: "拜访次数" },
+  { key: "opportunities", header: "商机数" },
+  { key: "quotations", header: "报价数" },
+  { key: "salesOrders", header: "成交订单" },
+  { key: "salesAmount", header: "成交金额" },
+];
+
 function PerformanceBoard() {
   const [period, setPeriod] = useState<Period>("week");
   const [data, setData] = useState<PerformanceData | null>(null);
@@ -61,7 +73,7 @@ function PerformanceBoard() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-ink-primary">绩效数据</h1>
-          <p className="mt-1 text-sm text-ink-muted">客观业务事实统计（本周/本月）；数据源缺失列显示「暂无事实数据」</p>
+          <p className="mt-1 text-sm text-ink-muted">客观业务事实统计（本周/本月）；数据源缺失列显示「暂无事实数据」，与 0 明确区分</p>
         </div>
         <select value={period} onChange={(e) => setPeriod(e.target.value as Period)} className={SELECT_CLASS}>
           <option value="week">本周</option>
@@ -80,13 +92,9 @@ function PerformanceBoard() {
               <tr className="border-b border-border bg-surface text-xs text-ink-muted">
                 <th className="px-4 py-2">员工</th>
                 <th className="px-4 py-2">部门</th>
-                <th className="px-4 py-2 tabular-nums">新增客户</th>
-                <th className="px-4 py-2 tabular-nums">跟进次数</th>
-                <th className="px-4 py-2 tabular-nums">拜访次数</th>
-                <th className="px-4 py-2 tabular-nums">商机数</th>
-                <th className="px-4 py-2 tabular-nums">报价数</th>
-                <th className="px-4 py-2 tabular-nums">成交订单</th>
-                <th className="px-4 py-2 tabular-nums">成交金额</th>
+                {COLUMN_SOURCES.map((c) => (
+                  <th key={c.key} className="px-4 py-2 tabular-nums">{c.header}</th>
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -94,15 +102,27 @@ function PerformanceBoard() {
                 <tr key={r.userId}>
                   <td className="px-4 py-2">{r.userName}</td>
                   <td className="px-4 py-2 text-ink-muted">{r.departmentName ?? "—"}</td>
-                  <td className="px-4 py-2 tabular-nums">{r.newCustomerCount}</td>
-                  <td className="px-4 py-2 tabular-nums text-ink-muted">
+                  <td className="px-4 py-2 tabular-nums">
+                    {data.dataSources.newCustomers ? r.newCustomerCount : "暂无事实数据"}
+                  </td>
+                  <td className="px-4 py-2 tabular-nums">
                     {data.dataSources.followUps ? (r.followUpCount ?? 0) : "暂无事实数据"}
                   </td>
-                  <td className="px-4 py-2 tabular-nums">{r.visitCount}</td>
-                  <td className="px-4 py-2 tabular-nums">{r.opportunityCount}</td>
-                  <td className="px-4 py-2 tabular-nums">{r.quotationCount}</td>
-                  <td className="px-4 py-2 tabular-nums">{r.salesOrderCount}</td>
-                  <td className="px-4 py-2 tabular-nums">{Number(r.salesAmount).toLocaleString("zh-CN")}</td>
+                  <td className="px-4 py-2 tabular-nums">
+                    {data.dataSources.visits ? r.visitCount : "暂无事实数据"}
+                  </td>
+                  <td className="px-4 py-2 tabular-nums">
+                    {data.dataSources.opportunities ? r.opportunityCount : "暂无事实数据"}
+                  </td>
+                  <td className="px-4 py-2 tabular-nums">
+                    {data.dataSources.quotations ? r.quotationCount : "暂无事实数据"}
+                  </td>
+                  <td className="px-4 py-2 tabular-nums">
+                    {data.dataSources.salesOrders ? r.salesOrderCount : "暂无事实数据"}
+                  </td>
+                  <td className="px-4 py-2 tabular-nums">
+                    {data.dataSources.salesAmount ? Number(r.salesAmount).toLocaleString("zh-CN") : "暂无事实数据"}
+                  </td>
                 </tr>
               ))}
               {data.rows.length === 0 && (
