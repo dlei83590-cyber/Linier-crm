@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import type { FrontendModule, ModuleDomainDef } from "@/lib/frontend/modules";
 import { MODULE_ACCENT_MAP } from "@/components/design-system";
 import { domainClass } from "@/components/design-system/domain-class";
+import { ModuleIcon } from "./module-icons";
 
 export interface PaletteGroup {
   domain: ModuleDomainDef;
@@ -144,11 +145,13 @@ export function CommandPalette({ open, onClose, groups }: CommandPaletteProps) {
                       type="button"
                       onClick={() => go(i)}
                       onMouseEnter={() => setActiveIndex(i)}
-                      className={`flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm transition-colors ${
+                      className={`flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm transition-colors duration-150 ${
                         active ? "bg-brand-50 text-ink-primary" : "text-ink-primary hover:bg-slate-50"
                       }`}
                     >
-                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dc.dot}`} aria-hidden="true" />
+                      <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded ${dc.soft}`}>
+                        <ModuleIcon moduleId={m.id} className={`h-3 w-3 ${dc.text}`} />
+                      </span>
                       <span className="min-w-0 flex-1 truncate font-medium">{m.label}</span>
                       <span className="shrink-0 text-xs text-ink-muted">
                         {MODULE_ACCENT_MAP[domainId]?.label ?? domainId}
@@ -156,7 +159,9 @@ export function CommandPalette({ open, onClose, groups }: CommandPaletteProps) {
                     </button>
                   ) : (
                     <span className="flex cursor-not-allowed items-center gap-2.5 px-4 py-2 text-sm text-ink-muted">
-                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dc.dot}`} aria-hidden="true" />
+                      <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded ${dc.soft}`}>
+                        <ModuleIcon moduleId={m.id} className={`h-3 w-3 ${dc.text}`} />
+                      </span>
                       <span className="min-w-0 flex-1 truncate">{m.label}</span>
                       <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px]">尚未开放</span>
                     </span>
