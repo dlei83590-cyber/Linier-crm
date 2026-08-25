@@ -344,7 +344,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
   },
 
   // ===== 客户与项目（F2-4 开放）=====
-  // project-opportunities：contract CRUD + convert（事实动作，无审批流）；ui CRUD（F2-4A2）；convert Tier 3 HOLD
+  // project-opportunities：contract CRUD + convert（事实动作，无审批流）；ui CRUD + factActions（FRT-05 convert 已交付，POST /api/project-opportunities/:id/convert）
   {
     id: 'project-opportunities',
     domain: 'customer-project',
@@ -352,7 +352,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/project-opportunities',
     permission: actionPermission('project-opportunity', 'view'), // F2-6-0: 对齐 API requirePermission("project-opportunity:view")（原 PERMISSIONS 值为 read 风格，与后端强制码不一致）
     availability: 'ready',
-    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD },
+    capabilities: { contract: CONTRACT_CRUD_ACTIONS, ui: UI_LIST_DETAIL_CRUD_ACTIONS },
     createRoute: '/project-opportunities/new',
     createPermission: actionPermission('project-opportunity', 'create'),
     order: 1,
