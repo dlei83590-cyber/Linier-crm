@@ -49,6 +49,8 @@ const businessPartnerUpdateSchema = z
     latitude: z.coerce.number().min(-90).max(90).nullable().optional(),
     longitude: z.coerce.number().min(-180).max(180).nullable().optional(),
     allowedRadiusMeters: z.number().int().positive().max(100000).nullable().optional(),
+    // 协同群（Migration 0055）：channel key（DB 只存 key，webhook/secret 仅在 Server 环境）
+    collaborationChannelKey: z.string().max(64).nullable().optional(),
     isActive: z.boolean().optional(),
     // 开票资料（ADR-0043，I1：uscc GB 32100-2015 校验；I10：maker-checker 走 approvalStatus）
     taxInvoiceInfo: z

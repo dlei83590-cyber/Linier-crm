@@ -6,6 +6,7 @@ import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { handleServerError } from "@/lib/api/server-error";
 import { haversineMeters } from "@/lib/visit/geo";
+import { writeCheckInChannelEvent } from "@/lib/dingtalk/events";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +27,9 @@ export const dynamic = "force-dynamic";
  *      无独立草稿状态——FOLLOW_UP 即草稿载体）；
  *   ③ 签退 = POST /api/business-partners/:id/activities/:activityId/checkout（checkoutAt 服务端 now）。
  * 权限：复用 project-visit（view/create）——尽量复用既有 RBAC 模块，不新增权限模块（ADR-0028）。
- * HOLD：审批流/评论/群消息/酷卡片/GIS 平台/地图服务/GeoFence Engine/推送平台/通用 Activity Engine。
+ * ④（Migration 0055，合同收口）：签到成功且客户配置 collaborationChannelKey → 同事务写 CRM_CHECK_IN Outbox
+ *   （DingTalk 酷卡片异步投递群；外部失败不影响签到事务，见 lib/dingtalk/sender）。
+ * HOLD：审批流/评论/GIS 平台/地图服务/GeoFence Engine/推送平台/通用 Activity Engine。
  */
 
 const createSchema = z
@@ -197,7 +200,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const created = await prisma.$transaction(async (tx) => {
       const bp = await tx.businessPartner.findFirst({
         where: { id, deletedAt: null },
-        select: { id: true, latitude: true, longitude: true, allowedRadiusMeters: true },
+        select: { id: true, name: true, latitude: true, longitude: true, allowedRadiusMeters: true, collaborationChannelKey: true },
       });
       if (!bp) throw new Error("PARTNER_INVALID");
 
@@ -269,6 +272,29 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             createdById: user!.id,
             updatedById: user!.id,
           },
+        });
+      }
+
+      // ④（Migration 0055）签到成功 + 客户已配置协同群 → 同事务写 CRM_CHECK_IN Outbox
+      //   （DingTalk 酷卡片异步投递；外部失败不影响签到事务——业务事实已提交，投递失败 FAILED 可重试）
+      if (d.activityType === "CHECK_IN" && bp.collaborationChannelKey) {
+        const actor = await tx.user.findUnique({
+          where: { id: user!.id },
+          select: { name: true },
+        });
+        await writeCheckInChannelEvent(tx, {
+          activityId: checkin.id,
+          businessPartnerId: id,
+          customerName: bp.name,
+          actorId: user!.id,
+          actorName: actor?.name ?? user!.email ?? "—",
+          checkinAt: now.toISOString(),
+          latitude: d.latitude ?? null,
+          longitude: d.longitude ?? null,
+          locationNote: d.locationNote?.trim() ?? null,
+          distanceMeters,
+          followUpSummary: followUp?.summary ?? null,
+          channelKey: bp.collaborationChannelKey,
         });
       }
 

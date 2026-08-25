@@ -706,6 +706,7 @@ model BusinessPartner {
   latitude            Decimal?       @db.Decimal(10, 7) // 签到范围：客户坐标纬度（-90..90；Migration 0051）
   longitude           Decimal?       @db.Decimal(10, 7) // 签到范围：客户坐标经度（-180..180；Migration 0051）
   allowedRadiusMeters Int?           // 签到范围：允许签到半径（米）；null = 不限制（Migration 0051）
+  collaborationChannelKey String? // 协同群 channel key（Migration 0055：DB 只存 key 不存 secret；webhook/secret 仅在 Server 环境 DINGTALK_CHANNELS_JSON）
   isActive            Boolean        @default(true)
   createdById         String?
   updatedById         String?
@@ -5464,11 +5465,15 @@ enum InventoryMovementType {
 }
 
 /// Outbox 状态（P8 Final：语义 = 库存消费成功才确认完成；不混"投递/消费/投影"）
+/// Migration 0055：追加渠道投递终态 SENT / FAILED——业务事务 → Outbox INSERT → sender POST 钉钉 →
+/// SENT（投递成功）/ FAILED（可重试，指数退避，超限 DEAD_LETTER）；外部渠道失败不影响业务事务
 enum OutboxStatus {
   PENDING
   PROCESSING
   PROCESSED
   DEAD_LETTER
+  SENT
+  FAILED
 }
 
 /// Sprint 6B：调拨单状态（P2 Final：DRAFT→SUBMITTED→APPROVED→EXECUTED/CANCELLED；EXECUTED 才触发双边 Movement）
