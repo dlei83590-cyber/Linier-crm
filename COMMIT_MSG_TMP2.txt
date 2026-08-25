@@ -1,4 +1,0 @@
-fix(contract-close): type-check — actorId nullable in reversal helper + typed mockPrisma in DELETE test
-
-- outbound-ledger: buildSalesDeliveryReversalAtoms ctx.actorId 允许 null（LedgerAtom.actorId 即 string|null）
-- route.test.ts (DELETE): vi.hoisted mockPrisma 显式类型化（delivery/invoice/$transaction），消除 TS18046 unknown
