@@ -85,6 +85,7 @@
 - **HOLD（解除需 CTO 单独指令）**：Reservation / AvailableQty / FIFO / 分仓分批成本 / 生产成本归集 / BI / OA / Mobile（Inventory Costing 基础已落地，深化项仍 HOLD）。
 - **UI 状态机红线**：APPROVED ≠ CONFIRMED、CREATED ≠ POSTED、APPROVED ≠ APPLIED、COMPLETED ≠ ADJUSTED、DRAFT ≠ SUBMITTED；前端按钮显隐只能消费后端状态契约。
 - 下一阶段开发必须先进行 **Design / Scope Gate**，再进入 Schema/API 实现；下一 Governance 项 = **main 分支保护（已启用 2026-08-20：require PR + CI checks）+ 错误码注册表自动化 + 增值税发票管理字段 / 会计期间体系 Design Gate**。
+- **前端补齐轻量流程（FRT-01 Frontend Registry / Navigation SSOT 阶段，2026-08-21）**：普通前端补齐（页面/组件/Module Registry/导航层修正——无新 Schema / Migration / 领域模型 / Engine / 大规模重构）执行「实现 → CI → 部署 → 真实 Smoke → 定点修复」，**不要求每个普通 UI 变更另开 Design / ADR Gate**；仅当涉及 Schema/Migration、新领域模型、通用 Engine 或大规模重构时才必须走 Design / Scope Gate。CI-First / No Local Server 红线（§1/§4/§5/§8）不变。
 
 ## 4. 每个任务的执行循环
 

@@ -1,4 +1,4 @@
--- Migration 0051 — Customer Profile Relations（Phase 3 MVP：单客户多产品 / 单客户多供应商）
+-- Migration 0053 — Customer Profile Relations（Phase 3 MVP：单客户多产品 / 单客户多供应商）
 -- CustomerProduct（businessPartnerId → BusinessPartner CASCADE；itemId → Item CASCADE）
 -- CustomerSupplier（customerId/supplierId → BusinessPartner CASCADE，BP-BP 自关联，命名关系区分）
 -- 红线：仅 CREATE TABLE / CREATE INDEX / ADD CONSTRAINT（对齐 0048/0049/0050 手写迁移约定）
