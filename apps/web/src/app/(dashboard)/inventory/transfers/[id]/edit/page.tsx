@@ -6,12 +6,26 @@ import Link from 'next/link';
 import { PermissionGuard } from '@/components/guard/permission-guard';
 import { apiFetch, ApiClientError, describeStatus } from '@/lib/api-client';
 import { CARD_CLASS } from "@/lib/ui-classes";
+import { filterLocationsByWarehouse, splitSerialNos } from '@/lib/inventory/transfer-form';
 
 interface ItemOption {
   id: string;
   code: string | null;
   name: string | null;
   stockUom?: { id: string; code: string | null; symbol: string | null } | null;
+}
+
+interface WarehouseOption {
+  id: string;
+  code: string | null;
+  name: string | null;
+}
+
+interface LocationOption {
+  id: string;
+  code: string | null;
+  name: string | null;
+  warehouseId?: string | null;
 }
 
 interface TransferDetail {
@@ -73,6 +87,8 @@ function TransferEditForm() {
   const router = useRouter();
 
   const [items, setItems] = useState<ItemOption[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
+  const [locations, setLocations] = useState<LocationOption[]>([]);
   const [detail, setDetail] = useState<TransferDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | null>(null);
@@ -89,21 +105,47 @@ function TransferEditForm() {
   const [submitting, setSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  // 数据源：items 下拉
+  // 数据源：items / warehouses / warehouse-locations 真实下拉（Master-Data Read API，PR #33）
   useEffect(() => {
     const controller = new AbortController();
-    apiFetch<ItemOption[]>('/api/items?pageSize=100', { signal: controller.signal })
-      .then((body) => setItems(body.data))
+    Promise.all([
+      apiFetch<ItemOption[]>('/api/items?pageSize=100', { signal: controller.signal }),
+      apiFetch<WarehouseOption[]>('/api/warehouses?pageSize=100', { signal: controller.signal }),
+      apiFetch<LocationOption[]>('/api/warehouse-locations?pageSize=100', { signal: controller.signal }),
+    ])
+      .then(([it, w, l]) => {
+        setItems(it.data);
+        setWarehouses(w.data);
+        setLocations(l.data);
+      })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
         setError(
           err instanceof ApiClientError
             ? err
-            : new ApiClientError(0, '加载物料失败', 'NETWORK_ERROR'),
+            : new ApiClientError(0, '加载基础数据失败', 'NETWORK_ERROR'),
         );
       });
     return () => controller.abort();
   }, []);
+
+  // 切换仓库时若已选库位不属于新仓库则清空（避免提交 422 组合 FK 校验失败）
+  const handleWarehouseChange = (
+    kind: 'source' | 'destination',
+    warehouseId: string,
+    setter: (v: string) => void,
+    locationSetter: (v: string) => void,
+  ) => {
+    setter(warehouseId);
+    markDirty();
+    const currentLocationId = kind === 'source' ? sourceLocationId : destinationLocationId;
+    if (
+      currentLocationId &&
+      !filterLocationsByWarehouse(locations, warehouseId).some((l) => l.id === currentLocationId)
+    ) {
+      locationSetter('');
+    }
+  };
 
   // 加载详情（Edit 回填 + version CAS 源）
   const loadDetail = useCallback(() => {
@@ -191,8 +233,8 @@ function TransferEditForm() {
 
   const validate = (): boolean => {
     const errs: Record<string, string> = {};
-    if (!sourceWarehouseId.trim()) errs.sourceWarehouseId = '源仓库 ID 必填';
-    if (!destinationWarehouseId.trim()) errs.destinationWarehouseId = '目标仓库 ID 必填';
+    if (!sourceWarehouseId.trim()) errs.sourceWarehouseId = '请选择源仓库';
+    if (!destinationWarehouseId.trim()) errs.destinationWarehouseId = '请选择目标仓库';
     lines.forEach((l, i) => {
       if (!l.itemId) errs[`lines.${i}.itemId`] = '请选择物料';
       if (!l.quantity || Number(l.quantity) <= 0) errs[`lines.${i}.quantity`] = '数量必须大于 0';
@@ -221,13 +263,8 @@ function TransferEditForm() {
           ...(l.uomId ? { uomId: l.uomId } : {}),
           quantity: Number(l.quantity),
           ...(l.batchNo ? { batchNo: l.batchNo } : {}),
-          ...(l.serialNos.trim()
-            ? {
-                serialNos: l.serialNos
-                  .split(',')
-                  .map((s) => s.trim())
-                  .filter(Boolean),
-              }
+          ...(splitSerialNos(l.serialNos).length
+            ? { serialNos: splitSerialNos(l.serialNos) }
             : {}),
           ...(l.mfgDate ? { mfgDate: l.mfgDate } : {}),
           ...(l.expDate ? { expDate: l.expDate } : {}),
@@ -334,54 +371,70 @@ function TransferEditForm() {
             <p className="mt-1 font-medium text-ink-primary">{detail?.transferNo}</p>
           </div>
           <div>
-            <label className="block text-xs text-ink-secondary">源仓库 ID（必填）</label>
-            <input
+            <label className="block text-xs text-ink-secondary">源仓库（必填）</label>
+            <select
               value={sourceWarehouseId}
-              onChange={(e) => {
-                setSourceWarehouseId(e.target.value);
-                markDirty();
-              }}
+              onChange={(e) => handleWarehouseChange('source', e.target.value, setSourceWarehouseId, setSourceLocationId)}
               className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
-            />
+            >
+              <option value="">选择仓库</option>
+              {warehouses.map((w) => (
+                <option key={w.id} value={w.id}>{w.code ?? ''} {w.name ?? ''}</option>
+              ))}
+            </select>
             {fieldErrors.sourceWarehouseId && (
               <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.sourceWarehouseId}</p>
             )}
           </div>
           <div>
-            <label className="block text-xs text-ink-secondary">源库位 ID（可选）</label>
-            <input
+            <label className="block text-xs text-ink-secondary">源库位（可选）</label>
+            <select
               value={sourceLocationId}
               onChange={(e) => {
                 setSourceLocationId(e.target.value);
                 markDirty();
               }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
-            />
+              disabled={!sourceWarehouseId}
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <option value="">未指定</option>
+              {filterLocationsByWarehouse(locations, sourceWarehouseId).map((l) => (
+                <option key={l.id} value={l.id}>{l.code ?? ''} {l.name ?? ''}</option>
+              ))}
+            </select>
           </div>
           <div>
-            <label className="block text-xs text-ink-secondary">目标仓库 ID（必填）</label>
-            <input
+            <label className="block text-xs text-ink-secondary">目标仓库（必填）</label>
+            <select
               value={destinationWarehouseId}
-              onChange={(e) => {
-                setDestinationWarehouseId(e.target.value);
-                markDirty();
-              }}
+              onChange={(e) => handleWarehouseChange('destination', e.target.value, setDestinationWarehouseId, setDestinationLocationId)}
               className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
-            />
+            >
+              <option value="">选择仓库</option>
+              {warehouses.map((w) => (
+                <option key={w.id} value={w.id}>{w.code ?? ''} {w.name ?? ''}</option>
+              ))}
+            </select>
             {fieldErrors.destinationWarehouseId && (
               <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.destinationWarehouseId}</p>
             )}
           </div>
           <div>
-            <label className="block text-xs text-ink-secondary">目标库位 ID（可选）</label>
-            <input
+            <label className="block text-xs text-ink-secondary">目标库位（可选）</label>
+            <select
               value={destinationLocationId}
               onChange={(e) => {
                 setDestinationLocationId(e.target.value);
                 markDirty();
               }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
-            />
+              disabled={!destinationWarehouseId}
+              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <option value="">未指定</option>
+              {filterLocationsByWarehouse(locations, destinationWarehouseId).map((l) => (
+                <option key={l.id} value={l.id}>{l.code ?? ''} {l.name ?? ''}</option>
+              ))}
+            </select>
           </div>
           <div className="col-span-2">
             <label className="block text-xs text-ink-secondary">备注（可选，≤500）</label>
@@ -396,9 +449,8 @@ function TransferEditForm() {
             />
           </div>
           <div className="col-span-2">
-            <p className="text-xs text-status-warning-text">
-              CONTRACT GAP：main 当前无 warehouse / warehouse-location 列表 API，仓库/库位暂以 ID
-              文本输入；服务端仍校验存在性与组合归属。
+            <p className="text-xs text-ink-muted">
+              仓库/库位来自主数据只读 API（GET /api/warehouses、/api/warehouse-locations）；库位下拉按所选仓库过滤。
             </p>
           </div>
         </div>

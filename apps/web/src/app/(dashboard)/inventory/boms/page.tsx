@@ -8,8 +8,9 @@
  */
 import { useState } from "react";
 import Link from "next/link";
-import { actionPermission } from "@nilier-crm/shared";
+import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
+import { useSession } from "@/lib/session-context";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
 import { SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
@@ -41,6 +42,11 @@ const STATUS_TONE_MAP: Record<string, "neutral" | "info" | "success" | "warning"
 
 function BomList() {
   const toast = useToast();
+  const { state } = useSession();
+  const roles = (state.user?.roles ?? []) as RoleCode[];
+  const canCreate = hasPermission(roles, actionPermission("bom", "create"));
+  const canEdit = hasPermission(roles, actionPermission("bom", "edit"));
+  const canDelete = hasPermission(roles, actionPermission("bom", "delete"));
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ status?: string }>({});
   const [deleting, setDeleting] = useState<BomRow | null>(null);
@@ -84,9 +90,11 @@ function BomList() {
         description="成品物料组合固定配方（系数 + 损耗率；吨→米/件/个在系数表达）；1 成品 = N 行原料，多版本，ACTIVE 唯一"
         emptyMessage="暂无配方——点击「+ 新建配方」为成品维护物料组合配方"
         headerActions={
-          <Link href="/inventory/boms/new" className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
-            + 新建配方
-          </Link>
+          canCreate ? (
+            <Link href="/inventory/boms/new" className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
+              + 新建配方
+            </Link>
+          ) : undefined
         }
         filters={
           <>
@@ -142,17 +150,12 @@ function BomList() {
                 <Link href={`/inventory/boms/${row.id}`} className="rounded-md border border-border px-2 py-1 text-xs text-ink-primary hover:bg-canvas">
                   详情
                 </Link>
-                {row.status === "DRAFT" && (
+                {row.status === "DRAFT" && canEdit && (
                   <Link href={`/inventory/boms/${row.id}/edit`} className="rounded-md border border-border px-2 py-1 text-xs text-ink-primary hover:bg-canvas">
                     编辑
                   </Link>
                 )}
-                {["DRAFT", "ARCHIVED"].includes(row.status) && (
-                  <Link href={`/inventory/boms/${row.id}`} className="rounded-md border border-brand-200 px-2 py-1 text-xs text-brand-700 hover:bg-brand-50">
-                    激活
-                  </Link>
-                )}
-                {row.status === "DRAFT" && (
+                {row.status === "DRAFT" && canDelete && (
                   <button
                     type="button"
                     onClick={() => setDeleting(row)}

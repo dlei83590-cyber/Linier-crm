@@ -7,8 +7,9 @@
  */
 import { useState } from "react";
 import Link from "next/link";
-import { actionPermission } from "@nilier-crm/shared";
+import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
+import { useSession } from "@/lib/session-context";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
@@ -45,6 +46,9 @@ const STATUS_TONE_MAP: Record<string, "neutral" | "info" | "success" | "warning"
 };
 
 function ProductionOrderList() {
+  const { state } = useSession();
+  const roles = (state.user?.roles ?? []) as RoleCode[];
+  const canCreate = hasPermission(roles, actionPermission("production-order", "create"));
   const [statusInput, setStatusInput] = useState("");
   const [typeInput, setTypeInput] = useState("");
   const [filters, setFilters] = useState<{ status?: string; productionType?: string }>({});
@@ -73,9 +77,11 @@ function ProductionOrderList() {
         description="自产或 OEM 外协（我方供料 + 加工费）：领料出库 → 成品入库（POSTED 同事务，成本 = Σ原料成本 + 加工费）"
         emptyMessage="暂无工单——点击「+ 新建工单」创建第一张生产/外协工单"
         headerActions={
-          <Link href="/inventory/production-orders/new" className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
-            + 新建工单
-          </Link>
+          canCreate ? (
+            <Link href="/inventory/production-orders/new" className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
+              + 新建工单
+            </Link>
+          ) : undefined
         }
         filters={
           <>
