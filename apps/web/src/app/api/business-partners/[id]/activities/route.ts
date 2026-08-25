@@ -120,6 +120,27 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     (a, b) => occurredAt(b).getTime() - occurredAt(a).getTime(),
   );
 
+  // 操作人展示（只读投影，FE 2.0）：createdBy/submittedBy/approvedBy/rejectedBy 用户摘要
+  const userIds = Array.from(
+    new Set(
+      sorted
+        .flatMap((a) => [a.createdById, a.submittedById, a.approvedById, a.rejectedById])
+        .filter((x): x is string => Boolean(x)),
+    ),
+  );
+  const users =
+    userIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, name: true, email: true },
+        })
+      : [];
+  const userMap = new Map(users.map((u) => [u.id, u]));
+  const pickUser = (id: string | null | undefined) =>
+    id && userMap.has(id)
+      ? { id, name: userMap.get(id)!.name, email: userMap.get(id)!.email }
+      : null;
+
   return ok(
     sorted.map((a) => ({
       id: a.id,
@@ -150,6 +171,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       createdById: a.createdById,
       createdAt: a.createdAt,
       occurredAt: occurredAt(a),
+      // FE 2.0 操作人展示（只读投影；禁止 raw database ID 上屏）
+      createdBy: pickUser(a.createdById),
+      submittedBy: pickUser(a.submittedById),
+      approvedBy: pickUser(a.approvedById),
+      rejectedBy: pickUser(a.rejectedById),
     })),
     { page, pageSize, total },
   );

@@ -171,7 +171,7 @@ function BusinessPartnerList() {
             <button
               type="button"
               onClick={applyFilter}
-              className={BUTTON_PRIMARY_CLASS}
+              className={BUTTON_SECONDARY_CLASS}
             >
               查询
             </button>
@@ -196,7 +196,15 @@ function BusinessPartnerList() {
           },
           { key: "name", header: "名称" },
           { key: "mnemonic", header: "助记码", render: (row) => row.mnemonic ?? "—" },
-          { key: "type", header: "类型", render: (row) => TYPE_LABELS[row.type] ?? row.type },
+          {
+            key: "type",
+            header: "类型",
+            render: (row) => (
+              <span className="inline-flex items-center rounded-full bg-canvas px-2 py-0.5 text-xs font-medium text-ink-secondary">
+                {TYPE_LABELS[row.type] ?? row.type}
+              </span>
+            ),
+          },
           { key: "region", header: "区域", render: (row) => row.region ?? "—" },
           { key: "industry", header: "行业", render: (row) => row.industry ?? "—" },
           {
@@ -210,7 +218,16 @@ function BusinessPartnerList() {
               />
             ),
           },
-          { key: "isActive", header: "启用", render: (row) => (row.isActive ? "是" : "否") },
+          {
+            key: "isActive",
+            header: "启用",
+            render: (row) =>
+              row.isActive ? (
+                <StatusBadge status="ACTIVE" label="启用" tone="success" />
+              ) : (
+                <StatusBadge status="INACTIVE" label="停用" tone="neutral" />
+              ),
+          },
           { key: "createdAt", header: "创建时间", render: (row) => formatDate(row.createdAt) },
         ]}
         rows={items}

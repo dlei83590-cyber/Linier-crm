@@ -1,21 +1,30 @@
 "use client";
 
 /**
- * Customer 360「跟进活动」Tab（跟进 / 拜访计划 / 定位签到时间线）
+ * Customer 360「跟进活动」Tab（FE 2.0 现代时间线）
  *
- * 数据：GET/POST /api/business-partners/:id/activities（CustomerActivity，Migration 0050）
- * 跟进审批（Migration 0051，followup-collab MVP）：仅 FOLLOW_UP 参与
- *   DRAFT →（提交 project-visit:edit）→ SUBMITTED →（批准/驳回 project-visit:approve）→ APPROVED / REJECTED
- *   时间线显示状态徽标 + 评论数；评论 = ActivityComment 最小评论（GET/POST /activities/:activityId/comments）
- * 签到：浏览器 navigator.geolocation 获取经纬度 → POST CHECK_IN（checkinAt 服务端 now 落库）
- * HOLD：Workflow Designer/多级审批/会签/抄送/Notification Engine/群消息/酷卡片/签退/围栏/引擎
+ * 数据：GET/POST /api/business-partners/:id/activities（CustomerActivity，Migration 0050/0051）
+ * 现代时间线：图标节点（FOLLOW_UP/VISIT_PLAN/CHECK_IN/COMMENT/APPROVAL 轻量 icon + 语义 accent）
+ * + 操作人（服务端只读投影 createdBy/submittedBy/approvedBy/rejectedBy）+ 时间 + 类型 + 内容 + 状态徽标。
+ * 三态：loading 骨架 / error 图标+重试 / empty 图标+说明+CTA（禁止把错误伪装成空态）。
+ * 驳回原因：window.prompt → RejectDialog（FormDialog 风格，必填校验 + busy 防重复提交）。
+ * 成功反馈：轻量 Toast；服务端真实错误（含签到超范围距离）toast.error 呈现。
+ *
+ * 业务逻辑与既有 API 完全一致（submit/approve/reject/comment/checkin 契约不变）。
  */
 import { useCallback, useEffect, useState } from "react";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
+import { StatusBadge } from "@/components/workspace";
 import { INPUT_CLASS, BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { formatDate } from "@/lib/format";
+import { activityTypeMeta, activityStatusMeta, type ActivityTypeKey } from "@/lib/customer/activity-meta";
+import type { StatusTone } from "@/components/design-system";
+import { ActivityTypeIcon, IconAlertCircle, IconRefreshCw } from "./icons";
 import { GEOLOCATION_OPTIONS, geolocationErrorMessage } from "@/lib/visit/geolocation";
 
 interface ActivityRow {
@@ -37,6 +46,10 @@ interface ActivityRow {
   rejectReason: string | null;
   commentCount: number;
   occurredAt: string;
+  createdBy: { id: string; name: string | null; email: string | null } | null;
+  submittedBy: { id: string; name: string | null; email: string | null } | null;
+  approvedBy: { id: string; name: string | null; email: string | null } | null;
+  rejectedBy: { id: string; name: string | null; email: string | null } | null;
 }
 
 interface ActivityCommentRow {
@@ -44,38 +57,134 @@ interface ActivityCommentRow {
   content: string;
   createdById: string | null;
   createdAt: string;
+  createdBy: { id: string; name: string | null; email: string | null } | null;
 }
+
+type ActivityMode = "FOLLOW_UP" | "VISIT_PLAN" | "CHECK_IN";
 
 const TYPE_LABELS: Record<string, string> = { FOLLOW_UP: "跟进", VISIT_PLAN: "拜访计划", CHECK_IN: "签到" };
 
-const STATUS_META: Record<string, { label: string; cls: string }> = {
-  DRAFT: { label: "待提交", cls: "bg-slate-100 text-slate-600" },
-  SUBMITTED: { label: "待审批", cls: "bg-amber-50 text-amber-700" },
-  APPROVED: { label: "已批准", cls: "bg-green-50 text-green-700" },
-  REJECTED: { label: "已驳回", cls: "bg-red-50 text-red-700" },
+const TONE_NODE: Record<StatusTone, { soft: string; text: string }> = {
+  neutral: { soft: "bg-slate-100", text: "text-slate-600" },
+  info: { soft: "bg-status-info-bg", text: "text-status-info-text" },
+  success: { soft: "bg-status-success-bg", text: "text-status-success-text" },
+  warning: { soft: "bg-status-warning-bg", text: "text-status-warning-text" },
+  danger: { soft: "bg-status-danger-bg", text: "text-status-danger-text" },
 };
 
-export function ActivityTimeline({ partnerId }: { partnerId: string }) {
+function userName(u: { name: string | null; email: string | null } | null | undefined): string {
+  if (!u) return "—";
+  return u.name ?? u.email ?? "—";
+}
+
+/** 驳回原因 FormDialog（替代 window.prompt；必填校验 + busy 防重复） */
+function RejectDialog({
+  open,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: (reason: string) => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setReason("");
+      setErr(null);
+    }
+  }, [open]);
+
+  if (!open) return null;
+
+  const submit = () => {
+    const t = reason.trim();
+    if (!t) {
+      setErr("驳回原因必填");
+      return;
+    }
+    onConfirm(t);
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="驳回跟进"
+      className="animate-fade-in fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-[2px]"
+      onClick={onCancel}
+    >
+      <div
+        className="animate-dialog-in w-full max-w-md rounded-lg border border-border bg-surface p-5 shadow-elevation-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-base font-semibold text-ink-primary">驳回跟进</h2>
+        <p className="mt-1.5 text-sm text-ink-secondary">请输入驳回原因（必填），提交后记录审计。</p>
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          rows={3}
+          className={INPUT_CLASS + " mt-3"}
+          placeholder="驳回原因"
+          autoFocus
+        />
+        {err ? <p className="mt-1 text-xs text-status-danger-text">{err}</p> : null}
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" onClick={onCancel} disabled={busy} className={BUTTON_SECONDARY_CLASS}>
+            取消
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={busy}
+            className="rounded-md bg-status-danger-text px-3 py-1.5 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {busy ? "提交中…" : "确认驳回"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ActivityTimeline({
+  partnerId,
+  initialMode = "FOLLOW_UP",
+}: {
+  partnerId: string;
+  initialMode?: ActivityMode;
+}) {
+  const toast = useToast();
   const [items, setItems] = useState<ActivityRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // 进行中操作的活动 id（null=空闲）
-  const [notice, setNotice] = useState<string | null>(null); // 成功反馈（签到距离等；失败用 error）
+  const [rejectTarget, setRejectTarget] = useState<string | null>(null);
 
   // 表单
-  const [mode, setMode] = useState<"FOLLOW_UP" | "VISIT_PLAN" | "CHECK_IN">("FOLLOW_UP");
+  const [mode, setMode] = useState<ActivityMode>(initialMode);
   const [summary, setSummary] = useState("");
   const [nextAction, setNextAction] = useState("");
   const [planDate, setPlanDate] = useState("");
   const [geo, setGeo] = useState<{ lat: string; lng: string } | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // 评论
   const [comments, setComments] = useState<Record<string, ActivityCommentRow[]>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [commentText, setCommentText] = useState<Record<string, string>>({});
 
+  useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode]);
+
   const load = useCallback(() => {
     setLoading(true);
+    setError(null);
     apiFetch<ActivityRow[]>("/api/business-partners/" + partnerId + "/activities?page=1&pageSize=50")
       .then(({ data }) => setItems(data))
       .catch((err: unknown) => setError(err instanceof ApiClientError ? err.message : "加载活动失败"))
@@ -106,37 +215,36 @@ export function ActivityTimeline({ partnerId }: { partnerId: string }) {
     if (next && !comments[activityId]) fetchComments(activityId);
   };
 
-  const runAction = async (activityId: string, action: "submit" | "approve" | "reject", rejectReason?: string) => {
+  const runAction = async (
+    activityId: string,
+    action: "submit" | "approve" | "reject",
+    rejectReason?: string,
+  ) => {
     setBusy(activityId);
-    setError(null);
     try {
       await apiFetch("/api/business-partners/" + partnerId + "/activities/" + activityId + "/" + action, {
         method: "POST",
         body: rejectReason ? JSON.stringify({ rejectReason }) : undefined,
       });
       await load();
+      if (action === "submit") toast.success("已提交审批");
+      if (action === "approve") toast.success("已批准");
+      if (action === "reject") {
+        toast.success("已驳回");
+        setRejectTarget(null);
+      }
     } catch (err: unknown) {
-      setError(err instanceof ApiClientError ? err.message : "操作失败");
+      const message = err instanceof ApiClientError ? err.message : "操作失败";
+      toast.error(action === "reject" ? "驳回失败" : action === "approve" ? "批准失败" : "提交失败", message);
     } finally {
       setBusy(null);
     }
-  };
-
-  const rejectWithReason = (activityId: string) => {
-    const reason = window.prompt("请输入驳回原因（必填）");
-    if (reason === null) return;
-    if (!reason.trim()) {
-      setError("驳回原因必填");
-      return;
-    }
-    runAction(activityId, "reject", reason.trim());
   };
 
   const addComment = async (activityId: string) => {
     const content = (commentText[activityId] ?? "").trim();
     if (!content) return;
     setBusy(activityId);
-    setError(null);
     try {
       await apiFetch("/api/business-partners/" + partnerId + "/activities/" + activityId + "/comments", {
         method: "POST",
@@ -144,8 +252,9 @@ export function ActivityTimeline({ partnerId }: { partnerId: string }) {
       });
       setCommentText((prev) => ({ ...prev, [activityId]: "" }));
       await Promise.all([load(), fetchComments(activityId)]);
+      toast.success("评论已发送");
     } catch (err: unknown) {
-      setError(err instanceof ApiClientError ? err.message : "评论失败");
+      toast.error("评论失败", err instanceof ApiClientError ? err.message : "网络错误");
     } finally {
       setBusy(null);
     }
@@ -153,17 +262,16 @@ export function ActivityTimeline({ partnerId }: { partnerId: string }) {
 
   const locate = () => {
     if (!("geolocation" in navigator)) {
-      setError("浏览器不支持定位");
+      setFormError("浏览器不支持定位");
       return;
     }
-    setError(null);
-    setNotice(null);
+    setFormError(null);
     navigator.geolocation.getCurrentPosition(
       (pos) => setGeo({ lat: String(pos.coords.latitude), lng: String(pos.coords.longitude) }),
       (err) => {
         // 定位拒绝/信号不可用/超时 → 明确真实原因（FRT-04，禁止静默失败）
         setGeo(null);
-        setError(geolocationErrorMessage(err?.code));
+        setFormError(geolocationErrorMessage(err?.code));
       },
       GEOLOCATION_OPTIONS,
     );
@@ -171,27 +279,26 @@ export function ActivityTimeline({ partnerId }: { partnerId: string }) {
 
   const submit = async () => {
     setBusy("__form__");
-    setError(null);
-    setNotice(null);
+    setFormError(null);
     try {
       const body: Record<string, unknown> = { activityType: mode };
       if (mode === "FOLLOW_UP") {
         if (!summary.trim()) {
-          setError("跟进内容必填");
+          setFormError("跟进内容必填");
           return;
         }
         body.summary = summary.trim();
         body.nextAction = nextAction.trim() || undefined;
       } else if (mode === "VISIT_PLAN") {
         if (!planDate) {
-          setError("请选择拜访计划日期（必填）");
+          setFormError("请选择拜访计划日期（必填）");
           return;
         }
         body.planDate = new Date(planDate).toISOString();
         body.summary = summary.trim() || undefined;
       } else {
         if (!geo) {
-          setError("请先获取定位");
+          setFormError("请先获取定位");
           return;
         }
         body.latitude = Number(geo.lat);
@@ -204,7 +311,9 @@ export function ActivityTimeline({ partnerId }: { partnerId: string }) {
       );
       if (mode === "CHECK_IN") {
         // 范围内成功反馈：服务端 Haversine 距离事实（客户未配置范围时 distanceMeters=null）
-        setNotice(data?.distanceMeters != null ? "签到成功（距客户 " + data.distanceMeters + " 米）" : "签到成功");
+        toast.success(data?.distanceMeters != null ? "签到成功（距客户 " + data.distanceMeters + " 米）" : "签到成功");
+      } else {
+        toast.success(mode === "FOLLOW_UP" ? "跟进已保存" : "拜访计划已保存");
       }
       setSummary("");
       setNextAction("");
@@ -212,26 +321,34 @@ export function ActivityTimeline({ partnerId }: { partnerId: string }) {
       setGeo(null);
       load();
     } catch (err: unknown) {
-      setError(err instanceof ApiClientError ? err.message : "保存失败");
+      const message = err instanceof ApiClientError ? err.message : "保存失败";
+      toast.error("保存失败", message);
     } finally {
       setBusy(null);
     }
   };
 
   return (
-    <section className="rounded-md border border-border p-4">
-      <h2 className="mb-3 text-sm font-semibold text-ink-primary">跟进活动</h2>
-      {notice && <p className="mb-2 rounded-md border border-green-200 bg-green-50 p-2 text-xs text-green-700">{notice}</p>}
-      {error && <p className="mb-2 rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">{error}</p>}
+    <section className="rounded-xl border border-border bg-surface p-5 shadow-elevation-sm">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-ink-primary">跟进活动</h2>
+        {items.length > 0 && <span className="text-xs text-ink-muted">共 {items.length} 条</span>}
+      </div>
 
       <PermissionGuard permission={actionPermission("project-visit", "create")}>
-        <div className="mb-4 space-y-2 rounded-md border border-border p-3">
-          <div className="flex gap-2">
+        <div className="mb-5 space-y-2.5 rounded-lg border border-border bg-canvas/50 p-3.5">
+          <div className="flex flex-wrap gap-1.5">
             {(["FOLLOW_UP", "VISIT_PLAN", "CHECK_IN"] as const).map((m) => (
               <button
                 key={m}
+                type="button"
                 onClick={() => setMode(m)}
-                className={"rounded-md px-3 py-1 text-xs " + (mode === m ? "bg-brand-600 text-white" : "border border-border")}
+                className={
+                  "rounded-full px-3 py-1 text-xs font-medium transition-colors duration-150 " +
+                  (mode === m
+                    ? "bg-brand-600 text-white"
+                    : "border border-border bg-surface text-ink-secondary hover:bg-slate-50")
+                }
               >
                 {TYPE_LABELS[m]}
               </button>
@@ -250,129 +367,221 @@ export function ActivityTimeline({ partnerId }: { partnerId: string }) {
             </>
           )}
           {mode === "CHECK_IN" && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button onClick={locate} className={BUTTON_SECONDARY_CLASS + " text-xs"}>
                 {geo ? "已获取定位：" + geo.lat + ", " + geo.lng : "获取定位"}
               </button>
-              <input value={summary} onChange={(e) => setSummary(e.target.value)} className={INPUT_CLASS} placeholder="位置备注（可选）" />
+              <input value={summary} onChange={(e) => setSummary(e.target.value)} className={INPUT_CLASS + " max-w-xs"} placeholder="位置备注（可选）" />
             </div>
           )}
-          <button onClick={submit} disabled={busy !== null} className={BUTTON_PRIMARY_CLASS + " text-xs"}>
-            保存
-          </button>
+          {formError && <p className="text-xs text-status-danger-text">{formError}</p>}
+          <div className="flex items-center justify-end">
+            <button onClick={submit} disabled={busy !== null} className={BUTTON_PRIMARY_CLASS + " text-xs"}>
+              保存
+            </button>
+          </div>
         </div>
       </PermissionGuard>
 
       {loading ? (
-        <p className="text-sm text-ink-muted">加载中…</p>
+        <div className="space-y-3" aria-hidden="true">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex gap-3">
+              <Skeleton className="h-8 w-8 rounded-full" />
+              <Skeleton className="h-16 flex-1" />
+            </div>
+          ))}
+        </div>
+      ) : error ? (
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-status-danger-border bg-status-danger-bg/30 py-8 text-center">
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-status-danger-bg text-status-danger-text">
+            <IconAlertCircle className="h-5 w-5" />
+          </span>
+          <p className="text-sm text-status-danger-text">{error}</p>
+          <button type="button" onClick={load} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-secondary transition-colors duration-150 hover:bg-slate-50">
+            <IconRefreshCw className="h-3.5 w-3.5" />
+            重试
+          </button>
+        </div>
       ) : items.length === 0 ? (
-        <p className="text-sm text-ink-muted">暂无跟进记录。</p>
+        <EmptyState
+          title="暂无跟进记录"
+          description={mode === "FOLLOW_UP" ? "记录跟进内容，或创建拜访计划/定位签到。" : "上方可新建跟进、拜访计划或签到。"}
+        />
       ) : (
-        <ul className="space-y-2">
-          {items.map((a) => {
-            const statusMeta = a.status ? STATUS_META[a.status] : null;
+        <ol className="relative space-y-3">
+          {items.map((a, idx) => {
+            const typeMeta = activityTypeMeta(a.activityType as ActivityTypeKey);
+            const node = TONE_NODE[typeMeta.tone];
+            const statusMeta = activityStatusMeta(a.status);
+            const isLast = idx === items.length - 1;
             return (
-              <li key={a.id} className="rounded-md border border-border p-3 text-sm">
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <span className="rounded bg-brand-50 px-1.5 py-0.5 text-brand-700">{TYPE_LABELS[a.activityType]}</span>
-                  {statusMeta && (
-                    <span className={"rounded px-1.5 py-0.5 font-medium " + statusMeta.cls}>{statusMeta.label}</span>
-                  )}
-                  <span className="text-ink-muted">{formatDate(a.occurredAt)}</span>
-                  {a.contact?.name && <span className="text-ink-muted">联系人：{a.contact.name}</span>}
+              <li key={a.id} className="flex gap-3">
+                {/* 图标节点 + 连接线 */}
+                <div className="flex shrink-0 flex-col items-center">
+                  <span className={"flex h-8 w-8 items-center justify-center rounded-full " + node.soft}>
+                    <ActivityTypeIcon type={a.activityType} className={"h-4 w-4 " + node.text} />
+                  </span>
+                  {!isLast && <span className="mt-1 w-px flex-1 bg-border" aria-hidden="true" />}
                 </div>
-                {a.summary && <p className="mt-1 text-ink-primary">{a.summary}</p>}
-                {a.nextAction && <p className="mt-0.5 text-xs text-ink-muted">下次行动：{a.nextAction}</p>}
-                {a.activityType === "CHECK_IN" && (
-                  <p className="mt-0.5 text-xs text-ink-muted">
-                    位置：{a.latitude ?? "—"}, {a.longitude ?? "—"} {a.locationNote ? "（" + a.locationNote + "）" : ""}
-                  </p>
-                )}
-                {a.status === "REJECTED" && a.rejectReason && (
-                  <p className="mt-0.5 text-xs text-red-600">驳回原因：{a.rejectReason}</p>
-                )}
 
-                {/* 跟进审批动作（仅 FOLLOW_UP） */}
-                {a.activityType === "FOLLOW_UP" &&
-                  (a.status === "DRAFT" || a.status === "REJECTED") && (
-                    <PermissionGuard permission={actionPermission("project-visit", "edit")}>
-                      <div className="mt-1.5 flex gap-1.5">
-                        <button
-                          onClick={() => runAction(a.id, "submit")}
-                          disabled={busy !== null}
-                          className={BUTTON_SECONDARY_CLASS + " text-xs"}
-                        >
-                          提交审批
-                        </button>
-                      </div>
-                    </PermissionGuard>
-                  )}
-                {a.activityType === "FOLLOW_UP" && a.status === "SUBMITTED" && (
-                  <PermissionGuard permission={actionPermission("project-visit", "approve")}>
-                    <div className="mt-1.5 flex gap-1.5">
-                      <button
-                        onClick={() => runAction(a.id, "approve")}
-                        disabled={busy !== null}
-                        className="rounded-md bg-green-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        批准
-                      </button>
-                      <button
-                        onClick={() => rejectWithReason(a.id)}
-                        disabled={busy !== null}
-                        className="rounded-md border border-red-200 px-2 py-1 text-xs font-medium text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        驳回
-                      </button>
-                    </div>
-                  </PermissionGuard>
-                )}
-
-                {/* 评论（所有活动类型；最小 ActivityComment） */}
-                <div className="mt-1.5">
-                  <button
-                    onClick={() => toggleComments(a.id)}
-                    className="text-xs text-brand-600 hover:underline"
-                  >
-                    评论（{a.commentCount}）
-                  </button>
-                </div>
-                {expanded[a.id] && (
-                  <div className="mt-1.5 space-y-1.5 rounded-md border border-border p-2">
-                    {comments[a.id] && comments[a.id].length > 0 ? (
-                      comments[a.id].map((c) => (
-                        <p key={c.id} className="text-xs text-ink-primary">
-                          <span className="text-ink-muted">{formatDate(c.createdAt)}：</span>
-                          {c.content}
-                        </p>
-                      ))
-                    ) : (
-                      <p className="text-xs text-ink-muted">暂无评论。</p>
+                {/* 内容卡 */}
+                <div className="mb-1 min-w-0 flex-1 rounded-lg border border-border bg-surface p-3.5 shadow-elevation-sm">
+                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                    <span className={"text-xs font-semibold " + node.text}>{typeMeta.label}</span>
+                    {statusMeta && (
+                      <StatusBadge status={a.status ?? ""} label={statusMeta.label} tone={statusMeta.tone} />
                     )}
-                    <PermissionGuard permission={actionPermission("project-visit", "create")}>
-                      <div className="flex gap-2">
-                        <input
-                          value={commentText[a.id] ?? ""}
-                          onChange={(e) => setCommentText((prev) => ({ ...prev, [a.id]: e.target.value }))}
-                          className={INPUT_CLASS + " flex-1"}
-                          placeholder="添加评论…"
-                        />
+                    <span className="text-xs text-ink-muted">{formatDate(a.occurredAt)}</span>
+                    <span className="text-xs text-ink-muted">操作人 {userName(a.createdBy)}</span>
+                    {a.contact?.name && <span className="text-xs text-ink-muted">联系人：{a.contact.name}</span>}
+                  </div>
+
+                  {a.summary && <p className="mt-1.5 text-sm text-ink-primary">{a.summary}</p>}
+                  {a.nextAction && <p className="mt-1 text-xs text-ink-secondary">下次行动：{a.nextAction}</p>}
+                  {a.activityType === "CHECK_IN" && (
+                    <p className="mt-1 text-xs text-ink-secondary">
+                      位置：{a.latitude ?? "—"}, {a.longitude ?? "—"} {a.locationNote ? "（" + a.locationNote + "）" : ""}
+                    </p>
+                  )}
+
+                  {/* 审批子事件（FOLLOW_UP 参与审批；APPROVAL 轻量 icon + accent） */}
+                  {a.activityType === "FOLLOW_UP" && (
+                    <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-secondary">
+                      {a.submittedAt && (
+                        <span className="inline-flex items-center gap-1">
+                          <IconShieldText className="h-3.5 w-3.5 text-status-warning-text" />
+                          提交 {userName(a.submittedBy)} · {formatDate(a.submittedAt)}
+                        </span>
+                      )}
+                      {a.approvedAt && (
+                        <span className="inline-flex items-center gap-1">
+                          <IconShieldText className="h-3.5 w-3.5 text-status-success-text" />
+                          批准 {userName(a.approvedBy)} · {formatDate(a.approvedAt)}
+                        </span>
+                      )}
+                      {a.rejectedAt && (
+                        <span className="inline-flex items-center gap-1 text-status-danger-text">
+                          <IconShieldText className="h-3.5 w-3.5" />
+                          驳回 {userName(a.rejectedBy)} · {formatDate(a.rejectedAt)}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {a.status === "REJECTED" && a.rejectReason && (
+                    <p className="mt-1 text-xs text-status-danger-text">驳回原因：{a.rejectReason}</p>
+                  )}
+
+                  {/* 跟进审批动作（仅 FOLLOW_UP） */}
+                  {a.activityType === "FOLLOW_UP" &&
+                    (a.status === "DRAFT" || a.status === "REJECTED") && (
+                      <PermissionGuard permission={actionPermission("project-visit", "edit")}>
+                        <div className="mt-2 flex gap-1.5">
+                          <button
+                            onClick={() => runAction(a.id, "submit")}
+                            disabled={busy !== null}
+                            className={BUTTON_SECONDARY_CLASS + " text-xs"}
+                          >
+                            提交审批
+                          </button>
+                        </div>
+                      </PermissionGuard>
+                    )}
+                  {a.activityType === "FOLLOW_UP" && a.status === "SUBMITTED" && (
+                    <PermissionGuard permission={actionPermission("project-visit", "approve")}>
+                      <div className="mt-2 flex gap-1.5">
                         <button
-                          onClick={() => addComment(a.id)}
-                          disabled={busy !== null || !(commentText[a.id] ?? "").trim()}
-                          className={BUTTON_PRIMARY_CLASS + " text-xs"}
+                          onClick={() => runAction(a.id, "approve")}
+                          disabled={busy !== null}
+                          className="rounded-md bg-status-success-text px-2.5 py-1 text-xs font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          发送
+                          批准
+                        </button>
+                        <button
+                          onClick={() => setRejectTarget(a.id)}
+                          disabled={busy !== null}
+                          className="rounded-md border border-status-danger-border px-2.5 py-1 text-xs font-medium text-status-danger-text transition-colors hover:bg-status-danger-bg disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          驳回
                         </button>
                       </div>
                     </PermissionGuard>
+                  )}
+
+                  {/* 评论（所有活动类型；最小 ActivityComment） */}
+                  <div className="mt-2">
+                    <button
+                      onClick={() => toggleComments(a.id)}
+                      className="inline-flex items-center gap-1 text-xs text-brand-600 hover:underline"
+                    >
+                      <IconComment className="h-3.5 w-3.5" />
+                      评论（{a.commentCount}）
+                    </button>
                   </div>
-                )}
+                  {expanded[a.id] && (
+                    <div className="mt-2 space-y-2 rounded-md border border-border bg-canvas/40 p-2.5">
+                      {comments[a.id] && comments[a.id].length > 0 ? (
+                        comments[a.id].map((c) => (
+                          <div key={c.id} className="text-xs text-ink-primary">
+                            <span className="text-ink-muted">{formatDate(c.createdAt)} · {userName(c.createdBy)}：</span>
+                            {c.content}
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-xs text-ink-muted">暂无评论。</p>
+                      )}
+                      <PermissionGuard permission={actionPermission("project-visit", "create")}>
+                        <div className="flex gap-2">
+                          <input
+                            value={commentText[a.id] ?? ""}
+                            onChange={(e) => setCommentText((prev) => ({ ...prev, [a.id]: e.target.value }))}
+                            className={INPUT_CLASS + " flex-1"}
+                            placeholder="添加评论…"
+                          />
+                          <button
+                            onClick={() => addComment(a.id)}
+                            disabled={busy !== null || !(commentText[a.id] ?? "").trim()}
+                            className={BUTTON_PRIMARY_CLASS + " text-xs"}
+                          >
+                            发送
+                          </button>
+                        </div>
+                      </PermissionGuard>
+                    </div>
+                  )}
+                </div>
               </li>
             );
           })}
-        </ul>
+        </ol>
       )}
+
+      <RejectDialog
+        open={rejectTarget !== null}
+        busy={busy === rejectTarget}
+        onCancel={() => setRejectTarget(null)}
+        onConfirm={(reason) => {
+          if (rejectTarget) runAction(rejectTarget, "reject", reason);
+        }}
+      />
     </section>
+  );
+}
+
+/** 审批/评论小图标（Lucide 风格，避免在时间线内联 SVG 重复） */
+function IconShieldText({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+      <path d="M9 12h6M9 16h4" />
+    </svg>
+  );
+}
+
+function IconComment({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+    </svg>
   );
 }

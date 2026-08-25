@@ -165,6 +165,8 @@ describe('GET /api/business-partners/:id/activities — 时间线', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockPrisma.businessPartner = { findFirst: vi.fn().mockResolvedValue({ id: 'bp-1' }) };
+    // FE 2.0 操作人只读投影：user 摘要查询
+    mockPrisma.user = { findMany: vi.fn().mockResolvedValue([{ id: 'u-2', name: '审批人', email: 'p@x.c' }]) };
     mockPrisma.customerActivity = {
       count: vi.fn().mockResolvedValue(2),
       findMany: vi.fn().mockResolvedValue([

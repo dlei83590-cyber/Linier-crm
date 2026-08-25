@@ -19,6 +19,7 @@ import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shar
 import { useSession } from "@/lib/session-context";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
+import { ConfirmActionDialog, StatusBadge } from "@/components/workspace";
 import { INPUT_CLASS, BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { formatDate } from "@/lib/format";
 
@@ -79,8 +80,8 @@ function errText(err: unknown, fallback: string): string {
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-md border border-border p-4">
-      <h3 className="mb-3 text-sm font-semibold text-ink-primary">{title}</h3>
+    <section className="rounded-xl border border-border bg-surface p-5 shadow-elevation-sm">
+      <h3 className="mb-4 text-sm font-semibold text-ink-primary">{title}</h3>
       {children}
     </section>
   );
@@ -137,7 +138,7 @@ export function SupplierProfile({ supplierId, onChanged }: { supplierId: string;
   const [editingSt, setEditingSt] = useState<string | null>(null);
   const [stEditForm, setStEditForm] = useState<{ paymentTerms: string; creditDays: string; paymentMethod: string; currency: string }>({ paymentTerms: "", creditDays: "", paymentMethod: "", currency: "CNY" });
   const [stEditSaving, setStEditSaving] = useState(false);
-  const [confirmDeleteSt, setConfirmDeleteSt] = useState<string | null>(null);
+  const [confirmDeleteSt, setConfirmDeleteSt] = useState<SettlementRow | null>(null);
 
   const [quals, setQuals] = useState<QualificationRow[]>([]);
   const [qualsLoading, setQualsLoading] = useState(true);
@@ -147,7 +148,7 @@ export function SupplierProfile({ supplierId, onChanged }: { supplierId: string;
   const [editingQual, setEditingQual] = useState<string | null>(null);
   const [qualEditForm, setQualEditForm] = useState<{ qualType: string; qualName: string; certNo: string; issueDate: string; expireDate: string; status: string }>({ qualType: "BUSINESS_LICENSE", qualName: "", certNo: "", issueDate: "", expireDate: "", status: "VALID" });
   const [qualEditSaving, setQualEditSaving] = useState(false);
-  const [confirmDeleteQual, setConfirmDeleteQual] = useState<string | null>(null);
+  const [confirmDeleteQual, setConfirmDeleteQual] = useState<QualificationRow | null>(null);
 
   const loadBase = useCallback(() => {
     setProfileLoading(true);
@@ -540,14 +541,7 @@ export function SupplierProfile({ supplierId, onChanged }: { supplierId: string;
                     <div className="ml-auto flex items-center gap-1">
                       {canEditSettlement && <button type="button" onClick={() => openStEdit(s)} className={BUTTON_SECONDARY_CLASS + " text-xs"}>编辑</button>}
                       {canDeleteSettlement && (
-                        confirmDeleteSt === s.id ? (
-                          <>
-                            <button type="button" onClick={() => deleteSettlement(s)} className="rounded-md bg-status-danger-text px-2 py-1 text-xs font-medium text-white">确认删除</button>
-                            <button type="button" onClick={() => setConfirmDeleteSt(null)} className={BUTTON_SECONDARY_CLASS + " text-xs"}>取消</button>
-                          </>
-                        ) : (
-                          <button type="button" onClick={() => setConfirmDeleteSt(s.id)} className={BUTTON_SECONDARY_CLASS + " text-xs text-status-danger-text"}>删除</button>
-                        )
+                        <button type="button" onClick={() => setConfirmDeleteSt(s)} className={BUTTON_SECONDARY_CLASS + " text-xs text-status-danger-text"}>删除</button>
                       )}
                     </div>
                   </div>
@@ -557,7 +551,7 @@ export function SupplierProfile({ supplierId, onChanged }: { supplierId: string;
           </div>
         )}
         {!settlementsLoading && !settlementsError && canCreateSettlement && (
-          <div className="flex flex-wrap items-end gap-2 rounded-md border border-border p-2">
+          <div className="flex flex-wrap items-end gap-2 rounded-lg border border-border bg-canvas/50 p-2.5">
             <input value={stForm.paymentTerms} onChange={(e) => setStForm({ ...stForm, paymentTerms: e.target.value })} className={INPUT_CLASS + " w-36"} placeholder="付款条款 NET30" />
             <input type="number" min={0} value={stForm.creditDays} onChange={(e) => setStForm({ ...stForm, creditDays: e.target.value })} className={INPUT_CLASS + " w-24"} placeholder="账期天数" />
             <select value={stForm.paymentMethod} onChange={(e) => setStForm({ ...stForm, paymentMethod: e.target.value })} className={INPUT_CLASS + " w-24"}>
@@ -598,18 +592,15 @@ export function SupplierProfile({ supplierId, onChanged }: { supplierId: string;
                     <span className="text-xs text-ink-secondary">{q.certNo ? "证书号 " + q.certNo : ""}</span>
                     <span className="text-xs text-ink-secondary">{q.issueDate ? "发证 " + formatDate(q.issueDate) : ""}</span>
                     <span className="text-xs text-ink-secondary">{q.expireDate ? "有效至 " + formatDate(q.expireDate) : ""}</span>
-                    <span className="text-xs">{QUAL_STATUS_LABELS[q.status] ?? q.status}</span>
+                    <StatusBadge
+                      status={q.status}
+                      label={QUAL_STATUS_LABELS[q.status] ?? q.status}
+                      toneMap={{ VALID: "success", EXPIRING: "warning", EXPIRED: "danger" }}
+                    />
                     <div className="ml-auto flex items-center gap-1">
                       {canEditQual && <button type="button" onClick={() => openQualEdit(q)} className={BUTTON_SECONDARY_CLASS + " text-xs"}>编辑</button>}
                       {canDeleteQual && (
-                        confirmDeleteQual === q.id ? (
-                          <>
-                            <button type="button" onClick={() => deleteQual(q)} className="rounded-md bg-status-danger-text px-2 py-1 text-xs font-medium text-white">确认删除</button>
-                            <button type="button" onClick={() => setConfirmDeleteQual(null)} className={BUTTON_SECONDARY_CLASS + " text-xs"}>取消</button>
-                          </>
-                        ) : (
-                          <button type="button" onClick={() => setConfirmDeleteQual(q.id)} className={BUTTON_SECONDARY_CLASS + " text-xs text-status-danger-text"}>删除</button>
-                        )
+                        <button type="button" onClick={() => setConfirmDeleteQual(q)} className={BUTTON_SECONDARY_CLASS + " text-xs text-status-danger-text"}>删除</button>
                       )}
                     </div>
                   </div>
@@ -619,7 +610,7 @@ export function SupplierProfile({ supplierId, onChanged }: { supplierId: string;
           </div>
         )}
         {!qualsLoading && !qualsError && canCreateQual && (
-          <div className="flex flex-wrap items-end gap-2 rounded-md border border-border p-2">
+          <div className="flex flex-wrap items-end gap-2 rounded-lg border border-border bg-canvas/50 p-2.5">
             <select value={qualForm.qualType} onChange={(e) => setQualForm({ ...qualForm, qualType: e.target.value })} className={INPUT_CLASS + " w-36"}>
               {QUAL_TYPE_OPTIONS.map((v) => <option key={v} value={v}>{QUAL_TYPE_LABELS[v]}</option>)}
             </select>
@@ -634,6 +625,31 @@ export function SupplierProfile({ supplierId, onChanged }: { supplierId: string;
           </div>
         )}
       </SectionCard>
+
+      <ConfirmActionDialog
+        open={confirmDeleteSt !== null}
+        title={"删除结算条款？"}
+        description={confirmDeleteSt?.paymentTerms ? "付款条款 " + confirmDeleteSt.paymentTerms + " 将被删除。" : "确认删除该结算条款？"}
+        confirmLabel="确认删除"
+        tone="danger"
+        busy={false}
+        onConfirm={() => {
+          if (confirmDeleteSt) deleteSettlement(confirmDeleteSt);
+        }}
+        onCancel={() => setConfirmDeleteSt(null)}
+      />
+      <ConfirmActionDialog
+        open={confirmDeleteQual !== null}
+        title={"删除资质证书？"}
+        description={confirmDeleteQual ? "资质 " + confirmDeleteQual.qualName + " 将被删除。" : "确认删除该资质证书？"}
+        confirmLabel="确认删除"
+        tone="danger"
+        busy={false}
+        onConfirm={() => {
+          if (confirmDeleteQual) deleteQual(confirmDeleteQual);
+        }}
+        onCancel={() => setConfirmDeleteQual(null)}
+      />
     </div>
   );
 }

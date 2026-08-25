@@ -1,18 +1,24 @@
 "use client";
 
 /**
- * Phase 2C-2 — Customer 360 公海状态卡（替代 Coming-by-contract 占位）
+ * Phase 2C-2 — Customer 360 公海状态卡（FE 2.0：三态统一）
  *
  * 显示：当前客户 Ownership（SSOT）/ 当前 Pool 状态 / 所属 Pool / enteredAt·reason / 当前 owner /
- *      claim / release / ownership history。
+ *      claim / release。
  * 数据源：GET /api/business-partners/:id/pool-status（customer-pool:view）。
  * 操作：claim / release（customer-pool:assign）。
+ * 三态：loading 骨架 / error 图标+重试 / empty 图标+说明；权限不足不渲染按钮。
  */
 import { useCallback, useEffect, useState } from "react";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
+import { StatusBadge } from "@/components/workspace";
+import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { formatDate } from "@/lib/format";
+import { IconAlertCircle, IconRefreshCw } from "./icons";
 
 interface PoolStatus {
   entry: {
@@ -40,6 +46,7 @@ export function PoolStatusCard({ partnerId }: { partnerId: string }) {
 
   const load = useCallback(() => {
     setLoading(true);
+    setError(null);
     apiFetch<PoolStatus>("/api/business-partners/" + partnerId + "/pool-status")
       .then(({ data }) => setData(data))
       .catch((err: unknown) => {
@@ -85,63 +92,76 @@ export function PoolStatusCard({ partnerId }: { partnerId: string }) {
   };
 
   return (
-    <section className="rounded-md border border-border p-4">
-      <div className="mb-3 flex items-center justify-between">
+    <section className="rounded-xl border border-border bg-surface p-5 shadow-elevation-sm">
+      <div className="mb-4 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-ink-primary">客户公海</h2>
-        {error && <p className="text-xs text-red-600">{error}</p>}
+        {data?.entry ? (
+          <StatusBadge
+            status={data.entry.status}
+            label={STATUS_LABELS[data.entry.status] ?? data.entry.status}
+            toneMap={{ IN_POOL: "warning", CLAIMED: "success" }}
+          />
+        ) : null}
       </div>
+
       {loading ? (
-        <p className="text-sm text-ink-muted">加载中…</p>
-      ) : !data ? (
-        <p className="text-sm text-ink-muted">暂无数据。</p>
+        <div className="space-y-2" aria-hidden="true">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <Skeleton key={i} className="h-5 w-full" />
+          ))}
+        </div>
+      ) : error ? (
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-status-danger-border bg-status-danger-bg/30 py-8 text-center">
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-status-danger-bg text-status-danger-text">
+            <IconAlertCircle className="h-5 w-5" />
+          </span>
+          <p className="text-sm text-status-danger-text">{error}</p>
+          <button type="button" onClick={load} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-secondary transition-colors duration-150 hover:bg-slate-50">
+            <IconRefreshCw className="h-3.5 w-3.5" />
+            重试
+          </button>
+        </div>
+      ) : !data || !data.entry ? (
+        <EmptyState
+          title="不在公海中"
+          description="客户当前有归属或未进入任何公海池；挑入/释放操作见对应公海工作台。"
+        />
       ) : (
-        <div className="space-y-3 text-sm">
+        <div className="space-y-3.5 text-sm">
           {/* 池状态 + 当前 owner */}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-            {data.entry ? (
-              <>
-                <span className="font-medium">{data.entry.pool.name}</span>
-                <span className="rounded bg-brand-50 px-1.5 py-0.5 text-xs text-brand-700">
-                  {STATUS_LABELS[data.entry.status] ?? data.entry.status}
-                </span>
-                <span className="text-xs text-ink-muted">
-                  {formatDate(data.entry.enteredAt)} · {ENTER_REASON_LABELS[data.entry.enterReason] ?? data.entry.enterReason}
-                </span>
-              </>
-            ) : (
-              <span className="text-ink-muted">不在公海中</span>
-            )}
-            <span className="text-xs text-ink-muted">
+            <span className="font-medium text-ink-primary">{data.entry.pool.name}</span>
+            <span className="text-xs text-ink-secondary">
+              {formatDate(data.entry.enteredAt)} · {ENTER_REASON_LABELS[data.entry.enterReason] ?? data.entry.enterReason}
+            </span>
+            <span className="text-xs text-ink-secondary">
               {data.activeOwnership ? "当前负责人：" + (data.activeOwnership.owner.name ?? data.activeOwnership.owner.email) : "当前无归属"}
             </span>
           </div>
 
-          {/* claim / release 操作 */}
-          {data.entry && (
-            <PermissionGuard permission={actionPermission("customer-pool", "assign")}>
-              <div className="flex gap-2">
-                {data.entry.status === "IN_POOL" && (
-                  <button
-                    onClick={claim}
-                    disabled={acting}
-                    className="rounded-md bg-brand-600 px-3 py-1.5 text-xs text-white hover:bg-brand-700 disabled:opacity-50"
-                  >
-                    挑入（claim）
-                  </button>
-                )}
-                {data.entry.status === "CLAIMED" && data.activeOwnership && (
-                  <button
-                    onClick={release}
-                    disabled={acting}
-                    className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-surface-hover disabled:opacity-50"
-                  >
-                    释放回池
-                  </button>
-                )}
-              </div>
-            </PermissionGuard>
-          )}
-
+          {/* claim / release 操作（权限门：不渲染假按钮） */}
+          <PermissionGuard permission={actionPermission("customer-pool", "assign")}>
+            <div className="flex gap-2">
+              {data.entry.status === "IN_POOL" && (
+                <button
+                  onClick={claim}
+                  disabled={acting}
+                  className={BUTTON_PRIMARY_CLASS + " text-xs"}
+                >
+                  {acting ? "处理中…" : "挑入（claim）"}
+                </button>
+              )}
+              {data.entry.status === "CLAIMED" && data.activeOwnership && (
+                <button
+                  onClick={release}
+                  disabled={acting}
+                  className={BUTTON_SECONDARY_CLASS + " text-xs"}
+                >
+                  {acting ? "处理中…" : "释放回池"}
+                </button>
+              )}
+            </div>
+          </PermissionGuard>
         </div>
       )}
     </section>
