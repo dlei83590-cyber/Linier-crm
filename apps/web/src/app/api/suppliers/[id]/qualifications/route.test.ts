@@ -13,6 +13,12 @@ vi.mock('@/lib/api-helpers', () => ({
 
 import { POST, GET } from '@/app/api/suppliers/[id]/qualifications/route';
 
+const supplierQualificationMock = () => mockPrisma.supplierQualification as {
+  create: ReturnType<typeof vi.fn>;
+  count: ReturnType<typeof vi.fn>;
+  findMany: ReturnType<typeof vi.fn>;
+};
+
 /**
  * FRT-02 契约测试：SupplierProfile「资质证书」区块依赖的
  * POST/GET /api/suppliers/:id/qualifications。
@@ -32,7 +38,7 @@ describe('POST /api/suppliers/:id/qualifications', () => {
     });
     const res = await POST(req, { params: Promise.resolve({ id: 'sup-1' }) });
     expect(res.status).toBe(201);
-    const createArgs = (mockPrisma.supplierQualification.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const createArgs = supplierQualificationMock().create.mock.calls[0][0];
     expect(createArgs.data.supplierId).toBe('sup-1');
     expect(createArgs.data.status).toBe('VALID');
   });
@@ -45,7 +51,7 @@ describe('POST /api/suppliers/:id/qualifications', () => {
     });
     const res = await POST(req, { params: Promise.resolve({ id: 'sup-1' }) });
     expect(res.status).toBe(400);
-    expect(mockPrisma.supplierQualification.create).not.toHaveBeenCalled();
+    expect(supplierQualificationMock().create).not.toHaveBeenCalled();
   });
 });
 

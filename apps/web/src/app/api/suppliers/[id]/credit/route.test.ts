@@ -13,6 +13,11 @@ vi.mock('@/lib/api-helpers', () => ({
 
 import { POST, GET } from '@/app/api/suppliers/[id]/credit/route';
 
+const partnerCreditMock = () => mockPrisma.partnerCredit as {
+  findFirst: ReturnType<typeof vi.fn>;
+  upsert: ReturnType<typeof vi.fn>;
+};
+
 /**
  * FRT-02 契约测试：SupplierProfile「信用评级」区块依赖的
  * POST/GET /api/suppliers/:id/credit（PartnerCredit upsert，共享信用 1:1）。
@@ -38,7 +43,7 @@ describe('POST /api/suppliers/:id/credit', () => {
     };
     const res = await POST(makeReq({ rating: 'A', status: 'NORMAL', creditLimit: 100000 }), { params: Promise.resolve({ id: 'sup-1' }) });
     expect(res.status).toBe(201);
-    const upsertArgs = (mockPrisma.partnerCredit.upsert as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const upsertArgs = partnerCreditMock().upsert.mock.calls[0][0];
     expect(upsertArgs.where.partnerId).toBe('bp-1');
     expect(upsertArgs.create.rating).toBe('A');
   });
@@ -52,14 +57,14 @@ describe('POST /api/suppliers/:id/credit', () => {
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error.code).toBe('VERSION_CONFLICT');
-    expect(mockPrisma.partnerCredit.upsert).not.toHaveBeenCalled();
+    expect(partnerCreditMock().upsert).not.toHaveBeenCalled();
   });
 
   it('非法 rating → 400（校验失败）', async () => {
     mockPrisma.partnerCredit = { findFirst: vi.fn().mockResolvedValue(null), upsert: vi.fn() };
     const res = await POST(makeReq({ rating: 'Z' }), { params: Promise.resolve({ id: 'sup-1' }) });
     expect(res.status).toBe(400);
-    expect(mockPrisma.partnerCredit.upsert).not.toHaveBeenCalled();
+    expect(partnerCreditMock().upsert).not.toHaveBeenCalled();
   });
 });
 
