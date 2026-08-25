@@ -83,7 +83,7 @@ export interface SalesDeliveryOriginalMovement {
 
 /** 构造删除 DISPATCHED Delivery 的 REVERSAL 原子（IN 恢复库存；禁止 delete movement / 无 movement 直接加回投影） */
 export function buildSalesDeliveryReversalAtoms(
-  ctx: { deliveryId: string; deliveryCode: string; actorId: string; occurredAt: string },
+  ctx: { deliveryId: string; deliveryCode: string; actorId: string | null; occurredAt: string },
   originalMovements: SalesDeliveryOriginalMovement[],
 ): LedgerAtom[] {
   const actionSourceId = `DELIVERY_DELETE:${ctx.deliveryId}`;

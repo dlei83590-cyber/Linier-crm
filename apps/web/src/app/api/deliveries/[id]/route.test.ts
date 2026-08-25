@@ -2,7 +2,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 import { Prisma } from '@prisma/client';
 
-const { mockPrisma } = vi.hoisted(() => ({ mockPrisma: {} as Record<string, unknown> }));
+const { mockPrisma } = vi.hoisted(() => {
+  const mockPrisma: {
+    delivery: { findFirst: ReturnType<typeof vi.fn> };
+    invoice: { findMany: ReturnType<typeof vi.fn>; count: ReturnType<typeof vi.fn> };
+    $transaction: ReturnType<typeof vi.fn>;
+  } = {
+    delivery: { findFirst: vi.fn() },
+    invoice: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
+    $transaction: vi.fn(),
+  };
+  return { mockPrisma };
+});
 vi.mock('@/lib/prisma', () => ({ prisma: mockPrisma }));
 vi.mock('@/lib/api-helpers', () => ({
   authenticate: vi.fn().mockResolvedValue({ id: 'u-1', email: 'a@b.c', roles: ['SUPER_ADMIN'] }),
@@ -85,8 +96,9 @@ function makeTx(delivery: ReturnType<typeof makeDelivery>, movements: unknown[])
 describe('DELETE /api/deliveries/:id — DISPATCHED 删除恢复库存（REVERSAL）', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockPrisma.delivery = { findFirst: vi.fn() };
-    mockPrisma.invoice = { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) };
+    mockPrisma.delivery.findFirst = vi.fn();
+    mockPrisma.invoice.findMany = vi.fn().mockResolvedValue([]);
+    mockPrisma.invoice.count = vi.fn().mockResolvedValue(0);
   });
 
   it('DISPATCHED 删除：找到 SALES_DELIVERY OUT movements → 构造 REVERSAL/IN 原子（reversalOfMovementId 引用原 Movement）→ 恢复库存', async () => {
