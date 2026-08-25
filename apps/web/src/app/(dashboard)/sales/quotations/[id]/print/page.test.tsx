@@ -41,7 +41,7 @@ const detail = {
     phone: '13800000000',
     email: 'wang@example.com',
     address: '上海市浦东新区某路 100 号',
-    ownerships: [{ owner: { id: 'u-9', name: '张销售', email: 'zhang@example.com' } }],
+    customerOwnerships: [{ owner: { id: 'u-9', name: '张销售', email: 'zhang@example.com' } }],
   },
   lines: [
     {
