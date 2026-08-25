@@ -8,9 +8,15 @@
  */
 export type VisitRowAction = "checkin" | "checkout" | null;
 
+/** 与 VisitRow.checkins 元素真实形状一致（含 checkinAt；判定只用 checkoutAt） */
+export interface VisitActionCheckin {
+  checkinAt: string | null;
+  checkoutAt: string | null;
+}
+
 export interface VisitActionRow {
   status: string;
-  checkins: Array<{ checkoutAt: string | null }>;
+  checkins: VisitActionCheckin[];
 }
 
 /** 该行当前可执行的动作（null = 无动作；权限仍由调用方 PermissionGuard/actionPermission 把关） */
