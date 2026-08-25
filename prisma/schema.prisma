@@ -1495,6 +1495,7 @@ model ProjectExpense {
   updatedById String?
   approvedById String?
   rejectionReason String? // 驳回原因（REJECTED 时记录；Migration 0054）
+  rejectedById   String? // 驳回人（REJECTED 时记录；Migration 0054）
   approvalStatus ApprovalStatus @default(DRAFT)
   version     Int      @default(1)
   deletedAt   DateTime?
