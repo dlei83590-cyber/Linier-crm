@@ -152,7 +152,7 @@ describe('PATCH /api/business-partners/:id — 信用等级（creditRating）写
     const res = await PATCH(makeRequest({ version: 1, creditRating: 'X'.repeat(101) }), { params: Promise.resolve({ id: 'bp-sup-1' }) });
     expect(res.status).toBe(400);
     const body = await res.json();
-    expect(body.error.code).toBe('VALIDATION');
+    expect(body.error.code).toBe('VALIDATION_ERROR');
     expect(casMock).not.toHaveBeenCalled();
   });
 
