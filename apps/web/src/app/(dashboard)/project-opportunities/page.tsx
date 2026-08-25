@@ -28,6 +28,11 @@ interface OpportunityRow {
   createdAt: string;
   customer?: { id: string; code: string | null; name: string | null; type: string | null } | null;
   project?: { id: string; code: string | null; name: string | null; stage: string | null } | null;
+  /** 商机跟进 MVP：该商机关联客户最近一次 FOLLOW_UP（服务端计算，零客户端推导） */
+  lastFollowUpAt: string | null;
+  daysSinceFollowUp: number | null;
+  needsFollowUp: boolean;
+  followUpThresholdDays: number;
 }
 
 const STAGE_OPTIONS = [
@@ -193,6 +198,31 @@ function OpportunityList() {
             ),
           },
           { key: "customer", header: "客户", render: (row) => row.customer?.name ?? "—" },
+          {
+            key: "lastFollowUpAt",
+            header: "最近跟进",
+            render: (row) =>
+              row.lastFollowUpAt ? (
+                <div>
+                  <div className="text-ink-primary">{formatDate(row.lastFollowUpAt)}</div>
+                  <div className="text-xs text-ink-muted">
+                    {row.daysSinceFollowUp != null ? "距今 " + row.daysSinceFollowUp + " 天" : ""}
+                  </div>
+                </div>
+              ) : (
+                <span className="text-ink-muted">从未跟进</span>
+              ),
+          },
+          {
+            key: "needsFollowUp",
+            header: "跟进状态",
+            render: (row) =>
+              row.needsFollowUp ? (
+                <StatusBadge status="FOLLOWUP_DUE" label="待跟进" tone="warning" />
+              ) : (
+                <span className="text-ink-muted">—</span>
+              ),
+          },
           {
             key: "project",
             header: "已转项目",

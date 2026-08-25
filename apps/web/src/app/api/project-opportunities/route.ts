@@ -6,6 +6,7 @@ import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/l
 import { ok, failValidation, failConflict, parsePagination } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
+import { buildFollowUpInfo } from "@/lib/api/opportunity-followup";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -66,7 +67,29 @@ export async function GET(request: NextRequest) {
     }),
   ]);
 
-  return ok(items, { page, pageSize, total });
+  // 商机跟进 MVP：本页商机客户 → 最近一次 FOLLOW_UP（CustomerActivity.createdAt，BP 维度）。
+  // 每客户取最新一条（orderBy createdAt desc 后首次出现即最新）；商机必有客户（customerId 非空）。
+  const customerIds = [...new Set(items.map((i) => i.customerId))];
+  const latestFollowUpByPartner = new Map<string, Date>();
+  if (customerIds.length > 0) {
+    const followUps = await prisma.customerActivity.findMany({
+      where: { businessPartnerId: { in: customerIds }, activityType: "FOLLOW_UP", deletedAt: null },
+      orderBy: { createdAt: "desc" },
+      select: { businessPartnerId: true, createdAt: true },
+    });
+    for (const f of followUps) {
+      if (!latestFollowUpByPartner.has(f.businessPartnerId)) {
+        latestFollowUpByPartner.set(f.businessPartnerId, f.createdAt);
+      }
+    }
+  }
+
+  const rows = items.map((opp) => ({
+    ...opp,
+    ...buildFollowUpInfo(latestFollowUpByPartner.get(opp.customerId) ?? null, opp.createdAt),
+  }));
+
+  return ok(rows, { page, pageSize, total });
 }
 
 /** POST /api/project-opportunities（创建销售机会：code 唯一） */
