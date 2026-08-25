@@ -2,6 +2,25 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - FRT-10：经营看板 + 绩效 + Runtime Acceptance 可视化收口（前端闭环最小集，零 Schema/零新 API）
+
+### 新增
+
+- **/reports/operations 区域分布完整显示**：regions（BusinessPartner.region）区域客户数 + 期间订单数/金额（未设置归「未设置」）
+- **/reports/operations 品牌分布完整显示**：brands（SalesOrderLine → Item.brand）品牌行数 + 金额（真实事实源，未设置归「未设置」）
+- **渠道维度明确「暂无渠道事实数据」**：channelAvailable=false 时显式提示，不造 channel 字段（后端无渠道 SSOT 事实源）
+- **经营目标维护最小 UI（reports:edit 可见）**：调已有 GET/POST /api/reports/targets；period（YYYY / YYYY-MM / YYYY-MM-DD）+ dimensionType + targetAmount；保存后刷新本页达成率；保存失败显式 Error + Retry
+- **目标空态保留设置入口**：targets=空时表格区显示空态，维护表单常驻（编辑者）；无 reports:edit 只提示联系管理员（不出现假按钮）
+- **/reports/performance 数据源不可用 vs 0 全列区分**：按后端 PERFORMANCE_DATA_SOURCES 逐列显示「暂无事实数据」或真实计数（本周/本月不变）
+- 经营看板/绩效所有 report API failure 统一 ErrorPanel 显式 Error + Retry
+
+### 边界
+
+- 零 Schema / 零 Migration / 零新领域模型；复用已有 GET /api/reports/operations、/api/reports/performance、/api/reports/targets（feat(crm) MVP 已合入 base）
+- 禁止 BI / OLAP / DW / Metric Engine / charts framework / AI scoring；不修改 modules.ts（FRT-01 独占）
+
+---
+
 ## [Unreleased] - Phase 2C-2：客户公海生产测试 MVP（CTO 纠偏：底座冻结，只做前端闭环最小集）
 
 ### 新增

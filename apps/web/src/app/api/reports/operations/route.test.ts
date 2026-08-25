@@ -181,6 +181,39 @@ describe('GET /api/reports/operations — 经营数据固定看板（只读聚�
     expect(unset).toEqual({ region: '未设置', customerCount: 0, salesOrderCount: 1, salesAmount: '4000' });
   });
 
+  it('固定品牌维度：SalesOrderLine → Item.brand 行数/金额（未设置归「未设置」，itemId 空行跳过）', async () => {
+    mockPrisma['salesOrderLine'] = {
+      findMany: vi.fn().mockResolvedValue([
+        { itemId: 'item-1', totalAmount: new Prisma.Decimal('5000.00') },
+        { itemId: 'item-2', totalAmount: new Prisma.Decimal('3000.00') },
+        { itemId: null, totalAmount: new Prisma.Decimal('1000.00') }, // itemId 空行不参与品牌聚合
+      ]),
+    };
+    mockPrisma['item'] = {
+      findMany: vi.fn().mockResolvedValue([
+        { id: 'item-1', brand: 'A品牌' },
+        { id: 'item-2', brand: null },
+      ]),
+    };
+    const res = await GET(makeRequest('month'));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const brands = body.data.brands;
+    const branded = brands.find((b: { brand: string }) => b.brand === 'A品牌');
+    // Decimal.toString() 去掉尾随零（5000.00 → '5000'）
+    expect(branded).toEqual({ brand: 'A品牌', lineCount: 1, amount: '5000' });
+    const unset = brands.find((b: { brand: string }) => b.brand === '未设置');
+    expect(unset).toEqual({ brand: '未设置', lineCount: 1, amount: '3000' });
+  });
+
+  it('channelAvailable 恒 false：渠道维度无 SSOT 事实源 → 前端显示「暂无渠道事实数据」，不造 channels 字段', async () => {
+    const res = await GET(makeRequest('month'));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.channelAvailable).toBe(false);
+    expect(body.data.channels).toBeUndefined();
+  });
+
   it('period=day → Asia/Shanghai 业务日边界（UTC 16:00 起，跨度 24h）', async () => {
     const res = await GET(makeRequest('day'));
     expect(res.status).toBe(200);
