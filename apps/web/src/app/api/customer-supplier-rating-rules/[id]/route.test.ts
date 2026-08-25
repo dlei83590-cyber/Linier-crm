@@ -17,8 +17,14 @@ import { casUpdate } from '@/lib/api/cas';
 
 const casMock = casUpdate as ReturnType<typeof vi.fn>;
 
+const ratingRuleMock = () =>
+  mockPrisma.customerSupplierRatingRule as {
+    findFirst: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+  };
+
 function makeRequest(method: 'GET' | 'PATCH' | 'DELETE', url: string, body?: unknown): NextRequest {
-  const init: RequestInit = { method, headers: { authorization: 'Bearer test-token' } };
+  const init: { method: string; headers: Record<string, string>; body?: string } = { method, headers: { authorization: 'Bearer test-token' } };
   if (body !== undefined) {
     init.body = JSON.stringify(body);
     init.headers = { ...init.headers, 'Content-Type': 'application/json' };
@@ -29,11 +35,11 @@ function makeRequest(method: 'GET' | 'PATCH' | 'DELETE', url: string, body?: unk
 describe('GET /api/customer-supplier-rating-rules/:id — 规则详情', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockPrisma.customerSupplierRatingRule = { findFirst: vi.fn() };
+    ratingRuleMock().findFirst = vi.fn();
   });
 
   it('返回规则详情', async () => {
-    mockPrisma.customerSupplierRatingRule.findFirst = vi.fn().mockResolvedValue({ id: 'r-1', customerLevel: 'VIP', minimumSupplierRating: 'A', isActive: true, version: 1 });
+    ratingRuleMock().findFirst = vi.fn().mockResolvedValue({ id: 'r-1', customerLevel: 'VIP', minimumSupplierRating: 'A', isActive: true, version: 1 });
     const res = await GET(makeRequest('GET', 'http://localhost/api/customer-supplier-rating-rules/r-1'), { params: Promise.resolve({ id: 'r-1' }) });
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -41,7 +47,7 @@ describe('GET /api/customer-supplier-rating-rules/:id — 规则详情', () => {
   });
 
   it('不存在 → 404', async () => {
-    mockPrisma.customerSupplierRatingRule.findFirst = vi.fn().mockResolvedValue(null);
+    ratingRuleMock().findFirst = vi.fn().mockResolvedValue(null);
     const res = await GET(makeRequest('GET', 'http://localhost/api/customer-supplier-rating-rules/r-x'), { params: Promise.resolve({ id: 'r-x' }) });
     expect(res.status).toBe(404);
   });
@@ -50,9 +56,7 @@ describe('GET /api/customer-supplier-rating-rules/:id — 规则详情', () => {
 describe('PATCH /api/customer-supplier-rating-rules/:id — 更新规则（乐观锁）', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockPrisma.customerSupplierRatingRule = {
-      findFirst: vi.fn().mockResolvedValue({ id: 'r-1', customerLevel: 'VIP', minimumSupplierRating: 'A', isActive: true, version: 1 }),
-    };
+    ratingRuleMock().findFirst = vi.fn().mockResolvedValue({ id: 'r-1', customerLevel: 'VIP', minimumSupplierRating: 'A', isActive: true, version: 1 });
     casMock.mockResolvedValue({ outcome: 'OK' });
   });
 
@@ -72,7 +76,7 @@ describe('PATCH /api/customer-supplier-rating-rules/:id — 更新规则（乐�
   });
 
   it('规则不存在 → 404', async () => {
-    mockPrisma.customerSupplierRatingRule.findFirst = vi.fn().mockResolvedValue(null);
+    ratingRuleMock().findFirst = vi.fn().mockResolvedValue(null);
     const res = await PATCH(makeRequest('PATCH', 'http://localhost/api/customer-supplier-rating-rules/r-x', { minimumSupplierRating: 'AA', version: 1 }), { params: Promise.resolve({ id: 'r-x' }) });
     expect(res.status).toBe(404);
   });
@@ -81,10 +85,8 @@ describe('PATCH /api/customer-supplier-rating-rules/:id — 更新规则（乐�
 describe('DELETE /api/customer-supplier-rating-rules/:id — 软删除', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockPrisma.customerSupplierRatingRule = {
-      findFirst: vi.fn().mockResolvedValue({ id: 'r-1', customerLevel: 'VIP', minimumSupplierRating: 'A', isActive: true, version: 1 }),
-      update: vi.fn().mockResolvedValue({ id: 'r-1' }),
-    };
+    ratingRuleMock().findFirst = vi.fn().mockResolvedValue({ id: 'r-1', customerLevel: 'VIP', minimumSupplierRating: 'A', isActive: true, version: 1 });
+    ratingRuleMock().update = vi.fn().mockResolvedValue({ id: 'r-1' });
   });
 
   it('软删除成功（deletedAt + isActive=false）', async () => {
@@ -92,7 +94,7 @@ describe('DELETE /api/customer-supplier-rating-rules/:id — 软删除', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data.deleted).toBe(true);
-    const updateArgs = (mockPrisma.customerSupplierRatingRule.update as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const updateArgs = ratingRuleMock().update.mock.calls[0][0];
     expect(updateArgs.data.isActive).toBe(false);
     expect(updateArgs.data.deletedAt).toBeInstanceOf(Date);
   });

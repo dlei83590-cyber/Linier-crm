@@ -13,6 +13,9 @@ vi.mock('@/lib/api-helpers', () => ({
 
 import { GET } from '@/app/api/sales-orders/[id]/supplier-recommendations/route';
 
+const ruleMock = () =>
+  mockPrisma.customerSupplierRatingRule as { findFirst: ReturnType<typeof vi.fn> };
+
 function makeRequest(): NextRequest {
   return new NextRequest('http://localhost/api/sales-orders/so-1/supplier-recommendations', { headers: { authorization: 'Bearer test-token' } });
 }
@@ -79,14 +82,14 @@ describe('GET /api/sales-orders/:id/supplier-recommendations — 推荐供应商
 
   it('客户未设置等级 → 无门槛，展示全部（basis 说明）', async () => {
     mockPrisma.salesOrder = { findFirst: vi.fn().mockResolvedValue({ id: 'so-1', customerId: 'c-1', customer: { id: 'c-1', customerLevel: null } }) };
-    mockPrisma.customerSupplierRatingRule = { findFirst: vi.fn() };
+    ruleMock().findFirst = vi.fn();
     const res = await GET(makeRequest(), { params: Promise.resolve({ id: 'so-1' }) });
     const body = await res.json();
     expect(body.data.rows.length).toBe(3);
     expect(body.data.ruleApplied).toBe(false);
     expect(body.data.customerLevel).toBeNull();
     expect(body.data.basis).toContain('客户未设置等级');
-    expect(mockPrisma.customerSupplierRatingRule.findFirst).not.toHaveBeenCalled();
+    expect(ruleMock().findFirst).not.toHaveBeenCalled();
   });
 
   it('无 SupplierItem → rows 空数组（响应结构不变）', async () => {

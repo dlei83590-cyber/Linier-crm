@@ -13,8 +13,16 @@ vi.mock('@/lib/api-helpers', () => ({
 
 import { GET, POST } from '@/app/api/customer-supplier-rating-rules/route';
 
+const ratingRuleMock = () =>
+  mockPrisma.customerSupplierRatingRule as {
+    count: ReturnType<typeof vi.fn>;
+    findMany: ReturnType<typeof vi.fn>;
+    findUnique: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
+  };
+
 function makeRequest(method: 'GET' | 'POST', url: string, body?: unknown): NextRequest {
-  const init: RequestInit = { method, headers: { authorization: 'Bearer test-token' } };
+  const init: { method: string; headers: Record<string, string>; body?: string } = { method, headers: { authorization: 'Bearer test-token' } };
   if (body !== undefined) {
     init.body = JSON.stringify(body);
     init.headers = { ...init.headers, 'Content-Type': 'application/json' };
@@ -25,12 +33,10 @@ function makeRequest(method: 'GET' | 'POST', url: string, body?: unknown): NextR
 describe('GET /api/customer-supplier-rating-rules — 规则列表', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockPrisma.customerSupplierRatingRule = {
-      count: vi.fn().mockResolvedValue(1),
-      findMany: vi.fn().mockResolvedValue([
-        { id: 'r-1', customerLevel: 'VIP', minimumSupplierRating: 'A', isActive: true, version: 1, createdAt: '2026-08-25T00:00:00.000Z' },
-      ]),
-    };
+    ratingRuleMock().count = vi.fn().mockResolvedValue(1);
+    ratingRuleMock().findMany = vi.fn().mockResolvedValue([
+      { id: 'r-1', customerLevel: 'VIP', minimumSupplierRating: 'A', isActive: true, version: 1, createdAt: '2026-08-25T00:00:00.000Z' },
+    ]);
   });
 
   it('返回规则列表（分页）', async () => {
@@ -43,11 +49,11 @@ describe('GET /api/customer-supplier-rating-rules — 规则列表', () => {
   });
 
   it('isActive=false 过滤生效', async () => {
-    mockPrisma.customerSupplierRatingRule.count = vi.fn().mockResolvedValue(0);
-    mockPrisma.customerSupplierRatingRule.findMany = vi.fn().mockResolvedValue([]);
+    ratingRuleMock().count = vi.fn().mockResolvedValue(0);
+    ratingRuleMock().findMany = vi.fn().mockResolvedValue([]);
     const res = await GET(makeRequest('GET', 'http://localhost/api/customer-supplier-rating-rules?isActive=false'));
     expect(res.status).toBe(200);
-    const findArgs = (mockPrisma.customerSupplierRatingRule.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const findArgs = ratingRuleMock().findMany.mock.calls[0][0];
     expect(findArgs.where.isActive).toBe(false);
   });
 });
@@ -55,17 +61,15 @@ describe('GET /api/customer-supplier-rating-rules — 规则列表', () => {
 describe('POST /api/customer-supplier-rating-rules — 创建规则', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockPrisma.customerSupplierRatingRule = {
-      findUnique: vi.fn().mockResolvedValue(null),
-      create: vi.fn().mockResolvedValue({
-        id: 'r-1',
-        customerLevel: 'KEY',
-        minimumSupplierRating: 'AA',
-        isActive: true,
-        approvalStatus: 'APPROVED',
-        version: 1,
-      }),
-    };
+    ratingRuleMock().findUnique = vi.fn().mockResolvedValue(null);
+    ratingRuleMock().create = vi.fn().mockResolvedValue({
+      id: 'r-1',
+      customerLevel: 'KEY',
+      minimumSupplierRating: 'AA',
+      isActive: true,
+      approvalStatus: 'APPROVED',
+      version: 1,
+    });
   });
 
   it('创建成功（201）', async () => {
@@ -73,16 +77,16 @@ describe('POST /api/customer-supplier-rating-rules — 创建规则', () => {
     expect(res.status).toBe(201);
     const body = await res.json();
     expect(body.data.customerLevel).toBe('KEY');
-    const createArgs = (mockPrisma.customerSupplierRatingRule.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const createArgs = ratingRuleMock().create.mock.calls[0][0];
     expect(createArgs.data.minimumSupplierRating).toBe('AA');
     expect(createArgs.data.approvalStatus).toBe('APPROVED');
   });
 
   it('客户等级重复 → 409（不覆盖已存在规则）', async () => {
-    mockPrisma.customerSupplierRatingRule.findUnique = vi.fn().mockResolvedValue({ id: 'r-1', customerLevel: 'KEY', deletedAt: null });
+    ratingRuleMock().findUnique = vi.fn().mockResolvedValue({ id: 'r-1', customerLevel: 'KEY', deletedAt: null });
     const res = await POST(makeRequest('POST', 'http://localhost/api/customer-supplier-rating-rules', { customerLevel: 'KEY', minimumSupplierRating: 'A' }));
     expect(res.status).toBe(409);
-    expect(mockPrisma.customerSupplierRatingRule.create).not.toHaveBeenCalled();
+    expect(ratingRuleMock().create).not.toHaveBeenCalled();
   });
 
   it('非法枚举值 → 400', async () => {
