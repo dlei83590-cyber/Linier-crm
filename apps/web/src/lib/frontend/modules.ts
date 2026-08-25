@@ -778,6 +778,8 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
   },
   // business-partners：Pending Pages Completion Gate（Batch 1）——/api/business-partners CRUD FINAL（list/get/create/patch/delete）
   // 权限码对齐 API requirePermission("business-partner:view/create/edit/delete")（原 PERMISSIONS 值为 read 风格）
+  // 供应商档案合同补齐 MVP（contract-supplier）：详情页（/business-partners/[id]）已开放——Customer 360 工作台 + 供应商档案
+  // （信用等级/账期/资质评级/状态 + 关联采购订单 + 供应物料只读聚合）→ ui.detail=true
   {
     id: 'business-partners',
     domain: 'master-data',
@@ -785,7 +787,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     route: '/business-partners',
     permission: actionPermission('business-partner', 'view'),
     availability: 'ready',
-    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_CRUD },
+    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST_DETAIL_CRUD },
     createRoute: '/business-partners/new',
     createPermission: actionPermission('business-partner', 'create'),
     order: 2,
