@@ -20,7 +20,7 @@ import { ContactWorkspace } from "./contact-workspace";
 import { PoolStatusCard } from "./pool-status-card";
 import { ActivityTimeline } from "./activity-timeline";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
-import { formatDate, formatMoney } from "@/lib/format";
+import { formatDate, formatMoney, formatMoneyValue } from "@/lib/format";
 
 interface PartnerDetail {
   id: string;
@@ -51,6 +51,7 @@ interface PartnerDetail {
   phone?: string | null;
   email?: string | null;
   address?: string | null;
+  isActive?: boolean;
   invoiceInfoRecord?: {
     title?: string | null;
     uscc?: string | null;
@@ -71,17 +72,85 @@ interface PartnerDetail {
     status?: string | null;
     reviewDate?: string | null;
   } | null;
+  // 供应商档案（Supplier 角色扩展 1:1；仅 type=SUPPLIER/BOTH 存在；只读聚合）
+  supplier?: {
+    id: string;
+    code: string;
+    name: string;
+    status: string;
+    rating?: number | null;
+    defaultLeadTime?: number | null;
+    minOrderQty?: string | null;
+    currency: string;
+    isPreferred: boolean;
+    settlements?: Array<{
+      id: string;
+      paymentTerms?: string | null;
+      creditDays?: number | null;
+      paymentMethod?: string | null;
+      currency: string;
+    }>;
+    qualifications?: Array<{
+      id: string;
+      qualType: string;
+      qualName: string;
+      certNo?: string | null;
+      issueDate?: string | null;
+      expireDate?: string | null;
+      status: string;
+    }>;
+  } | null;
+  // 供应物料关系（SupplierItem.supplierId → BusinessPartner）
+  supplierItems?: Array<{
+    id: string;
+    supplierCode?: string | null;
+    moq?: string | null;
+    leadTime?: number | null;
+    currency: string;
+    purchasePrice?: string | null;
+    isPreferred: boolean;
+    paymentTerm?: string | null;
+    incoterm?: string | null;
+    item?: { id: string; code: string; name: string; spec?: string | null; model?: string | null; brand?: string | null } | null;
+  }>;
 }
 
 type TabKey =
   | "overview" | "business" | "invoice" | "contacts" | "addresses" | "credit" | "tags"
   | "opportunities" | "projects" | "quotations" | "orders" | "ar"
-  | "activity" | "pool";
+  | "activity" | "pool"
+  | "supplierProfile" | "purchaseOrders" | "supplierItems";
 
 const TYPE_LABELS: Record<string, string> = { CUSTOMER: "客户", SUPPLIER: "供应商", BOTH: "客户/供应商" };
 const ADDRESS_TYPE_LABELS: Record<string, string> = { REGISTERED: "注册", DELIVERY: "收货", INVOICE: "开票", CONTACT: "联系" };
 const CREDIT_RATING_LABELS: Record<string, string> = { A: "A", B: "B", C: "C", D: "D" };
 const CREDIT_STATUS_LABELS: Record<string, string> = { NORMAL: "正常", WARNING: "预警", RESTRICTED: "受限" };
+const SUPPLIER_STATUS_LABELS: Record<string, string> = {
+  POTENTIAL: "潜在",
+  QUALIFIED: "合格",
+  PREFERRED: "优选",
+  SUSPENDED: "暂停",
+  BLACKLISTED: "黑名单",
+};
+const QUALIFICATION_TYPE_LABELS: Record<string, string> = {
+  BUSINESS_LICENSE: "营业执照",
+  ISO9001: "ISO9001",
+  ISO14001: "ISO14001",
+  IATF16949: "IATF16949",
+  CE: "CE",
+  ROHS: "RoHS",
+  OTHER: "其他",
+};
+const QUALIFICATION_STATUS_LABELS: Record<string, string> = { VALID: "有效", EXPIRING: "临期", EXPIRED: "已过期" };
+const PO_STATUS_LABELS: Record<string, string> = {
+  DRAFT: "草稿",
+  SUBMITTED: "已提交",
+  APPROVED: "已批准",
+  CONFIRMED: "已确认",
+  PARTIALLY_RECEIVED: "部分收货",
+  RECEIVED: "已收货",
+  CANCELLED: "已取消",
+};
 
 function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -104,17 +173,38 @@ function PartnerDetailPage() {
   const [quotations, setQuotations] = useState<Array<{ id: string; code: string; totalAmount: string; currency: string }>>([]);
   const [orders, setOrders] = useState<Array<{ id: string; code: string; totalAmount: string; currency: string; status: string }>>([]);
   const [ar, setAr] = useState<Array<{ id: string; totalAmount: string; balanceAmount: string; currency: string }>>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<Array<{ id: string; code: string; orderDate: string; totalAmount: string; currency: string; status: string }>>([]);
+  const [supplierItems, setSupplierItems] = useState<PartnerDetail["supplierItems"]>([]);
 
   useEffect(() => {
     const controller = new AbortController();
     apiFetch<PartnerDetail>(`/api/business-partners/${id}`, { signal: controller.signal })
-      .then((body) => setDetail(body.data))
+      .then((body) => {
+        setDetail(body.data);
+        setSupplierItems(body.data.supplierItems ?? []);
+      })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
         setLoadError(err instanceof ApiClientError ? err : new ApiClientError(0, "加载客户失败", "NETWORK_ERROR"));
       });
     return () => controller.abort();
   }, [id]);
+
+  // 供应商档案：采购订单（PurchaseOrder.supplierId → Supplier，只读聚合最近 5 条）
+  useEffect(() => {
+    if (!detail?.supplier?.id) {
+      setPurchaseOrders([]);
+      return;
+    }
+    const controller = new AbortController();
+    apiFetch<Array<{ id: string; code: string; orderDate: string; totalAmount: string; currency: string; status: string }>>(
+      `/api/purchase-orders?pageSize=5&supplierId=${detail.supplier.id}`,
+      { signal: controller.signal },
+    )
+      .then((b) => setPurchaseOrders(Array.isArray(b.data) ? b.data : []))
+      .catch(() => setPurchaseOrders([]));
+    return () => controller.abort();
+  }, [detail?.supplier?.id]);
 
   // 聚合各权威列表 API（customerId 过滤；最近 5 条只读展示）
   useEffect(() => {
@@ -154,6 +244,7 @@ function PartnerDetailPage() {
     );
   }
 
+  const isSupplier = detail.type === "SUPPLIER" || detail.type === "BOTH";
   const TABS: Array<{ key: TabKey; label: string }> = [
     { key: "overview", label: "概览" },
     { key: "business", label: "工商资料" },
@@ -167,6 +258,14 @@ function PartnerDetailPage() {
     { key: "quotations", label: "报价" },
     { key: "orders", label: "销售订单" },
     { key: "ar", label: "应收/回款" },
+    // 供应商档案（type=SUPPLIER/BOTH）：档案信息库 + 采购订单 + 供应物料（只读聚合既有事实源）
+    ...(isSupplier
+      ? ([
+          { key: "supplierProfile" as TabKey, label: "供应商档案" },
+          { key: "purchaseOrders" as TabKey, label: "采购订单" },
+          { key: "supplierItems" as TabKey, label: "供应物料" },
+        ] as Array<{ key: TabKey; label: string }>)
+      : []),
     { key: "activity", label: "活动/跟进" },
     { key: "pool", label: "公海" },
   ];
@@ -441,6 +540,143 @@ function PartnerDetailPage() {
               </table>
             ) : (
               <p className="text-sm text-ink-muted">暂无应收记录。</p>
+            )}
+          </section>
+        )}
+
+        {tab === "supplierProfile" && (
+          <section className="rounded-md border border-border p-4">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              {detail.supplier ? (
+                <>
+                  <span className="rounded bg-canvas px-2 py-0.5 text-xs text-ink-secondary">
+                    供应商状态：{SUPPLIER_STATUS_LABELS[detail.supplier.status] ?? detail.supplier.status}
+                  </span>
+                  {detail.supplier.isPreferred ? (
+                    <span className="rounded bg-brand-50 px-2 py-0.5 text-xs text-brand-700">优选</span>
+                  ) : null}
+                  {detail.supplier.rating != null ? (
+                    <span className="rounded bg-canvas px-2 py-0.5 text-xs text-ink-secondary">
+                      资质评级：{"★".repeat(detail.supplier.rating)}
+                      <span className="text-ink-muted">{"☆".repeat(5 - detail.supplier.rating)}</span>
+                    </span>
+                  ) : null}
+                </>
+              ) : (
+                <span className="rounded bg-canvas px-2 py-0.5 text-xs text-ink-muted">暂无供应商档案（在往来单位编辑页维护后，由采购流程建档）</span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              <InfoItem label="信用等级" value={detail.creditRating} />
+              <InfoItem label="结算条款" value={detail.settlementTerms} />
+              <InfoItem label="账期（天）" value={detail.supplier?.settlements?.[0]?.creditDays != null ? String(detail.supplier.settlements[0].creditDays) : null} />
+              <InfoItem label="付款条款" value={detail.supplier?.settlements?.[0]?.paymentTerms} />
+              <InfoItem label="付款方式" value={detail.supplier?.settlements?.[0]?.paymentMethod} />
+              <InfoItem label="默认交期（天）" value={detail.supplier?.defaultLeadTime != null ? String(detail.supplier.defaultLeadTime) : null} />
+              <InfoItem label="最小起订量" value={detail.supplier?.minOrderQty != null ? formatMoneyValue(detail.supplier.minOrderQty) : null} />
+              <InfoItem label="币种" value={detail.supplier?.currency ?? "CNY"} />
+              <InfoItem label="联系人" value={detail.contactPerson} />
+              <InfoItem label="电话" value={detail.phone} />
+              <InfoItem label="邮箱" value={detail.email} />
+              <InfoItem label="地址" value={detail.address} />
+              <InfoItem label="启用" value={detail.isActive == null ? null : detail.isActive ? "是" : "否"} />
+            </div>
+            <h3 className="mb-2 mt-5 text-sm font-semibold text-ink-primary">资质证书</h3>
+            {(detail.supplier?.qualifications ?? []).length > 0 ? (
+              <table className="min-w-full divide-y divide-border text-sm">
+                <thead className="text-ink-secondary bg-canvas text-left text-xs font-medium">
+                  <tr>
+                    <th className="px-4 py-2 font-semibold">类型</th>
+                    <th className="px-4 py-2 font-semibold">资质名称</th>
+                    <th className="px-4 py-2 font-semibold">证书编号</th>
+                    <th className="px-4 py-2 font-semibold">发证日期</th>
+                    <th className="px-4 py-2 font-semibold">有效期至</th>
+                    <th className="px-4 py-2 font-semibold">状态</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {(detail.supplier?.qualifications ?? []).map((q) => (
+                    <tr key={q.id}>
+                      <td className="px-4 py-2">{QUALIFICATION_TYPE_LABELS[q.qualType] ?? q.qualType}</td>
+                      <td className="px-4 py-2">{q.qualName}</td>
+                      <td className="px-4 py-2">{q.certNo ?? "—"}</td>
+                      <td className="px-4 py-2">{formatDate(q.issueDate)}</td>
+                      <td className="px-4 py-2">{formatDate(q.expireDate)}</td>
+                      <td className="px-4 py-2">{QUALIFICATION_STATUS_LABELS[q.status] ?? q.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="text-sm text-ink-muted">暂无资质记录。</p>
+            )}
+          </section>
+        )}
+
+        {tab === "purchaseOrders" && (
+          <section className="rounded-md border border-border p-4">
+            {purchaseOrders.length > 0 ? (
+              <table className="min-w-full divide-y divide-border text-sm">
+                <thead className="text-ink-secondary bg-canvas text-left text-xs font-medium">
+                  <tr>
+                    <th className="px-4 py-2 font-semibold">采购订单号</th>
+                    <th className="px-4 py-2 font-semibold">下单日期</th>
+                    <th className="px-4 py-2 font-semibold">含税金额</th>
+                    <th className="px-4 py-2 font-semibold">状态</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {purchaseOrders.map((po) => (
+                    <tr key={po.id}>
+                      <td className="px-4 py-2">
+                        <Link href={`/purchasing/orders/${po.id}`} className="font-medium text-brand-600 hover:underline">{po.code}</Link>
+                      </td>
+                      <td className="px-4 py-2">{formatDate(po.orderDate)}</td>
+                      <td className="px-4 py-2 tabular-nums">{formatMoney(po.totalAmount, po.currency)}</td>
+                      <td className="px-4 py-2">{PO_STATUS_LABELS[po.status] ?? po.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="text-sm text-ink-muted">暂无采购订单（创建于采购订单工作台并关联本供应商）。</p>
+            )}
+          </section>
+        )}
+
+        {tab === "supplierItems" && (
+          <section className="rounded-md border border-border p-4">
+            {supplierItems && supplierItems.length > 0 ? (
+              <table className="min-w-full divide-y divide-border text-sm">
+                <thead className="text-ink-secondary bg-canvas text-left text-xs font-medium">
+                  <tr>
+                    <th className="px-4 py-2 font-semibold">物料编码</th>
+                    <th className="px-4 py-2 font-semibold">物料名称</th>
+                    <th className="px-4 py-2 font-semibold">供应商料号</th>
+                    <th className="px-4 py-2 font-semibold">采购参考价</th>
+                    <th className="px-4 py-2 font-semibold">MOQ</th>
+                    <th className="px-4 py-2 font-semibold">交期（天）</th>
+                    <th className="px-4 py-2 font-semibold">优选</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {supplierItems.map((si) => (
+                    <tr key={si.id}>
+                      <td className="px-4 py-2">
+                        <Link href={`/items/${si.item?.id ?? ""}`} className="font-medium text-brand-600 hover:underline">{si.item?.code ?? "—"}</Link>
+                      </td>
+                      <td className="px-4 py-2">{si.item?.name ?? "—"}{si.item?.spec ? <span className="text-ink-muted">（{si.item.spec}）</span> : null}</td>
+                      <td className="px-4 py-2">{si.supplierCode ?? "—"}</td>
+                      <td className="px-4 py-2 tabular-nums">{si.purchasePrice != null ? formatMoney(si.purchasePrice, si.currency) : "—"}</td>
+                      <td className="px-4 py-2 tabular-nums">{si.moq != null ? formatMoneyValue(si.moq) : "—"}</td>
+                      <td className="px-4 py-2 tabular-nums">{si.leadTime ?? "—"}</td>
+                      <td className="px-4 py-2">{si.isPreferred ? "是" : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="text-sm text-ink-muted">暂无供应物料关系（在物料详情维护供应商-物料关系）。</p>
             )}
           </section>
         )}

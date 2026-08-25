@@ -35,6 +35,7 @@ interface BusinessPartnerDetail {
   bankName: string | null;
   bankAccount: string | null;
   settlementTerms: string | null;
+  creditRating: string | null;
   registeredCapital: string | null;
   employeeCount: number | null;
   website: string | null;
@@ -101,6 +102,7 @@ function BusinessPartnerEditForm() {
   const [bankName, setBankName] = useState("");
   const [bankAccount, setBankAccount] = useState("");
   const [settlementTerms, setSettlementTerms] = useState("");
+  const [creditRating, setCreditRating] = useState("");
   const [registeredCapital, setRegisteredCapital] = useState("");
   const [employeeCount, setEmployeeCount] = useState("");
   const [website, setWebsite] = useState("");
@@ -136,6 +138,7 @@ function BusinessPartnerEditForm() {
         setBankName(d.bankName ?? "");
         setBankAccount(d.bankAccount ?? "");
         setSettlementTerms(d.settlementTerms ?? "");
+        setCreditRating(d.creditRating ?? "");
         setRegisteredCapital(d.registeredCapital ? String(d.registeredCapital) : "");
         setEmployeeCount(d.employeeCount ? String(d.employeeCount) : "");
         setWebsite(d.website ?? "");
@@ -207,6 +210,7 @@ function BusinessPartnerEditForm() {
       bankName: bankName.trim() || null,
       bankAccount: bankAccount.trim() || null,
       settlementTerms: settlementTerms.trim() || null,
+      creditRating: creditRating.trim() || null,
       registeredCapital: registeredCapital.trim() || null,
       employeeCount: employeeCount ? Number(employeeCount) : null,
       website: website.trim() || null,
@@ -340,7 +344,10 @@ function BusinessPartnerEditForm() {
           <input value={bankAccount} onChange={(e) => setBankAccount(e.target.value)} className={inputClass} />
         </FormField>
         <FormField label="结算条款">
-          <input value={settlementTerms} onChange={(e) => setSettlementTerms(e.target.value)} className={inputClass} />
+          <input value={settlementTerms} onChange={(e) => setSettlementTerms(e.target.value)} className={inputClass} placeholder="如 NET30 / 月结 30 天" />
+        </FormField>
+        <FormField label="信用等级">
+          <input value={creditRating} onChange={(e) => setCreditRating(e.target.value)} className={inputClass} placeholder="如 AAA / AA / A / B / C" />
         </FormField>
         <FormField label="注册资本（万元）">
           <input value={registeredCapital} onChange={(e) => setRegisteredCapital(e.target.value)} className={inputClass} />
