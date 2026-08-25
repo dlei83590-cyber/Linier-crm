@@ -141,6 +141,7 @@ function ItemDetailPage() {
 
   const [detail, setDetail] = useState<ItemDetail | null>(null);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
+  const [uomConversions, setUomConversions] = useState<Array<{ id: string; factor: string; fromUom?: { code: string | null; name: string | null } | null; toUom?: { code: string | null; name: string | null } | null }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | null>(null);
 
@@ -153,8 +154,11 @@ function ItemDetailPage() {
       apiFetch<AuditLogRow[]>(`/api/audit-logs?entityType=item&entityId=${id}&pageSize=20`, {
         signal: controller.signal,
       }).catch(() => ({ data: [] as AuditLogRow[], success: true })),
+      apiFetch<Array<{ id: string; factor: string; fromUom?: { code: string | null; name: string | null } | null; toUom?: { code: string | null; name: string | null } | null }>>(`/api/items/${id}/uom-conversions?pageSize=50`, {
+        signal: controller.signal,
+      }).catch(() => ({ data: [] as never[], success: true })),
     ])
-      .then(([itemBody, auditBody]) => {
+      .then(([itemBody, auditBody, uomBody]) => {
         setDetail(itemBody.data);
         setAudit(
           auditBody.data.map((a) => ({
@@ -165,6 +169,7 @@ function ItemDetailPage() {
             note: a.result,
           })),
         );
+        setUomConversions(uomBody.data);
         setLoading(false);
       })
       .catch((err: unknown) => {
@@ -272,6 +277,20 @@ function ItemDetailPage() {
               <InfoItem label="库存单位" value={detail.stockUom?.symbol ?? detail.stockUom?.name} />
               <InfoItem label="采购单位" value={detail.purchaseUom?.symbol ?? detail.purchaseUom?.name} />
               <InfoItem label="销售单位" value={detail.salesUom?.symbol ?? detail.salesUom?.name} />
+            </div>
+            <div className="mt-3">
+              <p className="mb-1 text-xs text-ink-muted">单位换算（ItemUomConversion）</p>
+              {uomConversions.length === 0 ? (
+                <p className="text-xs text-ink-muted">暂无换算规则。</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {uomConversions.map((c) => (
+                    <span key={c.id} className="rounded-md border border-border px-2 py-1 text-xs tabular-nums text-ink-primary">
+                      {c.fromUom?.name ?? c.fromUom?.code ?? "—"} → {c.toUom?.name ?? c.toUom?.code ?? "—"} × {c.factor}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </section>
 
