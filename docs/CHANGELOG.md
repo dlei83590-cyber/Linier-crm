@@ -2,6 +2,25 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - cc-03-followup-level：跟进程度分级 + 动态必填 + 责任人（合同收口，Migration 0055）
+
+### 新增
+
+- **跟进程度（followUpLevel，Migration 0055）**：CustomerActivity 新增枚举 BASIC（普通跟进）/IMPORTANT（重点跟进）/DECISION（决策推进）+ 责任人字段 responsibleUserId（User 关联，可空）；仅 FOLLOW_UP 参与分级，VISIT_PLAN/CHECK_IN 为 NULL
+- **动态必填门禁（服务端 zod + 前端表单一致）**：BASIC=跟进内容；IMPORTANT=+下一步行动+下次跟进时间（reminderAt）；DECISION=上述+负责人
+- **负责人默认投影（服务端）**：DECISION 未指定负责人时按既有事实投影——客户负责人（CustomerOwnership active owner）→ 商机负责人（ProjectOpportunity.ownerId 最近更新）；提交的 responsibleUserId 必须为有效启用用户（fail-closed）
+- **Customer 360 跟进表单**：跟进程度三级选择 + 动态字段（下次跟进时间 datetime-local + 负责人真实 User selector，数据源 /api/users?isActive=true，禁止输入 userId）
+- **Customer 360 时间线展示**：跟进程度徽标 + 负责人 + 下次行动 + 下次跟进时间（reminderAt）；审批流/评论功能保持
+- **展示元数据**：lib/customer/activity-meta.ts 新增 activityFollowUpLevelMeta（未知值回退原值 + neutral，不吞未知 enum）
+
+### 边界
+
+- 领域事实仍为 CustomerActivity.FOLLOW_UP（不建新表、不建平行真相）；零新权限模块（复用 project-visit，ADR-0028）
+- 禁止 Rule/Reminder/Scoring Engine 与自定义规则编辑器（HOLD）；不触碰 modules.ts（Registry SSOT）
+- 无 user:view 权限（MANAGER/MEMBER）时负责人选择器不可用 → 服务端投影兜底（Known Limitation）
+
+---
+
 ## [Unreleased] - FE 2.0 UI-01：GLOBAL DESIGN SYSTEM 基元升级（零 Schema / 零 API / 零业务逻辑）
 
 ### 新增

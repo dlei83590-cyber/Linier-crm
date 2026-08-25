@@ -292,6 +292,7 @@ model User {
   roles        UserRole[]
   auditLogs    AuditLog[]
   customerOwnerships CustomerOwnership[] // 2C：作为公海归属 owner（ownerId 方向）
+  responsibleForActivities CustomerActivity[] @relation("CustomerActivityResponsibleUser") // followup-level：跟进责任人（CustomerActivity.responsibleUserId 方向，Migration 0055）
   purchaseRequisitions PurchaseRequisition[] // 5A：采购申请（requesterId 方向）
   purchaseOrders PurchaseOrder[] // 5A：采购订单（purchaserId 方向，采购员；CTO Phase 4B 指令）
   receivedPurchaseReceipts PurchaseReceipt[] // 5B：收货单（receivedById 方向，收货员）
@@ -6819,6 +6820,16 @@ model CustomerOwnership {
 //   （缺 PartnerContact 关联/拜访计划/定位签到字段）；故新建最小 CustomerActivity 表，禁止双写。
 // ============================================================================
 
+/// 跟进程度（跟进分级，Migration 0055）：决定 FOLLOW_UP 动态必填维度。
+/// BASIC=普通跟进（跟进内容）；IMPORTANT=重点跟进（+下一步行动+下次跟进时间）；DECISION=决策推进（+负责人）。
+/// 仅 FOLLOW_UP 适用；VISIT_PLAN/CHECK_IN 为 NULL——不参与分级。
+/// HOLD：Reminder Engine / Scoring Engine / Rule Engine / 推送平台（禁止自定义规则编辑器）。
+enum CustomerActivityFollowUpLevel {
+  BASIC // 普通跟进：跟进内容
+  IMPORTANT // 重点跟进：跟进内容 + 下一步行动 + 下次跟进时间
+  DECISION // 决策推进：上述 + 负责人
+}
+
 /// 客户跟进活动类型：跟进 / 拜访计划 / 定位签到
 enum CustomerActivityType {
   FOLLOW_UP // 客户跟进（跟进内容 + 下次行动 + 提醒）
@@ -6845,6 +6856,10 @@ model CustomerActivity {
   summary           String? // 跟进内容 / 拜访目的 / 签到备注
   nextAction        String? // 下次行动（FOLLOW_UP）
   reminderAt        DateTime? // 提醒时间（FOLLOW_UP）
+  // 跟进程度 + 责任人（followup-level，Migration 0055；仅 FOLLOW_UP 使用，VISIT_PLAN/CHECK_IN 为 NULL）
+  followUpLevel     CustomerActivityFollowUpLevel? // 跟进程度（BASIC/IMPORTANT/DECISION；null=未分级——历史记录/系统生成草稿）
+  responsibleUserId String? // 责任人（User 关联，可空；DECISION 必填——缺失时服务端投影：客户负责人 → 商机负责人）
+  responsibleUser   User?    @relation("CustomerActivityResponsibleUser", fields: [responsibleUserId], references: [id], onDelete: SetNull)
   planDate          DateTime? // 计划日期（VISIT_PLAN）
   checkinAt         DateTime? // 签到时间（CHECK_IN；服务端 now 落库，不信任客户端）
   checkoutAt        DateTime? // 签退时间（CHECK_IN；服务端 now 落库，不信任客户端；Migration 0051）
