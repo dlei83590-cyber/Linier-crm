@@ -1,16 +1,20 @@
 'use client';
 
 /**
- * Toast — 全局操作反馈系统（Sprint8 U2.1）
+ * Toast — 全局操作反馈系统（Sprint8 U2.1 / FE 2.0 UI-01 升级）
  *
  * - ToastProvider 挂载于 RootLayout；页面通过 useToast() 消费
  * - success/error/info/warning 四态；右上堆叠、自动消失（error 6s，其余 4s）
- * - 点击关闭；aria-live 播报；进出场动画（animate-toast-in）
- * - 零依赖
+ * - 点击关闭；aria-live 播报（error → assertive，其余 → polite）
+ * - 进出场动画（animate-toast-in）；prefers-reduced-motion 由 globals.css 全局降级
+ * - API 签名不变（UI-01 只做视觉/无障碍升级，零行为破坏）
  */
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { Icon } from './icon';
+import type { IconName } from './icon';
 
-export type ToastVariant = "success" | "error" | "info" | "warning";
+export type ToastVariant = 'success' | 'error' | 'info' | 'warning';
 
 interface ToastItem {
   id: number;
@@ -19,7 +23,7 @@ interface ToastItem {
   description?: string;
 }
 
-interface ToastContextValue {
+export interface ToastContextValue {
   success: (title: string, description?: string) => void;
   error: (title: string, description?: string) => void;
   info: (title: string, description?: string) => void;
@@ -30,31 +34,31 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 
 const VARIANT_STYLE: Record<
   ToastVariant,
-  { accent: string; iconBg: string; iconColor: string; path: React.ReactNode }
+  { accent: string; iconBg: string; iconColor: string; icon: IconName }
 > = {
   success: {
-    accent: "bg-status-success-text",
-    iconBg: "bg-status-success-bg",
-    iconColor: "text-status-success-text",
-    path: <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />,
+    accent: 'bg-status-success-text',
+    iconBg: 'bg-status-success-bg',
+    iconColor: 'text-status-success-text',
+    icon: 'check-circle',
   },
   error: {
-    accent: "bg-status-danger-text",
-    iconBg: "bg-status-danger-bg",
-    iconColor: "text-status-danger-text",
-    path: <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />,
+    accent: 'bg-status-danger-text',
+    iconBg: 'bg-status-danger-bg',
+    iconColor: 'text-status-danger-text',
+    icon: 'x-circle',
   },
   info: {
-    accent: "bg-status-info-text",
-    iconBg: "bg-status-info-bg",
-    iconColor: "text-status-info-text",
-    path: <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />,
+    accent: 'bg-status-info-text',
+    iconBg: 'bg-status-info-bg',
+    iconColor: 'text-status-info-text',
+    icon: 'info',
   },
   warning: {
-    accent: "bg-status-warning-text",
-    iconBg: "bg-status-warning-bg",
-    iconColor: "text-status-warning-text",
-    path: <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />,
+    accent: 'bg-status-warning-text',
+    iconBg: 'bg-status-warning-bg',
+    iconColor: 'text-status-warning-text',
+    icon: 'alert-triangle',
   },
 };
 
@@ -65,7 +69,7 @@ const DURATION: Record<ToastVariant, number> = {
   warning: 5000,
 };
 
-export function ToastProvider({ children }: { children: React.ReactNode }) {
+export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const nextId = useRef(1);
 
@@ -84,10 +88,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<ToastContextValue>(
     () => ({
-      success: (title: string, description?: string) => push("success", title, description),
-      error: (title: string, description?: string) => push("error", title, description),
-      info: (title: string, description?: string) => push("info", title, description),
-      warning: (title: string, description?: string) => push("warning", title, description),
+      success: (title: string, description?: string) => push('success', title, description),
+      error: (title: string, description?: string) => push('error', title, description),
+      info: (title: string, description?: string) => push('info', title, description),
+      warning: (title: string, description?: string) => push('warning', title, description),
     }),
     [push],
   );
@@ -104,7 +108,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           return (
             <div
               key={t.id}
-              role="status"
+              role={t.variant === 'error' ? 'alert' : 'status'}
               className="animate-toast-in pointer-events-auto relative flex items-start gap-3 overflow-hidden rounded-lg border border-border bg-surface py-3 pl-4 pr-9 shadow-elevation-lg"
             >
               <span className={`absolute inset-y-0 left-0 w-1 ${s.accent}`} aria-hidden="true" />
@@ -112,25 +116,21 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${s.iconBg} ${s.iconColor}`}
                 aria-hidden="true"
               >
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  {s.path}
-                </svg>
+                <Icon name={s.icon} size={14} strokeWidth={2} />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-ink-primary">{t.title}</p>
+                <p className="text-ink-primary text-sm font-medium">{t.title}</p>
                 {t.description ? (
-                  <p className="mt-0.5 break-words text-xs text-ink-secondary">{t.description}</p>
+                  <p className="text-ink-secondary mt-0.5 break-words text-xs">{t.description}</p>
                 ) : null}
               </div>
               <button
                 type="button"
                 onClick={() => dismiss(t.id)}
                 aria-label="关闭提示"
-                className="absolute right-2 top-2 rounded p-1 text-ink-muted transition-colors hover:bg-slate-100 hover:text-ink-primary"
+                className="text-ink-muted hover:text-ink-primary absolute right-2 top-2 rounded p-1 transition-colors hover:bg-slate-100"
               >
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <Icon name="x" size={14} />
               </button>
             </div>
           );
@@ -143,7 +143,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 export function useToast(): ToastContextValue {
   const ctx = useContext(ToastContext);
   if (!ctx) {
-    throw new Error("useToast 必须在 ToastProvider 内使用");
+    throw new Error('useToast 必须在 ToastProvider 内使用');
   }
   return ctx;
 }

@@ -3,8 +3,8 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 15, 23, 42;
-  --background-rgb: 248, 250, 252;
+  --foreground-rgb: 17, 24, 39; /* FE 2.0 ink-primary #111827 */
+  --background-rgb: 246, 247, 249; /* FE 2.0 Canvas #F6F7F9 */
 }
 
 body {
@@ -55,6 +55,32 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 .animate-page-in { animation: page-in 200ms cubic-bezier(0.4, 0, 0.2, 1) both; }
+
+/* Sprint8 U8 — 右侧抽屉进场（从右侧滑入；UI-01 新增，Drawer 组件消费） */
+@keyframes drawer-in-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.animate-drawer-in-right { animation: drawer-in-right 200ms cubic-bezier(0.4, 0, 0.2, 1) both; }
+
+/* Sprint8 U8 — Dropdown 菜单进场（fade + 轻微下移） */
+@keyframes dropdown-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-dropdown-in { animation: dropdown-in 120ms cubic-bezier(0.4, 0, 0.2, 1) both; }
+
+/* FE 2.0 UI-01 — 全局动效降级：系统开启"减少动态效果"时关闭所有动画/过渡（服务反馈不表演） */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
 /* 打印 — 报价单/单据打印 v1（window.print + print CSS；不引入 PDF 引擎）：
    隐藏壳层（顶栏/侧栏/页脚/Toast 浮层），main 去内边距，白底黑字，表格行避免跨页截断 */
