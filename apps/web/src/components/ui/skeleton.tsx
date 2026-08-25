@@ -1,9 +1,27 @@
 /**
- * Skeleton — 骨架屏（Sprint8 U2.2）
+ * Skeleton — 骨架屏（Sprint8 U2.2 / FE 2.0 UI-01 升级）
  * shimmer 动画见 globals.css（.animate-shimmer）；用于列表/表单/详情加载态。
+ * 新增：SkeletonText / SkeletonCircle 便捷变体（保持既有导出签名不变）。
  */
+'use client';
+
 export function Skeleton({ className = "" }: { className?: string }) {
   return <div className={`animate-shimmer rounded-md bg-slate-200/80 ${className}`} aria-hidden="true" />;
+}
+
+/** 文本骨架（宽度百分比） */
+export function SkeletonText({ width = "w-24", className = "" }: { width?: string; className?: string }) {
+  return <Skeleton className={`h-4 ${width} ${className}`} />;
+}
+
+/** 圆形骨架（头像/图标位） */
+export function SkeletonCircle({ size = "h-8 w-8", className = "" }: { size?: string; className?: string }) {
+  return <Skeleton className={`rounded-full ${size} ${className}`} />;
+}
+
+/** 按钮骨架 */
+export function SkeletonButton({ className = "" }: { className?: string }) {
+  return <Skeleton className={`h-10 w-24 ${className}`} />;
 }
 
 /** 行内按钮 loading 转圈（Sprint8 U2.4） */

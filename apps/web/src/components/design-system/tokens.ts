@@ -1,5 +1,5 @@
 /**
- * Design System — Design Tokens（F2-1 UI System Foundation）
+ * Design System — Design Tokens（F2-1 UI System Foundation / FE 2.0 UI-01 升级）
  *
  * 唯一视觉令牌来源：Typography / Spacing / Radius / Border / Elevation /
  * Semantic Color / Status Color / Form Density / Table Density / Responsive Breakpoint。
@@ -10,8 +10,9 @@
  * - Status 色为语义三元组（bg/text/border），只做状态展示，禁止跨状态语义压缩（如 APPROVED→"完成"）。
  */
 
-// ===== Typography =====
+// ===== Typography（FE 2.0：页面标题 24-28px semibold / 模块 18-20px / Section 14-16px semibold / 正文 14px / 辅助 12-13px）=====
 export const TYPOGRAPHY = {
+  /** 基础字号刻度（Tailwind text-xs/sm/base/lg/xl/2xl 一一对应） */
   sizes: {
     xs: '0.75rem',
     sm: '0.875rem',
@@ -26,6 +27,28 @@ export const TYPOGRAPHY = {
     semibold: 600,
     bold: 700,
   },
+  /** 页面级标题（display）：24-28px semibold（FE 2.0） */
+  display: {
+    /** 24px — 页面标题默认档 */
+    sm: '1.5rem',
+    /** 26px — 页面标题强调档 */
+    base: '1.625rem',
+    /** 28px — KPI 大数字 / 大标题档（配合 tabular-nums） */
+    lg: '1.75rem',
+  },
+  /** Section / 模块标题：14-16px semibold */
+  section: {
+    /** 14px — 紧凑 Section 标题 */
+    sm: '0.875rem',
+    /** 16px — 标准 Section 标题 */
+    base: '1rem',
+  },
+  /** 正文 14px */
+  body: '0.875rem',
+  /** 辅助 12px */
+  caption: '0.75rem',
+  /** 数字规范提示：金额/数量/KPI 一律加 tabular-nums */
+  tabular: 'tabular-nums',
 } as const;
 
 // ===== Spacing（语义别名，与 Tailwind 默认 scale 对齐）=====
@@ -66,26 +89,26 @@ export const ELEVATION = {
   lg: '0 10px 15px -3px rgb(15 23 42 / 0.1), 0 4px 6px -4px rgb(15 23 42 / 0.05)',
 } as const;
 
-// ===== Semantic Color（语义色）=====
+// ===== Semantic Color（语义色；FE 2.0 Canvas 冷灰白 #F6F7F9）=====
 export const SEMANTIC_COLORS = {
-  canvas: '#f8fafc', // 页面背景
+  canvas: '#f6f7f9', // 页面背景（冷灰白）
   surface: '#ffffff', // 卡片 / 表单表面
   border: '#e2e8f0', // 默认边框
   borderStrong: '#cbd5e1',
-  inkPrimary: '#0f172a', // 主文本
+  inkPrimary: '#111827', // 主文本
   inkSecondary: '#475569', // 次级文本
   inkMuted: '#94a3b8', // 弱化文本 / 占位
   brand: '#2563eb', // 主操作色
   brandHover: '#1d4ed8',
 } as const;
 
-// ===== Status Color（状态色：语义三元组）=====
+// ===== Status Color（状态色：语义三元组；FE 2.0 = Success Emerald / Warning Amber / Danger Rose / Info Blue / Neutral Slate）=====
 export const STATUS_COLORS = {
   neutral: { bg: '#f1f5f9', text: '#475569', border: '#e2e8f0' },
   info: { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe' },
-  success: { bg: '#f0fdf4', text: '#15803d', border: '#bbf7d0' },
+  success: { bg: '#ecfdf5', text: '#047857', border: '#a7f3d0' },
   warning: { bg: '#fffbeb', text: '#b45309', border: '#fde68a' },
-  danger: { bg: '#fef2f2', text: '#b91c1c', border: '#fecaca' },
+  danger: { bg: '#fff1f2', text: '#be123c', border: '#fecdd3' },
 } as const;
 
 export type StatusTone = keyof typeof STATUS_COLORS;
@@ -149,9 +172,15 @@ export const MODULE_ACCENT_MAP: Readonly<Record<string, ModuleAccent>> = MODULE_
   {} as Record<string, ModuleAccent>,
 );
 
-// ===== Motion（Sprint8 UI Modern — 动效令牌）=====
+// ===== Motion（FE 2.0：fast 120-150ms / normal 180-220ms / slow 250-300ms；服务反馈不表演，必须支持 prefers-reduced-motion）=====
 export const MOTION = {
-  duration: { fast: '150ms', base: '200ms', slow: '300ms' } as const,
+  duration: {
+    fast: '150ms', // 120-150ms — hover/微交互
+    normal: '200ms', // 180-220ms — 进场/展开
+    slow: '300ms', // 250-300ms — 大面板/页面切换
+    /** 向后兼容别名（旧消费方引用 MOTION.duration.base） */
+    base: '200ms',
+  } as const,
   easing: {
     standard: 'cubic-bezier(0.4, 0, 0.2, 1)',
     in: 'cubic-bezier(0.4, 0, 1, 1)',

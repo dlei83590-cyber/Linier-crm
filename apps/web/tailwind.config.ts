@@ -13,25 +13,25 @@ const config: Config = {
           700: '#1d4ed8',
           900: '#1e3a8a',
         },
-        // F2-1 Design System — 语义色（单一事实来源：components/design-system/tokens.ts）
-        canvas: '#f8fafc',
+        // FE 2.0 Design System — 语义色（单一事实来源：components/design-system/tokens.ts；Canvas #F6F7F9）
+        canvas: '#f6f7f9',
         surface: '#ffffff',
         border: {
           DEFAULT: '#e2e8f0',
           strong: '#cbd5e1',
         },
         ink: {
-          primary: '#0f172a',
+          primary: '#111827',
           secondary: '#475569',
           muted: '#94a3b8',
         },
-        // F2-1 Design System — 状态色（bg/text/border 三元组，供 StatusBadge / ErrorPanel / StateActionBar 消费）
+        // FE 2.0 Design System — 状态色（bg/text/border 三元组；Success=Emerald / Warning=Amber / Danger=Rose / Info=Blue / Neutral=Slate）
         status: {
           neutral: { bg: '#f1f5f9', text: '#475569', border: '#e2e8f0' },
           info: { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe' },
-          success: { bg: '#f0fdf4', text: '#15803d', border: '#bbf7d0' },
+          success: { bg: '#ecfdf5', text: '#047857', border: '#a7f3d0' },
           warning: { bg: '#fffbeb', text: '#b45309', border: '#fde68a' },
-          danger: { bg: '#fef2f2', text: '#b91c1c', border: '#fecaca' },
+          danger: { bg: '#fff1f2', text: '#be123c', border: '#fecdd3' },
         },
         // Sprint8 UI Modern — 10 业务域高饱和色板（单一事实来源：design-system/tokens.ts MODULE_ACCENTS）
         domain: {
@@ -52,9 +52,13 @@ const config: Config = {
         'elevation-md': '0 4px 6px -1px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.05)',
         'elevation-lg': '0 10px 15px -3px rgb(15 23 42 / 0.1), 0 4px 6px -4px rgb(15 23 42 / 0.05)',
       },
+      // FE 2.0 — 语义字号（页面标题 24-28px / Section 14-16px semibold；display-sm/base 向后兼容保留）
       fontSize: {
         'display-sm': ['1.25rem', { lineHeight: '1.75rem', fontWeight: '600' }],
         'display-base': ['1.5rem', { lineHeight: '2rem', fontWeight: '600' }],
+        'display-lg': ['1.75rem', { lineHeight: '2.25rem', fontWeight: '600' }],
+        'section-sm': ['0.875rem', { lineHeight: '1.25rem', fontWeight: '600' }],
+        section: ['1rem', { lineHeight: '1.5rem', fontWeight: '600' }],
       },
     },
   },

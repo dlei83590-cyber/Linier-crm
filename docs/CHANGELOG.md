@@ -2,6 +2,26 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - FE 2.0 UI-01：GLOBAL DESIGN SYSTEM 基元升级（零 Schema / 零 API / 零业务逻辑）
+
+### 新增
+
+- **Design Tokens 升级**：Typography 语义刻度（display 24-28px / section 14-16px semibold / tabular-nums 提示）；Canvas 微调 `#F6F7F9`；MOTION 对齐 fast(150ms)/normal(200ms)/slow(300ms)（保留 base 兼容别名）；Status 对齐 FE 2.0（Success=Emerald / Warning=Amber / Danger=Rose / Info=Blue / Neutral=Slate）
+- **tailwind.config.ts**：新增 `text-display-lg` / `text-section(-sm)` 语义字号；canvas / status 色与 tokens 一一对应
+- **globals.css**：新增 `prefers-reduced-motion` 全局降级（动画/过渡 0.01ms）；新增 drawer-in-right / dropdown-in 动画；保留既有动画类
+- **components/ui 统一出口（index.ts）+ 新组件**：Icon（零依赖 Lucide 风格，~100 图标，全站禁止 emoji 产品图标）、Button（primary/secondary/ghost/danger/link × sm/md/lg + loading）、IconButton、Badge、Card（Header/Content/Footer）、SectionHeader、Input/Select/Combobox、Dialog（ESC/遮罩/focus trap/scroll lock/busy）、ConfirmDialog、Drawer（420/480/560px）、ErrorState、Skeleton 变体、Tabs（underline/pill）、Dropdown（键盘导航）、Breadcrumb、KpiCard、Timeline（图标节点）
+- **既有组件升级（签名向后兼容）**：FormField（error 在 field 下方 + hint/error 互斥）、EmptyState（tone/compact）、Toast（error→role=alert 播报 + Icon 统一）、Skeleton（新增便捷变体）、ConfirmActionDialog 委托 ui ConfirmDialog
+- **lib/ui-classes.ts**：新增 BUTTON_GHOST/DANGER/LINK_CLASS + BUTTON_SM/MD/LG_CLASS（与 ui Button 对齐）；旧常量原样保留（214 处存量消费零破坏）
+- **组件/工具单测**：button / badge / icon / tabs / form-field / ui-classes 共 6 个
+
+### 边界
+
+- 零 Schema / 零 Migration / 零新 API / 零业务逻辑改动；不触碰 modules.ts（Registry SSOT）
+- 不引入 lucide-react（CI frozen-lockfile + CI-First 无本地 install）；自有 Icon 组件决策见 PR body
+- 不触碰 AdminShell / command-palette（UI-02 独占）与 packages/ui；domain-class.ts 不动（UI-02 消费方）
+
+---
+
 ## [Unreleased] - FRT-10：经营看板 + 绩效 + Runtime Acceptance 可视化收口（前端闭环最小集，零 Schema/零新 API）
 
 ### 新增
