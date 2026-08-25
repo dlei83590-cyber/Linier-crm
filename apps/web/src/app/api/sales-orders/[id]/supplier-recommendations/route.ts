@@ -30,16 +30,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     where: { salesOrderId: id, deletedAt: null },
     select: { itemId: true },
   });
-  const itemIds = [...new Set(lines.map((l) => l.itemId))];
+  const itemIds = [...new Set(lines.map((l) => l.itemId).filter((x): x is string => x !== null))];
   if (itemIds.length === 0) return ok([]);
 
   const supplierItems = await prisma.supplierItem.findMany({
     where: { itemId: { in: itemIds }, deletedAt: null, isActive: true },
-    select: {
-      id: true,
-      itemId: true,
-      isPreferred: true,
-      purchasePrice: true,
+    include: {
       supplier: {
         select: {
           id: true,

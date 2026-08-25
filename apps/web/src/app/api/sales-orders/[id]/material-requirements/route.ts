@@ -33,9 +33,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     select: { itemId: true, quantity: true },
   });
 
+  const itemIds = [...new Set(lines.map((l) => l.itemId).filter((x): x is string => x !== null))];
   // 成品 → 默认 ACTIVE 配方
   const boms = await prisma.itemBom.findMany({
-    where: { finishedItemId: { in: lines.map((l) => l.itemId) }, status: "ACTIVE", deletedAt: null },
+    where: { finishedItemId: { in: itemIds }, status: "ACTIVE", deletedAt: null },
     select: { id: true, finishedItemId: true, isDefault: true },
   });
   const bomByItem = new Map<string, string>();
@@ -55,6 +56,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   // 汇总原料需求
   const need = new Map<string, { qty: number; bomId: string }>();
   for (const l of lines) {
+    if (!l.itemId) continue;
     const bomId = bomByItem.get(l.itemId);
     if (!bomId) continue;
     const orderQty = Number(l.quantity);
@@ -73,7 +75,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       select: { id: true, code: true, name: true, stockUom: { select: { code: true, name: true } } },
     }),
     prisma.stockProjection.findMany({
-      where: { itemId: { in: componentIds }, deletedAt: null },
+      where: { itemId: { in: componentIds } },
       select: { itemId: true, onHandQty: true },
     }),
   ]);
