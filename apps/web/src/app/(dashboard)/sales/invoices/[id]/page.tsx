@@ -128,9 +128,11 @@ function InvoiceDetailPage() {
   // 蓝票（ISSUED 且非红字）可红冲；红字草稿自动预填引用
   const isIssuedBlue = detail !== null && detail.status === "ISSUED" && !detail.redLetter;
   // 反开票（撤销开票）：仅 ISSUED 蓝票且未收款（后端 paidAmount=0 + 无未冲销核销 409 兜底）
-  const isReverseable = isIssuedBlue && Number(detail.paidAmount) === 0;
+  const isReverseable =
+    detail !== null && detail.status === "ISSUED" && !detail.redLetter && Number(detail.paidAmount) === 0;
   // 开票审批门禁（与 issue 路由 2b 一致）：命中审批策略时仅 APPROVED 可开票
-  const isIssueable = isDraft && (!detail.workflowInstance || detail.approvalStatus === "APPROVED");
+  const isIssueable =
+    detail !== null && detail.status === "DRAFT" && (!detail.workflowInstance || detail.approvalStatus === "APPROVED");
   // 红字发票（redLetter）DRAFT/ISSUED/CANCELLED 可删除（ISSUED 删除 = 撤销红冲恢复应收；CANCELLED 直接删）
   const isRedDeletable =
     detail !== null && detail.redLetter === true && ["DRAFT", "ISSUED", "CANCELLED"].includes(detail.status);
