@@ -1,11 +1,28 @@
 "use client";
 
+/**
+ * Inspections — 新建质检记录（F2-3 Batch C1 Consolidation，CTO #11888 / FE 2.0 ui-08）
+ *
+ * 由旧式 CARD_CLASS 自绘表单迁移至统一 Workspace：
+ * AppPage → EntityFormWorkspace → FormField → ReferenceSelector。
+ * - 数据源：收货单列表（GET /api/purchase-receipts FINAL read API）+ 详情行（GET /api/purchase-receipts/{id}）
+ * - 选择收货单 → 拉取该单来源行；purchaseReceiptLineId 必填；inspectionMode 必填（SKIP/SPOT/FULL）
+ * - 服务端生成 canonical id 后导航；Dirty State 交 EntityFormWorkspace（不页面自挂 beforeunload / window.confirm）
+ * - 权限用 shared constant（PERMISSIONS / actionPermission），不复制裸字符串
+ */
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
+import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
-import { CARD_CLASS } from "@/lib/ui-classes";
+import {
+  AppPage,
+  EntityFormWorkspace,
+  ReferenceSelector,
+} from "@/components/workspace";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { FormField } from "@/components/ui/form-field";
+import { INPUT_CLASS } from "@/lib/ui-classes";
 
 interface ReceiptRow {
   id: string;
@@ -18,7 +35,6 @@ interface ReceiptLineOption {
   id: string;
   lineNo: number;
   quantity: string;
-  rejectedOnReceiptQty: string;
   item?: { code: string | null; name: string | null } | null;
   uom?: { symbol: string | null } | null;
 }
@@ -32,19 +48,25 @@ interface ReceiptDetail {
 
 const MODE_OPTIONS = ["SKIP", "SPOT", "FULL"] as const;
 
+const inputClass = INPUT_CLASS;
+
+
 function InspectionCreateForm() {
   const router = useRouter();
+
   const [receipts, setReceipts] = useState<ReceiptRow[]>([]);
   const [lines, setLines] = useState<ReceiptLineOption[]>([]);
+  const [linesLoading, setLinesLoading] = useState(false);
+  const [receiptId, setReceiptId] = useState("");
   const [purchaseReceiptLineId, setPurchaseReceiptLineId] = useState("");
   const [inspectionMode, setInspectionMode] = useState("SKIP");
   const [remark, setRemark] = useState("");
-  const [dirty, setDirty] = useState(false);
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiClientError | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [dirty, setDirty] = useState(false);
 
-  // 数据源：已收货单列表（GET /api/purchase-receipts FINAL read API）+ 详情行（GET /api/purchase-receipts/{id}）
+  // 数据源：已收货单列表（GET /api/purchase-receipts FINAL read API）
   useEffect(() => {
     const controller = new AbortController();
     apiFetch<ReceiptRow[] | { total: number; page: number; pageSize: number; items: ReceiptRow[] }>(
@@ -60,139 +82,110 @@ function InspectionCreateForm() {
   }, []);
 
   const loadReceiptLines = (receiptId: string) => {
-    const controller = new AbortController();
+    setReceiptId(receiptId);
     setLines([]);
     setPurchaseReceiptLineId("");
     if (!receiptId) return;
-    apiFetch<ReceiptDetail>(`/api/purchase-receipts/${receiptId}`, { signal: controller.signal })
+    setLinesLoading(true);
+    apiFetch<ReceiptDetail>(`/api/purchase-receipts/${receiptId}`)
       .then((body) => setLines(body.data.lines ?? []))
       .catch((err: unknown) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(err instanceof ApiClientError ? err : new ApiClientError(0, "加载收货行失败", "NETWORK_ERROR"));
-      });
-    return () => controller.abort();
+        if (err instanceof ApiClientError) {
+          setError(err);
+        }
+      })
+      .finally(() => setLinesLoading(false));
   };
 
-  // Dirty state：未保存离开提示
-  useEffect(() => {
-    if (!dirty) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = "";
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [dirty]);
-
-  const markDirty = () => setDirty(true);
-
-  const validate = (): boolean => {
-    const errs: Record<string, string> = {};
-    if (!purchaseReceiptLineId) errs.purchaseReceiptLineId = "请选择来源收货行";
-    if (!inspectionMode) errs.inspectionMode = "请选择质检模式";
-    setFieldErrors(errs);
-    return Object.keys(errs).length === 0;
+  // 三层 validation（仅 UX 层；领域事实以服务端为准）
+  const validate = (): string | null => {
+    if (!purchaseReceiptLineId) return "请选择来源收货行";
+    if (!inspectionMode) return "请选择质检模式";
+    return null;
   };
 
-  const handleSubmit = async () => {
-    if (!validate()) return;
+  const handleSave = () => {
+    if (submitting) return;
+    const firstError = validate();
+    if (firstError) {
+      setError(new ApiClientError(400, firstError, "VALIDATION"));
+      return;
+    }
     setSubmitting(true);
     setError(null);
-    try {
-      const payload = {
+    apiFetch<{ id: string }>("/api/inspections", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
         purchaseReceiptLineId,
         inspectionMode,
         ...(remark ? { remark } : {}),
-      };
-      const body = await apiFetch<{ id: string }>("/api/inspections", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+      }),
+    })
+      .then((body) => {
+        setDirty(false);
+        router.push(`/purchasing/inspections/${body.data.id}`);
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof ApiClientError ? err : new ApiClientError(0, "创建失败", "NETWORK_ERROR"));
+        setSubmitting(false);
       });
-      setDirty(false);
-      // Success convergence：服务端返回 id 导航详情（权威 re-GET）
-      router.push(`/purchasing/inspections/${body.data.id}`);
-    } catch (err: unknown) {
-      setError(err instanceof ApiClientError ? err : new ApiClientError(0, "创建失败", "NETWORK_ERROR"));
-    } finally {
-      setSubmitting(false);
-    }
   };
 
   return (
-    <div className={CARD_CLASS}>
-      <div className="flex items-center justify-between border-b border-border p-4">
-        <h1 className="text-lg font-semibold text-ink-primary">新建质检记录</h1>
-        <Link
-          href="/purchasing/inspections"
-          onClick={(e) => {
-            if (dirty && !window.confirm("有未保存的更改，确定离开？")) e.preventDefault();
-          }}
-          className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
-        >
-          返回列表
-        </Link>
-      </div>
-
-      <div className="p-4">
-        {error && (
-          <div className="mb-4 rounded-md bg-status-danger-bg p-3 text-sm text-status-danger-text">
-            <p>
-              {describeStatus(error.status)}：{error.message}
-              {error.code ? `（${error.code}）` : ""}
-            </p>
-          </div>
-        )}
-
-        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-canvas p-4 text-sm md:grid-cols-2">
-          <div>
-            <label className="block text-xs text-ink-secondary">收货单（已 RECEIVED）</label>
-            <select
-              onChange={(e) => {
-                loadReceiptLines(e.target.value);
-                markDirty();
-              }}
-              className="mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:border-brand-500 focus:outline-none"
-            >
-              <option value="">选择收货单</option>
-              {receipts.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.code ?? ""}（{r.status ?? ""}）{r.purchaseOrder ? ` / PO ${r.purchaseOrder.code ?? ""}` : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-ink-secondary">来源收货行（必填）</label>
-            <select
+    <EntityFormWorkspace
+      title="新建质检记录"
+      description="创建质检记录（PENDING）"
+      backHref="/purchasing/inspections"
+      mode="create"
+      submitting={submitting}
+      error={error}
+      dirty={dirty}
+      onDirty={() => setDirty(true)}
+      onSave={handleSave}
+      onCancel={() => router.push("/purchasing/inspections")}
+      saveLabel="创建（PENDING）"
+    >
+      <section className="border-border rounded-md border p-4">
+        <h2 className="text-ink-primary mb-3 text-sm font-semibold">基本信息</h2>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <FormField label="收货单（已 RECEIVED）">
+            <ReferenceSelector
+              value={receiptId}
+              onChange={loadReceiptLines}
+              options={receipts.map((r) => ({
+                value: r.id,
+                label: r.code ?? "—",
+                hint: `${r.status ?? ""}${r.purchaseOrder?.code ? ` / PO ${r.purchaseOrder.code}` : ""}`.trim(),
+              }))}
+              placeholder="选择收货单"
+            />
+          </FormField>
+          <FormField label="来源收货行" required>
+            <ReferenceSelector
               value={purchaseReceiptLineId}
-              onChange={(e) => {
-                setPurchaseReceiptLineId(e.target.value);
-                markDirty();
+              onChange={(v) => {
+                setPurchaseReceiptLineId(v);
+                setDirty(true);
               }}
-              className="mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:border-brand-500 focus:outline-none"
-            >
-              <option value="">选择收货行</option>
-              {lines.map((l) => (
-                <option key={l.id} value={l.id}>
-                  L{l.lineNo} {l.item?.code ?? ""} {l.item?.name ?? ""}（数量 {l.quantity}
-                  {l.uom?.symbol ? ` ${l.uom.symbol}` : ""}）
-                </option>
-              ))}
-            </select>
-            {fieldErrors.purchaseReceiptLineId && (
-              <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.purchaseReceiptLineId}</p>
-            )}
-          </div>
-          <div>
-            <label className="block text-xs text-ink-secondary">质检模式（必填）</label>
+              options={lines.map((l) => ({
+                value: l.id,
+                label: `L${l.lineNo} ${l.item?.code ?? ""} ${l.item?.name ?? ""}`.trim(),
+                hint: `数量 ${l.quantity}${l.uom?.symbol ? ` ${l.uom.symbol}` : ""}`.trim(),
+              }))}
+              placeholder="先选择收货单"
+              disabled={!receiptId}
+              loading={linesLoading}
+            />
+          </FormField>
+          <FormField label="质检模式" required>
             <select
               value={inspectionMode}
               onChange={(e) => {
                 setInspectionMode(e.target.value);
-                markDirty();
+                setDirty(true);
               }}
-              className="mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:border-brand-500 focus:outline-none"
+              className={inputClass}
             >
               {MODE_OPTIONS.map((m) => (
                 <option key={m} value={m}>
@@ -200,44 +193,44 @@ function InspectionCreateForm() {
                 </option>
               ))}
             </select>
-            {fieldErrors.inspectionMode && (
-              <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.inspectionMode}</p>
-            )}
-          </div>
-          <div className="col-span-2">
-            <label className="block text-xs text-ink-secondary">备注（可选，≤500）</label>
+          </FormField>
+          <FormField label="备注">
             <textarea
               value={remark}
               onChange={(e) => {
                 setRemark(e.target.value);
-                markDirty();
+                setDirty(true);
               }}
               rows={2}
-              className="mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:border-brand-500 focus:outline-none"
+              maxLength={500}
+              className={inputClass}
             />
-          </div>
+          </FormField>
         </div>
-
-        <div className="mt-4 flex items-center gap-3">
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {submitting ? "提交中…" : "创建（PENDING）"}
-          </button>
-          {dirty && <span className="text-xs text-status-warning-text">有未保存的更改</span>}
-        </div>
-      </div>
-    </div>
+      </section>
+    </EntityFormWorkspace>
   );
 }
 
 export default function Page() {
+  const { state } = useSession();
+  const canCreate =
+    state.status === "authenticated" &&
+    state.user !== null &&
+    hasPermission(state.user.roles as RoleCode[], actionPermission("inspection", "create"));
   return (
-    <PermissionGuard permission="inspection:create">
-      <InspectionCreateForm />
+    <PermissionGuard permission={PERMISSIONS.INSPECTION_READ}>
+      {canCreate ? (
+        <AppPage>
+          <InspectionCreateForm />
+        </AppPage>
+      ) : (
+        <AppPage>
+          <div className="border-border bg-surface rounded-lg border p-6 text-sm text-ink-secondary">
+            无创建权限
+          </div>
+        </AppPage>
+      )}
     </PermissionGuard>
   );
 }

@@ -1,11 +1,32 @@
-'use client';
+"use client";
 
-import { useCallback, useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { PermissionGuard } from '@/components/guard/permission-guard';
-import { apiFetch, ApiClientError, describeStatus } from '@/lib/api-client';
-import { CARD_CLASS } from "@/lib/ui-classes";
+/**
+ * Purchase Requisitions — 编辑采购申请（F2-3 Batch C1 Consolidation，CTO #11888 / FE 2.0 ui-08）
+ *
+ * 由旧式 CARD_CLASS 自绘表单迁移至统一 Workspace：
+ * AppPage → EntityFormWorkspace → FormField → LineEditor。
+ * - GET detail authoritative version；仅 DRAFT 可编辑（非 DRAFT 显示「当前状态不可编辑」+ 返回详情）
+ * - PATCH 携带 version；lines 全量替换；needDate/remark 可选
+ * - VERSION_CONFLICT 走 F2-2 统一 stale 面板（EntityFormWorkspace onReload：重新 GET → 更新 version → 成功后重置 dirty）
+ * - 禁止 silent retry / 自动覆盖 / 自动重新 PATCH
+ * - Dirty State 交 EntityFormWorkspace（不页面自挂 beforeunload / window.confirm）
+ */
+import { useCallback, useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
+import { useSession } from "@/lib/session-context";
+import { PermissionGuard } from "@/components/guard/permission-guard";
+import {
+  AppPage,
+  EntityFormWorkspace,
+  LineEditor,
+  ErrorPanel,
+  type LineColumn,
+  type LineRow,
+} from "@/components/workspace";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { FormField } from "@/components/ui/form-field";
+import { INPUT_CLASS } from "@/lib/ui-classes";
 
 interface ItemOption {
   id: string;
@@ -33,7 +54,7 @@ interface RequisitionDetail {
   }>;
 }
 
-interface LineForm {
+interface RequisitionLineRow extends LineRow {
   itemId: string;
   description: string;
   quantity: string;
@@ -42,15 +63,6 @@ interface LineForm {
   remark: string;
 }
 
-const EMPTY_LINE: LineForm = {
-  itemId: '',
-  description: '',
-  quantity: '',
-  uomId: '',
-  needDate: '',
-  remark: '',
-};
-
 function toIso(value: string): string | undefined {
   if (!value) return undefined;
   const d = new Date(value);
@@ -58,45 +70,47 @@ function toIso(value: string): string | undefined {
 }
 
 function toLocalInput(iso: string | null | undefined): string {
-  if (!iso) return '';
+  if (!iso) return "";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const pad = (n: number) => String(n).padStart(2, '0');
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
   // 用户指令 2026-08-21：全站取消分钟格式 → date（YYYY-MM-DD）
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+const inputClass = INPUT_CLASS;
+
+
 function RequisitionEditForm() {
   const params = useParams();
-  const id = typeof params.id === 'string' ? params.id : '';
+  const id = typeof params.id === "string" ? params.id : "";
   const router = useRouter();
 
   const [items, setItems] = useState<ItemOption[]>([]);
-  const [detail, setDetail] = useState<RequisitionDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<ApiClientError | null>(null);
-  const [notEditable, setNotEditable] = useState(false);
 
-  const [needDate, setNeedDate] = useState('');
-  const [remark, setRemark] = useState('');
-  const [lines, setLines] = useState<LineForm[]>([]);
+  const [detail, setDetail] = useState<RequisitionDetail | null>(null);
+  const [notEditable, setNotEditable] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<ApiClientError | null>(null);
+
+  const [needDate, setNeedDate] = useState("");
+  const [remark, setRemark] = useState("");
+  const [lines, setLines] = useState<RequisitionLineRow[]>([]);
   const [version, setVersion] = useState(0);
-  const [dirty, setDirty] = useState(false);
+
   const [submitting, setSubmitting] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [error, setError] = useState<ApiClientError | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   // 数据源：items 下拉
   useEffect(() => {
     const controller = new AbortController();
-    apiFetch<ItemOption[]>('/api/items?pageSize=100', { signal: controller.signal })
+    apiFetch<ItemOption[]>("/api/items?pageSize=100", { signal: controller.signal })
       .then((body) => setItems(body.data))
       .catch((err: unknown) => {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        setError(
-          err instanceof ApiClientError
-            ? err
-            : new ApiClientError(0, '加载物料失败', 'NETWORK_ERROR'),
-        );
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setLoadError(err instanceof ApiClientError ? err : new ApiClientError(0, "加载物料失败", "NETWORK_ERROR"));
       });
     return () => controller.abort();
   }, []);
@@ -105,98 +119,98 @@ function RequisitionEditForm() {
   const loadDetail = useCallback(() => {
     const controller = new AbortController();
     setLoading(true);
-    setError(null);
+    setLoadError(null);
     apiFetch<RequisitionDetail>(`/api/purchase-requisitions/${id}`, { signal: controller.signal })
       .then((body) => {
         const d = body.data;
         setDetail(d);
-        if (d.status !== 'DRAFT') {
+        if (d.status !== "DRAFT") {
           setNotEditable(true);
+          setLoading(false);
           return;
         }
         setNotEditable(false);
         setVersion(d.version);
         setNeedDate(toLocalInput(d.needDate));
-        setRemark(d.remark ?? '');
+        setRemark(d.remark ?? "");
         setLines(
           (d.lines ?? []).map((l) => ({
-            itemId: l.itemId ?? '',
+            id: crypto.randomUUID(),
+            itemId: l.itemId ?? "",
             description: l.description,
             quantity: l.quantity,
-            uomId: l.uomId ?? '',
+            uomId: l.uomId ?? "",
             needDate: toLocalInput(l.needDate),
-            remark: l.remark ?? '',
+            remark: l.remark ?? "",
           })),
         );
+        // 重新加载最新数据后：重置 dirty（reload 成功才清）
         setDirty(false);
+        setLoading(false);
       })
       .catch((err: unknown) => {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        setError(
-          err instanceof ApiClientError ? err : new ApiClientError(0, '加载失败', 'NETWORK_ERROR'),
-        );
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setLoadError(err instanceof ApiClientError ? err : new ApiClientError(0, "加载失败", "NETWORK_ERROR"));
+        setLoading(false);
       });
     return () => controller.abort();
   }, [id]);
 
   useEffect(() => loadDetail(), [loadDetail]);
 
-  // Dirty state
+  // F2-2 UX Hardening ②：409 VERSION_CONFLICT 后重新加载最新数据（保持 dirty=true 直到 GET 成功）
+  const handleReload = () => {
+    setError(null);
+    setReloadKey((k) => k + 1);
+  };
+
   useEffect(() => {
-    if (!dirty) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [dirty]);
+    if (reloadKey === 0) return;
+    return loadDetail();
+  }, [reloadKey, loadDetail]);
 
-  const markDirty = () => setDirty(true);
-
-  const updateLine = (idx: number, patch: Partial<LineForm>) => {
-    setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
-    markDirty();
-    if (patch.itemId) {
-      const item = items.find((it) => it.id === patch.itemId);
-      if (item?.stockUom?.id) {
-        setLines((prev) =>
-          prev.map((l, i) => (i === idx ? { ...l, uomId: item.stockUom?.id ?? l.uomId } : l)),
-        );
-      }
+  // 三层 validation（仅 UX 层；领域事实以服务端为准）
+  const validate = (): string | null => {
+    for (let i = 0; i < lines.length; i += 1) {
+      const l = lines[i];
+      if (!l.itemId) return `第 ${i + 1} 行：请选择物料`;
+      const qty = Number(l.quantity);
+      if (!l.quantity || !Number.isFinite(qty) || qty <= 0) return `第 ${i + 1} 行：数量必须大于 0`;
     }
+    return null;
   };
 
-  const addLine = () => {
-    setLines((prev) => [...prev, { ...EMPTY_LINE }]);
-    markDirty();
+  /** 行编辑：选商品自动带出 stockUom 作为行 UOM（契约内字段；服务端仍为准） */
+  const handleLinesChange = (next: RequisitionLineRow[]) => {
+    for (let i = 0; i < next.length; i += 1) {
+      const prevRow = lines[i];
+      const nextRow = next[i];
+      if (!prevRow || !nextRow || prevRow.itemId === nextRow.itemId) continue;
+      const item = items.find((it) => it.id === nextRow.itemId);
+      if (item?.stockUom?.id) nextRow.uomId = item.stockUom.id;
+    }
+    setLines(next);
+    setDirty(true);
   };
 
-  const removeLine = (idx: number) => {
-    setLines((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
-    markDirty();
+  const updateLine = (idx: number, patch: Partial<RequisitionLineRow>) => {
+    setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
+    setDirty(true);
   };
 
-  const validate = (): boolean => {
-    const errs: Record<string, string> = {};
-    lines.forEach((l, i) => {
-      if (!l.itemId) errs[`lines.${i}.itemId`] = '请选择物料';
-      if (!l.quantity || Number(l.quantity) <= 0) errs[`lines.${i}.quantity`] = '数量必须大于 0';
-    });
-    if (lines.length === 0) errs.lines = '至少需要一行';
-    setFieldErrors(errs);
-    return Object.keys(errs).length === 0;
-  };
-
-  const handleSubmit = async () => {
-    if (!validate()) return;
+  const handleSave = () => {
+    if (submitting) return;
+    const firstError = validate();
+    if (firstError) {
+      setError(new ApiClientError(400, firstError, "VALIDATION"));
+      return;
+    }
     setSubmitting(true);
     setError(null);
-    try {
-      const payload = {
+    apiFetch<RequisitionDetail>(`/api/purchase-requisitions/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
         version,
         ...(needDate ? { needDate: toIso(needDate) } : {}),
         ...(remark ? { remark } : {}),
@@ -208,258 +222,181 @@ function RequisitionEditForm() {
           ...(l.needDate ? { needDate: toIso(l.needDate) } : {}),
           ...(l.remark ? { remark: l.remark } : {}),
         })),
-      };
-      await apiFetch<RequisitionDetail>(`/api/purchase-requisitions/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+      }),
+    })
+      .then(() => {
+        setDirty(false);
+        router.push(`/purchasing/requisitions/${id}`);
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof ApiClientError ? err : new ApiClientError(0, "保存失败", "NETWORK_ERROR"));
+        setSubmitting(false);
       });
-      setDirty(false);
-      // Success refresh：使用服务端返回事实导航到详情（权威 re-GET）
-      router.push(`/purchasing/requisitions/${id}`);
-    } catch (err: unknown) {
-      // 409 VERSION_CONFLICT：不自动 retry、不覆盖本地事实；明确提示 + 由用户决定是否重新载入 authoritative detail
-      const apiErr =
-        err instanceof ApiClientError ? err : new ApiClientError(0, '保存失败', 'NETWORK_ERROR');
-      setError(apiErr);
-    } finally {
-      setSubmitting(false);
-    }
   };
+
+  const lineColumns: LineColumn<RequisitionLineRow>[] = [
+    {
+      key: "itemId",
+      header: "物料 *",
+      type: "select",
+      options: items.map((i) => ({
+        value: i.id,
+        label: `${i.code ?? ""} · ${i.name ?? ""}`.trim(),
+      })),
+      placeholder: "请选择物料",
+    },
+    { key: "description", header: "需求描述", type: "text", placeholder: "可选" },
+    { key: "quantity", header: "数量 *", type: "number", placeholder: "> 0" },
+    {
+      key: "uom",
+      header: "单位",
+      render: (row) => {
+        const item = items.find((it) => it.id === row.itemId);
+        return item?.stockUom?.symbol ?? "—";
+      },
+    },
+    {
+      key: "needDate",
+      header: "需求日期",
+      render: (row) => (
+        <input
+          type="date"
+          value={row.needDate}
+          onChange={(e) => {
+            const idx = lines.findIndex((l) => l.id === row.id);
+            updateLine(idx, { needDate: e.target.value });
+          }}
+          className={inputClass}
+        />
+      ),
+    },
+    { key: "remark", header: "备注", type: "text", placeholder: "可选" },
+  ];
 
   if (loading) {
     return (
-      <div className="rounded-lg border border-border bg-surface p-6 text-sm text-ink-muted">
-        加载中…
-      </div>
+      <AppPage>
+        <div className="border-border bg-surface rounded-lg border p-6 text-sm text-ink-muted">
+          加载中…
+        </div>
+      </AppPage>
     );
   }
 
-  if (notEditable && detail) {
+  if (loadError) {
     return (
-      <div className={CARD_CLASS}>
-        <div className="flex items-center justify-between border-b border-border p-4">
-          <h1 className="text-lg font-semibold text-ink-primary">编辑采购申请</h1>
-          <Link
-            href={`/purchasing/requisitions/${id}`}
-            className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
+      <AppPage>
+        <ErrorPanel error={loadError} />
+      </AppPage>
+    );
+  }
+
+  if (notEditable || !detail) {
+    return (
+      <AppPage>
+        <div className="border-border bg-surface rounded-lg border p-6">
+          <p className="text-ink-primary text-sm font-medium">当前状态不可编辑</p>
+          <p className="text-ink-secondary mt-1 text-sm">
+            仅草稿状态可编辑（当前状态：{detail?.status ?? "—"}）——已提交/已转单的采购申请不可修改。
+          </p>
+          <button
+            type="button"
+            onClick={() => router.push(`/purchasing/requisitions/${id}`)}
+            className="bg-brand-600 hover:bg-brand-700 mt-3 rounded-md px-3 py-1.5 text-sm font-medium text-white"
           >
             返回详情
-          </Link>
+          </button>
         </div>
-        <div className="p-6">
-          <p className="text-sm text-status-warning-text">
-            仅草稿状态可编辑（当前 {detail.status}）——已提交/已转单的采购申请不可修改。
-          </p>
-        </div>
-      </div>
+      </AppPage>
     );
   }
 
   return (
-    <div className={CARD_CLASS}>
-      <div className="flex items-center justify-between border-b border-border p-4">
-        <h1 className="text-lg font-semibold text-ink-primary">编辑采购申请</h1>
-        <div className="flex items-center gap-2">
-          {dirty && <span className="text-xs text-status-warning-text">有未保存的更改</span>}
-          <Link
-            href={`/purchasing/requisitions/${id}`}
-            onClick={(e) => {
-              if (dirty && !window.confirm('有未保存的更改，确定离开？')) e.preventDefault();
-            }}
-            className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
-          >
-            返回详情
-          </Link>
-        </div>
-      </div>
-
-      <div className="p-4">
-        {error && (
-          <div className="mb-4 rounded-md bg-status-danger-bg p-3 text-sm text-status-danger-text">
-            <p>
-              {describeStatus(error.status)}：{error.message}
-              {error.code ? `（${error.code}）` : ''}
-            </p>
-            {error.code === 'VERSION_CONFLICT' && (
-              <div className="mt-2">
-                <p className="text-xs">
-                  数据已被他人修改（VERSION_CONFLICT），未保存的更改可能丢失。重新载入最新数据后请重新确认修改。
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (window.confirm('未保存的更改将丢失，确定重新载入最新数据？')) {
-                      setError(null);
-                      loadDetail();
-                    }
-                  }}
-                  className="bg-brand-600 hover:bg-brand-700 mt-2 rounded-md px-3 py-1 text-xs font-medium text-white"
-                >
-                  重新载入最新数据
-                </button>
-              </div>
-            )}
+    <AppPage>
+      <EntityFormWorkspace
+        title={`编辑采购申请 — ${detail.code}`}
+        backHref={`/purchasing/requisitions/${id}`}
+        mode="edit"
+        submitting={submitting}
+        error={error}
+        dirty={dirty}
+        onDirty={() => setDirty(true)}
+        onReload={handleReload}
+        onSave={handleSave}
+        onCancel={() => router.push(`/purchasing/requisitions/${id}`)}
+      >
+        <section className="border-border rounded-md border p-4">
+          <h2 className="text-ink-primary mb-3 text-sm font-semibold">基本信息</h2>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <FormField label="单号">
+              <span className="text-ink-primary border-border bg-canvas block rounded-md border px-3 py-1.5 text-sm">
+                {detail.code}
+              </span>
+            </FormField>
+            <FormField label="期望日期">
+              <input
+                type="date"
+                value={needDate}
+                onChange={(e) => {
+                  setNeedDate(e.target.value);
+                  setDirty(true);
+                }}
+                className={inputClass}
+              />
+            </FormField>
+            <FormField label="备注">
+              <textarea
+                value={remark}
+                onChange={(e) => {
+                  setRemark(e.target.value);
+                  setDirty(true);
+                }}
+                rows={2}
+                maxLength={1000}
+                className={inputClass}
+              />
+            </FormField>
           </div>
-        )}
+        </section>
 
-        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-canvas p-4 text-sm md:grid-cols-3">
-          <div>
-            <label className="block text-xs text-ink-secondary">单号</label>
-            <p className="mt-1 font-medium text-ink-primary">{detail?.code}</p>
-          </div>
-          <div>
-            <label className="block text-xs text-ink-secondary">期望日期（可选）</label>
-            <input
-              type="date"
-              value={needDate}
-              onChange={(e) => {
-                setNeedDate(e.target.value);
-                markDirty();
-              }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
-            />
-          </div>
-          <div className="col-span-2">
-            <label className="block text-xs text-ink-secondary">备注（可选，≤1000）</label>
-            <textarea
-              value={remark}
-              onChange={(e) => {
-                setRemark(e.target.value);
-                markDirty();
-              }}
-              rows={2}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
-            />
-          </div>
-        </div>
-
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-sm font-medium text-ink-secondary">需求明细（至少一行）</h2>
-          <button
-            type="button"
-            onClick={addLine}
-            className="bg-brand-600 hover:bg-brand-700 rounded-md px-3 py-1.5 text-sm font-medium text-white"
-          >
-            + 添加行
-          </button>
-        </div>
-        {fieldErrors.lines && <p className="mb-2 text-xs text-status-danger-text">{fieldErrors.lines}</p>}
-
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
-              <tr>
-                <th className="px-3 py-2">物料</th>
-                <th className="px-3 py-2">需求描述</th>
-                <th className="px-3 py-2">数量</th>
-                <th className="px-3 py-2">单位</th>
-                <th className="px-3 py-2">需求日期</th>
-                <th className="px-3 py-2">备注</th>
-                <th className="px-3 py-2"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {lines.map((line, idx) => (
-                <tr key={idx}>
-                  <td className="px-3 py-2">
-                    <select
-                      value={line.itemId}
-                      onChange={(e) => updateLine(idx, { itemId: e.target.value })}
-                      className="focus:border-brand-500 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
-                    >
-                      <option value="">选择物料</option>
-                      {items.map((it) => (
-                        <option key={it.id} value={it.id}>
-                          {it.code ?? ''} {it.name ?? ''}
-                        </option>
-                      ))}
-                    </select>
-                    {fieldErrors[`lines.${idx}.itemId`] && (
-                      <p className="mt-0.5 text-xs text-status-danger-text">
-                        {fieldErrors[`lines.${idx}.itemId`]}
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-3 py-2">
-                    <input
-                      value={line.description}
-                      onChange={(e) => updateLine(idx, { description: e.target.value })}
-                      placeholder="可选"
-                      className="focus:border-brand-500 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
-                    />
-                  </td>
-                  <td className="px-3 py-2">
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      value={line.quantity}
-                      onChange={(e) => updateLine(idx, { quantity: e.target.value })}
-                      className="focus:border-brand-500 w-24 rounded-md border border-border px-2 py-1.5 focus:outline-none"
-                    />
-                    {fieldErrors[`lines.${idx}.quantity`] && (
-                      <p className="mt-0.5 text-xs text-status-danger-text">
-                        {fieldErrors[`lines.${idx}.quantity`]}
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-ink-secondary">
-                    {line.uomId
-                      ? (items.find((it) => it.id === line.itemId)?.stockUom?.symbol ?? '—')
-                      : '—'}
-                  </td>
-                  <td className="px-3 py-2">
-                    <input
-                      type="date"
-                      value={line.needDate}
-                      onChange={(e) => updateLine(idx, { needDate: e.target.value })}
-                      className="focus:border-brand-500 rounded-md border border-border px-2 py-1.5 focus:outline-none"
-                    />
-                  </td>
-                  <td className="px-3 py-2">
-                    <input
-                      value={line.remark}
-                      onChange={(e) => updateLine(idx, { remark: e.target.value })}
-                      placeholder="可选"
-                      className="focus:border-brand-500 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
-                    />
-                  </td>
-                  <td className="px-3 py-2">
-                    <button
-                      type="button"
-                      onClick={() => removeLine(idx)}
-                      disabled={lines.length <= 1}
-                      className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      删除
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="mt-4 flex items-center gap-3">
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="bg-brand-600 hover:bg-brand-700 rounded-md px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {submitting ? '保存中…' : '保存（DRAFT）'}
-          </button>
-        </div>
-      </div>
-    </div>
+        <LineEditor<RequisitionLineRow>
+          columns={lineColumns}
+          lines={lines}
+          onChange={handleLinesChange}
+          onAdd={() => ({
+            id: crypto.randomUUID(),
+            itemId: "",
+            description: "",
+            quantity: "",
+            uomId: "",
+            needDate: "",
+            remark: "",
+          })}
+          addLabel="添加行"
+          emptyMessage="请添加至少一行需求明细"
+        />
+      </EntityFormWorkspace>
+    </AppPage>
   );
 }
 
 export default function Page() {
+  const { state } = useSession();
+  const canEdit =
+    state.status === "authenticated" &&
+    state.user !== null &&
+    hasPermission(state.user.roles as RoleCode[], actionPermission("purchase-requisition", "edit"));
   return (
-    <PermissionGuard permission="purchase-requisition:edit">
-      <RequisitionEditForm />
+    <PermissionGuard permission={PERMISSIONS.PURCHASE_REQUISITION_READ}>
+      {canEdit ? (
+        <RequisitionEditForm />
+      ) : (
+        <AppPage>
+          <div className="border-border bg-surface rounded-lg border p-6 text-sm text-ink-secondary">
+            无编辑权限
+          </div>
+        </AppPage>
+      )}
     </PermissionGuard>
   );
 }
