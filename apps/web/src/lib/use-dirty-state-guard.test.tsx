@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, act, screen, cleanup } from "@testing-library/react";
+import { render, act, screen, cleanup, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { useDirtyStateGuard } from "@/lib/use-dirty-state-guard";
 
@@ -50,7 +50,7 @@ describe("useDirtyStateGuard（CC-10）", () => {
     expect(resolved).toBeNull();
   });
 
-  it("对话框「离开」确认后 resolve(true) 且对话框关闭", () => {
+  it("对话框「离开」确认后 resolve(true) 且对话框关闭", async () => {
     render(<Harness dirty />);
     let resolved: boolean | null = null;
     act(() => {
@@ -61,11 +61,16 @@ describe("useDirtyStateGuard（CC-10）", () => {
     act(() => {
       screen.getByRole("button", { name: "离开" }).click();
     });
-    expect(resolved).toBe(true);
-    expect(guardRef.current!.leaveConfirmDialog).toBeNull();
+    // Promise resolve 在微任务队列，等待其 flush（非 dirty 直通路径为同步 Promise）
+    await waitFor(() => {
+      expect(resolved).toBe(true);
+    });
+    await waitFor(() => {
+      expect(guardRef.current!.leaveConfirmDialog).toBeNull();
+    });
   });
 
-  it("对话框「取消」后 resolve(false)", () => {
+  it("对话框「取消」后 resolve(false)", async () => {
     render(<Harness dirty />);
     let resolved: boolean | null = null;
     act(() => {
@@ -76,6 +81,8 @@ describe("useDirtyStateGuard（CC-10）", () => {
     act(() => {
       screen.getByRole("button", { name: "取消" }).click();
     });
-    expect(resolved).toBe(false);
+    await waitFor(() => {
+      expect(resolved).toBe(false);
+    });
   });
 });
