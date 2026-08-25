@@ -139,6 +139,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       locationNote: a.locationNote,
       // #238：审批状态（FOLLOW_UP）透传 + 评论数（VISIT_PLAN/CHECK_IN status=NULL）
       status: a.status,
+      submittedAt: a.submittedAt,
+      submittedById: a.submittedById,
+      approvedAt: a.approvedAt,
+      approvedById: a.approvedById,
+      rejectedAt: a.rejectedAt,
+      rejectedById: a.rejectedById,
+      rejectReason: a.rejectReason,
       commentCount: a._count.comments,
       createdById: a.createdById,
       createdAt: a.createdAt,
