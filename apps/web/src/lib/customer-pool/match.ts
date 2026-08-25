@@ -92,7 +92,7 @@ export async function matchCustomerPools(partnerId: string): Promise<MatchCustom
       OR: scopeConditions.map((c) => ({ scopeType: c.scopeType, scopeValue: c.scopeValue })),
     },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    select: { id: true, code: true, scopeType: true },
+    select: { id: true, code: true, scopeType: true, scopeValue: true },
   });
   if (pools.length === 0) {
     return { matched: false, poolsMatched: [], entryCreated: false, skippedReason: "NO_MATCHING_POOL" };

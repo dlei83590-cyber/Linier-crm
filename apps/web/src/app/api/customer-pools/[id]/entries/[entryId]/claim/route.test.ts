@@ -10,10 +10,9 @@ vi.mock('@/lib/api-helpers', () => ({
   writeAuditLog: vi.fn().mockResolvedValue(undefined),
   requestLog: vi.fn(),
 }));
-const { matchCustomerPools } = vi.hoisted(() => ({
+vi.mock('@/lib/customer-pool/match', () => ({
   matchCustomerPools: vi.fn().mockResolvedValue({ matched: false, poolsMatched: [], entryCreated: false }),
 }));
-vi.mock('@/lib/customer-pool/match', () => ({ matchCustomerPools }));
 
 import { POST } from '@/app/api/customer-pools/[id]/entries/[entryId]/claim/route';
 import { matchCustomerPools } from '@/lib/customer-pool/match';

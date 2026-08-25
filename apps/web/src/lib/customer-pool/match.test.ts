@@ -75,7 +75,7 @@ describe('matchCustomerPools — 客户公海自动匹配 MVP（REGION + DEPARTM
     // 归属快照：客户负责人（owner）部门 = 销售一部
     ownershipFindFirstMock.mockResolvedValue({ id: 'own-1', owner: { departmentId: 'dept-sale-1' } });
     bpFindFirstMock.mockResolvedValue({ id: 'bp-1', type: 'CUSTOMER', region: null });
-    poolFindManyMock.mockResolvedValue([{ id: 'pool-dept-1', code: 'POOL-SALE-1', scopeType: 'DEPARTMENT' }]);
+    poolFindManyMock.mockResolvedValue([{ id: 'pool-dept-1', code: 'POOL-SALE-1', scopeType: 'DEPARTMENT', scopeValue: 'dept-sale-1' }]);
     const tx = makeTx({
       customerOwnership: { findFirst: vi.fn().mockResolvedValue({ owner: { departmentId: 'dept-sale-1' } }) },
     });
@@ -96,8 +96,8 @@ describe('matchCustomerPools — 客户公海自动匹配 MVP（REGION + DEPARTM
   it('DEPARTMENT + REGION 同时命中 → DEPARTMENT（客户负责人部门，触发源）优先入池', async () => {
     ownershipFindFirstMock.mockResolvedValue({ id: 'own-1', owner: { departmentId: 'dept-sale-1' } });
     poolFindManyMock.mockResolvedValue([
-      { id: 'pool-region-1', code: 'POOL-REGION-HD', scopeType: 'REGION' },
-      { id: 'pool-dept-1', code: 'POOL-SALE-1', scopeType: 'DEPARTMENT' },
+      { id: 'pool-region-1', code: 'POOL-REGION-HD', scopeType: 'REGION', scopeValue: '华东' },
+      { id: 'pool-dept-1', code: 'POOL-SALE-1', scopeType: 'DEPARTMENT', scopeValue: 'dept-sale-1' },
     ]);
     const tx = makeTx({
       customerOwnership: { findFirst: vi.fn().mockResolvedValue({ owner: { departmentId: 'dept-sale-1' } }) },
@@ -163,7 +163,7 @@ describe('matchCustomerPools — 客户公海自动匹配 MVP（REGION + DEPARTM
   it('已有 active entry（I2）→ DEPARTMENT 路径也不重复入池（HAS_ACTIVE_ENTRY）', async () => {
     ownershipFindFirstMock.mockResolvedValue({ id: 'own-1', owner: { departmentId: 'dept-sale-1' } });
     bpFindFirstMock.mockResolvedValue({ id: 'bp-1', type: 'CUSTOMER', region: null });
-    poolFindManyMock.mockResolvedValue([{ id: 'pool-dept-1', code: 'POOL-SALE-1', scopeType: 'DEPARTMENT' }]);
+    poolFindManyMock.mockResolvedValue([{ id: 'pool-dept-1', code: 'POOL-SALE-1', scopeType: 'DEPARTMENT', scopeValue: 'dept-sale-1' }]);
     const tx = makeTx({
       customerPoolEntry: {
         findFirst: vi.fn().mockResolvedValue({ id: 'entry-x' }),
@@ -193,7 +193,7 @@ describe('matchCustomerPools — 客户公海自动匹配 MVP（REGION + DEPARTM
   it('DEPARTMENT 事务内复核失败（归属在判定与提交间释放）→ MATCH_CONDITION_CHANGED 不创建', async () => {
     ownershipFindFirstMock.mockResolvedValue({ id: 'own-1', owner: { departmentId: 'dept-sale-1' } });
     bpFindFirstMock.mockResolvedValue({ id: 'bp-1', type: 'CUSTOMER', region: null });
-    poolFindManyMock.mockResolvedValue([{ id: 'pool-dept-1', code: 'POOL-SALE-1', scopeType: 'DEPARTMENT' }]);
+    poolFindManyMock.mockResolvedValue([{ id: 'pool-dept-1', code: 'POOL-SALE-1', scopeType: 'DEPARTMENT', scopeValue: 'dept-sale-1' }]);
     const tx = makeTx({ customerOwnership: { findFirst: vi.fn().mockResolvedValue(null) } });
     transactionMock.mockImplementation((fn: (t: unknown) => Promise<unknown>) => fn(tx));
 
