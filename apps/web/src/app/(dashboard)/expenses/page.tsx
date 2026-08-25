@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation";
 import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityListWorkspace } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
 import { apiFetch } from "@/lib/api-client";
@@ -69,11 +69,12 @@ const APPROVAL_LABELS: Record<string, string> = {
   APPROVED: "已批准",
   REJECTED: "已驳回",
 };
-const APPROVAL_TONE: Record<string, string> = {
-  DRAFT: "bg-slate-100 text-slate-600",
-  PENDING: "bg-amber-100 text-amber-700",
-  APPROVED: "bg-emerald-100 text-emerald-700",
-  REJECTED: "bg-rose-100 text-rose-700",
+// 语义色 tone 映射（FE2.0 UI-10：StatusBadge 统一，禁止页面自造状态色）
+const APPROVAL_TONE: Record<string, "neutral" | "info" | "success" | "danger"> = {
+  DRAFT: "neutral",
+  PENDING: "info",
+  APPROVED: "success",
+  REJECTED: "danger",
 };
 
 function ExpensesList() {
@@ -262,14 +263,11 @@ function ExpensesList() {
             key: "approvalStatus",
             header: "状态",
             render: (row) => (
-              <span
-                className={
-                  "inline-block rounded-full px-2 py-0.5 text-xs font-medium " +
-                  (APPROVAL_TONE[row.approvalStatus] ?? "bg-slate-100 text-slate-600")
-                }
-              >
-                {APPROVAL_LABELS[row.approvalStatus] ?? row.approvalStatus}
-              </span>
+              <StatusBadge
+                status={row.approvalStatus}
+                label={APPROVAL_LABELS[row.approvalStatus] ?? row.approvalStatus}
+                toneMap={APPROVAL_TONE}
+              />
             ),
           },
           {

@@ -19,6 +19,7 @@ import {
   ConfirmActionDialog,
   type AuditEvent,
 } from "@/components/workspace";
+import { PageLoading } from "@/components/ui/skeleton";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, INPUT_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useToast } from "@/components/ui/toast";
@@ -287,8 +288,8 @@ function PriceListDetailPage() {
   if (loading) {
     return (
       <AppPage>
-        <div className="rounded-lg border border-border bg-surface p-6 text-sm text-ink-muted">
-          加载中…
+        <div className="border-border bg-surface overflow-hidden rounded-lg border">
+          <PageLoading rows={5} />
         </div>
       </AppPage>
     );

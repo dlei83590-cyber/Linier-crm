@@ -7,18 +7,26 @@
  * RECEIPT_BASED：每行双溯源 purchaseOrderLineId + warehouseReceiptLineId（必须来自 POSTED 入库行），
  * 金额/税额由服务端 Decimal 计算（前端只传 quantity/unitPrice/taxRate，不传金额）。
  * PermissionGuard 对齐 API requirePermission("supplier-invoice:create")。
+ *
+ * FE2.0 UI-10：迁移到 EntityFormWorkspace（PageHeader + Section 分组 + INPUT_CLASS；Dirty-State
+ * 离开保护由 EntityFormWorkspace 统一提供，消除手写 window.confirm）。
  */
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
-import { CARD_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
+import { AppPage, EntityFormWorkspace } from "@/components/workspace";
+import { FormField } from "@/components/ui/form-field";
+import { INPUT_CLASS } from "@/lib/ui-classes";
 import { INVOICE_TYPE_OPTIONS, validateIssueVatFields } from "@/lib/vat-labels";
 
-interface SupplierOption { id: string; code: string | null; name: string | null }
+interface SupplierOption {
+  id: string;
+  code: string | null;
+  name: string | null;
+}
 
 interface LineForm {
   purchaseOrderLineId: string;
@@ -43,6 +51,17 @@ const EMPTY_LINE: LineForm = {
   taxRate: "13",
   vatRecoverable: true,
 };
+
+const inputClass = INPUT_CLASS;
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-md border border-border p-4">
+      <h2 className="mb-3 text-sm font-semibold text-ink-primary">{title}</h2>
+      {children}
+    </section>
+  );
+}
 
 function SupplierInvoiceCreateForm() {
   const router = useRouter();
@@ -79,16 +98,6 @@ function SupplierInvoiceCreateForm() {
       });
     return () => controller.abort();
   }, []);
-
-  useEffect(() => {
-    if (!dirty) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = "";
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [dirty]);
 
   const markDirty = () => setDirty(true);
 
@@ -169,187 +178,277 @@ function SupplierInvoiceCreateForm() {
   };
 
   return (
-    <div className={CARD_CLASS}>
-      <div className="flex items-center justify-between border-b border-border p-4">
-        <h1 className="text-lg font-semibold text-ink-primary">新建供应商发票</h1>
-        <Link
-          href="/supplier-invoices"
-          onClick={(e) => {
-            if (dirty && !window.confirm("有未保存的更改，确定离开？")) e.preventDefault();
-          }}
-          className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
-        >
-          返回列表
-        </Link>
-      </div>
-
-      <div className="p-4">
-        {error && (
-          <div className="mb-4 rounded-md bg-status-danger-bg p-3 text-sm text-status-danger-text">
-            <p>
-              {describeStatus(error.status)}：{error.message}
-              {error.code ? `（${error.code}）` : ""}
-            </p>
-          </div>
-        )}
-
-        <div className="mb-4 grid grid-cols-2 gap-4 rounded-md bg-canvas p-4 text-sm md:grid-cols-3">
-          <div>
-            <label className="block text-xs text-ink-secondary">供应商 *</label>
-            <select
-              value={supplierId}
-              onChange={(e) => { setSupplierId(e.target.value); markDirty(); }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
-            >
-              <option value="">选择供应商</option>
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>{s.code ?? ""} {s.name ?? ""}</option>
-              ))}
-            </select>
-            {fieldErrors.supplierId && <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.supplierId}</p>}
-          </div>
-          <div>
-            <label className="block text-xs text-ink-secondary">供应商发票号 *（≤100）</label>
-            <input
-              value={supplierInvoiceNo}
-              onChange={(e) => { setSupplierInvoiceNo(e.target.value); markDirty(); }}
-              maxLength={100}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
-            />
-            {fieldErrors.supplierInvoiceNo && <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.supplierInvoiceNo}</p>}
-          </div>
-          <div>
-            <label className="block text-xs text-ink-secondary">开票日期 *</label>
-            <input
-              type="date"
-              value={invoiceDate}
-              onChange={(e) => { setInvoiceDate(e.target.value); markDirty(); }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
-            />
-            {fieldErrors.invoiceDate && <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.invoiceDate}</p>}
-          </div>
-          <div>
-            <label className="block text-xs text-ink-secondary">收到日期 *</label>
-            <input
-              type="date"
-              value={receivedDate}
-              onChange={(e) => { setReceivedDate(e.target.value); markDirty(); }}
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
-            />
-            {fieldErrors.receivedDate && <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.receivedDate}</p>}
-          </div>
-          <div>
-            <label className="block text-xs text-ink-secondary">进项发票类型 *</label>
-            <select
-              value={invoiceType}
-              onChange={(e) => { setInvoiceType(e.target.value); setTaxInvoiceCode(""); setTaxInvoiceNo(""); markDirty(); }}
-              className={SELECT_CLASS + " mt-1 w-full"}
-            >
-              {INVOICE_TYPE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-            <p className="text-ink-muted mt-0.5 text-xs">
-              {invoiceType === "ELECTRONIC_VAT" ? "数电票：20 位号码，无代码" : "专票/普票：12 位代码 + 8 位号码"}
-            </p>
-            {fieldErrors.vat && <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.vat}</p>}
-          </div>
-          {invoiceType !== "EXPORT" && invoiceType !== "OTHER" && (
-            <>
-              {invoiceType !== "ELECTRONIC_VAT" && (
-                <div>
-                  <label className="block text-xs text-ink-secondary">发票代码（12 位）</label>
+    <AppPage>
+      <EntityFormWorkspace
+        title="新建供应商发票"
+        description="创建即取号（SINV）并进入 DRAFT；发票行双溯源 PO 行 + 已过账入库行，金额/税额由服务端计算"
+        backHref="/supplier-invoices"
+        mode="create"
+        submitting={submitting}
+        error={error}
+        dirty={dirty}
+        onDirty={() => setDirty(true)}
+        onSave={handleSubmit}
+        onCancel={() => router.push("/supplier-invoices")}
+      >
+        <Section title="发票信息">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <FormField label="供应商" required>
+              <select
+                value={supplierId}
+                onChange={(e) => {
+                  setSupplierId(e.target.value);
+                  markDirty();
+                }}
+                className={inputClass}
+              >
+                <option value="">选择供应商</option>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.code ?? ""} {s.name ?? ""}
+                  </option>
+                ))}
+              </select>
+              {fieldErrors.supplierId ? (
+                <p className="text-status-danger-text mt-0.5 text-xs">{fieldErrors.supplierId}</p>
+              ) : null}
+            </FormField>
+            <FormField label="供应商发票号" required hint="≤100 字">
+              <input
+                value={supplierInvoiceNo}
+                onChange={(e) => {
+                  setSupplierInvoiceNo(e.target.value);
+                  markDirty();
+                }}
+                maxLength={100}
+                className={inputClass}
+              />
+              {fieldErrors.supplierInvoiceNo ? (
+                <p className="text-status-danger-text mt-0.5 text-xs">{fieldErrors.supplierInvoiceNo}</p>
+              ) : null}
+            </FormField>
+            <FormField label="开票日期" required>
+              <input
+                type="date"
+                value={invoiceDate}
+                onChange={(e) => {
+                  setInvoiceDate(e.target.value);
+                  markDirty();
+                }}
+                className={inputClass}
+              />
+              {fieldErrors.invoiceDate ? (
+                <p className="text-status-danger-text mt-0.5 text-xs">{fieldErrors.invoiceDate}</p>
+              ) : null}
+            </FormField>
+            <FormField label="收到日期" required>
+              <input
+                type="date"
+                value={receivedDate}
+                onChange={(e) => {
+                  setReceivedDate(e.target.value);
+                  markDirty();
+                }}
+                className={inputClass}
+              />
+              {fieldErrors.receivedDate ? (
+                <p className="text-status-danger-text mt-0.5 text-xs">{fieldErrors.receivedDate}</p>
+              ) : null}
+            </FormField>
+            <FormField label="进项发票类型" required>
+              <select
+                value={invoiceType}
+                onChange={(e) => {
+                  setInvoiceType(e.target.value);
+                  setTaxInvoiceCode("");
+                  setTaxInvoiceNo("");
+                  markDirty();
+                }}
+                className={inputClass}
+              >
+                {INVOICE_TYPE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <span className="text-ink-muted text-xs">
+                {invoiceType === "ELECTRONIC_VAT" ? "数电票：20 位号码，无代码" : "专票/普票：12 位代码 + 8 位号码"}
+              </span>
+              {fieldErrors.vat ? (
+                <p className="text-status-danger-text mt-0.5 text-xs">{fieldErrors.vat}</p>
+              ) : null}
+            </FormField>
+            {invoiceType !== "EXPORT" && invoiceType !== "OTHER" ? (
+              invoiceType !== "ELECTRONIC_VAT" ? (
+                <FormField label="发票代码（12 位）">
                   <input
                     value={taxInvoiceCode}
-                    onChange={(e) => { setTaxInvoiceCode(e.target.value.replace(/\D/g, "")); markDirty(); }}
+                    onChange={(e) => {
+                      setTaxInvoiceCode(e.target.value.replace(/\D/g, ""));
+                      markDirty();
+                    }}
                     maxLength={12}
                     placeholder="12 位数字"
-                    className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+                    className={inputClass}
                   />
-                </div>
-              )}
-              <div>
-                <label className="block text-xs text-ink-secondary">发票号码（{invoiceType === "ELECTRONIC_VAT" ? "20 位" : "8 位"}）</label>
+                </FormField>
+              ) : null
+            ) : null}
+            {invoiceType !== "EXPORT" && invoiceType !== "OTHER" ? (
+              <FormField label={"发票号码（" + (invoiceType === "ELECTRONIC_VAT" ? "20 位" : "8 位") + "）"}>
                 <input
                   value={taxInvoiceNo}
-                  onChange={(e) => { setTaxInvoiceNo(e.target.value.replace(/\D/g, "")); markDirty(); }}
+                  onChange={(e) => {
+                    setTaxInvoiceNo(e.target.value.replace(/\D/g, ""));
+                    markDirty();
+                  }}
                   maxLength={invoiceType === "ELECTRONIC_VAT" ? 20 : 8}
                   placeholder={invoiceType === "ELECTRONIC_VAT" ? "20 位数字" : "8 位数字"}
-                  className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
+                  className={inputClass}
                 />
-              </div>
-            </>
-          )}
-          {/* 单币种 CNY（ADR：中国市场单币种决策）——币种/汇率固定，不提供输入，避免汇率空值/0 导致金额口径漂移 */}
-          <div>
-            <label className="block text-xs text-ink-secondary">账期（可选）</label>
-            <input type="date" value={paymentDueDate} onChange={(e) => { setPaymentDueDate(e.target.value); markDirty(); }} className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none" />
+              </FormField>
+            ) : null}
+            {/* 单币种 CNY（ADR：中国市场单币种决策）——币种/汇率固定，不提供输入，避免汇率空值/0 导致金额口径漂移 */}
+            <FormField label="账期（可选）">
+              <input
+                type="date"
+                value={paymentDueDate}
+                onChange={(e) => {
+                  setPaymentDueDate(e.target.value);
+                  markDirty();
+                }}
+                className={inputClass}
+              />
+            </FormField>
+            <FormField label="备注（可选）" hint="≤500 字">
+              <input
+                value={remark}
+                onChange={(e) => {
+                  setRemark(e.target.value);
+                  markDirty();
+                }}
+                maxLength={500}
+                className={inputClass}
+              />
+            </FormField>
           </div>
-          <div className="col-span-2 md:col-span-1">
-            <label className="block text-xs text-ink-secondary">备注（可选，≤500）</label>
-            <input value={remark} onChange={(e) => { setRemark(e.target.value); markDirty(); }} maxLength={500} className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none" />
+        </Section>
+
+        <Section title="发票行（至少一行；双溯源 PO 行 + 已过账入库行）">
+          <div className="mb-3 flex items-center justify-end">
+            <button
+              type="button"
+              onClick={addLine}
+              className="bg-brand-600 hover:bg-brand-700 rounded-md px-3 py-1.5 text-sm font-medium text-white"
+            >
+              + 添加行
+            </button>
           </div>
-        </div>
-
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-sm font-medium text-ink-secondary">发票行（至少一行；双溯源 PO 行 + 已过账入库行）</h2>
-          <button type="button" onClick={addLine} className="bg-brand-600 hover:bg-brand-700 rounded-md px-3 py-1.5 text-sm font-medium text-white">+ 添加行</button>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
-              <tr>
-                <th className="px-2 py-2">PO 行 ID</th>
-                <th className="px-2 py-2">入库行 ID</th>
-                <th className="px-2 py-2">数量</th>
-                <th className="px-2 py-2">单价</th>
-                <th className="px-2 py-2">税率%</th>
-                <th className="px-2 py-2">可抵扣</th>
-                <th className="px-2 py-2"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {lines.map((line, idx) => (
-                <tr key={idx}>
-                  <td className="px-2 py-2">
-                    <input value={line.purchaseOrderLineId} onChange={(e) => updateLine(idx, { purchaseOrderLineId: e.target.value })} className="focus:border-brand-500 w-full min-w-32 rounded-md border border-border px-2 py-1.5 focus:outline-none" />
-                  </td>
-                  <td className="px-2 py-2">
-                    <input value={line.warehouseReceiptLineId} onChange={(e) => updateLine(idx, { warehouseReceiptLineId: e.target.value })} className="focus:border-brand-500 w-full min-w-32 rounded-md border border-border px-2 py-1.5 focus:outline-none" />
-                  </td>
-                  <td className="px-2 py-2">
-                    <input type="number" min="0" step="any" value={line.quantity} onChange={(e) => updateLine(idx, { quantity: e.target.value })} className="focus:border-brand-500 w-24 rounded-md border border-border px-2 py-1.5 focus:outline-none" />
-                  </td>
-                  <td className="px-2 py-2">
-                    <input type="number" min="0" step="any" value={line.unitPrice} onChange={(e) => updateLine(idx, { unitPrice: e.target.value })} className="focus:border-brand-500 w-24 rounded-md border border-border px-2 py-1.5 focus:outline-none" />
-                  </td>
-                  <td className="px-2 py-2">
-                    <input type="number" min="0" max="100" step="any" value={line.taxRate} onChange={(e) => updateLine(idx, { taxRate: e.target.value })} className="focus:border-brand-500 w-20 rounded-md border border-border px-2 py-1.5 focus:outline-none" />
-                  </td>
-                  <td className="px-2 py-2">
-                    <input type="checkbox" checked={line.vatRecoverable} onChange={(e) => updateLine(idx, { vatRecoverable: e.target.checked })} className="h-4 w-4 accent-brand-600" />
-                  </td>
-                  <td className="px-2 py-2">
-                    <button type="button" onClick={() => removeLine(idx)} disabled={lines.length <= 1} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-40">删除</button>
-                  </td>
+          <div className="overflow-x-auto rounded-md border border-border">
+            <table className="divide-border min-w-full divide-y text-sm">
+              <thead className="bg-canvas text-ink-secondary sticky top-0 z-10 text-left text-xs font-medium">
+                <tr>
+                  <th className="px-3 py-2 font-semibold">PO 行 ID</th>
+                  <th className="px-3 py-2 font-semibold">入库行 ID</th>
+                  <th className="px-3 py-2 font-semibold">数量</th>
+                  <th className="px-3 py-2 font-semibold">单价</th>
+                  <th className="px-3 py-2 font-semibold">税率%</th>
+                  <th className="px-3 py-2 font-semibold">可抵扣</th>
+                  <th className="px-3 py-2 font-semibold"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {Object.keys(fieldErrors).length > 0 && (
-          <p className="mt-2 text-xs text-status-danger-text">{Object.values(fieldErrors).filter(Boolean)[0] ?? ""}</p>
-        )}
-
-        <div className="mt-4 flex items-center gap-3">
-          <button type="button" onClick={handleSubmit} disabled={submitting} className="bg-brand-600 hover:bg-brand-700 rounded-md px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">
-            {submitting ? "提交中…" : "创建（草稿）"}
-          </button>
-          {dirty && <span className="text-xs text-status-warning-text">有未保存的更改</span>}
-        </div>
-      </div>
-    </div>
+              </thead>
+              <tbody className="divide-border divide-y">
+                {lines.map((line, idx) => (
+                  <tr key={idx}>
+                    <td className="px-2 py-2">
+                      <input
+                        value={line.purchaseOrderLineId}
+                        onChange={(e) => updateLine(idx, { purchaseOrderLineId: e.target.value })}
+                        className={"w-full min-w-32 " + inputClass}
+                      />
+                      {fieldErrors["lines." + idx + ".po"] ? (
+                        <p className="text-status-danger-text mt-0.5 text-xs">{fieldErrors["lines." + idx + ".po"]}</p>
+                      ) : null}
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        value={line.warehouseReceiptLineId}
+                        onChange={(e) => updateLine(idx, { warehouseReceiptLineId: e.target.value })}
+                        className={"w-full min-w-32 " + inputClass}
+                      />
+                      {fieldErrors["lines." + idx + ".whr"] ? (
+                        <p className="text-status-danger-text mt-0.5 text-xs">{fieldErrors["lines." + idx + ".whr"]}</p>
+                      ) : null}
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={line.quantity}
+                        onChange={(e) => updateLine(idx, { quantity: e.target.value })}
+                        className={"w-24 " + inputClass}
+                      />
+                      {fieldErrors["lines." + idx + ".quantity"] ? (
+                        <p className="text-status-danger-text mt-0.5 text-xs">{fieldErrors["lines." + idx + ".quantity"]}</p>
+                      ) : null}
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={line.unitPrice}
+                        onChange={(e) => updateLine(idx, { unitPrice: e.target.value })}
+                        className={"w-24 " + inputClass}
+                      />
+                      {fieldErrors["lines." + idx + ".unitPrice"] ? (
+                        <p className="text-status-danger-text mt-0.5 text-xs">{fieldErrors["lines." + idx + ".unitPrice"]}</p>
+                      ) : null}
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="any"
+                        value={line.taxRate}
+                        onChange={(e) => updateLine(idx, { taxRate: e.target.value })}
+                        className={"w-20 " + inputClass}
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="checkbox"
+                        checked={line.vatRecoverable}
+                        onChange={(e) => updateLine(idx, { vatRecoverable: e.target.checked })}
+                        className="h-4 w-4 accent-brand-600"
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      <button
+                        type="button"
+                        onClick={() => removeLine(idx)}
+                        disabled={lines.length <= 1}
+                        className="border-border text-ink-secondary hover:bg-canvas rounded-md border px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        删除
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {Object.keys(fieldErrors).length > 0 ? (
+            <p className="text-status-danger-text mt-2 text-xs">
+              {Object.values(fieldErrors).filter(Boolean)[0] ?? ""}
+            </p>
+          ) : null}
+        </Section>
+      </EntityFormWorkspace>
+    </AppPage>
   );
 }
 

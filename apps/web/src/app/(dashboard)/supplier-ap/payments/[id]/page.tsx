@@ -6,9 +6,11 @@ import { useParams, useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
-import { AppPage, EntityFormWorkspace, StatusBadge, ErrorPanel } from "@/components/workspace";
+import { AppPage, EntityFormWorkspace, StatusBadge, ErrorPanel, ReasonDialog, DetailTable } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { SELECT_CLASS } from "@/lib/ui-classes";
+import { PageLoading } from "@/components/ui/skeleton";
+import { useToast } from "@/components/ui/toast";
 import { formatDate, formatMoney } from "@/lib/format";
 
 interface OpenItemRow {
@@ -110,6 +112,8 @@ function PaymentDetailView() {
   };
 
   // 整体冲销（Red Reversal，5C-2）：反转全部未反转核销 + 回滚 openAmount 投影 + 标记 reversed（同事务）
+  const toast = useToast();
+
   const runReverse = () => {
     if (!detail || acting) return;
     if (!reverseReason.trim()) { setReverseError("请填写冲销原因"); return; }
@@ -120,15 +124,25 @@ function PaymentDetailView() {
       method: "POST",
       body: JSON.stringify({ reason: reverseReason.trim(), version: detail.version }),
     })
-      .then(() => { setReverseOpen(false); setReverseReason(""); load(); setActing(false); })
+      .then(() => { setReverseOpen(false); setReverseReason(""); toast.success("付款单已整体冲销（红字）"); load(); setActing(false); })
       .catch((err: unknown) => {
         const e = err instanceof ApiClientError ? err : new ApiClientError(0, "网络错误", "NETWORK_ERROR");
-        setReverseError(`${e.status} ${e.message}${e.code ? `（${e.code}）` : ""}`);
+        const msg = `${e.status} ${e.message}${e.code ? `（${e.code}）` : ""}`;
+        setReverseError(msg);
+        toast.error("冲销失败", msg);
         setActing(false);
       });
   };
 
-  if (loading) return (<AppPage><p className="px-4 py-6 text-sm text-ink-secondary">加载中…</p></AppPage>);
+  if (loading) {
+    return (
+      <AppPage>
+        <div className="border-border bg-surface overflow-hidden rounded-lg border">
+          <PageLoading rows={5} />
+        </div>
+      </AppPage>
+    );
+  }
   if (loadError || !detail) return (<AppPage><ErrorPanel error={loadError ?? new ApiClientError(500, "加载失败", "LOAD_ERROR")} onRetry={load} /></AppPage>);
 
   const canApply = canEdit && !detail.voidedAt && !detail.reversedAt && detail.status !== "ALLOCATED";
@@ -183,67 +197,35 @@ function PaymentDetailView() {
         )}
         <section className="rounded-md border border-border p-4">
           <h2 className="mb-3 text-sm font-semibold text-ink-primary">已核销记录（{detail.allocations?.length ?? 0}）</h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-border text-sm">
-              <thead className="text-left text-xs font-medium text-ink-secondary"><tr><th className="px-3 py-2">核销金额</th><th className="px-3 py-2">核销时间</th></tr></thead>
-              <tbody className="divide-y divide-border">
-                {(detail.allocations ?? []).map((a) => (<tr key={a.id}><td className="px-3 py-2">{formatMoney(a.allocatedAmount, detail.currency)}</td><td className="px-3 py-2">{formatDate(a.allocatedAt)}</td></tr>))}
-              </tbody>
-            </table>
-          </div>
+          <DetailTable<{ id: string; allocatedAmount: string; allocatedAt: string }>
+            columns={[
+              { key: "amount", header: "核销金额", align: "right", render: (a) => formatMoney(a.allocatedAmount, detail.currency) },
+              { key: "time", header: "核销时间", render: (a) => formatDate(a.allocatedAt) },
+            ]}
+            rows={detail.allocations ?? []}
+            rowKey={(a) => a.id}
+            emptyMessage="暂无核销记录"
+          />
         </section>
       </EntityFormWorkspace>
 
-      {/* ── 整体冲销（Red Reversal）确认对话框 ── */}
-      {reverseOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
-          onClick={() => setReverseOpen(false)}
-        >
-          <div
-            className="border-border bg-surface shadow-elevation-lg w-full max-w-md rounded-lg border p-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-ink-primary text-base font-semibold">整体冲销付款单</h2>
-            <p className="text-ink-secondary mt-2 text-sm">
-              将反转全部未反转核销并回滚应付未结项余额（同事务红字冲销，保留逆向留痕）；冲销人不能是付款单创建人（maker-checker）。
-            </p>
-            {reverseError && (
-              <div className="border-status-danger-border mt-3 rounded-md border bg-status-danger-bg p-2 text-sm text-status-danger-text">
-                {reverseError}
-              </div>
-            )}
-            <label className="mt-4 block text-xs text-ink-secondary">冲销原因 *</label>
-            <input
-              value={reverseReason}
-              onChange={(e) => setReverseReason(e.target.value)}
-              maxLength={500}
-              placeholder="请填写冲销原因"
-              className="focus:border-brand-500 mt-1 w-full rounded-md border border-border px-3 py-1.5 focus:outline-none"
-            />
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setReverseOpen(false)}
-                disabled={acting}
-                className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                onClick={runReverse}
-                disabled={acting}
-                className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {acting ? "冲销中…" : "确认整体冲销"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ── 整体冲销（Red Reversal）原因表单对话框（FE2.0 UI-10：ReasonDialog 统一） ── */}
+      <ReasonDialog
+        open={reverseOpen}
+        title="整体冲销付款单"
+        description="将反转全部未反转核销并回滚应付未结项余额（同事务红字冲销，保留逆向留痕）；冲销人不能是付款单创建人（maker-checker）。"
+        label="冲销原因"
+        placeholder="请填写冲销原因"
+        value={reverseReason}
+        onChange={setReverseReason}
+        maxLength={500}
+        confirmLabel="确认整体冲销"
+        tone="danger"
+        busy={acting}
+        error={reverseError}
+        onConfirm={runReverse}
+        onCancel={() => setReverseOpen(false)}
+      />
     </AppPage>
   );
 }

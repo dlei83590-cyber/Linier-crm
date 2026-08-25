@@ -16,7 +16,7 @@ import { useParams } from "next/navigation";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
+import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel, DetailTable } from "@/components/workspace";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { PageLoading } from "@/components/ui/skeleton";
@@ -273,49 +273,33 @@ function SupplierInvoiceDetailPage() {
           <h2 className="text-ink-primary mb-3 text-sm font-semibold">
             发票行（{detail.lines?.length ?? 0}）
           </h2>
-          <div className="overflow-x-auto">
-            <table className="divide-border min-w-full divide-y text-sm">
-              <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
-                <tr>
-                  <th className="px-3 py-2 font-medium">行号</th>
-                  <th className="px-3 py-2 font-medium">物料</th>
-                  <th className="px-3 py-2 font-medium">数量</th>
-                  <th className="px-3 py-2 font-medium">单价</th>
-                  <th className="px-3 py-2 font-medium">税率</th>
-                  <th className="px-3 py-2 font-medium">净额</th>
-                  <th className="px-3 py-2 font-medium">税额</th>
-                  <th className="px-3 py-2 font-medium">来源</th>
-                </tr>
-              </thead>
-              <tbody className="divide-border divide-y">
-                {(detail.lines ?? []).map((line) => (
-                  <tr key={line.id}>
-                    <td className="px-3 py-2 text-ink-secondary">{line.lineNo}</td>
-                    <td className="px-3 py-2 text-ink-primary">
-                      {line.item ? `${line.item.code ?? ""} ${line.item.name ?? ""}`.trim() : "—"}
-                    </td>
-                    <td className="px-3 py-2 text-ink-primary">{line.quantity}</td>
-                    <td className="px-3 py-2 text-ink-secondary">{formatMoneyValue(line.unitPrice)}</td>
-                    <td className="px-3 py-2 text-ink-secondary">{line.taxRate}%</td>
-                    <td className="px-3 py-2 text-ink-primary">{formatMoneyValue(line.netAmount)}</td>
-                    <td className="px-3 py-2 text-ink-secondary">{formatMoneyValue(line.taxAmount)}</td>
-                    <td className="px-3 py-2 text-ink-secondary">
-                      {line.warehouseReceiptLine?.warehouseReceipt?.code
-                        ? `入库 ${line.warehouseReceiptLine.warehouseReceipt.code}`
-                        : line.purchaseOrderLine
-                          ? `PO L${line.purchaseOrderLine.lineNo}`
-                          : "—"}
-                    </td>
-                  </tr>
-                ))}
-                {(detail.lines ?? []).length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="px-3 py-8 text-center text-sm text-ink-muted">暂无明细行</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <DetailTable<SupplierInvoiceLine>
+            columns={[
+              { key: "lineNo", header: "行号", render: (line) => <span className="text-ink-secondary">{line.lineNo}</span> },
+              { key: "item", header: "物料", render: (line) => (line.item ? `${line.item.code ?? ""} ${line.item.name ?? ""}`.trim() : "—") },
+              { key: "quantity", header: "数量", align: "right", render: (line) => line.quantity },
+              { key: "unitPrice", header: "单价", align: "right", render: (line) => formatMoneyValue(line.unitPrice) },
+              { key: "taxRate", header: "税率", render: (line) => <span className="text-ink-secondary">{line.taxRate}%</span> },
+              { key: "netAmount", header: "净额", align: "right", render: (line) => formatMoneyValue(line.netAmount) },
+              { key: "taxAmount", header: "税额", align: "right", render: (line) => formatMoneyValue(line.taxAmount) },
+              {
+                key: "source",
+                header: "来源",
+                render: (line) => (
+                  <span className="text-ink-secondary">
+                    {line.warehouseReceiptLine?.warehouseReceipt?.code
+                      ? `入库 ${line.warehouseReceiptLine.warehouseReceipt.code}`
+                      : line.purchaseOrderLine
+                        ? `PO L${line.purchaseOrderLine.lineNo}`
+                        : "—"}
+                  </span>
+                ),
+              },
+            ]}
+            rows={detail.lines ?? []}
+            rowKey={(line) => line.id}
+            emptyMessage="暂无明细行"
+          />
         </section>
       </EntityDetailWorkspace>
 

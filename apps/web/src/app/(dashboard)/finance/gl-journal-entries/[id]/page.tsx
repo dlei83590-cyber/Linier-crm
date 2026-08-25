@@ -2,11 +2,12 @@
 
 /** GL 记账凭证 — 详情页（Sprint 7 Finance 首块，ADR-0033；只读，含借贷行与科目） */
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
-import { AppPage, EntityFormWorkspace, ErrorPanel } from "@/components/workspace";
+import { AppPage, EntityFormWorkspace, ErrorPanel, DetailTable } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { PageLoading } from "@/components/ui/skeleton";
@@ -43,6 +44,21 @@ const SOURCE_LABELS: Record<string, string> = {
 };
 const CATEGORY_LABELS: Record<string, string> = { ASSET: "资产", LIABILITY: "负债", EQUITY: "权益", REVENUE: "收入", EXPENSE: "费用" };
 const STATUS_LABELS: Record<string, string> = { DRAFT: "草稿", SUBMITTED: "已提交", APPROVED: "已批准", POSTED: "已过账", REJECTED: "已驳回" };
+
+/** 来源事件 → 业务单据详情链接（FE2.0 UI-10：禁止展示 raw database ID，改为可点击来源单据） */
+function sourceDocumentHref(sourceType: string, sourceId: string): string | null {
+  switch (sourceType) {
+    case "SupplierInvoicePosted":
+      return "/supplier-invoices/" + sourceId;
+    case "SupplierPaymentApplied":
+    case "SupplierPaymentReversed":
+      return "/supplier-ap/payments/" + sourceId;
+    case "SupplierCreditDebitNoteApplied":
+      return "/supplier-ap/credit-debit-notes/" + sourceId;
+    default:
+      return null; // MANUAL / PERIOD_CLOSE / PERIOD_CLOSE_REVERSAL 无外部单据
+  }
+}
 
 function GlEntryDetailView() {
   const router = useRouter();
@@ -113,28 +129,37 @@ function GlEntryDetailView() {
         <section className="rounded-md border border-border p-4">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <div><span className="text-sm text-ink-secondary">摘要</span><div className="text-sm font-medium">{detail.summary ?? "—"}</div></div>
-            <div><span className="text-sm text-ink-secondary">来源业务</span><div className="text-sm font-medium">{detail.sourceType}（{detail.sourceId}）</div></div>
+            <div>
+              <span className="text-sm text-ink-secondary">来源业务</span>
+              <div className="text-sm font-medium">
+                {SOURCE_LABELS[detail.sourceType] ?? (detail.sourceType === "MANUAL" ? "手工录入" : detail.sourceType)}
+                {sourceDocumentHref(detail.sourceType, detail.sourceId) ? (
+                  <Link
+                    href={sourceDocumentHref(detail.sourceType, detail.sourceId) ?? ""}
+                    className="text-brand-600 ml-2 text-sm hover:underline"
+                  >
+                    查看来源单据 →
+                  </Link>
+                ) : null}
+              </div>
+            </div>
             <div><span className="text-sm text-ink-secondary">创建时间</span><div className="text-sm font-medium">{formatDate(detail.createdAt)}</div></div>
           </div>
         </section>
         <section className="rounded-md border border-border p-4">
           <h2 className="mb-3 text-sm font-semibold text-ink-primary">凭证行（借贷平衡）</h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-border text-sm">
-              <thead className="text-left text-xs font-medium text-ink-secondary"><tr><th className="px-3 py-2">科目</th><th className="px-3 py-2">类别</th><th className="px-3 py-2">摘要</th><th className="px-3 py-2 text-right">借方</th><th className="px-3 py-2 text-right">贷方</th></tr></thead>
-              <tbody className="divide-y divide-border">
-                {detail.lines.map((l) => (
-                  <tr key={l.id}>
-                    <td className="px-3 py-2">{l.account?.code} {l.account?.name}</td>
-                    <td className="px-3 py-2">{CATEGORY_LABELS[l.account?.category ?? ""] ?? l.account?.category ?? "—"}</td>
-                    <td className="px-3 py-2">{l.summary ?? "—"}</td>
-                    <td className="px-3 py-2 text-right">{Number(l.debit) > 0 ? formatMoney(l.debit, "CNY") : "—"}</td>
-                    <td className="px-3 py-2 text-right">{Number(l.credit) > 0 ? formatMoney(l.credit, "CNY") : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DetailTable<GlLine>
+            columns={[
+              { key: "account", header: "科目", render: (l) => <span className="font-medium">{l.account?.code} {l.account?.name}</span> },
+              { key: "category", header: "类别", render: (l) => CATEGORY_LABELS[l.account?.category ?? ""] ?? l.account?.category ?? "—" },
+              { key: "summary", header: "摘要", render: (l) => l.summary ?? "—" },
+              { key: "debit", header: "借方", align: "right", render: (l) => (Number(l.debit) > 0 ? formatMoney(l.debit, "CNY") : "—") },
+              { key: "credit", header: "贷方", align: "right", render: (l) => (Number(l.credit) > 0 ? formatMoney(l.credit, "CNY") : "—") },
+            ]}
+            rows={detail.lines}
+            rowKey={(l) => l.id}
+            emptyMessage="暂无凭证行"
+          />
         </section>
         {detail.status === "SUBMITTED" && canApprove ? (
           <section className="rounded-md border border-status-warning-border bg-status-warning-bg/10 p-4">

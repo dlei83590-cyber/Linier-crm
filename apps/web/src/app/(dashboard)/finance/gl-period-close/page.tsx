@@ -6,10 +6,11 @@ import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
-import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
 import { useListQuery } from "@/lib/use-list-query";
+import { useToast } from "@/components/ui/toast";
 import { formatDate } from "@/lib/format";
 
 interface PeriodCloseRow {
@@ -39,19 +40,31 @@ function PeriodCloseView() {
   const { items, total, page, pageSize, loading, error, setPage, refresh } =
     useListQuery<PeriodCloseRow>("/api/gl/period-closes", {});
 
-  const [reopeningId, setReopeningId] = useState<string | null>(null);
+  const [reopenTarget, setReopenTarget] = useState<PeriodCloseRow | null>(null);
+  const toast = useToast();
 
-  const handleReopen = (row: PeriodCloseRow) => {
-    if (reopeningId || !window.confirm(`确认重开期间 ${row.periodKey}？将生成红字冲销结转凭证`)) return;
-    setReopeningId(row.id);
-    apiFetch<{ periodKey: string }>(`/api/gl/period-closes/${row.id}/reopen`, {
+  /** 打开期间重开确认对话框（替换 window.confirm：ConfirmActionDialog 统一二次确认） */
+  const openReopen = (row: PeriodCloseRow) => {
+    setReopenTarget(row);
+  };
+
+  /** 执行期间重开（红字冲销结转凭证）；失败回显到对话框内，不使用 alert */
+  const runReopen = () => {
+    if (!reopenTarget) return;
+    const row = reopenTarget;
+    apiFetch<{ periodKey: string }>("/api/gl/period-closes/" + row.id + "/reopen", {
       method: "POST",
       body: JSON.stringify({}),
     })
-      .then(() => { setReopeningId(null); refresh(); })
+      .then(() => {
+        setReopenTarget(null);
+        toast.success("期间 " + row.periodKey + " 已重开（生成红字冲销结转凭证）");
+        refresh();
+      })
       .catch((err: unknown) => {
-        alert(err instanceof ApiClientError ? err.message : "重开失败");
-        setReopeningId(null);
+        const e = err instanceof ApiClientError ? err : new ApiClientError(0, "重开失败", "NETWORK_ERROR");
+        setReopenTarget(null);
+        toast.error("重开失败", e.message + (e.code ? "（" + e.code + "）" : ""));
       });
   };
 
@@ -104,7 +117,7 @@ function PeriodCloseView() {
             { key: "journalEntry", header: "结转凭证", render: (row) => (row.journalEntry ? <Link href={`/finance/gl-journal-entries/${row.journalEntry.id}`} className="font-medium text-brand-600 hover:underline">{row.journalEntry.voucherNo ?? "—"}</Link> : "—") },
             { key: "closedAt", header: "结转时间", render: (row) => formatDate(row.closedAt) },
             { key: "status", header: "状态", render: () => (<StatusBadge status="CLOSED" label="已结转" toneMap={{ CLOSED: "success" }} />) },
-            { key: "actions", header: "操作", render: (row) => (canOperate ? <button type="button" onClick={() => handleReopen(row)} disabled={reopeningId !== null} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary hover:bg-canvas disabled:opacity-50">{reopeningId === row.id ? "重开中…" : "重开"}</button> : "—") },
+            { key: "actions", header: "操作", render: (row) => (canOperate ? <button type="button" onClick={() => openReopen(row)} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary hover:bg-canvas">重开</button> : "—") },
           ]}
           rows={items}
           rowKey={(row) => row.id}
@@ -117,6 +130,17 @@ function PeriodCloseView() {
           onPageChange={setPage}
         />
       </div>
+
+      <ConfirmActionDialog
+        open={reopenTarget !== null}
+        title={"重开期间 " + (reopenTarget?.periodKey ?? "") + "？"}
+        description="将生成红字冲销结转凭证并删除该期间的结转记录（同事务）；重开后该期间可再次结转。"
+        confirmLabel="确认重开"
+        tone="danger"
+        busy={false}
+        onConfirm={runReopen}
+        onCancel={() => setReopenTarget(null)}
+      />
     </AppPage>
   );
 }
