@@ -80,8 +80,10 @@ describe('Sales Order Detail — Q 线投影（FRT-06：API 失败 ≠ 空态）
         );
       }
       if (url.includes('/supplier-recommendations')) {
-        // 供应商接口成功但无数据 → 合法空态
-        return Promise.resolve(mockResponse(200, envelope([])));
+        // 供应商接口成功但无数据 → 合法空态（cc-06：rows 空数组 + basis 文案）
+        return Promise.resolve(
+          mockResponse(200, envelope({ rows: [], customerLevel: null, minimumSupplierRating: null, ruleApplied: false, basis: '推荐依据：客户未设置等级，无评级门槛（展示全部匹配供应商）；优选供应商优先，评级高者优先。用户仍可人工选择。' })),
+        );
       }
       return Promise.resolve(mockResponse(200, envelope(detail)));
     });
@@ -129,5 +131,44 @@ describe('Sales Order Detail — Q 线投影（FRT-06：API 失败 ≠ 空态）
     });
     expect(screen.getByText('101.0000')).toBeInTheDocument();
     expect(screen.queryByText(/无配方原料需求/)).not.toBeInTheDocument();
+  });
+
+  it('推荐供应商（cc-06）：展示评级门槛依据文案 + 仅列出满足规则的供应商（rows）', async () => {
+    materialsFail = false;
+    fetchMock = vi.fn((input: unknown) => {
+      const url = String(input);
+      if (url.includes('/material-requirements')) {
+        return Promise.resolve(mockResponse(200, envelope([{ itemId: 'rm-1', itemCode: 'RM001', itemName: '钢材', uom: '千克', requiredQty: 101, onHandQty: 500 }])));
+      }
+      if (url.includes('/supplier-recommendations')) {
+        return Promise.resolve(
+          mockResponse(200, envelope({
+            rows: [
+              { supplierId: 'sup-1', supplierCode: 'S001', supplierName: '甲供应商', creditRating: 'AA', supplierRating: 'AA', settlementTerms: null, itemCount: 2, preferredCount: 1, totalPrice: 300 },
+              { supplierId: 'sup-2', supplierCode: 'S002', supplierName: '乙供应商', creditRating: 'B', supplierRating: 'B', settlementTerms: null, itemCount: 1, preferredCount: 0, totalPrice: 90 },
+            ],
+            customerLevel: 'VIP',
+            minimumSupplierRating: 'A',
+            ruleApplied: true,
+            basis: '推荐依据：客户等级 VIP，要求供应商评级 ≥ A，优选供应商优先；评级相同则按供应商评级降序。用户仍可人工选择。',
+          })),
+        );
+      }
+      return Promise.resolve(mockResponse(200, envelope(detail)));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <DensityProvider>
+        <Page />
+      </DensityProvider>,
+    );
+
+    // 依据文案（页面必须展示推荐原因）
+    await screen.findByText(/要求供应商评级 ≥ A/);
+    // 仅列出满足规则的供应商
+    expect(screen.getByText('甲供应商')).toBeInTheDocument();
+    expect(screen.getByText('乙供应商')).toBeInTheDocument();
+    expect(screen.getByText('AA')).toBeInTheDocument();
   });
 });

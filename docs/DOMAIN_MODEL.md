@@ -864,6 +864,14 @@ erDiagram
         datetime deletedAt
     }
 
+    CustomerSupplierRatingRule {
+        string id PK
+        CustomerLevel customerLevel UK
+        CustomerCreditRating minimumSupplierRating
+        bool isActive
+        datetime deletedAt
+    }
+
     Supplier {
         string id PK
         string code UK
@@ -1050,6 +1058,12 @@ erDiagram
 
 - 枚举：ItemType（FINISHED_GOOD/RAW_MATERIAL/SEMI_FINISHED/PURCHASED_PART/ACCESSORY/SERVICE/CONSUMABLE/ASSET/TOOLING/PACKAGING）、ItemStatus（ACTIVE/INACTIVE/LOCKED/ARCHIVED）、ItemCostType（STANDARD/LAST_PURCHASE/AVERAGE/CURRENT）、AttachmentType（DRAWING/CERTIFICATE/PHOTO/MANUAL/MODEL_3D/VIDEO/INSPECTION_REPORT，统一放 File Center）；ItemLifecycle 重命名五值（DESIGN/TRIAL/MASS_PRODUCTION/DISCONTINUED/OBSOLETE）
 - 业务规则：不建 Item.supplierId 单值字段，建 SupplierItem（一个 Item 多供应商）；ItemCost 只建接口不写算法；Lifecycle 与 Status 分离；附件复用 File Center（businessType=item + attachmentType）
+
+## 17A. 客户等级 → 供应商评级匹配（Contract Close cc-06，ADR-0054，Migration 0055）
+
+> 合同：订单根据客户级别自动关联对应评级供应商。客户等级 SSOT = BusinessPartner.customerLevel（复用 CustomerLevel 枚举 VIP/KEY/REGULAR/PROSPECT，可空）；供应商评级 SSOT = PartnerCredit.rating（CustomerCreditRating 枚举）。
+> 配置模型 CustomerSupplierRatingRule（customerLevel @unique → minimumSupplierRating + isActive，系统设置简单表格维护，**非 Generic Rule Engine**）。
+> 推荐投影 GET /api/sales-orders/:id/supplier-recommendations：SalesOrder.customerId → customerLevel → active rule → 过滤 PartnerCredit.rating ≥ minimumSupplierRating（无规则 = 不设门槛，展示全部）→ 排序：优选（SupplierItem.isPreferred）→ 评级降序 → 覆盖商品数；返回 basis 文案（页面展示推荐原因）；用户仍可人工选择。评级有序语义 RATING_RANK（AAA=7…C=1，单一实现）。
 - 迁移 `0011_item_foundation`：Item 表 ALTER（RENAME COLUMN category→itemType + ADD COLUMN，不改既有列）+ 7 新表 + 枚举演进 + FileAttachment.attachmentType（仅新增/加列）
 - API：items 主档 CRUD + 分类树 + specifications/uom-conversions/costs/supplier-items/revisions/tags/attachments 子资源
 - 权限：item（动作级）+ item-category/item-specification/item-uom/item-cost/item-supplier/item-revision/item-tag/item-attachment 模块，MANAGER 全量

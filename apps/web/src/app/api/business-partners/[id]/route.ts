@@ -34,6 +34,8 @@ const businessPartnerUpdateSchema = z
     industry: z.string().max(100).nullable().optional(),
     companySize: z.string().max(100).nullable().optional(),
     creditRating: z.string().max(100).nullable().optional(),
+    // cc-06 客户等级→供应商评级匹配：客户等级（复用 CustomerLevel 枚举；可空）
+    customerLevel: z.enum(["VIP", "KEY", "REGULAR", "PROSPECT"]).nullable().optional(),
     sourceChannel: z.string().max(100).nullable().optional(),
     foundedDate: z.string().datetime().nullable().optional(),
     registeredCapital: z.string().nullable().optional(),

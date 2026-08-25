@@ -692,6 +692,7 @@ model BusinessPartner {
   industry             String? // 所属行业
   companySize          String? // 企业规模
   creditRating         String? // 信用等级
+  customerLevel        CustomerLevel? // 客户等级（订单推荐供应商评级依据；复用 CustomerLevel 枚举，VIP>KEY>REGULAR>PROSPECT）
   sourceChannel        String? // 来源渠道
   foundedDate          DateTime? // 成立日期
   registeredCapital    Decimal?      @db.Decimal(14, 2) // 注册资本（万元）
@@ -3091,6 +3092,26 @@ model PartnerCredit {
   deletedAt   DateTime?
   createdAt   DateTime            @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime            @updatedAt @db.Timestamptz(3)
+
+  @@index([deletedAt])
+}
+
+/// 客户等级→最低供应商评级配置（订单推荐供应商评级门槛；专用极小配置模型，非 Generic Rule Engine）
+/// 语义：customerLevel 的客户创建销售订单时，推荐供应商须满足 PartnerCredit.rating ≥ minimumSupplierRating；无规则 = 不设门槛
+model CustomerSupplierRatingRule {
+  id                    String               @id @default(cuid())
+  customerLevel         CustomerLevel        @unique // 客户等级（VIP/KEY/REGULAR/PROSPECT）
+  minimumSupplierRating CustomerCreditRating // 最低供应商评级门槛（PartnerCredit.rating；AAA > AA > A > BBB > BB > B > C）
+  isActive              Boolean              @default(true)
+  // 统一审计字段
+  createdById          String?
+  updatedById          String?
+  approvedById         String?
+  approvalStatus       ApprovalStatus       @default(APPROVED)
+  version              Int                  @default(1)
+  deletedAt            DateTime?
+  createdAt            DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime             @updatedAt @db.Timestamptz(3)
 
   @@index([deletedAt])
 }

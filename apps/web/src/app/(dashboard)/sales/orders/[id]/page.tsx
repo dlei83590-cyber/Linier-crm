@@ -83,15 +83,25 @@ interface MaterialRequirement {
 }
 
 /** Q 线投影：推荐供应商行（GET /api/sales-orders/:id/supplier-recommendations） */
-interface SupplierRecommendation {
+interface SupplierRecommendationRow {
   supplierId: string;
   supplierCode: string | null;
   supplierName: string | null;
   creditRating: string | null;
+  supplierRating: string | null; // PartnerCredit.rating（canonical 供应商评级；规则门槛比较依据）
   settlementTerms: string | null;
   itemCount: number;
   preferredCount: number;
   totalPrice?: number;
+}
+
+/** 推荐供应商响应（cc-06：含客户等级/门槛/依据文案；页面必须展示 basis） */
+interface SupplierRecommendationResponse {
+  rows: SupplierRecommendationRow[];
+  customerLevel: string | null;
+  minimumSupplierRating: string | null;
+  ruleApplied: boolean;
+  basis: string;
 }
 
 /** dialog 选择状态：行 id → 是否勾选 + 交付数量 */
@@ -119,7 +129,7 @@ function SalesOrderDetailPage() {
   const [materials, setMaterials] = useState<MaterialRequirement[]>([]);
   const [materialsLoading, setMaterialsLoading] = useState(true);
   const [materialsError, setMaterialsError] = useState<ApiClientError | null>(null);
-  const [suppliers, setSuppliers] = useState<SupplierRecommendation[]>([]);
+  const [suppliers, setSuppliers] = useState<SupplierRecommendationResponse | null>(null);
   const [suppliersLoading, setSuppliersLoading] = useState(true);
   const [suppliersError, setSuppliersError] = useState<ApiClientError | null>(null);
   const [loading, setLoading] = useState(true);
@@ -260,7 +270,7 @@ function SalesOrderDetailPage() {
         .finally(() => {
           if (!signal?.aborted) setMaterialsLoading(false);
         });
-      apiFetch<SupplierRecommendation[]>(`/api/sales-orders/${id}/supplier-recommendations`, { signal })
+      apiFetch<SupplierRecommendationResponse>(`/api/sales-orders/${id}/supplier-recommendations`, { signal })
         .then((body) => setSuppliers(body.data))
         .catch((err: unknown) => {
           if (err instanceof DOMException && err.name === "AbortError") return;
@@ -583,29 +593,37 @@ function SalesOrderDetailPage() {
               重试
             </button>
           </div>
-        ) : suppliers.length === 0 ? (
+        ) : !suppliers || suppliers.rows.length === 0 ? (
           <p className="text-ink-muted text-xs">暂无推荐供应商（订单行商品无 SupplierItem 关系）。</p>
         ) : (
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="text-ink-muted border-border border-b text-xs">
-                <th className="px-2 py-2">供应商</th>
-                <th className="px-2 py-2">信用等级</th>
-                <th className="px-2 py-2">覆盖商品数</th>
-                <th className="px-2 py-2">优选数</th>
-              </tr>
-            </thead>
-            <tbody className="divide-border divide-y">
-              {suppliers.map((s) => (
-                <tr key={s.supplierId ?? s.supplierName ?? ""}>
-                  <td className="px-2 py-2">{s.supplierName ?? s.supplierCode ?? "—"}</td>
-                  <td className="px-2 py-2">{s.creditRating ?? "—"}</td>
-                  <td className="px-2 py-2 tabular-nums">{s.itemCount}</td>
-                  <td className="px-2 py-2 tabular-nums">{s.preferredCount}</td>
+          <>
+            <p className="text-ink-muted mb-2 text-xs">{suppliers.basis}</p>
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="text-ink-muted border-border border-b text-xs">
+                  <th className="px-2 py-2">供应商</th>
+                  <th className="px-2 py-2">供应商评级</th>
+                  <th className="px-2 py-2">覆盖商品数</th>
+                  <th className="px-2 py-2">优选数</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-border divide-y">
+                {suppliers.rows.map((s) => (
+                  <tr key={s.supplierId ?? s.supplierName ?? ""}>
+                    <td className="px-2 py-2">
+                      {s.supplierName ?? s.supplierCode ?? "—"}
+                      {s.preferredCount > 0 && (
+                        <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">优选</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-2">{s.supplierRating ?? s.creditRating ?? "—"}</td>
+                    <td className="px-2 py-2 tabular-nums">{s.itemCount}</td>
+                    <td className="px-2 py-2 tabular-nums">{s.preferredCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
         )}
       </section>
 

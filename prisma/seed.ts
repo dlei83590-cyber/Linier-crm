@@ -187,6 +187,9 @@ const SEED_ACTION_MODULES = [
   // 经营数据固定看板（feat(crm) operations-report）：GET /api/reports/operations 只读聚合用 reports:view；
   // 与 shared PERMISSION_MODULES 保持一致（ADR-0028：static RBAC 与 DB permission catalog 不漂移）
   "reports",
+  // cc-06 客户等级→供应商评级匹配（Contract Close）：CustomerSupplierRatingRule 专用配置模块（view/create/edit/delete；
+  // 与 shared PERMISSION_MODULES 保持一致，ADR-0028 防漂移）
+  "customer-supplier-rating-rule",
 ] as const;
 
 const SEED_ACTIONS = ["view", "create", "edit", "delete", "approve", "audit", "export", "import", "assign", "close"] as const;
