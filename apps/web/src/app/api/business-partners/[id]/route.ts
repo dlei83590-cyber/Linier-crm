@@ -81,7 +81,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       partnerTags: { where: { deletedAt: null }, include: { tag: { select: { id: true, code: true, name: true, color: true } } } },
       partnerCredit: true,
       // 供应商档案（Supplier 角色扩展 1:1，Sprint 3C-2）：结算条款/资质只读聚合（供应商 = BusinessPartner type SUPPLIER/BOTH）
-      supplier: {
+      suppliers: {
+        where: { deletedAt: null },
         include: {
           settlements: { where: { deletedAt: null }, orderBy: { createdAt: "desc" } },
           qualifications: { where: { deletedAt: null }, orderBy: { createdAt: "desc" } },

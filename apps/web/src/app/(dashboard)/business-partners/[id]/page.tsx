@@ -72,8 +72,8 @@ interface PartnerDetail {
     status?: string | null;
     reviewDate?: string | null;
   } | null;
-  // 供应商档案（Supplier 角色扩展 1:1；仅 type=SUPPLIER/BOTH 存在；只读聚合）
-  supplier?: {
+  // 供应商档案（Supplier 角色扩展 1:1；仅 type=SUPPLIER/BOTH 存在；只读聚合；API 关系名为 suppliers 数组）
+  suppliers?: Array<{
     id: string;
     code: string;
     name: string;
@@ -99,7 +99,7 @@ interface PartnerDetail {
       expireDate?: string | null;
       status: string;
     }>;
-  } | null;
+  }>;
   // 供应物料关系（SupplierItem.supplierId → BusinessPartner）
   supplierItems?: Array<{
     id: string;
@@ -191,20 +191,21 @@ function PartnerDetailPage() {
   }, [id]);
 
   // 供应商档案：采购订单（PurchaseOrder.supplierId → Supplier，只读聚合最近 5 条）
+  const supplier = detail?.suppliers?.[0];
   useEffect(() => {
-    if (!detail?.supplier?.id) {
+    if (!supplier?.id) {
       setPurchaseOrders([]);
       return;
     }
     const controller = new AbortController();
     apiFetch<Array<{ id: string; code: string; orderDate: string; totalAmount: string; currency: string; status: string }>>(
-      `/api/purchase-orders?pageSize=5&supplierId=${detail.supplier.id}`,
+      `/api/purchase-orders?pageSize=5&supplierId=${supplier.id}`,
       { signal: controller.signal },
     )
       .then((b) => setPurchaseOrders(Array.isArray(b.data) ? b.data : []))
       .catch(() => setPurchaseOrders([]));
     return () => controller.abort();
-  }, [detail?.supplier?.id]);
+  }, [supplier?.id]);
 
   // 聚合各权威列表 API（customerId 过滤；最近 5 条只读展示）
   useEffect(() => {
@@ -271,6 +272,7 @@ function PartnerDetailPage() {
   ];
 
   const cr = detail.partnerCredit;
+  const supplierSettlement = supplier?.settlements?.[0];
 
   return (
     <AppPage maxWidth="6xl">
@@ -547,18 +549,18 @@ function PartnerDetailPage() {
         {tab === "supplierProfile" && (
           <section className="rounded-md border border-border p-4">
             <div className="mb-3 flex flex-wrap items-center gap-2">
-              {detail.supplier ? (
+              {supplier ? (
                 <>
                   <span className="rounded bg-canvas px-2 py-0.5 text-xs text-ink-secondary">
-                    供应商状态：{SUPPLIER_STATUS_LABELS[detail.supplier.status] ?? detail.supplier.status}
+                    供应商状态：{SUPPLIER_STATUS_LABELS[supplier.status] ?? supplier.status}
                   </span>
-                  {detail.supplier.isPreferred ? (
+                  {supplier.isPreferred ? (
                     <span className="rounded bg-brand-50 px-2 py-0.5 text-xs text-brand-700">优选</span>
                   ) : null}
-                  {detail.supplier.rating != null ? (
+                  {supplier.rating != null ? (
                     <span className="rounded bg-canvas px-2 py-0.5 text-xs text-ink-secondary">
-                      资质评级：{"★".repeat(detail.supplier.rating)}
-                      <span className="text-ink-muted">{"☆".repeat(5 - detail.supplier.rating)}</span>
+                      资质评级：{"★".repeat(supplier.rating)}
+                      <span className="text-ink-muted">{"☆".repeat(5 - supplier.rating)}</span>
                     </span>
                   ) : null}
                 </>
@@ -569,12 +571,12 @@ function PartnerDetailPage() {
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               <InfoItem label="信用等级" value={detail.creditRating} />
               <InfoItem label="结算条款" value={detail.settlementTerms} />
-              <InfoItem label="账期（天）" value={detail.supplier?.settlements?.[0]?.creditDays != null ? String(detail.supplier.settlements[0].creditDays) : null} />
-              <InfoItem label="付款条款" value={detail.supplier?.settlements?.[0]?.paymentTerms} />
-              <InfoItem label="付款方式" value={detail.supplier?.settlements?.[0]?.paymentMethod} />
-              <InfoItem label="默认交期（天）" value={detail.supplier?.defaultLeadTime != null ? String(detail.supplier.defaultLeadTime) : null} />
-              <InfoItem label="最小起订量" value={detail.supplier?.minOrderQty != null ? formatMoneyValue(detail.supplier.minOrderQty) : null} />
-              <InfoItem label="币种" value={detail.supplier?.currency ?? "CNY"} />
+              <InfoItem label="账期（天）" value={supplierSettlement?.creditDays != null ? String(supplierSettlement.creditDays) : null} />
+              <InfoItem label="付款条款" value={supplierSettlement?.paymentTerms} />
+              <InfoItem label="付款方式" value={supplierSettlement?.paymentMethod} />
+              <InfoItem label="默认交期（天）" value={supplier?.defaultLeadTime != null ? String(supplier.defaultLeadTime) : null} />
+              <InfoItem label="最小起订量" value={supplier?.minOrderQty != null ? formatMoneyValue(supplier.minOrderQty) : null} />
+              <InfoItem label="币种" value={supplier?.currency ?? "CNY"} />
               <InfoItem label="联系人" value={detail.contactPerson} />
               <InfoItem label="电话" value={detail.phone} />
               <InfoItem label="邮箱" value={detail.email} />
@@ -582,7 +584,7 @@ function PartnerDetailPage() {
               <InfoItem label="启用" value={detail.isActive == null ? null : detail.isActive ? "是" : "否"} />
             </div>
             <h3 className="mb-2 mt-5 text-sm font-semibold text-ink-primary">资质证书</h3>
-            {(detail.supplier?.qualifications ?? []).length > 0 ? (
+            {(supplier?.qualifications ?? []).length > 0 ? (
               <table className="min-w-full divide-y divide-border text-sm">
                 <thead className="text-ink-secondary bg-canvas text-left text-xs font-medium">
                   <tr>
@@ -595,7 +597,7 @@ function PartnerDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {(detail.supplier?.qualifications ?? []).map((q) => (
+                  {(supplier?.qualifications ?? []).map((q) => (
                     <tr key={q.id}>
                       <td className="px-4 py-2">{QUALIFICATION_TYPE_LABELS[q.qualType] ?? q.qualType}</td>
                       <td className="px-4 py-2">{q.qualName}</td>

@@ -33,22 +33,24 @@ function partnerWithSupplier() {
     isActive: true,
     version: 1,
     deletedAt: null,
-    supplier: {
-      id: 'sup-1',
-      code: 'S-001',
-      name: '华东供应商有限公司',
-      status: 'QUALIFIED',
-      rating: 4,
-      isPreferred: true,
-      defaultLeadTime: 15,
-      currency: 'CNY',
-      settlements: [
-        { id: 'st-1', paymentTerms: 'NET30', creditDays: 30, paymentMethod: 'TT', currency: 'CNY' },
-      ],
-      qualifications: [
-        { id: 'q-1', qualType: 'ISO9001', qualName: 'ISO9001 质量体系认证', certNo: 'C-001', issueDate: '2025-01-01T00:00:00.000Z', expireDate: '2028-01-01T00:00:00.000Z', status: 'VALID' },
-      ],
-    },
+    suppliers: [
+      {
+        id: 'sup-1',
+        code: 'S-001',
+        name: '华东供应商有限公司',
+        status: 'QUALIFIED',
+        rating: 4,
+        isPreferred: true,
+        defaultLeadTime: 15,
+        currency: 'CNY',
+        settlements: [
+          { id: 'st-1', paymentTerms: 'NET30', creditDays: 30, paymentMethod: 'TT', currency: 'CNY' },
+        ],
+        qualifications: [
+          { id: 'q-1', qualType: 'ISO9001', qualName: 'ISO9001 质量体系认证', certNo: 'C-001', issueDate: '2025-01-01T00:00:00.000Z', expireDate: '2028-01-01T00:00:00.000Z', status: 'VALID' },
+        ],
+      },
+    ],
     supplierItems: [
       { id: 'si-1', supplierCode: 'S-ITM-01', moq: '10', leadTime: 7, currency: 'CNY', purchasePrice: '12.5000', isPreferred: true, paymentTerm: 'NET30', item: { id: 'item-1', code: 'ITM-001', name: '轴承 6204', spec: '6204-2RS' } },
     ],
@@ -75,10 +77,10 @@ describe('GET /api/business-partners/:id — 供应商档案聚合（contract-su
     const res = await GET(new NextRequest('http://localhost/api/business-partners/bp-sup-1'), { params: Promise.resolve({ id: 'bp-sup-1' }) });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.data.supplier).toBeTruthy();
-    expect(body.data.supplier.status).toBe('QUALIFIED');
-    expect(body.data.supplier.settlements[0].creditDays).toBe(30); // 账期
-    expect(body.data.supplier.qualifications[0].qualType).toBe('ISO9001'); // 资质
+    expect(body.data.suppliers).toHaveLength(1);
+    expect(body.data.suppliers[0].status).toBe('QUALIFIED');
+    expect(body.data.suppliers[0].settlements[0].creditDays).toBe(30); // 账期
+    expect(body.data.suppliers[0].qualifications[0].qualType).toBe('ISO9001'); // 资质
     expect(body.data.creditRating).toBe('AA'); // 信用等级
   });
 
@@ -91,27 +93,29 @@ describe('GET /api/business-partners/:id — 供应商档案聚合（contract-su
     expect(body.data.supplierItems[0].supplierCode).toBe('S-ITM-01');
   });
 
-  it('客户型往来单位（无 Supplier 扩展）→ 200 且 supplier 为 null 不报错', async () => {
-    mockPrisma.businessPartner.findFirst = vi.fn().mockResolvedValue({
-      id: 'bp-cust-1',
-      code: 'CUS-001',
-      name: '某客户',
-      type: 'CUSTOMER',
-      creditRating: null,
-      version: 1,
-      deletedAt: null,
-      supplier: null,
-      supplierItems: [],
-    });
+  it('客户型往来单位（无 Supplier 扩展）→ 200 且 suppliers 为空数组不报错', async () => {
+    mockPrisma.businessPartner = {
+      findFirst: vi.fn().mockResolvedValue({
+        id: 'bp-cust-1',
+        code: 'CUS-001',
+        name: '某客户',
+        type: 'CUSTOMER',
+        creditRating: null,
+        version: 1,
+        deletedAt: null,
+        suppliers: [],
+        supplierItems: [],
+      }),
+    };
     const res = await GET(new NextRequest('http://localhost/api/business-partners/bp-cust-1'), { params: Promise.resolve({ id: 'bp-cust-1' }) });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.data.supplier).toBeNull();
+    expect(body.data.suppliers).toEqual([]);
     expect(body.data.supplierItems).toEqual([]);
   });
 
   it('不存在 → 404 NOT_FOUND', async () => {
-    mockPrisma.businessPartner.findFirst = vi.fn().mockResolvedValue(null);
+    mockPrisma.businessPartner = { findFirst: vi.fn().mockResolvedValue(null) };
     const res = await GET(new NextRequest('http://localhost/api/business-partners/bp-x'), { params: Promise.resolve({ id: 'bp-x' }) });
     expect(res.status).toBe(404);
     const body = await res.json();
