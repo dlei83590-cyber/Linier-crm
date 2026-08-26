@@ -31,10 +31,7 @@ export default function ProfilePage() {
             <dt className="text-xs text-ink-muted">角色</dt>
             <dd className="mt-1 text-sm text-ink-primary">{user.roles.join("、") || "—"}</dd>
           </div>
-          <div>
-            <dt className="text-xs text-ink-muted">用户 ID</dt>
-            <dd className="mt-1 break-all text-sm text-ink-primary">{user.id}</dd>
-          </div>
+          {/* CC-10：不展示原始数据库 UUID（raw DB ID 红线）；用户身份以邮箱/姓名为准 */}
         </dl>
       </div>
     </div>
