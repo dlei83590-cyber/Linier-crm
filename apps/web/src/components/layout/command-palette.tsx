@@ -133,7 +133,7 @@ export function CommandPalette({ open, onClose, groups, recent }: CommandPalette
 
   return (
     <div
-      className="animate-fade-in fixed inset-0 z-50 flex items-start justify-center bg-slate-900/30 p-4 pt-[12vh] backdrop-blur-[2px]"
+      className="animate-fade-in fixed inset-0 z-50 flex items-start justify-center bg-scrim p-4 pt-[12vh] backdrop-blur-[2px]"
       onClick={onClose}
     >
       <div
@@ -196,11 +196,11 @@ export function CommandPalette({ open, onClose, groups, recent }: CommandPalette
                       onClick={() => go(i)}
                       onMouseEnter={() => setActiveIndex(i)}
                       className={`flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm transition-colors duration-150 ${
-                        active ? "bg-brand-50 text-ink-primary" : "text-ink-primary hover:bg-slate-50"
+                        active ? "bg-brand-50 text-ink-primary" : "text-ink-primary hover:bg-surface-hover"
                       }`}
                     >
                       <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded ${
-                        hit ? dc?.soft : "bg-slate-100"
+                        hit ? dc?.soft : "bg-canvas"
                       }`}>
                         {hit ? (
                           <ModuleIcon moduleId={hit.module.id} className={`h-3 w-3 ${dc?.text}`} />
@@ -230,7 +230,7 @@ export function CommandPalette({ open, onClose, groups, recent }: CommandPalette
                         onClick={() => go(recentCount + j)}
                         onMouseEnter={() => setActiveIndex(recentCount + j)}
                         className={`flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm transition-colors duration-150 ${
-                          active ? "bg-brand-50 text-ink-primary" : "text-ink-primary hover:bg-slate-50"
+                          active ? "bg-brand-50 text-ink-primary" : "text-ink-primary hover:bg-surface-hover"
                         }`}
                       >
                         <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded ${dc.soft}`}>
@@ -247,7 +247,7 @@ export function CommandPalette({ open, onClose, groups, recent }: CommandPalette
                           <ModuleIcon moduleId={m.id} className={`h-3 w-3 ${dc.text}`} />
                         </span>
                         <span className="min-w-0 flex-1 truncate">{m.label}</span>
-                        <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px]">尚未开放</span>
+                        <span className="shrink-0 rounded bg-canvas px-1.5 py-0.5 text-[10px]">尚未开放</span>
                       </span>
                     )}
                   </li>

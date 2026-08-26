@@ -169,7 +169,7 @@ function ScrollTable({
 function DistBar({ value, max, barClass }: { value: number; max: number; barClass: string }) {
   const pct = max > 0 ? Math.max(2, Math.round((value / max) * 100)) : 0;
   return (
-    <div className="h-1.5 w-full min-w-24 overflow-hidden rounded-full bg-slate-100">
+    <div className="h-1.5 w-full min-w-24 overflow-hidden rounded-full bg-canvas">
       <div className={`h-full rounded-full ${barClass}`} style={{ width: `${pct}%` }} />
     </div>
   );
@@ -354,7 +354,7 @@ function OperationsBoard() {
                 }
               >
                 {data.targets.map((t) => (
-                  <tr key={t.id} className="transition-colors hover:bg-slate-50">
+                  <tr key={t.id} className="transition-colors hover:bg-surface-hover">
                     <td className={td + " text-ink-primary"}>{TARGET_LABELS[t.dimensionType] ?? t.dimensionType}</td>
                     <td className={tdRight + " text-ink-primary"}>{formatMoneyValue(t.targetAmount)}</td>
                     <td className={tdRight + " text-ink-primary"}>{formatMoneyValue(t.actual)}</td>
@@ -458,7 +458,7 @@ function OperationsBoard() {
               }
             >
               {TIER_ROWS.map((r) => (
-                <tr key={r.key} className="transition-colors hover:bg-slate-50">
+                <tr key={r.key} className="transition-colors hover:bg-surface-hover">
                   <td className={td + " text-ink-primary"}>
                     {r.label}
                     <span className="ml-2 text-xs text-ink-muted">{r.hint}</span>
@@ -492,7 +492,7 @@ function OperationsBoard() {
                 }
               >
                 {data.regions.map((r) => (
-                  <tr key={r.region} className="transition-colors hover:bg-slate-50">
+                  <tr key={r.region} className="transition-colors hover:bg-surface-hover">
                     <td className={td + " text-ink-primary"}>{r.region}</td>
                     <td className={tdRight + " text-ink-primary"}>{r.customerCount}</td>
                     <td className={tdRight + " text-ink-primary"}>{r.salesOrderCount}</td>
@@ -522,7 +522,7 @@ function OperationsBoard() {
                 }
               >
                 {data.brands.map((b) => (
-                  <tr key={b.brand} className="transition-colors hover:bg-slate-50">
+                  <tr key={b.brand} className="transition-colors hover:bg-surface-hover">
                     <td className={td + " text-ink-primary"}>{b.brand}</td>
                     <td className={tdRight + " text-ink-primary"}>{b.lineCount}</td>
                     <td className={tdRight + " text-ink-primary"}>¥{formatMoneyValue(b.amount)}</td>
@@ -554,7 +554,7 @@ function OperationsBoard() {
               }
             >
               {data.channels.map((c) => (
-                <tr key={c.channel} className="transition-colors hover:bg-slate-50">
+                <tr key={c.channel} className="transition-colors hover:bg-surface-hover">
                   <td className={td + " text-ink-primary"}>{c.channel}</td>
                   <td className={tdRight + " text-ink-primary"}>{c.customerCount}</td>
                   <td className={tdRight + " text-ink-primary"}>{c.salesOrderCount}</td>
@@ -583,7 +583,7 @@ function OperationsBoard() {
                 }
               >
                 {funnelRows.map((r) => (
-                  <tr key={r.stage} className="transition-colors hover:bg-slate-50">
+                  <tr key={r.stage} className="transition-colors hover:bg-surface-hover">
                     <td className={td + " text-ink-primary"}>{r.label}</td>
                     <td className={tdRight + " text-ink-primary"}>{r.count}</td>
                     <td className={td}>
@@ -611,7 +611,7 @@ function OperationsBoard() {
                 }
               >
                 {statusRows.map((r) => (
-                  <tr key={r.status} className="transition-colors hover:bg-slate-50">
+                  <tr key={r.status} className="transition-colors hover:bg-surface-hover">
                     <td className={td}>
                       <StatusBadge
                         status={r.status}

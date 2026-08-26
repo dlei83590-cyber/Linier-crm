@@ -19,7 +19,7 @@ describe("lib/ui-classes — FE 2.0 UI-01 控件类与 Button 组件对齐（向
   });
 
   it("新增 ghost/danger/link 与 ui Button 视觉对齐", () => {
-    expect(BUTTON_GHOST_CLASS).toContain("hover:bg-slate-100");
+    expect(BUTTON_GHOST_CLASS).toContain("hover:bg-surface-hover");
     expect(BUTTON_DANGER_CLASS).toContain("bg-rose-600");
     expect(BUTTON_LINK_CLASS).toContain("underline-offset-4");
   });

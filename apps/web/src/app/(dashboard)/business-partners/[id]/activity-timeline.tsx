@@ -75,7 +75,7 @@ type ActivityMode = "FOLLOW_UP" | "VISIT_PLAN" | "CHECK_IN";
 const TYPE_LABELS: Record<string, string> = { FOLLOW_UP: "跟进", VISIT_PLAN: "拜访计划", CHECK_IN: "签到" };
 
 const TONE_NODE: Record<StatusTone, { soft: string; text: string }> = {
-  neutral: { soft: "bg-slate-100", text: "text-slate-600" },
+  neutral: { soft: "bg-canvas", text: "text-ink-secondary" },
   info: { soft: "bg-status-info-bg", text: "text-status-info-text" },
   success: { soft: "bg-status-success-bg", text: "text-status-success-text" },
   warning: { soft: "bg-status-warning-bg", text: "text-status-warning-text" },
@@ -125,7 +125,7 @@ function RejectDialog({
       role="dialog"
       aria-modal="true"
       aria-label="驳回跟进"
-      className="animate-fade-in fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-[2px]"
+      className="animate-fade-in fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4 backdrop-blur-[2px]"
       onClick={onCancel}
     >
       <div
@@ -400,7 +400,7 @@ export function ActivityTimeline({
                   "rounded-full px-3 py-1 text-xs font-medium transition-colors duration-150 " +
                   (mode === m
                     ? "bg-brand-600 text-white"
-                    : "border border-border bg-surface text-ink-secondary hover:bg-slate-50")
+                    : "border border-border bg-surface text-ink-secondary hover:bg-surface-hover")
                 }
               >
                 {TYPE_LABELS[m]}
@@ -427,7 +427,7 @@ export function ActivityTimeline({
                       "rounded-full px-3 py-1 text-xs font-medium transition-colors duration-150 " +
                       (followUpLevel === lv
                         ? "bg-brand-600 text-white"
-                        : "border border-border bg-surface text-ink-secondary hover:bg-slate-50")
+                        : "border border-border bg-surface text-ink-secondary hover:bg-surface-hover")
                     }
                   >
                     {label}
@@ -503,7 +503,7 @@ export function ActivityTimeline({
             <IconAlertCircle className="h-5 w-5" />
           </span>
           <p className="text-sm text-status-danger-text">{error}</p>
-          <button type="button" onClick={load} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-secondary transition-colors duration-150 hover:bg-slate-50">
+          <button type="button" onClick={load} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-secondary transition-colors duration-150 hover:bg-surface-hover">
             <IconRefreshCw className="h-3.5 w-3.5" />
             重试
           </button>

@@ -624,7 +624,7 @@ function QuotationEditForm() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
+          <table className="min-w-full divide-y divide-border text-sm">
             <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
               <tr>
                 <th className="px-3 py-2">行号</th>
@@ -636,7 +636,7 @@ function QuotationEditForm() {
                 <th className="px-3 py-2"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-border">
               {lines.map((line, idx) => {
                 const lineDirty = lineDirtyIds.has(line.id);
                 return (
@@ -720,7 +720,7 @@ function QuotationEditForm() {
 
         {/* ── 新增行（POST /lines；不发送 unitPrice；quotation-line:create Gate） ── */}
         {canCreateLine ? (
-          <div className="mt-4 rounded-md border border-dashed border-slate-300 p-3">
+          <div className="mt-4 rounded-md border border-dashed border-border p-3">
             <p className="mb-2 text-xs font-medium text-ink-secondary">新增行</p>
             {itemsError ? (
               <p className="text-sm text-status-danger-text">

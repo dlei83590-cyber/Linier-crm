@@ -290,11 +290,11 @@ function BusinessPartnerList() {
         ].filter((c): c is NonNullable<typeof c> => c !== null)}
         rowActions={(row) => (
           <div className="flex justify-end gap-1">
-            <Link href={`/business-partners/${row.id}`} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary transition-colors hover:bg-slate-100">
+            <Link href={`/business-partners/${row.id}`} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary transition-colors hover:bg-surface-hover">
               详情
             </Link>
             {canEdit && (
-              <button type="button" onClick={() => router.push(`/business-partners/${row.id}/edit`)} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary transition-colors hover:bg-slate-100">
+              <button type="button" onClick={() => router.push(`/business-partners/${row.id}/edit`)} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary transition-colors hover:bg-surface-hover">
                 编辑
               </button>
             )}

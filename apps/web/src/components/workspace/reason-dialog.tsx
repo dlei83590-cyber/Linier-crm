@@ -70,7 +70,7 @@ export function ReasonDialog({
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      className="animate-fade-in fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-[2px]"
+      className="animate-fade-in fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4 backdrop-blur-[2px]"
       onClick={onCancel}
     >
       <div
@@ -109,7 +109,7 @@ export function ReasonDialog({
             type="button"
             onClick={onCancel}
             disabled={busy}
-            className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {cancelLabel}
           </button>

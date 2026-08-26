@@ -1,9 +1,9 @@
 export function PlaceholderPage({ title, description }: { title: string; description: string }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-6">
-      <h1 className="text-lg font-semibold text-slate-800">{title}</h1>
-      <p className="mt-2 text-sm text-slate-500">{description}</p>
-      <div className="mt-6 rounded-md bg-slate-50 p-4 text-sm text-slate-400">
+    <div className="rounded-lg border border-border bg-surface p-6">
+      <h1 className="text-lg font-semibold text-ink-primary">{title}</h1>
+      <p className="mt-2 text-sm text-ink-secondary">{description}</p>
+      <div className="mt-6 rounded-md bg-canvas p-4 text-sm text-ink-muted">
         尚未开放
       </div>
     </div>

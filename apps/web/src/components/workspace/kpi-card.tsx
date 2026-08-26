@@ -51,7 +51,7 @@ export function KpiCard({
         <p className="text-xs font-medium text-ink-muted">{label}</p>
         {icon ? (
           <span
-            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${iconClass ?? "bg-slate-100 text-slate-500"}`}
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${iconClass ?? "bg-canvas text-ink-secondary"}`}
             aria-hidden="true"
           >
             {icon}

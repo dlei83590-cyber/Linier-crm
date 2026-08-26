@@ -150,7 +150,7 @@ function VisitPlanChip({
             type="button"
             disabled={busy}
             onClick={() => onCheckout(row)}
-            className="rounded border border-border bg-surface px-1.5 py-0.5 text-[11px] font-medium text-ink-secondary transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded border border-border bg-surface px-1.5 py-0.5 text-[11px] font-medium text-ink-secondary transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             签退
           </button>
@@ -670,7 +670,7 @@ function VisitsList() {
                                 type="button"
                                 disabled={busyId === row.id}
                                 onClick={() => checkout(row, openCheckin(row)!.id)}
-                                className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 {busyId === row.id ? "处理中…" : "签退"}
                               </button>

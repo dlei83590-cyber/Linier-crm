@@ -146,7 +146,7 @@ function WarehouseList() {
           (row) => (
             <div className="flex justify-end gap-1">
               {canEdit && (
-                <button type="button" onClick={() => router.push(`/warehouses/${row.id}/edit`)} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary transition-colors hover:bg-slate-100">
+                <button type="button" onClick={() => router.push(`/warehouses/${row.id}/edit`)} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary transition-colors hover:bg-surface-hover">
                   编辑
                 </button>
               )}

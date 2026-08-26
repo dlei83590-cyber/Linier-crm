@@ -6,7 +6,7 @@
  * 新枚举按模块随 Scale-Out 增量补充。
  */
 const STATUS_META: Record<string, { label: string; className: string }> = {
-  DRAFT: { label: "草稿", className: "bg-slate-100 text-slate-700" },
+  DRAFT: { label: "草稿", className: "bg-canvas text-ink-primary" },
   SUBMITTED: { label: "已提交", className: "bg-blue-100 text-blue-700" },
   APPROVED: { label: "已批准", className: "bg-green-100 text-green-700" },
   CONVERTED: { label: "已转单", className: "bg-violet-100 text-violet-700" },
@@ -34,7 +34,7 @@ const STATUS_META: Record<string, { label: string; className: string }> = {
 };
 
 export function StatusBadge({ status }: { status: string }) {
-  const meta = STATUS_META[status] ?? { label: status, className: "bg-slate-100 text-slate-700" };
+  const meta = STATUS_META[status] ?? { label: status, className: "bg-canvas text-ink-primary" };
   return (
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${meta.className}`}>
       {meta.label}

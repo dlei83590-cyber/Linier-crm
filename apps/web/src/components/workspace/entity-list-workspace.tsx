@@ -227,7 +227,7 @@ export function EntityListWorkspace<T>({
                     aria-sort={activeSort ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
                     onClick={col.sortable ? () => toggleSort(col.key) : undefined}
                     className={`px-4 py-3 font-semibold ${col.align === "right" ? "text-right" : "text-left"} ${
-                      col.sortable ? "cursor-pointer select-none transition-colors hover:bg-slate-100" : ""
+                      col.sortable ? "cursor-pointer select-none transition-colors hover:bg-surface-hover" : ""
                     }`}
                     style={col.width ? { width: col.width } : undefined}
                   >
@@ -296,7 +296,7 @@ export function EntityListWorkspace<T>({
             onClick={() => setColumnsMenuOpen((v) => !v)}
             aria-expanded={columnsMenuOpen}
             aria-haspopup="menu"
-            className="border-border text-ink-secondary inline-flex items-center gap-1.5 rounded-md border bg-surface px-2.5 py-1 text-xs font-medium transition-colors hover:bg-slate-50"
+            className="border-border text-ink-secondary inline-flex items-center gap-1.5 rounded-md border bg-surface px-2.5 py-1 text-xs font-medium transition-colors hover:bg-surface-hover"
           >
             <Icon name="sliders" className="h-3.5 w-3.5" />
             列设置
@@ -308,7 +308,7 @@ export function EntityListWorkspace<T>({
                 return (
                   <label
                     key={col.key}
-                    className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-ink-primary transition-colors hover:bg-slate-50"
+                    className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-ink-primary transition-colors hover:bg-surface-hover"
                   >
                     <input
                       type="checkbox"

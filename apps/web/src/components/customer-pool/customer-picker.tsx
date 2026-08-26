@@ -121,7 +121,7 @@ export function CustomerPicker({
         <span className="text-sm font-medium text-ink-primary">{value.name}</span>
         <span className="text-xs text-ink-muted">（{value.code}）</span>
         <span className="text-xs text-ink-muted">区域：{value.region ?? "—"}</span>
-        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-ink-secondary">
+        <span className="rounded bg-canvas px-1.5 py-0.5 text-xs text-ink-secondary">
           {PARTNER_TYPE_LABELS[value.type] ?? value.type}
         </span>
         <button
@@ -174,12 +174,12 @@ export function CustomerPicker({
                   <button
                     type="button"
                     onClick={() => selectPartner(p)}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-50"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-surface-hover"
                   >
                     <span className="text-sm font-medium text-ink-primary">{p.name}</span>
                     <span className="text-xs text-ink-muted">（{p.code}）</span>
                     <span className="text-xs text-ink-muted">区域：{p.region ?? "—"}</span>
-                    <span className="ml-auto rounded bg-slate-100 px-1.5 py-0.5 text-xs text-ink-secondary">
+                    <span className="ml-auto rounded bg-canvas px-1.5 py-0.5 text-xs text-ink-secondary">
                       {PARTNER_TYPE_LABELS[p.type] ?? p.type}
                     </span>
                   </button>

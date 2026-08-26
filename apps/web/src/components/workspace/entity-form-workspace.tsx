@@ -86,7 +86,7 @@ export function EntityFormWorkspace({
               type="button"
               onClick={handleCancel}
               disabled={submitting}
-              className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
               {cancelLabel}
             </button>

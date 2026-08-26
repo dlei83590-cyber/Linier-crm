@@ -248,7 +248,7 @@ function CnDnCreateForm() {
           <p className="text-ink-secondary py-6 text-center text-sm">加载发票明细…</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <table className="min-w-full divide-y divide-border text-sm">
               <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
                 <tr>
                   <th className="px-3 py-2">行号</th>
@@ -259,7 +259,7 @@ function CnDnCreateForm() {
                   <th className="px-3 py-2">调整数量</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-border">
                 {invoiceLines.map((line, idx) => (
                   <tr key={line.id}>
                     <td className="px-3 py-2 text-ink-secondary">{line.lineNo}</td>

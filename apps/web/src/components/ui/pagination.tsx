@@ -48,7 +48,7 @@ export function Pagination({
           type="button"
           disabled={page <= 1}
           onClick={() => onPageChange(page - 1)}
-          className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+          className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
         >
           上一页
         </button>
@@ -59,7 +59,7 @@ export function Pagination({
           type="button"
           disabled={page >= totalPages}
           onClick={() => onPageChange(page + 1)}
-          className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+          className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
         >
           下一页
         </button>

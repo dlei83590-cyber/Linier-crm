@@ -693,7 +693,7 @@ function SalesOrderDetailPage() {
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4"
           onClick={closeDeliveryDialog}
         >
           <div
@@ -714,7 +714,7 @@ function SalesOrderDetailPage() {
                   {dialogError}
                 </div>
               )}
-              <table className="min-w-full divide-y divide-slate-200 text-sm">
+              <table className="min-w-full divide-y divide-border text-sm">
                 <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
                   <tr>
                     <th className="px-3 py-2">选择</th>
@@ -724,7 +724,7 @@ function SalesOrderDetailPage() {
                     <th className="px-3 py-2">本次数量</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-border">
                   {remainingLines.map((line) => {
                     const sel = selections[line.id];
                     const max = Number(line.remainingQty ?? line.quantity);

@@ -191,7 +191,7 @@ function CustomerPoolList() {
           <div className="flex justify-end gap-1">
             <Link
               href={"/customer-pools/" + r.id}
-              className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary transition-colors hover:bg-slate-100"
+              className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary transition-colors hover:bg-surface-hover"
             >
               查看
             </Link>

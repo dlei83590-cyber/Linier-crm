@@ -141,7 +141,7 @@ export const BREAKPOINTS = {
 // ===== 通用表单控件 class（供 ReferenceSelector / LineEditor 等复用）=====
 /** 标准输入/选择控件外观（对齐 FORM_DENSITY.default） */
 export const CONTROL_CLASS =
-  'w-full rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-ink-primary placeholder:text-ink-muted focus:border-brand-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-ink-muted';
+  'w-full rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-ink-primary placeholder:text-ink-muted focus:border-brand-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-surface-hover disabled:text-ink-muted';
 // ===== Module Accent（Sprint8 UI Modern — 10 业务域高饱和色板，单一事实来源：tailwind domain-* 类）=====
 export interface ModuleAccent {
   id: string;

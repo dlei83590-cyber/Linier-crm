@@ -449,7 +449,7 @@ function QuotationCreateForm() {
         {fieldErrors.lines && <p className="mb-2 text-xs text-status-danger-text">{fieldErrors.lines}</p>}
 
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
+          <table className="min-w-full divide-y divide-border text-sm">
             <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
               <tr>
                 <th className="px-3 py-2">物料</th>
@@ -459,7 +459,7 @@ function QuotationCreateForm() {
                 <th className="px-3 py-2"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-border">
               {lines.map((line, idx) => (
                 <tr key={idx}>
                   <td className="px-3 py-2">

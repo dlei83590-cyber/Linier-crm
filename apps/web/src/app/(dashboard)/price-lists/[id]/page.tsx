@@ -382,7 +382,7 @@ function PriceListDetailPage() {
                         {canEdit && (
                           <td className="px-3 py-2">
                             <div className="flex justify-end gap-1">
-                              <button type="button" onClick={() => openEdit(line)} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary transition-colors hover:bg-slate-100">
+                              <button type="button" onClick={() => openEdit(line)} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary transition-colors hover:bg-surface-hover">
                                 编辑
                               </button>
                               <button type="button" onClick={() => setDeleting(line)} className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text transition-colors hover:bg-red-50">

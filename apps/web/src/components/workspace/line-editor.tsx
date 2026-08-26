@@ -82,20 +82,20 @@ export function LineEditor<T extends LineRow>({
 
   return (
     <div className="border-border overflow-hidden rounded-md border">
-      <div className="border-border flex items-center justify-between border-b bg-slate-50 px-3 py-2">
+      <div className="border-border flex items-center justify-between border-b bg-canvas px-3 py-2">
         <span className="text-ink-secondary text-sm font-medium">行明细</span>
         <button
           type="button"
           onClick={() => onChange([...lines, onAdd()])}
           disabled={disabled || disableAdd}
-          className="border-border bg-surface text-ink-primary rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="border-border bg-surface text-ink-primary rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           + {addLabel}
         </button>
       </div>
       <div className="overflow-x-auto">
         <table className="divide-border min-w-full divide-y">
-          <thead className="text-ink-secondary bg-slate-50 text-left text-xs font-medium">
+          <thead className="text-ink-secondary bg-canvas text-left text-xs font-medium">
             <tr>
               {columns.map((col) => (
                 <th
