@@ -179,22 +179,18 @@ describe('PATCH /api/business-partners/:id — 信用等级（creditRating）写
   });
 });
 
-describe('DELETE /api/business-partners/:id — 引用检查仅统计未删除（deletedAt:null）引用', () => {
+describe('DELETE /api/business-partners/:id — 独立引用拒绝 + 自有子资源级联软删', () => {
   let findFirstMock: ReturnType<typeof vi.fn>;
-  let updateMock: ReturnType<typeof vi.fn>;
+  let txMock: ReturnType<typeof vi.fn>;
 
-  /** 构造带 _count 的往来单位；counts 只统计未软删除的引用（历史草稿不计入） */
+  /** 构造带 _count 的往来单位；仅独立业务事实（customer/opportunity/project）计入引用 */
   function bpWithCounts(counts: Record<string, number>) {
     return {
       id: 'bp-del-1',
       _count: {
-        suppliers: counts.suppliers ?? 0,
         customers: counts.customers ?? 0,
         opportunities: counts.opportunities ?? 0,
         projects: counts.projects ?? 0,
-        partnerContacts: counts.partnerContacts ?? 0,
-        partnerAddresses: counts.partnerAddresses ?? 0,
-        partnerBankAccounts: counts.partnerBankAccounts ?? 0,
       },
     };
   }
@@ -202,24 +198,49 @@ describe('DELETE /api/business-partners/:id — 引用检查仅统计未删除�
   beforeEach(() => {
     vi.clearAllMocks();
     findFirstMock = vi.fn();
-    updateMock = vi.fn().mockResolvedValue({ id: 'bp-del-1', deletedAt: new Date() });
-    mockPrisma.businessPartner = {
-      findFirst: findFirstMock,
-      update: updateMock,
-    };
+    mockPrisma.businessPartner = { findFirst: findFirstMock };
+    // 级联软删 tx 对象（供应商档案扩展 + 自有子资源 + 主档）
+    txMock = vi.fn((fn: (t: Record<string, unknown>) => Promise<unknown>) =>
+      fn({
+        supplier: {
+          findFirst: vi.fn().mockResolvedValue({ id: 'sup-1' }),
+          update: vi.fn().mockResolvedValue({}),
+        },
+        supplierQualification: { updateMany: vi.fn().mockResolvedValue({}) },
+        supplierCertificate: { updateMany: vi.fn().mockResolvedValue({}) },
+        supplierSettlement: { updateMany: vi.fn().mockResolvedValue({}) },
+        businessPartnerRole: { updateMany: vi.fn().mockResolvedValue({}) },
+        partnerContact: { updateMany: vi.fn().mockResolvedValue({}) },
+        partnerAddress: { updateMany: vi.fn().mockResolvedValue({}) },
+        partnerBankAccount: { updateMany: vi.fn().mockResolvedValue({}) },
+        partnerTag: { updateMany: vi.fn().mockResolvedValue({}) },
+        partnerCredit: { updateMany: vi.fn().mockResolvedValue({}) },
+        businessPartnerInvoiceInfo: { updateMany: vi.fn().mockResolvedValue({}) },
+        businessPartner: { update: vi.fn().mockResolvedValue({}) },
+      }),
+    );
+    mockPrisma.$transaction = txMock;
   });
 
-  it('无任何引用 → 200 软删除', async () => {
+  it('无独立引用（供应商/角色/联系人等自有子资源级联软删）→ 200', async () => {
     findFirstMock.mockResolvedValue(bpWithCounts({}));
     const res = await DELETE(new NextRequest('http://localhost/api/business-partners/bp-del-1', { method: 'DELETE' }), { params: Promise.resolve({ id: 'bp-del-1' }) });
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data.deleted).toBe(true);
-    expect(updateMock).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'bp-del-1' } }));
+    expect(txMock).toHaveBeenCalled();
   });
 
   it('存在未删除的有效引用（customers>0）→ 409 CONFLICT', async () => {
     findFirstMock.mockResolvedValue(bpWithCounts({ customers: 1 }));
+    const res = await DELETE(new NextRequest('http://localhost/api/business-partners/bp-del-1', { method: 'DELETE' }), { params: Promise.resolve({ id: 'bp-del-1' }) });
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error.code).toBe('CONFLICT');
+  });
+
+  it('存在未删除的有效引用（projects>0）→ 409 CONFLICT', async () => {
+    findFirstMock.mockResolvedValue(bpWithCounts({ projects: 1 }));
     const res = await DELETE(new NextRequest('http://localhost/api/business-partners/bp-del-1', { method: 'DELETE' }), { params: Promise.resolve({ id: 'bp-del-1' }) });
     expect(res.status).toBe(409);
     const body = await res.json();

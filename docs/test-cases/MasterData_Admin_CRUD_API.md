@@ -88,6 +88,7 @@
 | UOM-7 | PATCH 改 code 与他人冲突 | 409 CONFLICT |
 | UOM-8 | DELETE 无引用 | 200 软删 |
 | UOM-9 | DELETE 被物料/单据行/UomConversion 引用 | 409 CONFLICT「已被物料/单据/换算引用，不能删除（可编辑）」 |
+| UOM-10 | DELETE 仅存在已软删除的历史草稿引用（deletedAt≠null） | 200 软删（历史草稿不计入引用；InventoryMovement 为不可变事实仍计入） |
 
 ## 6. /api/users（user:view/create/edit/delete）
 
