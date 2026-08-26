@@ -89,9 +89,9 @@ export const ELEVATION = {
   lg: '0 10px 15px -3px rgb(15 23 42 / 0.1), 0 4px 6px -4px rgb(15 23 42 / 0.05)',
 } as const;
 
-// ===== Semantic Color（语义色；FE 2.0 Canvas 冷灰白 #F6F7F9）=====
+// ===== Semantic Color（语义色；FE 2.0 Canvas 暖灰白 #F7F6F3，P2 微暖化）=====
 export const SEMANTIC_COLORS = {
-  canvas: '#f6f7f9', // 页面背景（冷灰白）
+  canvas: '#f7f6f3', // 页面背景（暖灰白，2026「求真实」色彩回归的克制应用；仅比纯白略暖）
   surface: '#ffffff', // 卡片 / 表单表面
   border: '#e2e8f0', // 默认边框
   borderStrong: '#cbd5e1',

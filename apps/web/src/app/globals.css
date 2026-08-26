@@ -12,7 +12,7 @@ html {
 
 :root {
   --foreground-rgb: 17, 24, 39; /* FE 2.0 ink-primary #111827 */
-  --background-rgb: 246, 247, 249; /* FE 2.0 Canvas #F6F7F9 */
+  --background-rgb: 247, 246, 243; /* FE 2.0 Canvas 暖灰白 #F7F6F3（P2 微暖化） */
 }
 
 body {
