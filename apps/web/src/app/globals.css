@@ -78,6 +78,38 @@ body {
 }
 .animate-dropdown-in { animation: dropdown-in 120ms cubic-bezier(0.4, 0, 0.2, 1) both; }
 
+/* Sprint8 UI Modern — 入场 stagger（FE 2.0 UI 补齐）：列表行 / 洞察卡依次淡入上移。
+   仅在 prefers-reduced-motion: no-preference 时启用——reduced 用户无动画且无 delay（避免 opacity:0 闪烁） */
+@keyframes stagger-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .stagger-grid > * {
+    animation: stagger-in 200ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+  .stagger-grid > *:nth-child(2) { animation-delay: 30ms; }
+  .stagger-grid > *:nth-child(3) { animation-delay: 60ms; }
+  .stagger-grid > *:nth-child(4) { animation-delay: 90ms; }
+  .stagger-grid > *:nth-child(5) { animation-delay: 120ms; }
+  .stagger-grid > *:nth-child(6) { animation-delay: 150ms; }
+  .stagger-grid > *:nth-child(n + 7) { animation-delay: 180ms; }
+
+  .stagger-rows > tr {
+    animation: stagger-in 180ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+  .stagger-rows > tr:nth-child(2) { animation-delay: 20ms; }
+  .stagger-rows > tr:nth-child(3) { animation-delay: 40ms; }
+  .stagger-rows > tr:nth-child(4) { animation-delay: 60ms; }
+  .stagger-rows > tr:nth-child(5) { animation-delay: 80ms; }
+  .stagger-rows > tr:nth-child(6) { animation-delay: 100ms; }
+  .stagger-rows > tr:nth-child(7) { animation-delay: 120ms; }
+  .stagger-rows > tr:nth-child(8) { animation-delay: 140ms; }
+  .stagger-rows > tr:nth-child(9) { animation-delay: 160ms; }
+  .stagger-rows > tr:nth-child(10) { animation-delay: 180ms; }
+}
+
+
 /* FE 2.0 UI-01 — 全局动效降级：系统开启"减少动态效果"时关闭所有动画/过渡（服务反馈不表演） */
 @media (prefers-reduced-motion: reduce) {
   *,
