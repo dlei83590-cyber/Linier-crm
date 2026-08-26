@@ -14,7 +14,7 @@ const config: Config = {
           900: '#1e3a8a',
         },
         // FE 2.0 Design System — 语义色（单一事实来源：components/design-system/tokens.ts；Canvas #F6F7F9）
-        canvas: '#f6f7f9',
+        canvas: '#f7f6f3', // 暖灰白（P2 微暖化；与 design-system/tokens.ts 同步）
         surface: '#ffffff',
         border: {
           DEFAULT: '#e2e8f0',
