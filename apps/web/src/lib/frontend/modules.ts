@@ -359,7 +359,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
   },
   // projects：contract CRUD + transition/close/acceptance + 子资源 CRUD；ui CRUD + factActions——
   // 详情页 Tab 子资源 CRUD（stakeholders/members/milestones/tasks/risks/visits/products/tags/budgets/expenses/progress/acceptance）已交付（B2-1B/L2-A）；
-  // transition / closure 事实动作已交付（L2-B1）；project-visits / project-risks 独立页仍为引导页（能力归属本模块，不建平行 CRUD）
+  // transition / closure 事实动作已交付（L2-B1）；走访/风险无独立菜单入口（2026-08 菜单链路审计：引导页已删除，能力归属本模块详情 Tab，不建平行 CRUD）
   {
     id: 'projects',
     domain: 'customer-project',
@@ -371,28 +371,6 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     createRoute: '/projects/new',
     createPermission: actionPermission('project', 'create'),
     order: 2,
-  },
-  // project-visits / project-risks：独立页=引导页（Pending Pages Batch 3）——CRUD 在项目详情 Tab（B2-1B 已交付 风险/走访 完整 CRUD）；
-  // 保持 hold：独立页无独立能力（能力归属 projects 模块），不建平行 CRUD（AGENTS.md 禁止平行业务真相）
-  {
-    id: 'project-visits',
-    domain: 'customer-project',
-    label: '客户走访',
-    route: '/project-visits',
-    permission: actionPermission('project', 'view'),
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
-    order: 3,
-  },
-  {
-    id: 'project-risks',
-    domain: 'customer-project',
-    label: '项目风险',
-    route: '/project-risks',
-    permission: actionPermission('project', 'view'),
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
-    order: 4,
   },
   // Phase 2C 客户公海（CTO 生产测试 MVP）：列表/详情/新建 + 手工入池/领取/移出（ui.detail + factActions 已交付；规则引擎/sweep HOLD）
   {
@@ -999,6 +977,20 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     capabilities: { contract: CONTRACT_LIST_DETAIL, ui: UI_LIST_DETAIL },
     order: 4,
   },
+  // supplier-rating-rules：cc-06 客户等级→最低供应商评级配置页（订单推荐供应商门槛过滤）。
+  // 单一列表页 = 列表 + 行内新建/编辑/删除（无独立 /new 或 /[id] 路由）→ 按 Registry 不变量仅声明 ui.list，
+  // 不虚报 create/edit（行内操作不属于独立页面 surface，ui.create 必须带权威 createRoute 页面）。
+  // 2026-08 菜单链路审计：孤儿页补链（原无菜单入口，直链 /settings/supplier-rating-rules）。
+  {
+    id: 'supplier-rating-rules',
+    domain: 'system',
+    label: '供应商评级规则',
+    route: '/settings/supplier-rating-rules',
+    permission: actionPermission('customer-supplier-rating-rule', 'view'),
+    availability: 'ready',
+    capabilities: { contract: CONTRACT_CRUD, ui: UI_LIST },
+    order: 5,
+  },
 
   // ===== 分析与报表（信息架构先行：Catalog 见 docs/frontend/Report_Catalog.md；不实现指标）=====
   // operations-report：经营数据固定看板 MVP（feat(crm)）——GET /api/reports/operations 只读聚合（reports:view）
@@ -1022,16 +1014,6 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
     availability: 'ready',
     capabilities: { contract: CONTRACT_LIST_ONLY, ui: UI_LIST },
     order: 2,
-  },
-  {
-    id: 'reports',
-    domain: 'reports',
-    label: '报表中心',
-    route: '/reports',
-    permission: null,
-    availability: 'hold',
-    capabilities: { contract: CONTRACT_NONE, ui: UI_NONE },
-    order: 3,
   },
 ];
 
