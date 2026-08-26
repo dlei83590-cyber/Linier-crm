@@ -66,18 +66,31 @@ function failEnvelope(code: string, message: string) {
 describe('Sales Order Detail — Q 线投影（FRT-06：API 失败 ≠ 空态）', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
   let materialsFail: boolean;
+  let materialsPayload: unknown[];
 
   beforeEach(() => {
     materialsFail = true;
+    materialsPayload = [
+      {
+        itemId: 'rm-1',
+        itemCode: 'RM001',
+        itemName: '钢材',
+        uom: '千克',
+        requiredUom: 'KG',
+        requiredQty: 101,
+        tonnage: 0.101,
+        tonnageConvertible: true,
+        reason: null,
+        onHandQty: 500,
+      },
+    ];
     fetchMock = vi.fn((input: unknown) => {
       const url = String(input);
       if (url.includes('/material-requirements')) {
         if (materialsFail) {
           return Promise.resolve(mockResponse(500, failEnvelope('INTERNAL_ERROR', '数据库查询失败')));
         }
-        return Promise.resolve(
-          mockResponse(200, envelope([{ itemId: 'rm-1', itemCode: 'RM001', itemName: '钢材', uom: '千克', requiredQty: 101, onHandQty: 500 }])),
-        );
+        return Promise.resolve(mockResponse(200, envelope(materialsPayload)));
       }
       if (url.includes('/supplier-recommendations')) {
         // 供应商接口成功但无数据 → 合法空态（cc-06：rows 空数组 + basis 文案）
@@ -129,7 +142,7 @@ describe('Sales Order Detail — Q 线投影（FRT-06：API 失败 ≠ 空态）
     await waitFor(() => {
       expect(screen.queryByText(/系统故障/)).not.toBeInTheDocument();
     });
-    expect(screen.getByText('101.0000')).toBeInTheDocument();
+    expect(screen.getByText('101.0000 KG')).toBeInTheDocument();
     expect(screen.queryByText(/无配方原料需求/)).not.toBeInTheDocument();
   });
 
@@ -170,5 +183,85 @@ describe('Sales Order Detail — Q 线投影（FRT-06：API 失败 ≠ 空态）
     expect(screen.getByText('甲供应商')).toBeInTheDocument();
     expect(screen.getByText('乙供应商')).toBeInTheDocument();
     expect(screen.getByText('AA')).toBeInTheDocument();
+  });
+
+  it('KG→TON 换算：吨数列显示折算吨数；汇总只含可换算项', async () => {
+    materialsFail = false;
+    materialsPayload = [
+      {
+        itemId: 'rm-1',
+        itemCode: 'RM001',
+        itemName: '钢材',
+        uom: '千克',
+        requiredUom: 'KG',
+        requiredQty: 2000,
+        tonnage: 2,
+        tonnageConvertible: true,
+        reason: null,
+        onHandQty: 500,
+      },
+    ];
+    render(
+      <DensityProvider>
+        <Page />
+      </DensityProvider>,
+    );
+
+    await screen.findByText('钢材');
+    // 2000 KG → 2.000 TON（行内折算吨数 + 合计各一处）
+    expect(screen.getByText('2000.0000 KG')).toBeInTheDocument();
+    expect(screen.getAllByText('2.000 TON').length).toBe(2);
+    // 库存单位列
+    expect(screen.getByText('千克')).toBeInTheDocument();
+    // 合计 = 2.000 TON
+    expect(screen.getByText(/预计用料吨数合计（仅可换算项）：/)).toBeInTheDocument();
+    // 全部可换算 → 无未换算提示
+    expect(screen.queryByText(/种原料未配置/)).not.toBeInTheDocument();
+  });
+
+  it('无换算原料：显示"未换算"（不造 0），汇总只含可换算项并明确提示未换算物料数', async () => {
+    materialsFail = false;
+    materialsPayload = [
+      {
+        itemId: 'rm-1',
+        itemCode: 'RM001',
+        itemName: '钢材',
+        uom: '千克',
+        requiredUom: 'KG',
+        requiredQty: 2000,
+        tonnage: 2,
+        tonnageConvertible: true,
+        reason: null,
+        onHandQty: 500,
+      },
+      {
+        itemId: 'rm-2',
+        itemCode: 'RM002',
+        itemName: '油漆',
+        uom: '升',
+        requiredUom: 'L',
+        requiredQty: 10,
+        tonnage: null,
+        tonnageConvertible: false,
+        reason: '缺少 L → TON 换算',
+        onHandQty: 0,
+      },
+    ];
+    render(
+      <DensityProvider>
+        <Page />
+      </DensityProvider>,
+    );
+
+    await screen.findByText('钢材');
+    // 未换算项显示"未换算"，绝不显示 0.000 TON
+    expect(screen.getByText('未换算')).toBeInTheDocument();
+    expect(screen.queryByText('0.000 TON')).not.toBeInTheDocument();
+    // 汇总只含可换算项 = 2.000 TON（可换算行 + 合计各一处；未换算行不出现 0）
+    expect(screen.getAllByText('2.000 TON').length).toBe(2);
+    // 明确提示未换算物料数
+    expect(screen.getByText(/另有 1 种原料未配置 → TON 换算，未计入合计/)).toBeInTheDocument();
+    // 原单位需求列展示原单位
+    expect(screen.getByText('10.0000 L')).toBeInTheDocument();
   });
 });

@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission } from "@/lib/api-helpers";
 import { requestLog } from "@/lib/api/logger";
@@ -49,8 +50,133 @@ export const PERFORMANCE_DATA_SOURCES = {
   salesAmount: true, // SalesOrder.totalAmount（成交口径同 salesOrders）
 } as const;
 
+export type PerformanceView = "person" | "region";
+
+/** 区域未设置归组标签（BusinessPartner.region 为空 → 该组；SSOT：region 字段即事实，禁止用 Department 冒充） */
+export const UNASSIGNED_REGION = "未设置";
+
+export interface RegionPerformanceRow {
+  region: string;
+  newCustomerCount: number;
+  followUpCount: number;
+  visitCount: number;
+  opportunityCount: number;
+  quotationCount: number;
+  salesOrderCount: number;
+  salesAmount: string;
+}
+
 /**
- * GET /api/reports/performance?period=week|month —— 绩效数据固定页 MVP（只读聚合，客观事实）
+ * 区域绩效聚合（view=region）：所有维度经实体 → BusinessPartner.region 归属（真实客户区域，SSOT 红线）：
+ * - 新增客户：周期内新建 BP（createdById 非空，与个人视图同一事实集）按 BP 自身 region 分组
+ * - 跟进/拜访：CustomerActivity.FOLLOW_UP / CHECK_IN → businessPartnerId → BP.region（按客户归属，不依赖操作人）
+ * - 商机/报价/成交订单：ProjectOpportunity / Quotation / SalesOrder → customerId → BP.region
+ * - 成交金额：成交口径（status ∉ DRAFT/CANCELLED）totalAmount 按 region 求和（Decimal 计算，禁止 toNumber）
+ * BusinessPartner.region 为空 → "未设置" 分组；不引入主观评分/权重/奖金算法（HOLD）。
+ */
+async function buildRegionRows(from: Date, to: Date): Promise<RegionPerformanceRow[]> {
+  const range = { gte: from, lt: to };
+  const [newBps, followUps, visits, opps, quotes, sos] = await Promise.all([
+    prisma.businessPartner.findMany({
+      where: { deletedAt: null, createdById: { not: null }, createdAt: range },
+      select: { region: true },
+    }),
+    prisma.customerActivity.findMany({
+      where: { deletedAt: null, createdAt: range, activityType: "FOLLOW_UP" },
+      select: { businessPartnerId: true },
+    }),
+    prisma.customerActivity.findMany({
+      where: { deletedAt: null, createdAt: range, activityType: "CHECK_IN" },
+      select: { businessPartnerId: true },
+    }),
+    prisma.projectOpportunity.findMany({
+      where: { deletedAt: null, createdAt: range },
+      select: { customerId: true },
+    }),
+    prisma.quotation.findMany({
+      where: { deletedAt: null, quoteDate: range },
+      select: { customerId: true },
+    }),
+    prisma.salesOrder.findMany({
+      where: { deletedAt: null, orderDate: range, status: { notIn: ["DRAFT", "CANCELLED"] } },
+      select: { customerId: true, totalAmount: true },
+    }),
+  ]);
+
+  const bpIds = new Set<string>();
+  for (const a of followUps) bpIds.add(a.businessPartnerId);
+  for (const a of visits) bpIds.add(a.businessPartnerId);
+  for (const o of opps) bpIds.add(o.customerId);
+  for (const q of quotes) bpIds.add(q.customerId);
+  for (const s of sos) bpIds.add(s.customerId);
+  const bpRegions = bpIds.size
+    ? await prisma.businessPartner.findMany({
+        where: { id: { in: [...bpIds] } },
+        select: { id: true, region: true },
+      })
+    : [];
+  const regionByBp = new Map(bpRegions.map((b) => [b.id, b.region ?? null]));
+  const regionOf = (bpId: string | null): string => {
+    if (!bpId) return UNASSIGNED_REGION;
+    return regionByBp.get(bpId) ?? UNASSIGNED_REGION;
+  };
+
+  interface RegionAcc {
+    newCustomerCount: number;
+    followUpCount: number;
+    visitCount: number;
+    opportunityCount: number;
+    quotationCount: number;
+    salesOrderCount: number;
+    salesAmount: Prisma.Decimal;
+  }
+  const acc = new Map<string, RegionAcc>();
+  const bump = (region: string): RegionAcc => {
+    let cur = acc.get(region);
+    if (!cur) {
+      cur = {
+        newCustomerCount: 0,
+        followUpCount: 0,
+        visitCount: 0,
+        opportunityCount: 0,
+        quotationCount: 0,
+        salesOrderCount: 0,
+        salesAmount: new Prisma.Decimal(0),
+      };
+      acc.set(region, cur);
+    }
+    return cur;
+  };
+
+  for (const b of newBps) bump(b.region ?? UNASSIGNED_REGION).newCustomerCount += 1;
+  for (const a of followUps) bump(regionOf(a.businessPartnerId)).followUpCount += 1;
+  for (const a of visits) bump(regionOf(a.businessPartnerId)).visitCount += 1;
+  for (const o of opps) bump(regionOf(o.customerId)).opportunityCount += 1;
+  for (const q of quotes) bump(regionOf(q.customerId)).quotationCount += 1;
+  for (const s of sos) {
+    const cur = bump(regionOf(s.customerId));
+    cur.salesOrderCount += 1;
+    cur.salesAmount = cur.salesAmount.plus(s.totalAmount ?? 0);
+  }
+
+  return [...acc.entries()]
+    .map(([region, v]) => ({
+      region,
+      newCustomerCount: v.newCustomerCount,
+      followUpCount: v.followUpCount,
+      visitCount: v.visitCount,
+      opportunityCount: v.opportunityCount,
+      quotationCount: v.quotationCount,
+      salesOrderCount: v.salesOrderCount,
+      salesAmount: v.salesAmount.toString(),
+    }))
+    .sort((a, b) => b.salesOrderCount - a.salesOrderCount || a.region.localeCompare(b.region, "zh-Hans-CN"));
+}
+
+/**
+ * GET /api/reports/performance?period=week|month&view=person|region —— 绩效数据固定页（只读聚合，客观事实）
+ * view=person（默认）：按 User 分组统计客观事实；view=region：区域周报——按真实客户区域
+ * BusinessPartner.region 分组（实体 → customerId/businessPartnerId → BP.region；未设置 → "未设置"）。
  *
  * 按 User 分组统计周期内（本周/本月）客观业务事实，金额统一 Decimal 字符串返回（禁止 toNumber()）：
  * - 新增客户数：BusinessPartner.createdById（deletedAt = null）
@@ -76,8 +202,27 @@ export async function GET(request: NextRequest) {
   if (!period) {
     return failValidation({ period: "period 必须为 week 或 month" });
   }
+  const viewRaw = searchParams.get("view") ?? "person";
+  const view: PerformanceView | null =
+    viewRaw === "person" || viewRaw === "region" ? viewRaw : null;
+  if (!view) {
+    return failValidation({ view: "view 必须为 person 或 region" });
+  }
 
   const { from, to } = performancePeriodRange(period);
+
+  // 区域周报（view=region）：按真实客户区域 BusinessPartner.region 聚合（未设置 → "未设置"）
+  if (view === "region") {
+    const regions = await buildRegionRows(from, to);
+    return ok({
+      view,
+      period,
+      from: from.toISOString(),
+      to: to.toISOString(),
+      dataSources: PERFORMANCE_DATA_SOURCES,
+      regions,
+    });
+  }
 
   const [users, bpGroups, followUpGroups, visitGroups, oppGroups, quoteGroups, soGroups] = await Promise.all([
     prisma.user.findMany({
@@ -154,6 +299,7 @@ export async function GET(request: NextRequest) {
   }));
 
   return ok({
+    view,
     period,
     from: from.toISOString(),
     to: to.toISOString(),

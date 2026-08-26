@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission } from "@/lib/api-helpers";
 import { ok, failNotFound } from "@/lib/api/response";
@@ -13,6 +14,14 @@ export const dynamic = "force-dynamic";
  * 算法：订单行 quantity × ItemBomLine.qtyPerFinishedUnit × (1 + lossRate) → 按原料汇总；
  * 成品取 ACTIVE 默认配方（ItemBom status=ACTIVE 且 isDefault=true；无默认取任一 ACTIVE）。
  * 输出含当前库存（StockProjection SSOT，禁止前端自拼余额）。
+ *
+ * 吨数折算（本线：统一 TON 展示）：
+ * 只消费现有 UomConversion 事实（1 from = factor to，CTO #2075；不重写 BOM 算法、不前端换算）。
+ *  - 目标 TON 单位 = UnitOfMeasure(code=TON 或 name=吨)；
+ *  - requiredUom → TON 存在换算：正向（from=requiredUom, to=TON）tonnage = requiredQty × factor；
+ *    反向（from=TON, to=requiredUom）tonnage = requiredQty ÷ factor；
+ *  - 无 TON 单位或无换算 → 不猜：tonnage=null、tonnageConvertible=false、reason 说明缺失事实。
+ *
  * 红线：只读投影，不自动下采购单/不预留/不 MRP（HOLD）。
  */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -69,15 +78,33 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   const componentIds = [...need.keys()];
-  const [items, stockRows] = await Promise.all([
+
+  // TON 目标单位（code=TON 或 name=吨）；不存在 → 整条投影不可换算（不猜，reason 说明）
+  const tonUom = await prisma.unitOfMeasure.findFirst({
+    where: { OR: [{ code: "TON" }, { name: "吨" }], deletedAt: null },
+    select: { id: true, code: true },
+  });
+
+  const [items, stockRows, conversions] = await Promise.all([
     prisma.item.findMany({
       where: { id: { in: componentIds } },
-      select: { id: true, code: true, name: true, stockUom: { select: { code: true, name: true } } },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        stockUom: { select: { id: true, code: true, name: true } },
+      },
     }),
     prisma.stockProjection.findMany({
       where: { itemId: { in: componentIds } },
       select: { itemId: true, onHandQty: true },
     }),
+    tonUom
+      ? prisma.uomConversion.findMany({
+          where: { itemId: { in: componentIds }, deletedAt: null },
+          select: { itemId: true, fromUomId: true, toUomId: true, factor: true },
+        })
+      : Promise.resolve([]),
   ]);
   const itemMap = new Map(items.map((i) => [i.id, i]));
   const stockMap = new Map<string, number>();
@@ -87,12 +114,51 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   const rows = componentIds.map((cid) => {
     const it = itemMap.get(cid);
+    const requiredUomCode = it?.stockUom?.code ?? null;
+    const stockUomId = it?.stockUom?.id ?? null;
+    const reqQty = need.get(cid)!.qty;
+
+    let tonnage: number | null = null;
+    let tonnageConvertible = false;
+    let reason: string | null = null;
+    if (!tonUom) {
+      reason = "缺少 TON 计量单位（无法换算）";
+    } else if (!stockUomId) {
+      reason = "原料缺少库存计量单位，无法换算";
+    } else {
+      // 正向：requiredUom → TON（1 from = factor to → qty × factor）
+      const direct = conversions.find(
+        (c) => c.itemId === cid && c.fromUomId === stockUomId && c.toUomId === tonUom.id,
+      );
+      // 反向：TON → requiredUom（1 from = factor to → qty ÷ factor）
+      const reverse = conversions.find(
+        (c) => c.itemId === cid && c.fromUomId === tonUom.id && c.toUomId === stockUomId,
+      );
+      if (direct) {
+        tonnage = new Prisma.Decimal(reqQty)
+          .mul(new Prisma.Decimal(direct.factor.toString()))
+          .toNumber();
+        tonnageConvertible = true;
+      } else if (reverse) {
+        tonnage = new Prisma.Decimal(reqQty)
+          .div(new Prisma.Decimal(reverse.factor.toString()))
+          .toNumber();
+        tonnageConvertible = true;
+      } else {
+        reason = `缺少 ${requiredUomCode} → TON 换算`;
+      }
+    }
+
     return {
       itemId: cid,
       itemCode: it?.code ?? null,
       itemName: it?.name ?? null,
       uom: it?.stockUom?.name ?? it?.stockUom?.code ?? null,
-      requiredQty: need.get(cid)!.qty,
+      requiredUom: requiredUomCode,
+      requiredQty: reqQty,
+      tonnage,
+      tonnageConvertible,
+      reason,
       onHandQty: stockMap.get(cid) ?? 0,
     };
   });

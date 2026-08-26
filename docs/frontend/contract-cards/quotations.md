@@ -11,7 +11,8 @@
 | 能力    | 端点                                                     | 方法  | 说明                    |
 | ------- | -------------------------------------------------------- | ----- | ----------------------- |
 | List    | `/api/quotations`                                        | GET   | 分页/筛选               |
-| Detail  | `/api/quotations/{id}`                                   | GET   | —                       |
+| Detail  | `/api/quotations/{id}`                                   | GET   | —（CC-05 打印只读投影：客户联系/地址/销售负责人 + 行单位/规格） |
+| Print   | `/sales/quotations/[id]/print`（前端视图）                | GET   | 标准报价单 A4 打印视图（复用 Detail 数据，浏览器打印；CC-05） |
 | Create  | `/api/quotations`                                        | POST  | —                       |
 | Edit    | `/api/quotations/{id}`                                   | PATCH | CAS version（仅 DRAFT） |
 | Actions | `/api/quotations/{id}/submit`                            | POST  | 提交（workflow）        |
@@ -48,6 +49,7 @@
 | Edit              | ⏸️ edit 页面未入 main          |
 | Submit / Workflow | HOLD（Tier 2 HARD HOLD）       |
 | Fact Actions      | HOLD（Tier 3 HARD HOLD）       |
+| 打印视图（CC-05） | ✅ 已交付：/sales/quotations/[id]/print（标准报价单 A4，浏览器打印） |
 
 ## Current UI
 

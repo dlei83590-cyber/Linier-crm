@@ -17689,6 +17689,8 @@ components:
         updatedById: { type: [string, "null"] }
         deletedAt: { type: [string, "null"], format: date-time }
         isActive: { type: boolean }
+        item: { type: object, nullable: true, description: "GET 详情含 {id,code,name,model,spec}（打印视图产品编码/名称/规格）" }
+        uom: { type: object, nullable: true, description: "GET 详情含 {id,code,name,symbol}（打印视图单位列，CC-05）" }
 
     QuotationLineCreate:
       type: object
@@ -17764,7 +17766,7 @@ components:
             id: { type: string }
             code: { type: string }
             customerId: { type: string }
-            customer: { type: object, nullable: true, description: "GET 详情含 {id,code,name}" }
+            customer: { type: object, nullable: true, description: "GET 详情含 {id,code,name,fullName,contactPerson,phone,email,address,customerOwnerships(active owner → 打印视图销售负责人)}" }
             opportunityId: { type: [string, "null"] }
             projectId: { type: [string, "null"] }
             status: { $ref: "#/components/schemas/QuotationStatus" }
