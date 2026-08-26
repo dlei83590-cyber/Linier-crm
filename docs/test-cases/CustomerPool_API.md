@@ -18,8 +18,10 @@
 - POST /api/customer-pools/:poolId/entries/:entryId/claim（挑入；ownerId 可选需 assign 权限；事务行锁 + Outbox CustomerPoolEntryClaimed）
 - POST .../release（回池 / 移出池；单事务；Outbox CustomerOwnershipReleased）
 - POST /api/customer-pools/sweep（customer-pool:consume；batch/idempotent/sorted/FOR UPDATE SKIP LOCKED；返回 scanned/entered/unchanged/ambiguous/blocked/failed）——**HOLD（本 MVP 不实现）**
-- BP create/update 后同步 matchCustomerPools（自动匹配 MVP：REGION scopeValue === BP.region 触碰 → FIELD_RULE 自动入池；
-  DEPARTMENT 自动路径跳过（BP 无部门字段）；GLOBAL 不自动入池；失败不回滚 BP 主档事务，best-effort）
+- BP create/update 后同步 matchCustomerPools（自动匹配：REGION scopeValue === BP.region 触碰 → FIELD_RULE 自动入池；
+  DEPARTMENT scopeValue === CustomerOwnership.ownerId → User.departmentId 触碰 → FIELD_RULE 自动入池（客户负责人部门，BP 无部门字段，
+  归属 SSOT = CustomerOwnership）；GLOBAL 不自动入池；失败不回滚 BP 主档事务，best-effort）
+- claim 后同步 matchCustomerPools（客户负责人变更触发 DEPARTMENT 自动匹配；best-effort 不回滚 claim）
 
 ## 不变量（DB partial unique，Migration 0049）
 
@@ -59,7 +61,12 @@
 | CP-24 | 并发双自动入池撞 partial unique | P2002 → RACE_LOST no-op（不抛错、不回滚 BP 主档） |
 | CP-25 | BP update（PATCH）后自动匹配 | 更新成功 → matchCustomerPools best-effort；失败仅日志，不回滚主档 |
 | CP-26 | matchCustomerPools 意外错误 | BP create/update 仍成功（best-effort）；手工入池 POST entries 可兜底 |
+| CP-27 | BP create/update（CUSTOMER，owner 部门=销售一部；存在 DEPARTMENT 池 scopeValue=销售一部） | 自动创建 FIELD_RULE entry + Outbox CustomerPoolEntryEntered（DEPARTMENT 触碰：owner → User.departmentId） |
+| CP-28 | owner 无部门 / owner 部门无对应 DEPARTMENT 池 / BP 无 region 且无归属 | 不自动入池（NO_MATCHING_POOL no-op，不抛错） |
+| CP-29 | DEPARTMENT + REGION 同时命中 | DEPARTMENT 优先入池（客户负责人部门 = 触发源）；同 scope 内 createdAt asc / id asc |
+| CP-30 | claim 后触发 matchCustomerPools | 已领客户存在 active entry（CLAIMED）→ HAS_ACTIVE_ENTRY no-op（I2 不重复入池） |
 
-> 单测证据：apps/web/src/lib/customer-pool/validators.test.ts；apps/web/src/lib/customer-pool/match.test.ts（自动匹配 8 用例）；
+> 单测证据：apps/web/src/lib/customer-pool/validators.test.ts；apps/web/src/lib/customer-pool/match.test.ts（自动匹配 13 用例：REGION + DEPARTMENT + I1/I2 + RACE_LOST）；
 > apps/web/src/app/api/customer-pools/**/route.test.ts（2C-1 全套 + entries 全校验 + Outbox 同事务）；
-> apps/web/src/app/api/business-partners/route.test.ts（create 后 matchCustomerPools 钩子）。
+> apps/web/src/app/api/business-partners/route.test.ts（create 后 matchCustomerPools 钩子）；
+> apps/web/src/app/api/customer-pools/**/claim/route.test.ts（claim 后 matchCustomerPools 触发钩子）。
