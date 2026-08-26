@@ -156,6 +156,20 @@ describe('PATCH /api/business-partners/:id — 信用等级（creditRating）写
     expect(casMock).not.toHaveBeenCalled();
   });
 
+  it('channel 合法枚举（经销）→ 200 且 casUpdate 携带 channel 持久化', async () => {
+    const res = await PATCH(makeRequest({ version: 1, channel: '经销' }), { params: Promise.resolve({ id: 'bp-sup-1' }) });
+    expect(res.status).toBe(200);
+    expect(casMock).toHaveBeenCalledWith(expect.anything(), 'businessPartner', 'bp-sup-1', 1, expect.objectContaining({ channel: '经销' }));
+  });
+
+  it('channel 非法值 → 400 VALIDATION（固定枚举 fail closed）', async () => {
+    const res = await PATCH(makeRequest({ version: 1, channel: '代理' }), { params: Promise.resolve({ id: 'bp-sup-1' }) });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(casMock).not.toHaveBeenCalled();
+  });
+
   it('版本冲突 → 409 VERSION_CONFLICT', async () => {
     casMock.mockResolvedValue({ outcome: 'CONFLICT' });
     const res = await PATCH(makeRequest({ version: 1, creditRating: 'AA' }), { params: Promise.resolve({ id: 'bp-sup-1' }) });

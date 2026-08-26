@@ -13,6 +13,7 @@ import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 import { validateUscc } from "@/lib/tax-invoice";
+import { BUSINESS_PARTNER_CHANNELS } from "@/lib/business-partner/channel";
 import { useToast } from "@/components/ui/toast";
 import { PageLoading } from "@/components/ui/skeleton";
 
@@ -27,6 +28,7 @@ interface BusinessPartnerDetail {
   legalRepresentative: string | null;
   region: string | null;
   industry: string | null;
+  channel: string | null;
   companySize: string | null;
   contactPerson: string | null;
   phone: string | null;
@@ -35,10 +37,12 @@ interface BusinessPartnerDetail {
   latitude: string | null;
   longitude: string | null;
   allowedRadiusMeters: number | null;
+  collaborationChannelKey: string | null;
   bankName: string | null;
   bankAccount: string | null;
   settlementTerms: string | null;
   creditRating: string | null;
+  customerLevel: string | null; // cc-06：客户等级（VIP/KEY/REGULAR/PROSPECT）
   registeredCapital: string | null;
   employeeCount: number | null;
   website: string | null;
@@ -97,6 +101,7 @@ function BusinessPartnerEditForm() {
   const [legalRepresentative, setLegalRepresentative] = useState("");
   const [region, setRegion] = useState("");
   const [industry, setIndustry] = useState("");
+  const [channel, setChannel] = useState("");
   const [companySize, setCompanySize] = useState("");
   const [contactPerson, setContactPerson] = useState("");
   const [phone, setPhone] = useState("");
@@ -106,10 +111,15 @@ function BusinessPartnerEditForm() {
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
   const [allowedRadiusMeters, setAllowedRadiusMeters] = useState("");
+  // 协同群（Migration 0055）：channel key（DB 只存 key，不显示 secret）；选项来自 /api/dingtalk/channels
+  const [collaborationChannelKey, setCollaborationChannelKey] = useState("");
+  const [channelOptions, setChannelOptions] = useState<Array<{ key: string; name: string | null }>>([]);
   const [bankName, setBankName] = useState("");
   const [bankAccount, setBankAccount] = useState("");
   const [settlementTerms, setSettlementTerms] = useState("");
   const [creditRating, setCreditRating] = useState("");
+  // cc-06 客户等级→供应商评级匹配：客户等级（VIP/KEY/REGULAR/PROSPECT；仅 CUSTOMER/BOTH 可设）
+  const [customerLevel, setCustomerLevel] = useState("");
   const [registeredCapital, setRegisteredCapital] = useState("");
   const [employeeCount, setEmployeeCount] = useState("");
   const [website, setWebsite] = useState("");
@@ -137,6 +147,7 @@ function BusinessPartnerEditForm() {
         setLegalRepresentative(d.legalRepresentative ?? "");
         setRegion(d.region ?? "");
         setIndustry(d.industry ?? "");
+        setChannel(d.channel ?? "");
         setCompanySize(d.companySize ?? "");
         setContactPerson(d.contactPerson ?? "");
         setPhone(d.phone ?? "");
@@ -145,10 +156,12 @@ function BusinessPartnerEditForm() {
         setLatitude(d.latitude ? String(d.latitude) : "");
         setLongitude(d.longitude ? String(d.longitude) : "");
         setAllowedRadiusMeters(d.allowedRadiusMeters ? String(d.allowedRadiusMeters) : "");
+        setCollaborationChannelKey(d.collaborationChannelKey ?? "");
         setBankName(d.bankName ?? "");
         setBankAccount(d.bankAccount ?? "");
         setSettlementTerms(d.settlementTerms ?? "");
         setCreditRating(d.creditRating ?? "");
+        setCustomerLevel(d.customerLevel ?? "");
         setRegisteredCapital(d.registeredCapital ? String(d.registeredCapital) : "");
         setEmployeeCount(d.employeeCount ? String(d.employeeCount) : "");
         setWebsite(d.website ?? "");
@@ -169,6 +182,10 @@ function BusinessPartnerEditForm() {
         setLoadError(err instanceof ApiClientError ? err : new ApiClientError(0, "网络错误", "NETWORK_ERROR"));
         setLoading(false);
       });
+    // 协同群选项（只读；接口仅返回 key+name，不暴露 webhook/secret）
+    apiFetch<{ channels: Array<{ key: string; name: string | null }> }>("/api/dingtalk/channels")
+      .then((body) => setChannelOptions(body.data.channels ?? []))
+      .catch(() => setChannelOptions([]));
   };
 
   useEffect(() => {
@@ -212,6 +229,7 @@ function BusinessPartnerEditForm() {
       legalRepresentative: legalRepresentative.trim() || null,
       region: region.trim() || null,
       industry: industry.trim() || null,
+      channel: channel.trim() || null,
       companySize: companySize.trim() || null,
       contactPerson: contactPerson.trim() || null,
       phone: phone.trim() || null,
@@ -220,10 +238,12 @@ function BusinessPartnerEditForm() {
       latitude: latitude.trim() === "" ? null : Number(latitude),
       longitude: longitude.trim() === "" ? null : Number(longitude),
       allowedRadiusMeters: allowedRadiusMeters.trim() === "" ? null : Number(allowedRadiusMeters),
+      collaborationChannelKey: collaborationChannelKey.trim() === "" ? null : collaborationChannelKey.trim(),
       bankName: bankName.trim() || null,
       bankAccount: bankAccount.trim() || null,
       settlementTerms: settlementTerms.trim() || null,
       creditRating: creditRating.trim() || null,
+      customerLevel: type === "CUSTOMER" || type === "BOTH" ? customerLevel || null : null,
       registeredCapital: registeredCapital.trim() || null,
       employeeCount: employeeCount ? Number(employeeCount) : null,
       website: website.trim() || null,
@@ -310,6 +330,18 @@ function BusinessPartnerEditForm() {
             ))}
           </select>
         </FormField>
+        {(type === "CUSTOMER" || type === "BOTH") && (
+          <FormField label="客户等级">
+            <select value={customerLevel} onChange={(e) => setCustomerLevel(e.target.value)} className={inputClass}>
+              <option value="">未设置</option>
+              <option value="VIP">VIP</option>
+              <option value="KEY">重点（KEY）</option>
+              <option value="REGULAR">普通（REGULAR）</option>
+              <option value="PROSPECT">潜在（PROSPECT）</option>
+            </select>
+            <p className="text-xs text-ink-muted">客户等级用于销售订单的推荐供应商评级门槛匹配（系统设置-客户等级→最低供应商评级）。</p>
+          </FormField>
+        )}
         <FormField label="统一社会信用代码">
           <input value={uscc} onChange={(e) => setUscc(e.target.value)} className={inputClass} placeholder="18 位统一社会信用代码（GB 32100-2015）" />
         </FormField>
@@ -332,6 +364,16 @@ function BusinessPartnerEditForm() {
         </FormField>
         <FormField label="行业">
           <input value={industry} onChange={(e) => setIndustry(e.target.value)} className={inputClass} />
+        </FormField>
+        <FormField label="销售渠道">
+          <select value={channel} onChange={(e) => setChannel(e.target.value)} className={inputClass}>
+            <option value="">未设置</option>
+            {BUSINESS_PARTNER_CHANNELS.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
         </FormField>
         <FormField label="企业规模">
           <input value={companySize} onChange={(e) => setCompanySize(e.target.value)} className={inputClass} />
@@ -361,6 +403,16 @@ function BusinessPartnerEditForm() {
         </FormField>
         <FormField label="签到范围说明">
           <p className="text-sm text-ink-muted">纬度、经度、允许半径三者齐备后，拜访签到将在服务端校验距离，超出范围将明确提示。</p>
+        </FormField>
+        <FormField label="协同群（签到/订单阶段推送）" hint="配置后，客户签到与订单阶段变更将向该协同群推送卡片（仅显示渠道标识，不暴露 webhook 密钥）。">
+          <select value={collaborationChannelKey} onChange={(e) => setCollaborationChannelKey(e.target.value)} className={inputClass}>
+            <option value="">未配置</option>
+            {channelOptions.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.name ? c.name + "（" + c.key + "）" : c.key}
+              </option>
+            ))}
+          </select>
         </FormField>
       </Section>
       <Section title="财务与开票">

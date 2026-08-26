@@ -45,6 +45,28 @@ export function activityTypeMeta(type: string | null | undefined): ActivityTypeM
   );
 }
 
+export interface FollowUpLevelMeta {
+  label: string;
+  tone: StatusTone;
+}
+
+const FOLLOW_UP_LEVEL_META: Record<string, FollowUpLevelMeta> = {
+  BASIC: { label: "普通跟进", tone: "neutral" },
+  IMPORTANT: { label: "重点跟进", tone: "warning" },
+  DECISION: { label: "决策推进", tone: "danger" },
+};
+
+/**
+ * 跟进程度展示元数据（followup-level，Migration 0055）；null（未分级：历史记录/系统生成草稿/VISIT_PLAN/CHECK_IN）
+ * → null（不渲染徽标）。未知值回退原值 + neutral（禁止静默吞掉未知 enum，与 activityTypeMeta 同约定）。
+ */
+export function activityFollowUpLevelMeta(
+  level: string | null | undefined,
+): FollowUpLevelMeta | null {
+  if (!level) return null;
+  return FOLLOW_UP_LEVEL_META[level] ?? { label: level, tone: "neutral" };
+}
+
 export interface ActivityStatusMeta {
   label: string;
   tone: StatusTone;

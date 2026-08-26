@@ -6,6 +6,7 @@ import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { handleServerError } from "@/lib/api/server-error";
 import { haversineMeters } from "@/lib/visit/geo";
+import { writeCheckInChannelEvent } from "@/lib/dingtalk/events";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +27,9 @@ export const dynamic = "force-dynamic";
  *      无独立草稿状态——FOLLOW_UP 即草稿载体）；
  *   ③ 签退 = POST /api/business-partners/:id/activities/:activityId/checkout（checkoutAt 服务端 now）。
  * 权限：复用 project-visit（view/create）——尽量复用既有 RBAC 模块，不新增权限模块（ADR-0028）。
- * HOLD：审批流/评论/群消息/酷卡片/GIS 平台/地图服务/GeoFence Engine/推送平台/通用 Activity Engine。
+ * ④（Migration 0055，合同收口）：签到成功且客户配置 collaborationChannelKey → 同事务写 CRM_CHECK_IN Outbox
+ *   （DingTalk 酷卡片异步投递群；外部失败不影响签到事务，见 lib/dingtalk/sender）。
+ * HOLD：审批流/评论/GIS 平台/地图服务/GeoFence Engine/推送平台/通用 Activity Engine。
  */
 
 const createSchema = z
@@ -42,10 +45,31 @@ const createSchema = z
     locationNote: z.string().max(500).nullable().optional(),
     // 拜访计划反馈（Migration 0051）：CHECK_IN 可选关联 VISIT_PLAN id
     visitPlanId: z.string().min(1).max(50).nullable().optional(),
+    // 跟进分级（followup-level，Migration 0055）：仅 FOLLOW_UP 适用；DECISION 负责人缺失时由服务端投影兜底
+    followUpLevel: z.enum(["BASIC", "IMPORTANT", "DECISION"]).nullable().optional(),
+    responsibleUserId: z.string().min(1).max(50).nullable().optional(),
   })
   .superRefine((v, ctx) => {
-    if (v.activityType === "FOLLOW_UP" && (!v.summary || !v.summary.trim())) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["summary"], message: "跟进内容必填" });
+    if (v.activityType === "FOLLOW_UP") {
+      if (!v.summary || !v.summary.trim()) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["summary"], message: "跟进内容必填" });
+      }
+      const level = v.followUpLevel ?? "BASIC";
+      if (level !== "BASIC") {
+        if (!v.nextAction || !v.nextAction.trim()) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["nextAction"], message: "重点跟进/决策推进必须提供下一步行动" });
+        }
+        if (!v.reminderAt) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["reminderAt"], message: "重点跟进/决策推进必须提供下次跟进时间" });
+        }
+      }
+      if (level === "DECISION" && !v.responsibleUserId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["responsibleUserId"],
+          message: "决策推进必须指定负责人（未指定时服务端按客户负责人/商机负责人投影，若仍缺失请手动选择）",
+        });
+      }
     }
     if (v.activityType === "VISIT_PLAN" && !v.planDate) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["planDate"], message: "拜访计划必须提供计划日期" });
@@ -71,6 +95,28 @@ function occurredAt(a: {
 function autoFollowUpSummary(now: Date, lat: number, lng: number, locationNote: string | null | undefined): string {
   const loc = locationNote?.trim() || `${lat}, ${lng}`;
   return `签到：${now.toISOString()}（${loc}）`;
+}
+
+/**
+ * 默认负责人投影（followup-level，Migration 0055）：DECISION 未指定负责人时，服务端按既有事实投影——
+ * ① 客户负责人（CustomerOwnership SSOT active owner：releasedAt=null + deletedAt=null）；
+ * ② 否则最近更新的商机负责人（ProjectOpportunity.ownerId）。
+ * 仅投影既有 durable 事实；禁止客户端传 userId 伪造归属（responsibleUserId 提交后仍须为有效启用用户）。
+ */
+async function projectDefaultResponsibleUser(businessPartnerId: string): Promise<string | null> {
+  const ownership = await prisma.customerOwnership.findFirst({
+    where: { businessPartnerId, releasedAt: null, deletedAt: null },
+    select: { ownerId: true },
+    orderBy: { claimedAt: "desc" },
+  });
+  if (ownership?.ownerId) return ownership.ownerId;
+
+  const opportunity = await prisma.projectOpportunity.findFirst({
+    where: { customerId: businessPartnerId, ownerId: { not: null }, deletedAt: null },
+    select: { ownerId: true },
+    orderBy: { updatedAt: "desc" },
+  });
+  return opportunity?.ownerId ?? null;
 }
 
 /** 签到超范围（服务端 Haversine 距离 > 客户允许半径）：携带距离/半径事实供明确提示 */
@@ -112,7 +158,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       orderBy: { createdAt: "desc" }, // 分页边界确定性；页内按 occurredAt 稳定排序（时间线语义）
       skip,
       take,
-      include: { contact: { select: { id: true, name: true, title: true } }, _count: { select: { comments: true } } },
+      include: {
+        contact: { select: { id: true, name: true, title: true } },
+        // followup-level（Migration 0055）：责任人只读投影（禁止 raw database ID 上屏）
+        responsibleUser: { select: { id: true, name: true, email: true } },
+        _count: { select: { comments: true } },
+      },
     }),
   ]);
 
@@ -151,6 +202,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       summary: a.summary,
       nextAction: a.nextAction,
       reminderAt: a.reminderAt,
+      // followup-level（Migration 0055）：跟进程度 + 责任人（展示层消费）
+      followUpLevel: a.followUpLevel,
+      responsibleUserId: a.responsibleUserId,
+      responsibleUser: a.responsibleUser,
       planDate: a.planDate,
       checkinAt: a.checkinAt,
       checkoutAt: a.checkoutAt,
@@ -190,14 +245,32 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const { id } = await params;
   const meta = requestMeta(request);
-  const parsed = createSchema.safeParse(await request.json().catch(() => null));
+
+  // 跟进分级（followup-level，Migration 0055）：DECISION 未指定负责人 → 服务端投影默认负责人
+  // （客户负责人 CustomerOwnership → 商机负责人 ProjectOpportunity.ownerId；仅投影既有事实）
+  const rawBody: unknown = await request.json().catch(() => null);
+  let body = rawBody;
+  if (
+    rawBody !== null &&
+    typeof rawBody === "object" &&
+    (rawBody as { activityType?: unknown }).activityType === "FOLLOW_UP" &&
+    (rawBody as { followUpLevel?: unknown }).followUpLevel === "DECISION" &&
+    !(rawBody as { responsibleUserId?: unknown }).responsibleUserId
+  ) {
+    const projectedOwnerId = await projectDefaultResponsibleUser(id);
+    if (projectedOwnerId) {
+      body = { ...(rawBody as Record<string, unknown>), responsibleUserId: projectedOwnerId };
+    }
+  }
+
+  const parsed = createSchema.safeParse(body);
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
   try {
     const created = await prisma.$transaction(async (tx) => {
       const bp = await tx.businessPartner.findFirst({
         where: { id, deletedAt: null },
-        select: { id: true, latitude: true, longitude: true, allowedRadiusMeters: true },
+        select: { id: true, name: true, latitude: true, longitude: true, allowedRadiusMeters: true, collaborationChannelKey: true },
       });
       if (!bp) throw new Error("PARTNER_INVALID");
 
@@ -208,6 +281,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           select: { id: true },
         });
         if (!contact) throw new Error("CONTACT_MISMATCH");
+      }
+
+      // 责任人必须为有效启用用户（followup-level；fail-closed，create 不被调用）
+      if (parsed.data.responsibleUserId) {
+        const responsible = await tx.user.findFirst({
+          where: { id: parsed.data.responsibleUserId, isActive: true },
+          select: { id: true },
+        });
+        if (!responsible) throw new Error("RESPONSIBLE_USER_INVALID");
       }
 
       const d = parsed.data;
@@ -252,6 +334,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           locationNote: d.locationNote?.trim() || null,
           // 跟进审批（#238）：仅 FOLLOW_UP 进入审批流，初始 DRAFT；VISIT_PLAN/CHECK_IN 不参与 → NULL
           status: d.activityType === "FOLLOW_UP" ? "DRAFT" : null,
+          // 跟进分级（followup-level，Migration 0055）：仅 FOLLOW_UP 适用（缺省 BASIC）；VISIT_PLAN/CHECK_IN → NULL
+          followUpLevel: d.activityType === "FOLLOW_UP" ? (d.followUpLevel ?? "BASIC") : null,
+          responsibleUserId: d.activityType === "FOLLOW_UP" ? d.responsibleUserId ?? null : null,
           createdById: user!.id,
           updatedById: user!.id,
         },
@@ -269,6 +354,29 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             createdById: user!.id,
             updatedById: user!.id,
           },
+        });
+      }
+
+      // ④（Migration 0055）签到成功 + 客户已配置协同群 → 同事务写 CRM_CHECK_IN Outbox
+      //   （DingTalk 酷卡片异步投递；外部失败不影响签到事务——业务事实已提交，投递失败 FAILED 可重试）
+      if (d.activityType === "CHECK_IN" && bp.collaborationChannelKey) {
+        const actor = await tx.user.findUnique({
+          where: { id: user!.id },
+          select: { name: true },
+        });
+        await writeCheckInChannelEvent(tx, {
+          activityId: checkin.id,
+          businessPartnerId: id,
+          customerName: bp.name,
+          actorId: user!.id,
+          actorName: actor?.name ?? user!.email ?? "—",
+          checkinAt: now.toISOString(),
+          latitude: d.latitude ?? null,
+          longitude: d.longitude ?? null,
+          locationNote: d.locationNote?.trim() ?? null,
+          distanceMeters,
+          followUpSummary: followUp?.summary ?? null,
+          channelKey: bp.collaborationChannelKey,
         });
       }
 
@@ -299,6 +407,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     if (err instanceof Error && err.message === "CONTACT_MISMATCH") {
       return failValidation({ contactId: ["联系人不存在或不属于该客户"] });
+    }
+    if (err instanceof Error && err.message === "RESPONSIBLE_USER_INVALID") {
+      return failValidation({ responsibleUserId: ["负责人不存在或已停用"] });
     }
     if (err instanceof Error && err.message === "VISIT_PLAN_MISMATCH") {
       return failValidation({ visitPlanId: ["拜访计划不存在或不属于该客户"] });

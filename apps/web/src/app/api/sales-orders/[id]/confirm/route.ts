@@ -5,6 +5,7 @@ import { ok, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { publishSalesOrderEvent } from "@/lib/sales-order/events";
+import { writeOrderStageChangedEvent } from "@/lib/dingtalk/events";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,8 @@ export const dynamic = "force-dynamic";
  *   - 已触发审批（workflowInstanceId != null）→ 必须 approvalStatus == APPROVED 才允许；
  *     PENDING（审批中）/ REJECTED（被驳回）/ RUNNING（未完成）→ 409，禁止绕过审批。
  * 成功：status=CONFIRMED + SalesOrderSnapshot(CONFIRMED) + 发布 SalesOrderConfirmed。
+ * Migration 0055（合同收口）：confirm 事务内，若客户配置 collaborationChannelKey →
+ *   同事务写 ORDER_STAGE_CHANGED（stage=CONFIRMED）Outbox → DingTalk 酷卡片异步推送责任人/协同群。
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await authenticate(request);
@@ -47,6 +50,32 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       where: { id },
       data: { status: "CONFIRMED", updatedById: actorId },
     });
+    // Migration 0055：客户配置协同群 → 同事务写 ORDER_STAGE_CHANGED（CONFIRMED）Outbox（外部失败不影响订单事务）
+    if (saved.customerId) {
+      const customer = await tx.businessPartner.findFirst({
+        where: { id: saved.customerId, deletedAt: null },
+        select: { name: true, collaborationChannelKey: true },
+      });
+      if (customer?.collaborationChannelKey) {
+        const owner = saved.createdById
+          ? await tx.user.findUnique({ where: { id: saved.createdById }, select: { name: true } })
+          : null;
+        await writeOrderStageChangedEvent(tx, {
+          salesOrderId: id,
+          salesOrderCode: saved.code,
+          customerId: saved.customerId,
+          customerName: customer.name,
+          stage: "CONFIRMED",
+          stageLabel: "已确认",
+          totalAmount: saved.totalAmount.toString(),
+          currency: saved.currency,
+          updatedAt: new Date().toISOString(),
+          ownerId: saved.createdById ?? null,
+          ownerName: owner?.name ?? null,
+          channelKey: customer.collaborationChannelKey,
+        });
+      }
+    }
     const latestRevision = await tx.salesOrderRevision.findFirst({
       where: { salesOrderId: id, deletedAt: null },
       orderBy: { revisionNo: "desc" },

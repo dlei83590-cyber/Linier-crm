@@ -329,6 +329,9 @@ export const PERMISSION_MODULES = [
   // 经营数据固定看板（feat(crm) operations-report）：GET /api/reports/operations 只读聚合用 reports:view；
   // 与 prisma/seed.ts SEED_ACTION_MODULES 保持一致（ADR-0028：static RBAC 与 DB permission catalog 不漂移）
   "reports",
+  // cc-06 客户等级→供应商评级匹配（Contract Close）：CustomerSupplierRatingRule 专用配置模块（view/create/edit/delete；
+  // 与 prisma/seed.ts SEED_ACTION_MODULES 保持一致；系统设置简单表格维护，仅 SUPER_ADMIN/ADMIN 静态授权——MANAGER 不放开）
+  "customer-supplier-rating-rule",
 ] as const;
 
 /** 生成模块×动作权限码（如 "item:view"） */

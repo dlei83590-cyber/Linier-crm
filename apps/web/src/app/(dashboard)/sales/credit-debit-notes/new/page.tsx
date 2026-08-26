@@ -17,6 +17,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, CARD_CLASS, INPUT_CLASS } from "@/lib/ui-classes";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { formatMoney } from "@/lib/format";
 
 interface InvoiceOption {
@@ -59,6 +60,7 @@ function CnDnCreateForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiClientError | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [pendingLeave, setPendingLeave] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -157,13 +159,17 @@ function CnDnCreateForm() {
   };
 
   return (
+    <>
     <div className={CARD_CLASS}>
       <div className="flex items-center justify-between border-b border-border p-4">
         <h1 className="text-lg font-semibold text-ink-primary">新建贷项/借项通知单</h1>
         <Link
           href="/sales/credit-debit-notes"
           onClick={(e) => {
-            if (dirty && !window.confirm("有未保存的更改，确定离开？")) e.preventDefault();
+            if (dirty) {
+              e.preventDefault();
+              setPendingLeave(true);
+            }
           }}
           className={BUTTON_SECONDARY_CLASS}
         >
@@ -300,6 +306,20 @@ function CnDnCreateForm() {
         </div>
       </div>
     </div>
+
+      <ConfirmDialog
+        open={pendingLeave}
+        title="有未保存的更改"
+        description="有未保存的更改，确定离开？"
+        confirmLabel="离开"
+        onConfirm={() => {
+          setPendingLeave(false);
+          setDirty(false);
+          router.push("/sales/credit-debit-notes");
+        }}
+        onCancel={() => setPendingLeave(false)}
+      />
+    </>
   );
 }
 

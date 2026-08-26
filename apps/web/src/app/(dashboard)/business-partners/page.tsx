@@ -13,6 +13,7 @@ import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
+import { BUSINESS_PARTNER_CHANNELS, CHANNEL_UNSET_LABEL } from "@/lib/business-partner/channel";
 import { useListQuery } from "@/lib/use-list-query";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
@@ -26,6 +27,7 @@ interface BusinessPartnerRow {
   type: string;
   region: string | null;
   industry: string | null;
+  channel: string | null;
   uscc: string | null;
   isActive: boolean;
   approvalStatus: string;
@@ -67,17 +69,19 @@ function BusinessPartnerList() {
   const [nameInput, setNameInput] = useState("");
   const [typeInput, setTypeInput] = useState("");
   const [regionInput, setRegionInput] = useState("");
-  const [filters, setFilters] = useState<{ code?: string; name?: string; type?: string; region?: string }>({});
+  const [channelInput, setChannelInput] = useState("");
+  const [filters, setFilters] = useState<{ code?: string; name?: string; type?: string; region?: string; channel?: string }>({});
 
   const { items, total, page, pageSize, loading, error, setPage, refresh } =
     useListQuery<BusinessPartnerRow>("/api/business-partners", filters);
 
   const applyFilter = () => {
-    const next: { code?: string; name?: string; type?: string; region?: string } = {};
+    const next: { code?: string; name?: string; type?: string; region?: string; channel?: string } = {};
     if (codeInput.trim()) next.code = codeInput.trim();
     if (nameInput.trim()) next.name = nameInput.trim();
     if (typeInput) next.type = typeInput;
     if (regionInput.trim()) next.region = regionInput.trim();
+    if (channelInput) next.channel = channelInput;
     setFilters(next);
     setPage(1);
   };
@@ -87,6 +91,7 @@ function BusinessPartnerList() {
     setNameInput("");
     setTypeInput("");
     setRegionInput("");
+    setChannelInput("");
     setFilters({});
     setPage(1);
   };
@@ -164,6 +169,15 @@ function BusinessPartnerList() {
               placeholder="按区域搜索"
               className={"w-32 " + SELECT_CLASS}
             />
+            <select value={channelInput} onChange={(e) => setChannelInput(e.target.value)} className={SELECT_CLASS}>
+              <option value="">全部渠道</option>
+              {BUSINESS_PARTNER_CHANNELS.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+              <option value={CHANNEL_UNSET_LABEL}>{CHANNEL_UNSET_LABEL}</option>
+            </select>
           </>
         }
         toolbarActions={
@@ -207,6 +221,7 @@ function BusinessPartnerList() {
           },
           { key: "region", header: "区域", render: (row) => row.region ?? "—" },
           { key: "industry", header: "行业", render: (row) => row.industry ?? "—" },
+          { key: "channel", header: "渠道", render: (row) => row.channel ?? CHANNEL_UNSET_LABEL },
           {
             key: "approvalStatus",
             header: "审批状态",
