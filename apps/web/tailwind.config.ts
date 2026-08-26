@@ -5,46 +5,48 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Phase 1 深色模式：语义色全部改为 CSS 变量引用（类名不变 → 页面/测试零改动）；
+        // 实际色值 SSOT = globals.css :root（亮）/ [data-theme="dark"]（暖暗）
         brand: {
-          50: '#eff6ff',
-          100: '#dbeafe',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-          900: '#1e3a8a',
+          50: 'var(--color-brand-50)',
+          100: 'var(--color-brand-100)',
+          500: 'var(--color-brand-500)',
+          600: 'var(--color-brand-600)',
+          700: 'var(--color-brand-700)',
+          900: 'var(--color-brand-900)',
         },
-        // FE 2.0 Design System — 语义色（单一事实来源：components/design-system/tokens.ts；Canvas #F6F7F9）
-        canvas: '#f7f6f3', // 暖灰白（P2 微暖化；与 design-system/tokens.ts 同步）
-        surface: '#ffffff',
+        // FE 2.0 Design System — 语义色（单一事实来源：design-system/tokens.ts；Canvas 暖灰白 #F7F6F3）
+        canvas: 'var(--color-canvas)',
+        surface: 'var(--color-surface)',
         border: {
-          DEFAULT: '#e2e8f0',
-          strong: '#cbd5e1',
+          DEFAULT: 'var(--color-border)',
+          strong: 'var(--color-border-strong)',
         },
         ink: {
-          primary: '#111827',
-          secondary: '#475569',
-          muted: '#94a3b8',
+          primary: 'var(--color-ink-primary)',
+          secondary: 'var(--color-ink-secondary)',
+          muted: 'var(--color-ink-muted)',
         },
         // FE 2.0 Design System — 状态色（bg/text/border 三元组；Success=Emerald / Warning=Amber / Danger=Rose / Info=Blue / Neutral=Slate）
         status: {
-          neutral: { bg: '#f1f5f9', text: '#475569', border: '#e2e8f0' },
-          info: { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe' },
-          success: { bg: '#ecfdf5', text: '#047857', border: '#a7f3d0' },
-          warning: { bg: '#fffbeb', text: '#b45309', border: '#fde68a' },
-          danger: { bg: '#fff1f2', text: '#be123c', border: '#fecdd3' },
+          neutral: { bg: 'var(--color-status-neutral-bg)', text: 'var(--color-status-neutral-text)', border: 'var(--color-status-neutral-border)' },
+          info: { bg: 'var(--color-status-info-bg)', text: 'var(--color-status-info-text)', border: 'var(--color-status-info-border)' },
+          success: { bg: 'var(--color-status-success-bg)', text: 'var(--color-status-success-text)', border: 'var(--color-status-success-border)' },
+          warning: { bg: 'var(--color-status-warning-bg)', text: 'var(--color-status-warning-text)', border: 'var(--color-status-warning-border)' },
+          danger: { bg: 'var(--color-status-danger-bg)', text: 'var(--color-status-danger-text)', border: 'var(--color-status-danger-border)' },
         },
         // Sprint8 UI Modern — 10 业务域高饱和色板（单一事实来源：design-system/tokens.ts MODULE_ACCENTS）
         domain: {
-          workbench: { 50: '#eff6ff', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8' },
-          'customer-project': { 50: '#f5f3ff', 500: '#8b5cf6', 600: '#7c3aed', 700: '#6d28d9' },
-          sales: { 50: '#ecfdf5', 500: '#10b981', 600: '#059669', 700: '#047857' },
-          purchasing: { 50: '#fff7ed', 500: '#f97316', 600: '#ea580c', 700: '#c2410c' },
-          inventory: { 50: '#ecfeff', 500: '#06b6d4', 600: '#0891b2', 700: '#0e7490' },
-          'supplier-ap': { 50: '#fffbeb', 500: '#f59e0b', 600: '#d97706', 700: '#b45309' },
-          finance: { 50: '#fff1f2', 500: '#f43f5e', 600: '#e11d48', 700: '#be123c' },
-          'master-data': { 50: '#f0f9ff', 500: '#0ea5e9', 600: '#0284c7', 700: '#0369a1' },
-          system: { 50: '#f8fafc', 500: '#64748b', 600: '#475569', 700: '#334155' },
-          reports: { 50: '#fdf4ff', 500: '#d946ef', 600: '#c026d3', 700: '#a21caf' },
+          workbench: { 50: 'var(--color-domain-workbench-50)', 500: 'var(--color-domain-workbench-500)', 600: 'var(--color-domain-workbench-600)', 700: 'var(--color-domain-workbench-700)' },
+          'customer-project': { 50: 'var(--color-domain-customer-project-50)', 500: 'var(--color-domain-customer-project-500)', 600: 'var(--color-domain-customer-project-600)', 700: 'var(--color-domain-customer-project-700)' },
+          sales: { 50: 'var(--color-domain-sales-50)', 500: 'var(--color-domain-sales-500)', 600: 'var(--color-domain-sales-600)', 700: 'var(--color-domain-sales-700)' },
+          purchasing: { 50: 'var(--color-domain-purchasing-50)', 500: 'var(--color-domain-purchasing-500)', 600: 'var(--color-domain-purchasing-600)', 700: 'var(--color-domain-purchasing-700)' },
+          inventory: { 50: 'var(--color-domain-inventory-50)', 500: 'var(--color-domain-inventory-500)', 600: 'var(--color-domain-inventory-600)', 700: 'var(--color-domain-inventory-700)' },
+          'supplier-ap': { 50: 'var(--color-domain-supplier-ap-50)', 500: 'var(--color-domain-supplier-ap-500)', 600: 'var(--color-domain-supplier-ap-600)', 700: 'var(--color-domain-supplier-ap-700)' },
+          finance: { 50: 'var(--color-domain-finance-50)', 500: 'var(--color-domain-finance-500)', 600: 'var(--color-domain-finance-600)', 700: 'var(--color-domain-finance-700)' },
+          'master-data': { 50: 'var(--color-domain-master-data-50)', 500: 'var(--color-domain-master-data-500)', 600: 'var(--color-domain-master-data-600)', 700: 'var(--color-domain-master-data-700)' },
+          system: { 50: 'var(--color-domain-system-50)', 500: 'var(--color-domain-system-500)', 600: 'var(--color-domain-system-600)', 700: 'var(--color-domain-system-700)' },
+          reports: { 50: 'var(--color-domain-reports-50)', 500: 'var(--color-domain-reports-500)', 600: 'var(--color-domain-reports-600)', 700: 'var(--color-domain-reports-700)' },
         },
       },
       boxShadow: {

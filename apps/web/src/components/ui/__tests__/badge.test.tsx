@@ -9,11 +9,11 @@ describe("Badge — FE 2.0 UI-01 徽章基元", () => {
     expect(screen.getByText("草稿").className).toContain("rounded-full");
   });
 
-  it("tone 输出语义色（inline style 与 status tokens 一致）", () => {
+  it("tone 输出语义色（inline style 引用 status tokens 的 CSS 变量；Phase 1 深色模式）", () => {
     const { rerender } = render(<Badge tone="success">已批准</Badge>);
-    expect(screen.getByText("已批准")).toHaveStyle({ backgroundColor: "#ecfdf5" });
+    expect(screen.getByText("已批准").style.backgroundColor).toBe("var(--color-status-success-bg)");
     rerender(<Badge tone="danger">已取消</Badge>);
-    expect(screen.getByText("已取消")).toHaveStyle({ color: "#be123c" });
+    expect(screen.getByText("已取消").style.color).toBe("var(--color-status-danger-text)");
   });
 
   it("dot 渲染状态圆点", () => {

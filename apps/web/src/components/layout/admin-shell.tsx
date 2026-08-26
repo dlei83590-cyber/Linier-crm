@@ -20,6 +20,7 @@ import { DomainIcon, ModuleIcon } from "./module-icons";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CommandPalette, type RecentVisit } from "./command-palette";
 import { useTableDensity } from "@/lib/table-density-context";
+import { Icon } from "@/components/ui/icon";
 
 /**
  * Admin Shell — UI-02 Frontend Experience 2.0（App Shell 重做）
@@ -38,6 +39,8 @@ import { useTableDensity } from "@/lib/table-density-context";
 
 /** 命令面板「最近访问」localStorage 键 */
 const RECENT_STORAGE_KEY = "linier.recent";
+/** 主题偏好 localStorage 键（Phase 1 深色模式） */
+const THEME_STORAGE_KEY = "linier.theme";
 /** 最近访问最多保留条数 */
 const RECENT_MAX = 8;
 
@@ -73,6 +76,16 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   // 命令面板（Ctrl+K / ⌘K）
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // 主题（Phase 1 深色模式：亮/暗两态；localStorage linier.theme 记忆；默认亮色避免 SSR mismatch）
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    if (typeof window === "undefined") return "light";
+    try {
+      return window.localStorage.getItem(THEME_STORAGE_KEY) === "dark" ? "dark" : "light";
+    } catch {
+      /* 隐私模式忽略 */
+      return "light";
+    }
+  });
   // 最近访问（localStorage "linier.recent" 懒加载；最多 8 条、按 route 去重、最新在前）
   const [recentItems, setRecentItems] = useState<RecentVisit[]>(() => {
     if (typeof window === "undefined") return [];
@@ -109,6 +122,16 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     setCreateOpen(false);
     setUserMenuOpen(false);
   }, [pathname]);
+
+  // 主题持久化 + 应用到 <html data-theme>（Phase 1 深色模式）
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {
+      /* 隐私模式忽略 */
+    }
+  }, [theme]);
 
   // 折叠偏好持久化
   useEffect(() => {
@@ -646,6 +669,17 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <span className="font-medium">Ctrl K</span>
+          </button>
+
+          {/* 主题切换（亮/暗；localStorage linier.theme 记忆） */}
+          <button
+            type="button"
+            onClick={() => setTheme((prev) => (prev === "dark" ? "light" : "dark"))}
+            title={theme === "dark" ? "切换到亮色模式" : "切换到暗色模式"}
+            aria-label={theme === "dark" ? "切换到亮色模式" : "切换到暗色模式"}
+            className="flex h-8 w-8 items-center justify-center rounded-md border border-border text-ink-muted transition-colors duration-150 hover:bg-slate-100 hover:text-ink-primary"
+          >
+            <Icon name={theme === "dark" ? "sun" : "moon"} className="h-4 w-4" />
           </button>
 
           {/* 用户菜单（个人信息 / 界面密度 / 退出） */}

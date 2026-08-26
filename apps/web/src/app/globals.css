@@ -10,14 +10,155 @@ html {
 @tailwind components;
 @tailwind utilities;
 
+/* ===== 主题色变量（Phase 1 深色模式：SSOT；Tailwind 语义类全部引用 var(--color-*)）===== */
 :root {
-  --foreground-rgb: 17, 24, 39; /* FE 2.0 ink-primary #111827 */
-  --background-rgb: 247, 246, 243; /* FE 2.0 Canvas 暖灰白 #F7F6F3（P2 微暖化） */
+  /* 亮色主题（暖白；Canvas #F7F6F3 微暖化 + FE 2.0 语义色） */
+  --color-canvas: #f7f6f3;
+  --color-surface: #ffffff;
+  --color-border: #e2e8f0;
+  --color-border-strong: #cbd5e1;
+  --color-ink-primary: #111827;
+  --color-ink-secondary: #475569;
+  --color-ink-muted: #64748b;
+  --color-brand-50: #eff6ff;
+  --color-brand-100: #dbeafe;
+  --color-brand-500: #3b82f6;
+  --color-brand-600: #2563eb;
+  --color-brand-700: #1d4ed8;
+  --color-brand-900: #1e3a8a;
+  --color-status-neutral-bg: #f1f5f9;
+  --color-status-neutral-text: #475569;
+  --color-status-neutral-border: #e2e8f0;
+  --color-status-info-bg: #eff6ff;
+  --color-status-info-text: #1d4ed8;
+  --color-status-info-border: #bfdbfe;
+  --color-status-success-bg: #ecfdf5;
+  --color-status-success-text: #047857;
+  --color-status-success-border: #a7f3d0;
+  --color-status-warning-bg: #fffbeb;
+  --color-status-warning-text: #b45309;
+  --color-status-warning-border: #fde68a;
+  --color-status-danger-bg: #fff1f2;
+  --color-status-danger-text: #be123c;
+  --color-status-danger-border: #fecdd3;
+  --color-domain-workbench-50: #eff6ff;
+  --color-domain-workbench-500: #3b82f6;
+  --color-domain-workbench-600: #2563eb;
+  --color-domain-workbench-700: #1d4ed8;
+  --color-domain-customer-project-50: #f5f3ff;
+  --color-domain-customer-project-500: #8b5cf6;
+  --color-domain-customer-project-600: #7c3aed;
+  --color-domain-customer-project-700: #6d28d9;
+  --color-domain-sales-50: #ecfdf5;
+  --color-domain-sales-500: #10b981;
+  --color-domain-sales-600: #059669;
+  --color-domain-sales-700: #047857;
+  --color-domain-purchasing-50: #fff7ed;
+  --color-domain-purchasing-500: #f97316;
+  --color-domain-purchasing-600: #ea580c;
+  --color-domain-purchasing-700: #c2410c;
+  --color-domain-inventory-50: #ecfeff;
+  --color-domain-inventory-500: #06b6d4;
+  --color-domain-inventory-600: #0891b2;
+  --color-domain-inventory-700: #0e7490;
+  --color-domain-supplier-ap-50: #fffbeb;
+  --color-domain-supplier-ap-500: #f59e0b;
+  --color-domain-supplier-ap-600: #d97706;
+  --color-domain-supplier-ap-700: #b45309;
+  --color-domain-finance-50: #fff1f2;
+  --color-domain-finance-500: #f43f5e;
+  --color-domain-finance-600: #e11d48;
+  --color-domain-finance-700: #be123c;
+  --color-domain-master-data-50: #f0f9ff;
+  --color-domain-master-data-500: #0ea5e9;
+  --color-domain-master-data-600: #0284c7;
+  --color-domain-master-data-700: #0369a1;
+  --color-domain-system-50: #f8fafc;
+  --color-domain-system-500: #64748b;
+  --color-domain-system-600: #475569;
+  --color-domain-system-700: #334155;
+  --color-domain-reports-50: #fdf4ff;
+  --color-domain-reports-500: #d946ef;
+  --color-domain-reports-600: #c026d3;
+  --color-domain-reports-700: #a21caf;
+}
+
+/* 暖色暗色主题（非纯黑：暖炭黑 #1b1a18 系；Design Gate 2026-08-26 §3.2 色板） */
+[data-theme="dark"] {
+  --color-canvas: #1b1a18;
+  --color-surface: #242220;
+  --color-border: #3a3733;
+  --color-border-strong: #4a4640;
+  --color-ink-primary: #ece9e4;
+  --color-ink-secondary: #b8b2a9;
+  --color-ink-muted: #857f76;
+  --color-brand-50: #172554;
+  --color-brand-100: #1e3a8a;
+  --color-brand-500: #3b82f6;
+  --color-brand-600: #3b82f6;
+  --color-brand-700: #60a5fa;
+  --color-brand-900: #172554;
+  --color-status-neutral-bg: #2a2826;
+  --color-status-neutral-text: #b8b2a9;
+  --color-status-neutral-border: #3a3733;
+  --color-status-info-bg: #12263f;
+  --color-status-info-text: #93c5fd;
+  --color-status-info-border: #1e40af;
+  --color-status-success-bg: #0f2e22;
+  --color-status-success-text: #6ee7b7;
+  --color-status-success-border: #14532d;
+  --color-status-warning-bg: #332a10;
+  --color-status-warning-text: #fcd34d;
+  --color-status-warning-border: #78350f;
+  --color-status-danger-bg: #3d1216;
+  --color-status-danger-text: #fda4af;
+  --color-status-danger-border: #881337;
+  --color-domain-workbench-50: #172554;
+  --color-domain-customer-project-50: #2e1065;
+  --color-domain-sales-50: #022c22;
+  --color-domain-purchasing-50: #431407;
+  --color-domain-inventory-50: #083344;
+  --color-domain-supplier-ap-50: #451a03;
+  --color-domain-finance-50: #4c0519;
+  --color-domain-master-data-50: #0c4a6e;
+  --color-domain-system-50: #1f2937;
+  --color-domain-reports-50: #500724;
+  /* 域 500/600/700 在暗底保持可读性：提亮一档（同一色相） */
+  --color-domain-workbench-500: #3b82f6;
+  --color-domain-workbench-600: #60a5fa;
+  --color-domain-workbench-700: #93c5fd;
+  --color-domain-customer-project-500: #8b5cf6;
+  --color-domain-customer-project-600: #a78bfa;
+  --color-domain-customer-project-700: #c4b5fd;
+  --color-domain-sales-500: #10b981;
+  --color-domain-sales-600: #34d399;
+  --color-domain-sales-700: #6ee7b7;
+  --color-domain-purchasing-500: #f97316;
+  --color-domain-purchasing-600: #fb923c;
+  --color-domain-purchasing-700: #fdba74;
+  --color-domain-inventory-500: #06b6d4;
+  --color-domain-inventory-600: #22d3ee;
+  --color-domain-inventory-700: #67e8f9;
+  --color-domain-supplier-ap-500: #f59e0b;
+  --color-domain-supplier-ap-600: #fbbf24;
+  --color-domain-supplier-ap-700: #fcd34d;
+  --color-domain-finance-500: #f43f5e;
+  --color-domain-finance-600: #fb7185;
+  --color-domain-finance-700: #fda4af;
+  --color-domain-master-data-500: #0ea5e9;
+  --color-domain-master-data-600: #38bdf8;
+  --color-domain-master-data-700: #7dd3fc;
+  --color-domain-system-500: #64748b;
+  --color-domain-system-600: #94a3b8;
+  --color-domain-system-700: #cbd5e1;
+  --color-domain-reports-500: #d946ef;
+  --color-domain-reports-600: #e879f9;
+  --color-domain-reports-700: #f0abfc;
 }
 
 body {
-  color: rgb(var(--foreground-rgb));
-  background: rgb(var(--background-rgb));
+  color: var(--color-ink-primary);
+  background: var(--color-canvas);
 }
 
 /* Sprint8 UI Modern — 壳层动效（U1.4 移动端抽屉 / backdrop） */
