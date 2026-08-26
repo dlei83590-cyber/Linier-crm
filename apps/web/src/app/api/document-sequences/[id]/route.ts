@@ -6,6 +6,7 @@ import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/respon
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { casUpdate } from "@/lib/api/cas";
+import { currentPeriodKey } from "@/lib/gl/period";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,8 @@ const DOC_TYPES = [
   "INVENTORY_CONVERSION", "SUPPLIER_INVOICE",
 ] as const;
 
-/** 更新 schema：startNo 起始序号 + nextNo 当前序号（管理员可调整——用于初始化/跳号修复；约束 nextNo ≥ startNo） */
+/** 更新 schema：模板行配置（code/name/docType/prefix/padLength/startNo/periodPattern/perPeriodReset/isActive）
+ * 期间行 nextNo 由取号引擎管理，不在模板行 PATCH 中编辑；重置期间序号走 POST /:id/reset。 */
 const documentSequenceUpdateSchema = z
   .object({
     code: z.string().min(1).max(64).optional(),
@@ -28,7 +30,8 @@ const documentSequenceUpdateSchema = z
     prefix: z.string().max(32).nullable().optional(),
     padLength: z.number().int().min(1).max(12).optional(),
     startNo: z.number().int().min(1).optional(),
-    nextNo: z.number().int().min(1).optional(),
+    periodPattern: z.string().max(64).nullable().optional(),
+    perPeriodReset: z.boolean().optional(),
     isActive: z.boolean().optional(),
     version: z.number().int().positive(),
   })
@@ -47,7 +50,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   return ok(seq);
 }
 
-/** PATCH /api/document-sequences/:id（乐观锁 version；nextNo 只读） */
+/** PATCH /api/document-sequences/:id（乐观锁 version；模板行配置编辑，期间行 nextNo 由引擎管理） */
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await authenticate(request);
   const denied = requirePermission(user, "document-sequence:edit");
@@ -69,13 +72,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (codeExisting && codeExisting.id !== id && !codeExisting.deletedAt) {
       return failConflict(ERROR_CODES.CONFLICT, "单据序列编码已存在");
     }
-  }
-
-  // 起始序号/当前序号约束：nextNo 不得小于 startNo（防回拨导致已发号码重复）
-  const effectiveStartNo = updates.startNo ?? existing.startNo;
-  const effectiveNextNo = updates.nextNo ?? existing.nextNo;
-  if (effectiveNextNo < effectiveStartNo) {
-    return failConflict(ERROR_CODES.CONFLICT, "当前序号不得小于起始序号（防已发号码重复）");
   }
 
   const cas = await casUpdate(prisma, 'documentSequence', id, version, {
@@ -100,6 +96,52 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   });
 
   return ok(updated);
+}
+
+/** POST /api/document-sequences/:id/reset（重置期间序号：将指定期间的 nextNo 重置为 startNo；默认当前业务月）
+ * 单据序列重构（ADR-0055）：模板行承载配置，期间行 code={docType}:{YYYYMM} 承载按月计数；
+ * 重置仅作用于期间行（回拨到 startNo 有与已发号码重复的风险——仅限期间尚未发号或管理员明确跳号修复场景）。
+ */
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await authenticate(request);
+  const denied = requirePermission(user, "document-sequence:edit");
+  if (denied) return denied;
+  requestLog(request, user?.id, "document-sequence.reset");
+
+  const { id } = await params;
+  const meta = requestMeta(request);
+  const body = await request.json().catch(() => ({}));
+  const periodKey =
+    typeof body?.periodKey === "string" && /^\d{6}$/.test(body.periodKey)
+      ? body.periodKey
+      : currentPeriodKey();
+
+  const seq = await prisma.documentSequence.findFirst({ where: { id, deletedAt: null } });
+  if (!seq) return failNotFound(ERROR_CODES.NOT_FOUND, "单据序列不存在");
+  if (seq.docType === "JOURNAL") {
+    return failConflict(ERROR_CODES.CONFLICT, "日记账序列由凭证字引擎管理（记202608-0001），请勿在此重置");
+  }
+
+  const periodCode = seq.docType + ":" + periodKey;
+  const periodRow = await prisma.documentSequence.findFirst({ where: { code: periodCode } });
+  if (!periodRow) {
+    return ok({ reset: true, periodKey, nextNo: seq.startNo, existed: false });
+  }
+  await prisma.documentSequence.update({
+    where: { id: periodRow.id },
+    data: { nextNo: seq.startNo, updatedById: user?.id ?? null },
+  });
+
+  await writeAuditLog({
+    actorId: user?.id,
+    action: "document-sequence.reset",
+    entityType: "documentSequence",
+    entityId: id,
+    afterData: { periodKey, nextNo: seq.startNo },
+    ...meta,
+  });
+
+  return ok({ reset: true, periodKey, nextNo: seq.startNo, existed: true });
 }
 
 /** DELETE /api/document-sequences/:id（软删除） */

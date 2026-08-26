@@ -25,6 +25,8 @@ const documentSequenceCreateSchema = z.object({
   prefix: z.string().max(32).nullable().optional(),
   padLength: z.number().int().min(1).max(12).optional(),
   startNo: z.number().int().min(1).optional(), // 起始序号（默认 1；nextNo 初始 = startNo）
+  periodPattern: z.string().max(64).nullable().optional(), // 期间段模板（如 LNE{YYYY}{MM}；单据序列重构 ADR-0055）
+  perPeriodReset: z.boolean().optional(), // 是否按月重排（期间行 code={docType}:{YYYYMM} 独立计数）
 });
 
 /** GET /api/document-sequences（分页 + code/name/docType/isActive 过滤） */
@@ -40,6 +42,7 @@ export async function GET(request: NextRequest) {
   const name = searchParams.get("name")?.trim();
   const docType = searchParams.get("docType")?.trim();
   const isActive = searchParams.get("isActive")?.trim();
+  const includePeriods = searchParams.get("includePeriods")?.trim() === "true";
 
   const where = {
     deletedAt: null,
@@ -47,6 +50,8 @@ export async function GET(request: NextRequest) {
     ...(name ? { name: { contains: name, mode: "insensitive" as const } } : {}),
     ...(docType ? { docType: docType as DocumentType } : {}),
     ...(isActive === "true" ? { isActive: true } : isActive === "false" ? { isActive: false } : {}),
+    // 默认隐藏期间行（按月重排的运行时计数器，code={docType}:{YYYYMM}）；includePeriods=true 才显示
+    ...(includePeriods ? {} : { NOT: { code: { contains: ":" } } }),
   };
 
   const [total, items] = await Promise.all([
@@ -87,6 +92,8 @@ export async function POST(request: NextRequest) {
       padLength: parsed.data.padLength ?? 4,
       startNo: parsed.data.startNo ?? 1,
       nextNo: parsed.data.startNo ?? 1, // 当前序号初始 = 起始序号（管理员可后续调整）
+      periodPattern: parsed.data.periodPattern ?? null,
+      perPeriodReset: parsed.data.perPeriodReset ?? false,
       approvalStatus: "APPROVED",
       createdById: user?.id ?? null,
       updatedById: user?.id ?? null,

@@ -3,6 +3,23 @@
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
 
+## [Unreleased] - 单据序列管理模块适配（基础资料 /document-sequences，ADR-0055 补全）
+
+### 新增
+
+- **列表**：默认隐藏期间行（按月重排的运行时计数器），仅展示模板行；新增「编号格式（示例）」「按月重排」列
+- **新建/编辑**：支持 `periodPattern`（期间段模板）与 `perPeriodReset`（按月重排）
+- **重置**：`POST /api/document-sequences/:id/reset` 重置当前（或指定）期间序号为 `startNo`；编辑页新增「重置当前期间序号」按钮
+- **前端格式预览**：`lib/document-sequence/format.ts`（客户端纯函数，东八区归属月）
+
+### 变更
+
+- 编辑模板行移除 `nextNo`（期间行计数由取号引擎管理）；JOURNAL 序列拒绝在此重置
+
+### 边界
+
+- 零 Schema / Migration
+
 ## [Unreleased] - 单据序列重构（{prefix}-LNE{YYYY}{MM}{####} 按月重排，ADR-0055）
 
 ### 新增
