@@ -13,6 +13,7 @@ import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { formatDate } from "@/lib/format";
+import { sequenceFormatPreview } from "@/lib/document-sequence/format";
 
 interface DocumentSequenceRow {
   id: string;
@@ -21,8 +22,9 @@ interface DocumentSequenceRow {
   docType: string;
   prefix: string | null;
   startNo: number;
-  nextNo: number;
   padLength: number;
+  periodPattern: string | null;
+  perPeriodReset: boolean;
   isActive: boolean;
   createdAt: string;
 }
@@ -130,7 +132,7 @@ function DocumentSequenceList() {
     <AppPage>
       <EntityListWorkspace<DocumentSequenceRow>
         title="单据序列"
-        description="维护报价/订单/项目等单据编号序列规则（编号由系统引擎管理）"
+        description="维护单据编号序列规则（格式：前缀-LNE{年月}{序号}，按月重排；编号由系统引擎管理）"
         emptyMessage="暂无编号序列规则"
         headerActions={
           canCreate ? (
@@ -195,8 +197,9 @@ function DocumentSequenceList() {
           { key: "name", header: "名称" },
           { key: "docType", header: "单据类型", render: (row) => DOC_TYPE_LABELS[row.docType] ?? row.docType },
           { key: "prefix", header: "前缀", render: (row) => row.prefix ?? "—" },
-          { key: "startNo", header: "起始序号", render: (row) => String(row.startNo).padStart(row.padLength, "0") },
-          { key: "nextNo", header: "当前序号", render: (row) => String(row.nextNo).padStart(row.padLength, "0") },
+          { key: "format", header: "编号格式（示例）", render: (row) => sequenceFormatPreview({ prefix: row.prefix, periodPattern: row.periodPattern, padLength: row.padLength }) },
+          { key: "startNo", header: "起始序号", render: (row) => String(row.startNo) },
+          { key: "perPeriodReset", header: "按月重排", render: (row) => (row.perPeriodReset ? "是" : "否") },
           { key: "isActive", header: "启用", render: (row) => (row.isActive ? "是" : "否") },
           { key: "createdAt", header: "创建时间", render: (row) => formatDate(row.createdAt) },
         ]}

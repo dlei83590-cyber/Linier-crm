@@ -30,3 +30,4 @@
 ## 影响
 
 - 新增 `apps/web/src/lib/document-sequence/next-code.ts`；改 `recycle.ts`、22 个 helpers、project/SO/stock-count 内联、各 create 路由、`prisma/seed.ts`；文档同步（ADR/QA/test-cases/CHANGELOG/ROADMAP）。
+- **单据序列管理模块（基础资料 /document-sequences）适配**：列表默认隐藏期间行（code={docType}:{YYYYMM} 运行时计数器，仅模板行作为配置展示，新增「编号格式（示例）/按月重排」列）；新建/编辑支持 `periodPattern`/`perPeriodReset`；编辑移除模板行 `nextNo`（改为期间行计数）；新增 `POST /api/document-sequences/:id/reset` 重置当前（或指定）期间序号为 `startNo`（JOURNAL 由凭证字引擎管理，拒绝在此重置）。

@@ -10,5 +10,7 @@
 | S6 | JOURNAL 保持 ADR-0044 凭证字格式（记202608-0001），不套用 LNE | ✅ |
 | S7 | 单号回收（recycle）：删除期间最后一张回退期间行 nextNo；历史旧格式单号不参与回收 | ✅ |
 | S8 | seed：业务单据 padLength 4 + periodPattern + perPeriodReset；补 SCN/SDN；upsert update 传播新字段 | ✅ |
+| S9 | 单据序列列表默认隐藏期间行（仅模板行）；新建/编辑支持 periodPattern/perPeriodReset | ✅ |
+| S10 | 编辑模板行移除 nextNo；POST /:id/reset 重置当前期间序号为 startNo；JOURNAL 拒绝重置 | ✅ |
 
 > 验证事实源 = GitHub CI（type-check / unit tests / build / lint）。运行时冒烟（真实建单取号）留待部署后人工执行。

@@ -52,6 +52,8 @@ function DocumentSequenceCreateForm() {
   const [prefix, setPrefix] = useState("");
   const [padLength, setPadLength] = useState("4");
   const [startNo, setStartNo] = useState("1"); // 起始序号
+  const [periodPattern, setPeriodPattern] = useState("LNE{YYYY}{MM}"); // 期间段模板
+  const [perPeriodReset, setPerPeriodReset] = useState(true); // 按月重排
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiClientError | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -71,6 +73,8 @@ function DocumentSequenceCreateForm() {
       prefix: prefix.trim() || undefined,
       padLength: Number(padLength) || 4,
       startNo: Number(startNo) || 1,
+      periodPattern: periodPattern.trim() || null,
+      perPeriodReset,
     };
     apiFetch<{ id: string }>("/api/document-sequences", {
       method: "POST",
@@ -122,6 +126,15 @@ function DocumentSequenceCreateForm() {
           </FormField>
           <FormField label="起始序号">
             <input type="number" min={1} value={startNo} onChange={(e) => setStartNo(e.target.value)} className={inputClass} placeholder="默认 1（当前序号初始值）" />
+          </FormField>
+          <FormField label="期间段模板">
+            <input value={periodPattern} onChange={(e) => setPeriodPattern(e.target.value)} className={inputClass} placeholder="如 LNE{YYYY}{MM}（{YYYY}=年 {MM}=月）" />
+          </FormField>
+          <FormField label="按月重排">
+            <select value={perPeriodReset ? "true" : "false"} onChange={(e) => setPerPeriodReset(e.target.value === "true")} className={inputClass}>
+              <option value="true">是（每年月从起始序号重新计数）</option>
+              <option value="false">否（全局连续）</option>
+            </select>
           </FormField>
         </div>
       </section>

@@ -10,6 +10,8 @@ import { PageLoading } from "@/components/ui/skeleton";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
+import { useToast } from "@/components/ui/toast";
+import { sequenceFormatPreview } from "@/lib/document-sequence/format";
 
 interface DocumentSequenceDetail {
   id: string;
@@ -18,8 +20,9 @@ interface DocumentSequenceDetail {
   docType: string;
   prefix: string | null;
   startNo: number;
-  nextNo: number;
   padLength: number;
+  periodPattern: string | null;
+  perPeriodReset: boolean;
   isActive: boolean;
   version: number;
 }
@@ -60,6 +63,7 @@ const inputClass = INPUT_CLASS;
 
 function DocumentSequenceEditForm() {
   const router = useRouter();
+  const toast = useToast();
   const params = useParams<{ id: string }>();
   const id = params.id;
 
@@ -68,9 +72,11 @@ function DocumentSequenceEditForm() {
   const [docType, setDocType] = useState("");
   const [prefix, setPrefix] = useState("");
   const [startNo, setStartNo] = useState(1); // 起始序号
-  const [nextNo, setNextNo] = useState(1); // 当前序号（可调整）
   const [padLength, setPadLength] = useState("4");
+  const [periodPattern, setPeriodPattern] = useState("LNE{YYYY}{MM}");
+  const [perPeriodReset, setPerPeriodReset] = useState(true);
   const [isActive, setIsActive] = useState(true);
+  const [resetBusy, setResetBusy] = useState(false);
   const [version, setVersion] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<ApiClientError | null>(null);
@@ -89,8 +95,9 @@ function DocumentSequenceEditForm() {
         setDocType(d.docType);
         setPrefix(d.prefix ?? "");
         setStartNo(d.startNo);
-        setNextNo(d.nextNo);
         setPadLength(String(d.padLength));
+        setPeriodPattern(d.periodPattern ?? "LNE{YYYY}{MM}");
+        setPerPeriodReset(d.perPeriodReset);
         setIsActive(d.isActive);
         setVersion(d.version);
         setDirty(false);
@@ -123,7 +130,8 @@ function DocumentSequenceEditForm() {
       prefix: prefix.trim() || null,
       padLength: Number(padLength) || 4,
       startNo: Number(startNo) || 1,
-      nextNo: Number(nextNo) || 1,
+      periodPattern: periodPattern.trim() || null,
+      perPeriodReset,
       isActive,
     };
     apiFetch<{ id: string }>(`/api/document-sequences/${id}`, {
@@ -135,6 +143,21 @@ function DocumentSequenceEditForm() {
         setError(err instanceof ApiClientError ? err : new ApiClientError(0, "网络错误", "NETWORK_ERROR"));
         setSubmitting(false);
       });
+  };
+
+  const handleReset = () => {
+    if (resetBusy) return;
+    if (!window.confirm("确认将「当前业务月」的序号重置为起始序号？该期间已发出的号码可能重复，请谨慎操作。")) return;
+    setResetBusy(true);
+    apiFetch<{ reset: boolean; periodKey: string; nextNo: number }>(`/api/document-sequences/${id}/reset`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    })
+      .then(() => toast.success("已重置当前期间序号"))
+      .catch((err: unknown) => {
+        toast.error("重置失败", err instanceof ApiClientError ? err.message : "网络错误");
+      })
+      .finally(() => setResetBusy(false));
   };
 
   if (loading) {
@@ -196,8 +219,14 @@ function DocumentSequenceEditForm() {
           <FormField label="起始序号">
             <input type="number" min={1} value={startNo} onChange={(e) => setStartNo(Number(e.target.value) || 1)} className={inputClass} />
           </FormField>
-          <FormField label="当前序号（下一个将使用；可调整）">
-            <input type="number" min={1} value={nextNo} onChange={(e) => setNextNo(Number(e.target.value) || 1)} className={inputClass} />
+          <FormField label="期间段模板">
+            <input value={periodPattern} onChange={(e) => setPeriodPattern(e.target.value)} className={inputClass} placeholder="如 LNE{YYYY}{MM}" />
+          </FormField>
+          <FormField label="按月重排">
+            <select value={perPeriodReset ? "true" : "false"} onChange={(e) => setPerPeriodReset(e.target.value === "true")} className={inputClass}>
+              <option value="true">是（每年月从起始序号重新计数）</option>
+              <option value="false">否（全局连续）</option>
+            </select>
           </FormField>
           <FormField label="启用">
             <select value={isActive ? "true" : "false"} onChange={(e) => setIsActive(e.target.value === "true")} className={inputClass}>
@@ -205,6 +234,17 @@ function DocumentSequenceEditForm() {
               <option value="false">否</option>
             </select>
           </FormField>
+        </div>
+      </section>
+      <section className="rounded-md border border-border p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="text-sm text-ink-secondary">
+            编号示例：<span className="font-mono">{sequenceFormatPreview({ prefix: prefix.trim() || null, periodPattern: periodPattern.trim() || null, padLength: Number(padLength) || 4 })}</span>
+            <span className="ml-2 text-xs">（当前业务月；按月重排时每月从起始序号重新计数）</span>
+          </div>
+          <button type="button" disabled={resetBusy} onClick={handleReset} className="rounded-md border border-status-danger-border px-3 py-1.5 text-sm text-status-danger-text transition-colors hover:bg-red-50 disabled:opacity-50">
+            {resetBusy ? "重置中…" : "重置当前期间序号"}
+          </button>
         </div>
       </section>
     </EntityFormWorkspace>
