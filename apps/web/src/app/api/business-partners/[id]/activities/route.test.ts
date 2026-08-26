@@ -20,22 +20,23 @@ import { POST, GET } from '@/app/api/business-partners/[id]/activities/route';
 type TxMock = {
   businessPartner: { findFirst: ReturnType<typeof vi.fn> };
   partnerContact: { findFirst: ReturnType<typeof vi.fn> };
-  user: { findFirst: ReturnType<typeof vi.fn> };
+  user: { findFirst: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn> };
   customerActivity: { findFirst: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
-  user: { findUnique: ReturnType<typeof vi.fn> };
 };
 
 function makeTx(overrides: Partial<TxMock> = {}): TxMock {
   return {
     businessPartner: { findFirst: vi.fn().mockResolvedValue({ id: 'bp-1' }) },
     partnerContact: { findFirst: vi.fn().mockResolvedValue(null) },
-    // followup-level（Migration 0055）：责任人校验（有效启用用户）
-    user: { findFirst: vi.fn().mockResolvedValue({ id: 'u-9' }) },
+    // followup-level（Migration 0055）：责任人校验（有效启用用户）+ 操作人查询（findUnique）
+    user: {
+      findFirst: vi.fn().mockResolvedValue({ id: 'u-9' }),
+      findUnique: vi.fn().mockResolvedValue({ id: 'u-1', name: '张三' }),
+    },
     customerActivity: {
       findFirst: vi.fn().mockResolvedValue(null),
       create: vi.fn().mockResolvedValue({ id: 'act-1', activityType: 'FOLLOW_UP', businessPartnerId: 'bp-1' }),
     },
-    user: { findUnique: vi.fn().mockResolvedValue({ id: 'u-1', name: '张三' }) },
     ...overrides,
   };
 }
