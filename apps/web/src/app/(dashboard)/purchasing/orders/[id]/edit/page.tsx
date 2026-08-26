@@ -25,6 +25,7 @@ import {
   type LineRow,
 } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { Combobox } from "@/components/ui/combobox";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 
@@ -382,21 +383,19 @@ function PurchaseOrderEditForm() {
           <h2 className="text-ink-primary mb-3 text-sm font-semibold">基本信息</h2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <FormField label="付款条件（商业条款）">
-              <select
-                value={paymentTerm}
-                onChange={(e) => {
-                  setPaymentTerm(e.target.value);
+              <Combobox
+                value={paymentTerm || null}
+                onValueChange={(v) => {
+                  setPaymentTerm(v ?? "");
                   setDirty(true);
                 }}
-                className={inputClass}
-              >
-                <option value="">不设置</option>
-                {commercialTerms.map((t) => (
-                  <option key={t.id} value={t.code}>
-                    {t.code} {t.name}
-                  </option>
-                ))}
-              </select>
+                options={commercialTerms.map((t) => ({
+                  value: t.code,
+                  label: `${t.code} ${t.name}`.trim(),
+                }))}
+                placeholder="不设置"
+                clearable
+              />
             </FormField>
             <FormField label="期望交货日期">
               <input

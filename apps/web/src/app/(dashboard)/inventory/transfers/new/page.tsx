@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityFormWorkspace } from "@/components/workspace";
+import { Combobox } from "@/components/ui/combobox";
 import { FormField } from "@/components/ui/form-field";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { INPUT_CLASS } from "@/lib/ui-classes";
@@ -217,66 +218,68 @@ function TransferCreateForm() {
         <h2 className="mb-3 text-sm font-semibold text-ink-primary">调拨信息</h2>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           <FormField label="源仓库" required>
-            <select
-              value={sourceWarehouseId}
-              onChange={(e) => handleWarehouseChange("source", e.target.value, setSourceWarehouseId, setSourceLocationId)}
-              className={INPUT_CLASS}
-            >
-              <option value="">选择仓库</option>
-              {warehouses.map((w) => (
-                <option key={w.id} value={w.id}>{w.code ?? ""} {w.name ?? ""}</option>
-              ))}
-            </select>
+            <Combobox
+              value={sourceWarehouseId || null}
+              onValueChange={(v) => handleWarehouseChange("source", v ?? "", setSourceWarehouseId, setSourceLocationId)}
+              options={warehouses.map((w) => ({
+                value: w.id,
+                label: `${w.code ?? ""} ${w.name ?? ""}`.trim(),
+              }))}
+              placeholder="选择仓库"
+              clearable
+              invalid={!!fieldErrors.sourceWarehouseId}
+            />
             {fieldErrors.sourceWarehouseId ? (
               <span className="text-xs text-status-danger-text">{fieldErrors.sourceWarehouseId}</span>
             ) : null}
           </FormField>
           <FormField label="源库位（可选）">
-            <select
-              value={sourceLocationId}
-              onChange={(e) => {
-                setSourceLocationId(e.target.value);
+            <Combobox
+              value={sourceLocationId || null}
+              onValueChange={(v) => {
+                setSourceLocationId(v ?? "");
                 markDirty();
               }}
               disabled={!sourceWarehouseId}
-              className={INPUT_CLASS}
-            >
-              <option value="">未指定</option>
-              {filterLocationsByWarehouse(locations, sourceWarehouseId).map((l) => (
-                <option key={l.id} value={l.id}>{l.code ?? ""} {l.name ?? ""}</option>
-              ))}
-            </select>
+              options={filterLocationsByWarehouse(locations, sourceWarehouseId).map((l) => ({
+                value: l.id,
+                label: `${l.code ?? ""} ${l.name ?? ""}`.trim(),
+              }))}
+              placeholder="未指定"
+              clearable
+            />
           </FormField>
           <FormField label="目标仓库" required>
-            <select
-              value={destinationWarehouseId}
-              onChange={(e) => handleWarehouseChange("destination", e.target.value, setDestinationWarehouseId, setDestinationLocationId)}
-              className={INPUT_CLASS}
-            >
-              <option value="">选择仓库</option>
-              {warehouses.map((w) => (
-                <option key={w.id} value={w.id}>{w.code ?? ""} {w.name ?? ""}</option>
-              ))}
-            </select>
+            <Combobox
+              value={destinationWarehouseId || null}
+              onValueChange={(v) => handleWarehouseChange("destination", v ?? "", setDestinationWarehouseId, setDestinationLocationId)}
+              options={warehouses.map((w) => ({
+                value: w.id,
+                label: `${w.code ?? ""} ${w.name ?? ""}`.trim(),
+              }))}
+              placeholder="选择仓库"
+              clearable
+              invalid={!!fieldErrors.destinationWarehouseId}
+            />
             {fieldErrors.destinationWarehouseId ? (
               <span className="text-xs text-status-danger-text">{fieldErrors.destinationWarehouseId}</span>
             ) : null}
           </FormField>
           <FormField label="目标库位（可选）">
-            <select
-              value={destinationLocationId}
-              onChange={(e) => {
-                setDestinationLocationId(e.target.value);
+            <Combobox
+              value={destinationLocationId || null}
+              onValueChange={(v) => {
+                setDestinationLocationId(v ?? "");
                 markDirty();
               }}
               disabled={!destinationWarehouseId}
-              className={INPUT_CLASS}
-            >
-              <option value="">未指定</option>
-              {filterLocationsByWarehouse(locations, destinationWarehouseId).map((l) => (
-                <option key={l.id} value={l.id}>{l.code ?? ""} {l.name ?? ""}</option>
-              ))}
-            </select>
+              options={filterLocationsByWarehouse(locations, destinationWarehouseId).map((l) => ({
+                value: l.id,
+                label: `${l.code ?? ""} ${l.name ?? ""}`.trim(),
+              }))}
+              placeholder="未指定"
+              clearable
+            />
           </FormField>
           <div className="col-span-1 md:col-span-4">
             <FormField label="备注（可选，≤500）">
@@ -328,18 +331,19 @@ function TransferCreateForm() {
               {lines.map((line, idx) => (
                 <tr key={idx}>
                   <td className="px-3 py-2">
-                    <select
-                      value={line.itemId}
-                      onChange={(e) => updateLine(idx, { itemId: e.target.value })}
-                      className={INPUT_CLASS}
-                    >
-                      <option value="">选择物料</option>
-                      {items.map((it) => (
-                        <option key={it.id} value={it.id}>
-                          {it.code ?? ""} {it.name ?? ""}
-                        </option>
-                      ))}
-                    </select>
+                    <Combobox
+                      value={line.itemId || null}
+                      onValueChange={(v) => updateLine(idx, { itemId: v ?? "" })}
+                      options={items.map((it) => ({
+                        value: it.id,
+                        label: `${it.code ?? ""} ${it.name ?? ""}`.trim(),
+                      }))}
+                      placeholder="选择物料"
+                      clearable
+                      size="sm"
+                      className="w-full"
+                      invalid={!!fieldErrors[`lines.${idx}.itemId`]}
+                    />
                     {fieldErrors[`lines.${idx}.itemId`] ? (
                       <p className="mt-0.5 text-xs text-status-danger-text">
                         {fieldErrors[`lines.${idx}.itemId`]}

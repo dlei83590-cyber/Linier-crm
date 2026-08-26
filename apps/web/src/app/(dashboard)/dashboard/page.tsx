@@ -23,6 +23,7 @@ import {
 import { buildPendingWork, PENDING_WORK_SOURCES } from "@/lib/dashboard/pending";
 import { activityLabel } from "@/lib/dashboard/activity";
 import type { OperationsReportData } from "@/lib/reports/operations-types";
+import { Donut } from "@/components/ui/charts";
 import {
   IconTrendUp,
   IconShoppingCart,
@@ -114,6 +115,20 @@ const STAGE_ORDER = [
   "LEAD", "QUALIFIED", "SOLUTION", "QUOTATION", "SAMPLING",
   "TESTING", "SMALL_BATCH", "MASS_SUPPLY", "PAUSED", "FAILED", "CLOSED",
 ];
+// 商机阶段 Donut 分段色（语义 hex，仅展示投影，非业务事实）
+const STAGE_COLORS: Record<string, string> = {
+  LEAD: "#94a3b8",
+  QUALIFIED: "#3b82f6",
+  SOLUTION: "#8b5cf6",
+  QUOTATION: "#059669",
+  SAMPLING: "#f59e0b",
+  TESTING: "#06b6d4",
+  SMALL_BATCH: "#ea580c",
+  MASS_SUPPLY: "#10b981",
+  PAUSED: "#64748b",
+  FAILED: "#ef4444",
+  CLOSED: "#e2e8f0",
+};
 const SO_STATUS_META: Record<string, { label: string; bar: string }> = {
   DRAFT: { label: "草稿", bar: "bg-slate-400" },
   CONFIRMED: { label: "已确认", bar: "bg-blue-500" },
@@ -123,6 +138,16 @@ const SO_STATUS_META: Record<string, { label: string; bar: string }> = {
   CANCELLED: { label: "已取消", bar: "bg-rose-500" },
 };
 const SO_STATUS_ORDER = ["DRAFT", "CONFIRMED", "PARTIALLY_DELIVERED", "DELIVERED", "COMPLETED", "CANCELLED"];
+// 订单状态 Donut 分段色：由 SO_STATUS_META.bar 类名映射为 hex（展示投影，非业务事实）
+const SO_STATUS_BAR_HEX: Record<string, string> = {
+  "bg-slate-400": "#94a3b8",
+  "bg-blue-500": "#3b82f6",
+  "bg-amber-500": "#f59e0b",
+  "bg-sky-500": "#0ea5e9",
+  "bg-emerald-500": "#10b981",
+  "bg-rose-500": "#f43f5e",
+};
+const FALLBACK_SEGMENT_HEX = "#94a3b8";
 
 const TIER_ROWS: { key: "deal" | "quoted" | "opportunity" | "normal"; label: string; hint: string }[] = [
   { key: "deal", label: "有成交", hint: "存在非草稿/非取消订单" },
@@ -319,6 +344,19 @@ export default function DashboardPage() {
       }))
     : [];
   const statusMax = statusRows.reduce((m, r) => Math.max(m, r.count), 0);
+  // Donut 投影：复用 funnelRows/statusRows 的过滤（count>0）与排序
+  const funnelSegments = funnelRows.map((r) => ({
+    value: r.count,
+    color: STAGE_COLORS[r.stage] ?? FALLBACK_SEGMENT_HEX,
+    label: r.label,
+  }));
+  const funnelTotal = funnelRows.reduce((sum, r) => sum + r.count, 0);
+  const statusSegments = statusRows.map((r) => ({
+    value: r.count,
+    color: SO_STATUS_BAR_HEX[r.bar] ?? FALLBACK_SEGMENT_HEX,
+    label: r.label,
+  }));
+  const statusTotal = statusRows.reduce((sum, r) => sum + r.count, 0);
   const tierMax = data
     ? Math.max(
         data.customerTiers.deal,
@@ -490,6 +528,35 @@ export default function DashboardPage() {
                   )}
                 </InsightCard>
 
+                {funnelRows.length > 0 ? (
+                  <InsightCard title="商机阶段分布" subtitle="在册商机按阶段占比（真实聚合）">
+                    <div className="flex flex-col items-center gap-3">
+                      <Donut
+                        segments={funnelSegments}
+                        centerLabel="商机"
+                        centerValue={String(funnelTotal)}
+                      />
+                      <div className="grid w-full grid-cols-2 gap-x-4 gap-y-2">
+                        {funnelSegments.map((seg, i) => (
+                          <div key={i} className="flex items-center justify-between gap-2">
+                            <span className="flex min-w-0 items-center gap-1.5 text-xs text-ink-secondary">
+                              <span
+                                aria-hidden="true"
+                                className="h-2 w-2 shrink-0 rounded-full"
+                                style={{ backgroundColor: seg.color }}
+                              />
+                              <span className="truncate">{seg.label}</span>
+                            </span>
+                            <span className="shrink-0 text-xs font-semibold tabular-nums text-ink-primary">
+                              {seg.value}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </InsightCard>
+                ) : null}
+
                 <InsightCard
                   title={`销售订单状态（${periodLabel}）`}
                   subtitle={`共 ${data.salesOrders.count} 单 · 不含草稿/已取消`}
@@ -514,6 +581,35 @@ export default function DashboardPage() {
                     <p className="py-6 text-center text-sm text-ink-muted">暂无订单数据</p>
                   )}
                 </InsightCard>
+
+                {statusRows.length > 0 ? (
+                  <InsightCard title="订单状态分布" subtitle="各状态订单数占比（真实聚合）">
+                    <div className="flex flex-col items-center gap-3">
+                      <Donut
+                        segments={statusSegments}
+                        centerLabel="订单"
+                        centerValue={String(statusTotal)}
+                      />
+                      <div className="grid w-full grid-cols-2 gap-x-4 gap-y-2">
+                        {statusSegments.map((seg, i) => (
+                          <div key={i} className="flex items-center justify-between gap-2">
+                            <span className="flex min-w-0 items-center gap-1.5 text-xs text-ink-secondary">
+                              <span
+                                aria-hidden="true"
+                                className="h-2 w-2 shrink-0 rounded-full"
+                                style={{ backgroundColor: seg.color }}
+                              />
+                              <span className="truncate">{seg.label}</span>
+                            </span>
+                            <span className="shrink-0 text-xs font-semibold tabular-nums text-ink-primary">
+                              {seg.value}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </InsightCard>
+                ) : null}
 
                 <InsightCard
                   title="区域分布"

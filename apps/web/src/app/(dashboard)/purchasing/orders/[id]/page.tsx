@@ -14,6 +14,7 @@ import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@ni
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
+import { CopyButton } from "@/components/ui/copy-button";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
 import { formatDate, formatMoney } from "@/lib/format";
@@ -215,7 +216,15 @@ function OrderDetailPage() {
         }
         summary={
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <InfoItem label="单号" value={detail.code} />
+            <InfoItem
+              label="单号"
+              value={
+                <span className="inline-flex items-center gap-2">
+                  {detail.code}
+                  <CopyButton text={detail.code} size="sm" />
+                </span>
+              }
+            />
             <InfoItem label="来源类型" value={SOURCE_TYPE_LABELS[detail.sourceType ?? ""] ?? detail.sourceType} />
             <InfoItem label="供应商" value={detail.supplier?.name} />
             <InfoItem

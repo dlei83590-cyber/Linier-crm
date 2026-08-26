@@ -8,7 +8,7 @@
  * 列表消费只读 GET /api/expenses（跨项目聚合 + 按客户/项目/科目筛选）；
  * 创建走既有 POST /api/projects/:id/expenses（单一写入源，B2-1B 已交付）。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
@@ -16,7 +16,7 @@ import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { apiFetch } from "@/lib/api-client";
 import { formatDateOnly, formatMoneyValue } from "@/lib/format";
 
@@ -94,8 +94,29 @@ function ExpensesList() {
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ customerId?: string; projectId?: string; category?: string; status?: string }>({});
 
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<ExpenseRow>("/api/expenses", filters);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<ExpenseRow>("/api/expenses", filters, 20, { syncUrl: true });
+
+  // URL 筛选恢复（hydration 后一次性应用；刷新/分享后筛选不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["customerId", "projectId", "category", "status"]);
+    setCustomerInput(u.customerId ?? "");
+    setProjectInput(u.projectId ?? "");
+    setCategoryInput(u.category ?? "");
+    setStatusInput(u.status ?? "");
+    setFilters(() => {
+      const n: { customerId?: string; projectId?: string; category?: string; status?: string } = {};
+      if (u.customerId) n.customerId = u.customerId;
+      if (u.projectId) n.projectId = u.projectId;
+      if (u.category) n.category = u.category;
+      if (u.status) n.status = u.status;
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 客户选项（复用 /api/business-partners 只读列表）
   useEffect(() => {
@@ -287,6 +308,70 @@ function ExpensesList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        activeFilters={[
+          filters.customerId
+            ? {
+                key: "customerId",
+                label: `客户：${customers.find((c) => c.id === filters.customerId)?.name ?? filters.customerId}`,
+                onClear: () => {
+                  setCustomerInput("");
+                  setProjectInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.customerId;
+                    delete n.projectId;
+                    return n;
+                  });
+                },
+              }
+            : null,
+          filters.projectId
+            ? {
+                key: "projectId",
+                label: `项目：${projects.find((p) => p.id === filters.projectId)?.name ?? filters.projectId}`,
+                onClear: () => {
+                  setProjectInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.projectId;
+                    return n;
+                  });
+                },
+              }
+            : null,
+          filters.category
+            ? {
+                key: "category",
+                label: `费用科目：${filters.category}`,
+                onClear: () => {
+                  setCategoryInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.category;
+                    return n;
+                  });
+                },
+              }
+            : null,
+          filters.status
+            ? {
+                key: "status",
+                label: `状态：${APPROVAL_LABELS[filters.status] ?? filters.status}`,
+                onClear: () => {
+                  setStatusInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.status;
+                    return n;
+                  });
+                },
+              }
+            : null,
+        ].filter((c): c is NonNullable<typeof c> => c !== null)}
         rowActions={(row) => (
           <div className="flex justify-end gap-1">
             <button

@@ -7,8 +7,11 @@
  * - 状态机规则由业务层解析（State_Action_Matrix 为准），本组件只渲染
  * - 声明了 confirm 的动作先弹 ConfirmActionDialog
  * - busy 动作显示进行中并禁用整栏，防止重复提交
+ * - FE 2.0 UI 补齐：
+ *   · sticky：长详情页滚动时动作栏吸顶（top-16 顶栏下方，backdrop 半透明）
+ *   · disabled 动作原因：title 之外补 aria-describedby（读屏可达）
  */
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { StatusBadge } from './status-badge';
 import { ConfirmActionDialog } from './confirm-action-dialog';
 import type { StatusTone } from '@/components/design-system';
@@ -39,6 +42,8 @@ interface StateActionBarProps {
   onAction: (key: string) => void;
   /** 当前执行中的动作 key（执行中整栏禁用） */
   busyKey?: string | null;
+  /** 滚动吸顶（长详情页推荐开启） */
+  sticky?: boolean;
 }
 
 const TONE_CLASS: Record<StateActionTone, string> = {
@@ -54,8 +59,10 @@ export function StateActionBar({
   actions,
   onAction,
   busyKey = null,
+  sticky = false,
 }: StateActionBarProps) {
   const [confirming, setConfirming] = useState<StateAction | null>(null);
+  const reasonIdBase = useId();
   const busy = busyKey !== null;
 
   const handleClick = (action: StateAction) => {
@@ -66,30 +73,38 @@ export function StateActionBar({
     onAction(action.key);
   };
 
-  return (
+  const bar = (
     <div className="flex flex-wrap items-center gap-2">
       <StatusBadge status={state} label={stateLabel} tone={stateTone} />
-      {actions.map((action) => {
+      {actions.map((action, i) => {
         const disabled = busy || action.disabled;
         const tone = action.tone ?? 'secondary';
+        const reasonId = `${reasonIdBase}-reason-${i}`;
         return (
-          <button
-            key={action.key}
-            type="button"
-            onClick={() => handleClick(action)}
-            disabled={disabled}
-            title={action.disabled ? action.disabledReason : undefined}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 ${TONE_CLASS[tone]}`}
-          >
-            {busyKey === action.key ? (
-              <span className="inline-flex items-center gap-1.5">
-                <Spinner />
-                处理中…
+          <span key={action.key} className="inline-flex">
+            <button
+              type="button"
+              onClick={() => handleClick(action)}
+              disabled={disabled}
+              title={action.disabled ? action.disabledReason : undefined}
+              aria-describedby={action.disabled && action.disabledReason ? reasonId : undefined}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 ${TONE_CLASS[tone]}`}
+            >
+              {busyKey === action.key ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <Spinner />
+                  处理中…
+                </span>
+              ) : (
+                action.label
+              )}
+            </button>
+            {action.disabled && action.disabledReason ? (
+              <span id={reasonId} className="sr-only">
+                {action.disabledReason}
               </span>
-            ) : (
-              action.label
-            )}
-          </button>
+            ) : null}
+          </span>
         );
       })}
       <ConfirmActionDialog
@@ -97,15 +112,21 @@ export function StateActionBar({
         title={confirming?.confirm?.title ?? ''}
         description={confirming?.confirm?.description}
         confirmLabel={confirming?.confirm?.confirmLabel}
-        tone={confirming?.tone === 'danger' ? 'danger' : 'primary'}
         busy={busy}
         onConfirm={() => {
-          const key = confirming?.key;
+          if (confirming) onAction(confirming.key);
           setConfirming(null);
-          if (key) onAction(key);
         }}
         onCancel={() => setConfirming(null)}
       />
+    </div>
+  );
+
+  if (!sticky) return bar;
+
+  return (
+    <div className="bg-canvas/95 top-16 z-20 -mx-4 sticky px-4 py-2 backdrop-blur md:-mx-6 md:px-6">
+      {bar}
     </div>
   );
 }

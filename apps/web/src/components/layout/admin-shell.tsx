@@ -18,7 +18,7 @@ import { MODULE_ACCENT_MAP } from "@/components/design-system";
 import { domainClass } from "@/components/design-system/domain-class";
 import { DomainIcon, ModuleIcon } from "./module-icons";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CommandPalette } from "./command-palette";
+import { CommandPalette, type RecentVisit } from "./command-palette";
 import { useTableDensity } from "@/lib/table-density-context";
 
 /**
@@ -35,6 +35,22 @@ import { useTableDensity } from "@/lib/table-density-context";
  * - Mobile：Sidebar → Drawer（drawer-in 动画 + backdrop blur）；顶部 = menu + 页面标题 + 快捷创建主操作
  * - Footer：保留发布版本信息（NEXT_PUBLIC_RELEASE_VERSION / BUILD_ID / GIT_SHA / DEPLOYMENT_ENV）
  */
+
+/** 命令面板「最近访问」localStorage 键 */
+const RECENT_STORAGE_KEY = "linier.recent";
+/** 最近访问最多保留条数 */
+const RECENT_MAX = 8;
+
+/** localStorage 读取的最近访问条目形状校验（隐私模式 / 旧格式容错） */
+function isRecentVisit(value: unknown): value is RecentVisit {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.route === "string" &&
+    typeof record.label === "string" &&
+    typeof record.domainLabel === "string"
+  );
+}
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const { state, logout } = useSession();
@@ -57,6 +73,20 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   // 命令面板（Ctrl+K / ⌘K）
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // 最近访问（localStorage "linier.recent" 懒加载；最多 8 条、按 route 去重、最新在前）
+  const [recentItems, setRecentItems] = useState<RecentVisit[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = window.localStorage.getItem(RECENT_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter(isRecentVisit).slice(0, RECENT_MAX);
+    } catch {
+      /* 隐私模式 / 解析失败等场景忽略 */
+      return [];
+    }
+  });
   // 快捷创建菜单
   const [createOpen, setCreateOpen] = useState(false);
   const createRef = useRef<HTMLDivElement>(null);
@@ -161,6 +191,28 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   // 快捷创建投影（Registry ui.create + createRoute + createPermission + 权限门）
   const quickCreate = useMemo(() => quickCreateItems(roles, visibleGroups), [roles, visibleGroups]);
+
+  // 最近访问：pathname 变化时把当前模块记录到 localStorage（按 route 去重、最新在前、最多 8 条）
+  useEffect(() => {
+    if (!currentModule) return;
+    const { module, domainId } = currentModule;
+    const accent = MODULE_ACCENT_MAP[domainId];
+    const entry: RecentVisit = {
+      route: module.route,
+      label: module.label,
+      domainLabel: accent ? accent.label : domainId,
+    };
+    setRecentItems((prev) => [entry, ...prev.filter((v) => v.route !== entry.route)].slice(0, RECENT_MAX));
+  }, [currentModule]);
+
+  // 最近访问持久化（隐私模式等写入异常忽略）
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(recentItems));
+    } catch {
+      /* 隐私模式等场景忽略 */
+    }
+  }, [recentItems]);
 
   // 搜索候选（ready/preview 可跳转；hold 仅展示）
   const searchCandidates = useMemo(() => {
@@ -716,6 +768,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
         groups={visibleGroups}
+        recent={recentItems}
       />
     </div>
   );

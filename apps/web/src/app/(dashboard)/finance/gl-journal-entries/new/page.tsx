@@ -8,6 +8,7 @@ import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityFormWorkspace } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
+import { Combobox } from "@/components/ui/combobox";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 import { VOUCHER_TYPE_OPTIONS } from "@/lib/vat-labels";
 
@@ -145,10 +146,15 @@ function ManualEntryForm() {
               {lines.map((l, i) => (
                 <tr key={i}>
                   <td className="px-3 py-2">
-                    <select value={l.accountCode} onChange={(e) => updateLine(i, { accountCode: e.target.value })} className={inputClass}>
-                      <option value="">请选择科目</option>
-                      {accounts.map((a) => (<option key={a.id} value={a.code}>{a.code} {a.name}</option>))}
-                    </select>
+                    <Combobox
+                      value={l.accountCode || null}
+                      onValueChange={(v) => updateLine(i, { accountCode: v ?? "" })}
+                      options={accounts.map((a) => ({ value: a.code, label: `${a.code} ${a.name}` }))}
+                      placeholder="请选择科目"
+                      clearable
+                      size="sm"
+                      className="w-full"
+                    />
                   </td>
                   <td className="px-3 py-2"><input value={l.summary} onChange={(e) => updateLine(i, { summary: e.target.value })} className={inputClass} /></td>
                   <td className="px-3 py-2"><input type="number" min={0} step="0.01" value={l.debit} disabled={Number(l.credit) > 0} onChange={(e) => updateLine(i, { debit: e.target.value, credit: Number(e.target.value) > 0 ? "" : l.credit })} className={inputClass} /></td>

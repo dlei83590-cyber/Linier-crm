@@ -19,6 +19,7 @@ import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from 
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { salesStatusLabel, salesStatusTone } from "@/lib/sales-status";
+import { CopyButton } from "@/components/ui/copy-button";
 import { useToast } from "@/components/ui/toast";
 import { PageLoading } from "@/components/ui/skeleton";
 import { useSession } from "@/lib/session-context";
@@ -322,7 +323,15 @@ function InvoiceDetailPage() {
         }
         summary={
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <InfoItem label="单号" value={detail.code ?? "（草稿）"} />
+            <InfoItem
+              label="单号"
+              value={
+                <span className="inline-flex items-center gap-2">
+                  {detail.code ?? "（草稿）"}
+                  {detail.code ? <CopyButton text={detail.code} size="sm" /> : null}
+                </span>
+              }
+            />
             <InfoItem label="客户" value={detail.customer?.name} />
             <InfoItem
               label="来源送货单"

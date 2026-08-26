@@ -6,7 +6,7 @@
  * 依据 Contract Card（items.md）：backend CRUD FINAL，本 Wave 实现 List。
  * 结构：AppPage + EntityListWorkspace（Header → Toolbar → Table → Pagination）。
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
@@ -14,7 +14,7 @@ import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { formatDate } from "@/lib/format";
@@ -97,8 +97,29 @@ function ItemList() {
     status?: string;
   }>({});
 
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<ItemRow>("/api/items", filters);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<ItemRow>("/api/items", filters, 20, { syncUrl: true });
+
+  // URL 筛选恢复（hydration 后一次性应用；刷新/分享后筛选不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["code", "name", "itemType", "status"]);
+    setCodeInput(u.code ?? "");
+    setNameInput(u.name ?? "");
+    setTypeInput(u.itemType ?? "");
+    setStatusInput(u.status ?? "");
+    setFilters(() => {
+      const n: { code?: string; name?: string; itemType?: string; status?: string } = {};
+      if (u.code) n.code = u.code;
+      if (u.name) n.name = u.name;
+      if (u.itemType) n.itemType = u.itemType;
+      if (u.status) n.status = u.status;
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyFilter = () => {
     const next: { code?: string; name?: string; itemType?: string; status?: string } = {};
@@ -278,6 +299,68 @@ function ItemList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        activeFilters={[
+          filters.code
+            ? {
+                key: "code",
+                label: `编码：${filters.code}`,
+                onClear: () => {
+                  setCodeInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.code;
+                    return n;
+                  });
+                },
+              }
+            : null,
+          filters.name
+            ? {
+                key: "name",
+                label: `名称：${filters.name}`,
+                onClear: () => {
+                  setNameInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.name;
+                    return n;
+                  });
+                },
+              }
+            : null,
+          filters.itemType
+            ? {
+                key: "itemType",
+                label: `类型：${ITEM_TYPE_LABELS[filters.itemType] ?? filters.itemType}`,
+                onClear: () => {
+                  setTypeInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.itemType;
+                    return n;
+                  });
+                },
+              }
+            : null,
+          filters.status
+            ? {
+                key: "status",
+                label: `状态：${STATUS_LABELS[filters.status] ?? filters.status}`,
+                onClear: () => {
+                  setStatusInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.status;
+                    return n;
+                  });
+                },
+              }
+            : null,
+        ].filter((c): c is NonNullable<typeof c> => c !== null)}
         rowActions={(row) => (
           <div className="flex justify-end gap-1">
             {canEdit && (

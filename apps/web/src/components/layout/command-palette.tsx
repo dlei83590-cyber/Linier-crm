@@ -15,6 +15,7 @@ import type { FrontendModule, ModuleDomainDef } from "@/lib/frontend/modules";
 import { MODULE_ACCENT_MAP } from "@/components/design-system";
 import { domainClass } from "@/components/design-system/domain-class";
 import { ModuleIcon } from "./module-icons";
+import { Icon } from "@/components/ui/icon";
 
 export interface PaletteGroup {
   domain: ModuleDomainDef;
@@ -23,32 +24,60 @@ export interface PaletteGroup {
   hold: FrontendModule[];
 }
 
+/** 最近访问条目（AdminShell 持久化到 localStorage "linier.recent" 后经 props 传入） */
+export interface RecentVisit {
+  route: string;
+  label: string;
+  domainLabel: string;
+}
+
 interface CommandPaletteProps {
   open: boolean;
   onClose: () => void;
   groups: PaletteGroup[];
+  /** 最近访问（可选；不传时行为与旧版一致） */
+  recent?: RecentVisit[];
 }
 
-interface Candidate {
+interface ModuleCandidate {
+  kind: "module";
   module: FrontendModule;
   domainId: string;
   available: boolean;
 }
 
-export function CommandPalette({ open, onClose, groups }: CommandPaletteProps) {
+interface RecentCandidate {
+  kind: "recent";
+  route: string;
+  label: string;
+  domainLabel: string;
+}
+
+type Candidate = ModuleCandidate | RecentCandidate;
+
+export function CommandPalette({ open, onClose, groups, recent }: CommandPaletteProps) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const candidates = useMemo<Candidate[]>(() => {
-    const all = groups.flatMap((g) => [
-      ...g.ready.map((m) => ({ module: m, domainId: g.domain.id, available: true })),
-      ...g.preview.map((m) => ({ module: m, domainId: g.domain.id, available: true })),
-      ...g.hold.map((m) => ({ module: m, domainId: g.domain.id, available: false })),
+    const all: ModuleCandidate[] = groups.flatMap((g) => [
+      ...g.ready.map((m) => ({ kind: "module" as const, module: m, domainId: g.domain.id, available: true })),
+      ...g.preview.map((m) => ({ kind: "module" as const, module: m, domainId: g.domain.id, available: true })),
+      ...g.hold.map((m) => ({ kind: "module" as const, module: m, domainId: g.domain.id, available: false })),
     ]);
     const q = query.trim().toLowerCase();
-    if (!q) return all.slice(0, 12);
+    if (!q) {
+      // 最近访问并入候选数组最前（可 ↑↓ 选中 / Enter 跳转）
+      const recents: RecentCandidate[] = (recent ?? []).map((v) => ({
+        kind: "recent",
+        route: v.route,
+        label: v.label,
+        domainLabel: v.domainLabel,
+      }));
+      return [...recents, ...all.slice(0, 12)];
+    }
     return all
       .filter(({ module, domainId }) => {
         const accent = MODULE_ACCENT_MAP[domainId];
@@ -56,7 +85,18 @@ export function CommandPalette({ open, onClose, groups }: CommandPaletteProps) {
         return module.label.toLowerCase().includes(q) || domainLabel.toLowerCase().includes(q);
       })
       .slice(0, 12);
-  }, [groups, query]);
+  }, [groups, query, recent]);
+
+  // 最近访问条目按 route 恢复模块图标 / 域色（未命中 → history 兜底图标）
+  const moduleByRoute = useMemo(() => {
+    const map = new Map<string, { module: FrontendModule; domainId: string }>();
+    for (const g of groups) {
+      for (const m of [...g.ready, ...g.preview, ...g.hold]) {
+        if (!map.has(m.route)) map.set(m.route, { module: m, domainId: g.domain.id });
+      }
+    }
+    return map;
+  }, [groups]);
 
   // 打开时聚焦 + 重置
   useEffect(() => {
@@ -81,10 +121,15 @@ export function CommandPalette({ open, onClose, groups }: CommandPaletteProps) {
 
   const go = (index: number) => {
     const item = candidates[index];
-    if (!item || !item.available) return;
-    router.push(item.module.route);
+    if (!item) return;
+    if (item.kind === "module" && !item.available) return;
+    router.push(item.kind === "recent" ? item.route : item.module.route);
     onClose();
   };
+
+  // 分组渲染开关：query 为空且有最近访问时，顶部展示「最近访问」+「全部模块」
+  const showRecentGroup = query.trim() === "" && recent != null && recent.length > 0;
+  const recentCount = showRecentGroup ? (recent ?? []).length : 0;
 
   return (
     <div
@@ -135,12 +180,17 @@ export function CommandPalette({ open, onClose, groups }: CommandPaletteProps) {
           {candidates.length === 0 ? (
             <li className="px-4 py-3 text-sm text-ink-muted">无匹配模块</li>
           ) : (
-            candidates.map(({ module: m, domainId, available }, i) => {
-              const dc = domainClass(domainId);
-              const active = i === activeIndex;
-              return (
-                <li key={m.id}>
-                  {available ? (
+            <>
+              {showRecentGroup && (
+                <li className="select-none px-4 pb-1 pt-2 text-xs font-medium text-ink-muted">最近访问</li>
+              )}
+              {candidates.slice(0, recentCount).map((c, i) => {
+                if (c.kind !== "recent") return null;
+                const hit = moduleByRoute.get(c.route);
+                const dc = hit ? domainClass(hit.domainId) : null;
+                const active = i === activeIndex;
+                return (
+                  <li key={`recent-${c.route}`}>
                     <button
                       type="button"
                       onClick={() => go(i)}
@@ -149,26 +199,61 @@ export function CommandPalette({ open, onClose, groups }: CommandPaletteProps) {
                         active ? "bg-brand-50 text-ink-primary" : "text-ink-primary hover:bg-slate-50"
                       }`}
                     >
-                      <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded ${dc.soft}`}>
-                        <ModuleIcon moduleId={m.id} className={`h-3 w-3 ${dc.text}`} />
+                      <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded ${
+                        hit ? dc?.soft : "bg-slate-100"
+                      }`}>
+                        {hit ? (
+                          <ModuleIcon moduleId={hit.module.id} className={`h-3 w-3 ${dc?.text}`} />
+                        ) : (
+                          <Icon name="history" className="h-3 w-3 text-ink-muted" />
+                        )}
                       </span>
-                      <span className="min-w-0 flex-1 truncate font-medium">{m.label}</span>
-                      <span className="shrink-0 text-xs text-ink-muted">
-                        {MODULE_ACCENT_MAP[domainId]?.label ?? domainId}
-                      </span>
+                      <span className="min-w-0 flex-1 truncate font-medium">{c.label}</span>
+                      <span className="shrink-0 text-xs text-ink-muted">{c.domainLabel}</span>
                     </button>
-                  ) : (
-                    <span className="flex cursor-not-allowed items-center gap-2.5 px-4 py-2 text-sm text-ink-muted">
-                      <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded ${dc.soft}`}>
-                        <ModuleIcon moduleId={m.id} className={`h-3 w-3 ${dc.text}`} />
+                  </li>
+                );
+              })}
+              {showRecentGroup && (
+                <li className="select-none px-4 pb-1 pt-2 text-xs font-medium text-ink-muted">全部模块</li>
+              )}
+              {candidates.slice(recentCount).map((c, j) => {
+                if (c.kind !== "module") return null;
+                const { module: m, domainId, available } = c;
+                const dc = domainClass(domainId);
+                const active = recentCount + j === activeIndex;
+                return (
+                  <li key={m.id}>
+                    {available ? (
+                      <button
+                        type="button"
+                        onClick={() => go(recentCount + j)}
+                        onMouseEnter={() => setActiveIndex(recentCount + j)}
+                        className={`flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm transition-colors duration-150 ${
+                          active ? "bg-brand-50 text-ink-primary" : "text-ink-primary hover:bg-slate-50"
+                        }`}
+                      >
+                        <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded ${dc.soft}`}>
+                          <ModuleIcon moduleId={m.id} className={`h-3 w-3 ${dc.text}`} />
+                        </span>
+                        <span className="min-w-0 flex-1 truncate font-medium">{m.label}</span>
+                        <span className="shrink-0 text-xs text-ink-muted">
+                          {MODULE_ACCENT_MAP[domainId]?.label ?? domainId}
+                        </span>
+                      </button>
+                    ) : (
+                      <span className="flex cursor-not-allowed items-center gap-2.5 px-4 py-2 text-sm text-ink-muted">
+                        <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded ${dc.soft}`}>
+                          <ModuleIcon moduleId={m.id} className={`h-3 w-3 ${dc.text}`} />
+                        </span>
+                        <span className="min-w-0 flex-1 truncate">{m.label}</span>
+                        <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px]">尚未开放</span>
                       </span>
-                      <span className="min-w-0 flex-1 truncate">{m.label}</span>
-                      <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px]">尚未开放</span>
-                    </span>
-                  )}
-                </li>
-              );
-            })
+                    )}
+                  </li>
+                );
+              })}
+            </>
           )}
         </ul>
         <div className="border-t border-border px-4 py-2 text-xs text-ink-muted">
