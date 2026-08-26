@@ -2,6 +2,17 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - CC-07：订单 BOM 用料统一吨数展示（Contract Close → Production-Test）
+
+### 新增
+
+- **GET /api/sales-orders/:id/material-requirements 输出吨数折算（只读）**：每行新增 requiredUom（原单位 code）、tonnage（折算吨数）、tonnageConvertible、reason（不可换算原因）；只消费现有 UomConversion 事实（1 from = factor to；正向 requiredUom→TON 相乘、反向 TON→requiredUom 相除）；无 TON 计量单位或无换算 → tonnage=null / tonnageConvertible=false / reason="缺少 xxx → TON 换算"，绝不猜测
+- **SalesOrder 详情「BOM 预计用料」统一吨数展示**：表格列 = 原料 / 原单位需求（数量+原单位）/ 折算吨数 / 当前库存 / 库存单位；吨数合计只统计可换算项；未换算物料显示"未换算"（不造 0）并明确提示"另有 N 种原料未配置 → TON 换算，未计入合计"
+- **单测**：KG→TON 正向/反向换算、无换算 → null/false/reason、无 TON 单位分支、吨数汇总只含可换算项
+
+### 边界
+
+- 零 Schema / 零 Migration（requiredUom/tonnage 为只读计算输出）；不重写 BOM 算法；不做 MRP / 自动采购 / 库存 Reservation；前端不写换算系数；不触碰 modules.ts
 ## [Unreleased] - Phase 2C-2 收口：客户公海 DEPARTMENT/小组自动入池（零 Schema，CustomerPool 2C 收口线）
 
 ### 新增
