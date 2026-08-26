@@ -2,6 +2,21 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 菜单链路审计与无用功能清理（导航层，FRT-01）
+
+### 新增
+
+- **供应商评级规则补链**：/settings/supplier-rating-rules（cc-06 客户等级→最低供应商评级配置）注册为 system 域 ready 模块（permission customer-supplier-rating-rule:view）；ui 仅声明 list（行内新建/编辑不虚报 create/edit）；模块图标新增
+- **审计文档**：docs/frontend/Menu_Chain_Audit_2026-08.md（9 域 52 模块链路清单 + 问题处置表）
+
+### 清理
+
+- 删除 hold 死条目 ×3（modules.ts）：报表中心（route /reports 无页面 404）、客户走访/项目风险（引导页全站不可达，能力已归属项目详情 Tab）；同步删除 /project-visits、/project-risks 引导页与孤儿模块图标
+
+### 边界
+
+- 零 Schema / Migration / API / Seed / RBAC 变更；ready 模块 route/能力/权限码不动；后端 Menu Center API（/api/menu-groups、/api/menus）前端零消费为遗留项（需 Design Gate 后单独清理）
+
 ## [Unreleased] - 合同收口-销售出库（CC-01 Sales Outbound）：Delivery DISPATCH 真正库存扣减
 
 ### 新增
