@@ -181,6 +181,7 @@ describe('PATCH /api/business-partners/:id — 信用等级（creditRating）写
 
 describe('DELETE /api/business-partners/:id — 引用检查仅统计未删除（deletedAt:null）引用', () => {
   let findFirstMock: ReturnType<typeof vi.fn>;
+  let updateMock: ReturnType<typeof vi.fn>;
 
   /** 构造带 _count 的往来单位；counts 只统计未软删除的引用（历史草稿不计入） */
   function bpWithCounts(counts: Record<string, number>) {
@@ -201,9 +202,10 @@ describe('DELETE /api/business-partners/:id — 引用检查仅统计未删除�
   beforeEach(() => {
     vi.clearAllMocks();
     findFirstMock = vi.fn();
+    updateMock = vi.fn().mockResolvedValue({ id: 'bp-del-1', deletedAt: new Date() });
     mockPrisma.businessPartner = {
       findFirst: findFirstMock,
-      update: vi.fn().mockResolvedValue({ id: 'bp-del-1', deletedAt: new Date() }),
+      update: updateMock,
     };
   });
 
@@ -213,7 +215,7 @@ describe('DELETE /api/business-partners/:id — 引用检查仅统计未删除�
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data.deleted).toBe(true);
-    expect(mockPrisma.businessPartner.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'bp-del-1' } }));
+    expect(updateMock).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'bp-del-1' } }));
   });
 
   it('存在未删除的有效引用（customers>0）→ 409 CONFLICT', async () => {
