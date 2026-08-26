@@ -7,6 +7,7 @@ import { ok, fail, failValidation, failConflict, parsePagination } from "@/lib/a
 import { handleServerError } from "@/lib/api/server-error";
 import { normalizeUscc, isValidUscc } from "@/lib/business-partner/normalize";
 import { findBusinessPartnerDuplicates } from "@/lib/business-partner/duplicate-check";
+import { BUSINESS_PARTNER_CHANNELS, CHANNEL_UNSET_LABEL } from "@/lib/business-partner/channel";
 import { matchCustomerPools } from "@/lib/customer-pool/match";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
@@ -38,6 +39,8 @@ const businessPartnerCreateSchema = z.object({
   // cc-06 客户等级→供应商评级匹配：客户等级（复用 CustomerLevel 枚举；可空）
   customerLevel: z.enum(["VIP", "KEY", "REGULAR", "PROSPECT"]).nullable().optional(),
   sourceChannel: z.string().max(100).nullable().optional(),
+  // 销售渠道（Migration 0055；SSOT = 固定枚举，服务端校验 fail closed；null = 未设置）
+  channel: z.enum(BUSINESS_PARTNER_CHANNELS).nullable().optional(),
   foundedDate: z.string().datetime().nullable().optional(),
   registeredCapital: z.string().nullable().optional(),
   employeeCount: z.number().int().nonnegative().nullable().optional(),
@@ -70,6 +73,7 @@ export async function GET(request: NextRequest) {
   const type = searchParams.get("type")?.trim();
   const region = searchParams.get("region")?.trim();
   const industry = searchParams.get("industry")?.trim();
+  const channel = searchParams.get("channel")?.trim();
   const isActive = searchParams.get("isActive")?.trim();
 
   const where = {
@@ -80,6 +84,8 @@ export async function GET(request: NextRequest) {
     ...(type ? { type: type as PartnerType } : {}),
     ...(region ? { region: { contains: region, mode: "insensitive" as const } } : {}),
     ...(industry ? { industry: { contains: industry, mode: "insensitive" as const } } : {}),
+    // 销售渠道固定枚举 → 精确匹配；「未设置」= channel IS NULL
+    ...(channel ? (channel === CHANNEL_UNSET_LABEL ? { channel: null } : { channel }) : {}),
     ...(isActive === "true" ? { isActive: true } : isActive === "false" ? { isActive: false } : {}),
   };
 
@@ -201,6 +207,7 @@ export async function POST(request: NextRequest) {
         creditRating: parsed.data.creditRating ?? null,
         customerLevel: parsed.data.customerLevel ?? null,
         sourceChannel: parsed.data.sourceChannel ?? null,
+        channel: parsed.data.channel ?? null,
         foundedDate: parsed.data.foundedDate ? new Date(parsed.data.foundedDate) : null,
         registeredCapital: parsed.data.registeredCapital ?? null,
         employeeCount: parsed.data.employeeCount ?? null,

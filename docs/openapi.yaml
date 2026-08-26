@@ -21077,6 +21077,7 @@ components:
         registeredAddress: { type: [string, 'null'] }
         region: { type: [string, 'null'] }
         industry: { type: [string, 'null'] }
+        channel: { type: [string, 'null'], description: 销售渠道（固定枚举 直销/经销/电商/项目/其他；null=未设置，Migration 0055） }
         companySize: { type: [string, 'null'] }
         contactPerson: { type: [string, 'null'] }
         phone: { type: [string, 'null'] }
@@ -21120,6 +21121,7 @@ components:
         registeredAddress: { type: [string, 'null'] }
         region: { type: [string, 'null'] }
         industry: { type: [string, 'null'] }
+        channel: { type: [string, 'null'], description: 销售渠道（固定枚举 直销/经销/电商/项目/其他；null=未设置） }
         companySize: { type: [string, 'null'] }
         contactPerson: { type: [string, 'null'] }
         phone: { type: [string, 'null'] }
@@ -21141,6 +21143,7 @@ components:
         uscc: { type: [string, 'null'] }
         region: { type: [string, 'null'] }
         industry: { type: [string, 'null'] }
+        channel: { type: [string, 'null'], description: 销售渠道（固定枚举 直销/经销/电商/项目/其他；null=未设置） }
         contactPerson: { type: [string, 'null'] }
         phone: { type: [string, 'null'] }
         email: { type: [string, 'null'] }

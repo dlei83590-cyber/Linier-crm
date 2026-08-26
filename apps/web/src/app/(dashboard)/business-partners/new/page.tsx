@@ -13,6 +13,7 @@ import { AppPage, EntityFormWorkspace } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
+import { BUSINESS_PARTNER_CHANNELS } from "@/lib/business-partner/channel";
 import {
   computeDuplicateUiState,
   shouldRunDuplicateCheck,
@@ -53,6 +54,7 @@ function BusinessPartnerCreateForm() {
   const [legalRepresentative, setLegalRepresentative] = useState("");
   const [region, setRegion] = useState("");
   const [industry, setIndustry] = useState("");
+  const [channel, setChannel] = useState("");
   const [companySize, setCompanySize] = useState("");
   const [contactPerson, setContactPerson] = useState("");
   const [phone, setPhone] = useState("");
@@ -150,6 +152,7 @@ function BusinessPartnerCreateForm() {
         legalRepresentative: legalRepresentative.trim() || undefined,
         region: region.trim() || undefined,
         industry: industry.trim() || undefined,
+        channel: channel || undefined,
         companySize: companySize.trim() || undefined,
         contactPerson: contactPerson.trim() || undefined,
         phone: phone.trim() || undefined,
@@ -291,6 +294,16 @@ function BusinessPartnerCreateForm() {
         </FormField>
         <FormField label="行业">
           <input value={industry} onChange={(e) => setIndustry(e.target.value)} className={inputClass} />
+        </FormField>
+        <FormField label="销售渠道">
+          <select value={channel} onChange={(e) => setChannel(e.target.value)} className={inputClass}>
+            <option value="">未设置</option>
+            {BUSINESS_PARTNER_CHANNELS.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
         </FormField>
         <FormField label="企业规模">
           <input value={companySize} onChange={(e) => setCompanySize(e.target.value)} className={inputClass} />

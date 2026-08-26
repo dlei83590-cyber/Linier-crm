@@ -93,6 +93,9 @@ describe('GET /api/reports/operations — 经营数据固定看板（只读聚�
     expect(d.targets).toEqual([]);
     expect(d.customerTiers).toEqual({ total: 10, deal: 0, quoted: 0, opportunity: 0, normal: 10 });
     expect(d.regions).toEqual([]);
+    // 渠道维度：SSOT 已接入（BusinessPartner.channel）→ channelAvailable=true；无渠道事实 → channels 空数组
+    expect(d.channelAvailable).toBe(true);
+    expect(d.channels).toEqual([]);
   });
 
   it('订单/报价 KPI 排除 CANCELLED，且按 createdAt 区间过滤（groupBy 保留全状态构成）', async () => {
@@ -206,12 +209,39 @@ describe('GET /api/reports/operations — 经营数据固定看板（只读聚�
     expect(unset).toEqual({ brand: '未设置', lineCount: 1, amount: '3000' });
   });
 
-  it('channelAvailable 恒 false：渠道维度无 SSOT 事实源 → 前端显示「暂无渠道事实数据」，不造 channels 字段', async () => {
+  it('固定渠道维度：BusinessPartner.channel 聚合客户数 + 期间订单数/金额（未设置归「未设置」）', async () => {
+    const bp = mockPrisma['businessPartner'] as { groupBy: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn> };
+    const so = mockPrisma['salesOrder'] as { findMany: ReturnType<typeof vi.fn> };
+    // groupBy 两次调用：第一次 region、第二次 channel
+    bp.groupBy
+      .mockResolvedValueOnce([]) // region 无事实
+      .mockResolvedValueOnce([
+        { channel: '直销', _count: { _all: 4 } },
+        { channel: '经销', _count: { _all: 3 } },
+      ]);
+    so.findMany
+      .mockResolvedValueOnce([]) // 分层（无成交）
+      .mockResolvedValueOnce([
+        { customerId: 'bp-1', totalAmount: new Prisma.Decimal('9000.00') },
+        { customerId: 'bp-2', totalAmount: new Prisma.Decimal('6000.00') },
+        { customerId: 'bp-9', totalAmount: new Prisma.Decimal('2000.00') },
+      ]);
+    bp.findMany.mockResolvedValue([
+      { id: 'bp-1', region: null, channel: '直销' },
+      { id: 'bp-2', region: null, channel: '经销' },
+      { id: 'bp-9', region: null, channel: null },
+    ]);
     const res = await GET(makeRequest('month'));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.data.channelAvailable).toBe(false);
-    expect(body.data.channels).toBeUndefined();
+    expect(body.data.channelAvailable).toBe(true);
+    const channels = body.data.channels;
+    const direct = channels.find((c: { channel: string }) => c.channel === '直销');
+    expect(direct).toEqual({ channel: '直销', customerCount: 4, salesOrderCount: 1, salesAmount: '9000' });
+    const dealer = channels.find((c: { channel: string }) => c.channel === '经销');
+    expect(dealer).toEqual({ channel: '经销', customerCount: 3, salesOrderCount: 1, salesAmount: '6000' });
+    const unset = channels.find((c: { channel: string }) => c.channel === '未设置');
+    expect(unset).toEqual({ channel: '未设置', customerCount: 0, salesOrderCount: 1, salesAmount: '2000' });
   });
 
   it('period=day → Asia/Shanghai 业务日边界（UTC 16:00 起，跨度 24h）', async () => {
