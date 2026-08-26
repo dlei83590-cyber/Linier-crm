@@ -7,7 +7,7 @@
  * 不提供新建按钮（SO 唯一入口是 Quotation Convert，F2-6B）。
  * PermissionGuard 对齐 API requirePermission("sales-order:view")。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
@@ -17,7 +17,7 @@ import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 import type { ModuleSummaryData } from "@/lib/module-summary/types";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { SALES_STATUS_OPTIONS, salesStatusLabel, salesStatusTone } from "@/lib/sales-status";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { useSession } from "@/lib/session-context";
@@ -85,8 +85,31 @@ function SalesOrderList() {
     setPage(1);
   };
 
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<SalesOrderRow>("/api/sales-orders", filters);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<SalesOrderRow>("/api/sales-orders", filters, 20, { syncUrl: true });
+
+  // URL 筛选恢复（hydration 后一次性应用，避免 SSR 不一致；刷新/分享后筛选不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["code", "customerId", "status", "dateFrom", "dateTo"]);
+    setCodeInput(u.code ?? "");
+    setCustomerInput(u.customerId ?? "");
+    setDateFromInput(u.dateFrom ?? "");
+    setDateToInput(u.dateTo ?? "");
+    setStatusInput(u.status ?? "");
+    setFilters(() => {
+      const n: { code?: string; customerId?: string; status?: string; dateFrom?: string; dateTo?: string } = {};
+      if (u.code) n.code = u.code;
+      if (u.customerId) n.customerId = u.customerId;
+      if (u.status) n.status = u.status;
+      if (u.dateFrom) n.dateFrom = u.dateFrom;
+      if (u.dateTo) n.dateTo = u.dateTo;
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyFilter = () => {
     const next: { code?: string; customerId?: string; status?: string; dateFrom?: string; dateTo?: string } = {};
@@ -258,6 +281,70 @@ function SalesOrderList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        activeFilters={[
+          filters.code
+            ? {
+                key: "code",
+                label: `单号：${filters.code}`,
+                onClear: () => {
+                  setCodeInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.code;
+                    return n;
+                  });
+                },
+              }
+            : null,
+          filters.customerId
+            ? {
+                key: "customerId",
+                label: `客户：${customers.find((c) => c.id === filters.customerId)?.name ?? filters.customerId}`,
+                onClear: () => {
+                  setCustomerInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.customerId;
+                    return n;
+                  });
+                },
+              }
+            : null,
+          filters.status
+            ? {
+                key: "status",
+                label: `状态：${salesStatusLabel("salesOrder", filters.status)}`,
+                onClear: () => {
+                  setStatusInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.status;
+                    return n;
+                  });
+                },
+              }
+            : null,
+          filters.dateFrom || filters.dateTo
+            ? {
+                key: "date",
+                label: `下单日期：${filters.dateFrom ?? "…"} ~ ${filters.dateTo ?? "…"}`,
+                onClear: () => {
+                  setDateFromInput("");
+                  setDateToInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.dateFrom;
+                    delete n.dateTo;
+                    return n;
+                  });
+                },
+              }
+            : null,
+        ].filter((c): c is NonNullable<typeof c> => c !== null)}
         rowActions={(row) => (
           <RowActionsMenu
             actions={[

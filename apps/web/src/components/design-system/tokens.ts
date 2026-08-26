@@ -97,7 +97,7 @@ export const SEMANTIC_COLORS = {
   borderStrong: '#cbd5e1',
   inkPrimary: '#111827', // 主文本
   inkSecondary: '#475569', // 次级文本
-  inkMuted: '#94a3b8', // 弱化文本 / 占位
+  inkMuted: '#64748b', // 弱化文本 / 占位（对比度 2.7:1 → 4.8:1，WCAG AA；placeholder 仍足够弱）
   brand: '#2563eb', // 主操作色
   brandHover: '#1d4ed8',
 } as const;

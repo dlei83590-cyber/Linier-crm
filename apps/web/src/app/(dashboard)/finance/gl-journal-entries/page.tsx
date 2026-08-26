@@ -1,7 +1,7 @@
 "use client";
 
 /** GL 记账凭证 — 只读列表页（Sprint 7 Finance 首块，ADR-0033；事件驱动自动过账，无手工过账 UI） */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
@@ -9,7 +9,7 @@ import { AppPage, EntityListWorkspace, StatusBadge, ModuleKpiStrip } from "@/com
 import { apiFetch } from "@/lib/api-client";
 import type { ModuleSummaryData } from "@/lib/module-summary/types";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { formatDate, formatMoney } from "@/lib/format";
 import { VOUCHER_TYPE_LABELS } from "@/lib/vat-labels";
 
@@ -75,8 +75,24 @@ function GlEntryList() {
     setPage(1);
   };
 
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<GlEntryRow>("/api/gl/journal-entries", filters);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<GlEntryRow>("/api/gl/journal-entries", filters, 20, { syncUrl: true });
+
+  // URL 筛选恢复（hydration 后一次性应用；刷新/分享后筛选不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["sourceType", "status"]);
+    setSourceTypeInput(u.sourceType ?? "");
+    setFilters(() => {
+      const n: { sourceType?: string; status?: string } = {};
+      if (u.sourceType) n.sourceType = u.sourceType;
+      if (u.status) n.status = u.status;
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyFilter = () => {
     const next: { sourceType?: string; status?: string } = {};
@@ -143,6 +159,39 @@ function GlEntryList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        activeFilters={[
+          filters.sourceType
+            ? {
+                key: "sourceType",
+                label: `来源：${SOURCE_LABELS[filters.sourceType] ?? filters.sourceType}`,
+                onClear: () => {
+                  setSourceTypeInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.sourceType;
+                    return n;
+                  });
+                },
+              }
+            : null,
+          filters.status
+            ? {
+                key: "status",
+                label: `状态：${STATUS_LABELS[filters.status] ?? filters.status}`,
+                onClear: () => {
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.status;
+                    return n;
+                  });
+                },
+              }
+            : null,
+        ].filter((c): c is NonNullable<typeof c> => c !== null)}
       />
     </AppPage>
   );

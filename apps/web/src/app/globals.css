@@ -1,3 +1,11 @@
+html {
+  /* 中文字体栈（FE 2.0 UI-01 补齐）：macOS 苹方 / Windows 微软雅黑 / Linux Noto Sans SC；
+     数字列继续由 tabular-nums 负责对齐，字体栈只解决中西文混排一致性 */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Helvetica Neue",
+    Arial, sans-serif;
+  text-rendering: optimizeLegibility;
+}
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

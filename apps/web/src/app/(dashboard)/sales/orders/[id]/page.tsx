@@ -19,6 +19,7 @@ import { useParams, useRouter } from "next/navigation";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel, StatusBadge } from "@/components/workspace";
+import { CopyButton } from "@/components/ui/copy-button";
 import { PageLoading } from "@/components/ui/skeleton";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
@@ -394,7 +395,15 @@ function SalesOrderDetailPage() {
         }
         summary={
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <InfoItem label="单号" value={detail.code} />
+            <InfoItem
+              label="单号"
+              value={
+                <span className="inline-flex items-center gap-2">
+                  {detail.code}
+                  <CopyButton text={detail.code} size="sm" />
+                </span>
+              }
+            />
             <InfoItem label="客户" value={detail.customer?.name} />
             <InfoItem
               label="来源报价单"

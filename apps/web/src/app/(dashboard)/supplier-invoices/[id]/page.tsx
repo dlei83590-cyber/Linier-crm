@@ -18,6 +18,7 @@ import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel, DetailTable } from "@/components/workspace";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
+import { CopyButton } from "@/components/ui/copy-button";
 import { useToast } from "@/components/ui/toast";
 import { PageLoading } from "@/components/ui/skeleton";
 import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
@@ -239,7 +240,15 @@ function SupplierInvoiceDetailPage() {
         }
         summary={
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <InfoItem label="发票号" value={detail.invoiceNo} />
+            <InfoItem
+              label="发票号"
+              value={
+                <span className="inline-flex items-center gap-2">
+                  {detail.invoiceNo}
+                  <CopyButton text={detail.invoiceNo} size="sm" />
+                </span>
+              }
+            />
             <InfoItem label="供应商发票号" value={detail.supplierInvoiceNo} />
             <InfoItem
               label="进项发票类型"

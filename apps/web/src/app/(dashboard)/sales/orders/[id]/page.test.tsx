@@ -18,6 +18,7 @@ vi.mock('@/lib/session-context', () => ({
 }));
 
 import { DensityProvider } from '@/lib/table-density-context';
+import { ToastProvider } from '@/components/ui/toast';
 import Page from '@/app/(dashboard)/sales/orders/[id]/page';
 
 const detail = {
@@ -110,7 +111,9 @@ describe('Sales Order Detail — Q 线投影（FRT-06：API 失败 ≠ 空态）
   it('material-requirements 接口失败时显示真实错误 + 重试，绝不伪装成"无配方"空态', async () => {
     render(
       <DensityProvider>
-        <Page />
+        <ToastProvider>
+          <Page />
+        </ToastProvider>
       </DensityProvider>,
     );
 
@@ -126,7 +129,9 @@ describe('Sales Order Detail — Q 线投影（FRT-06：API 失败 ≠ 空态）
   it('点击重试后（接口恢复）BOM 用料正常渲染，错误面板消失', async () => {
     render(
       <DensityProvider>
-        <Page />
+        <ToastProvider>
+          <Page />
+        </ToastProvider>
       </DensityProvider>,
     );
 
@@ -173,7 +178,9 @@ describe('Sales Order Detail — Q 线投影（FRT-06：API 失败 ≠ 空态）
 
     render(
       <DensityProvider>
-        <Page />
+        <ToastProvider>
+          <Page />
+        </ToastProvider>
       </DensityProvider>,
     );
 
@@ -203,7 +210,9 @@ describe('Sales Order Detail — Q 线投影（FRT-06：API 失败 ≠ 空态）
     ];
     render(
       <DensityProvider>
-        <Page />
+        <ToastProvider>
+          <Page />
+        </ToastProvider>
       </DensityProvider>,
     );
 
@@ -249,7 +258,9 @@ describe('Sales Order Detail — Q 线投影（FRT-06：API 失败 ≠ 空态）
     ];
     render(
       <DensityProvider>
-        <Page />
+        <ToastProvider>
+          <Page />
+        </ToastProvider>
       </DensityProvider>,
     );
 

@@ -9,6 +9,7 @@ import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shar
 import { useSession } from "@/lib/session-context";
 import { AppPage, EntityFormWorkspace, ErrorPanel, DetailTable } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { CopyButton } from "@/components/ui/copy-button";
 import { useToast } from "@/components/ui/toast";
 import { PageLoading } from "@/components/ui/skeleton";
 import { formatDate, formatMoney } from "@/lib/format";
@@ -128,6 +129,15 @@ function GlEntryDetailView() {
       >
         <section className="rounded-md border border-border p-4">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div>
+              <span className="text-sm text-ink-secondary">凭证号</span>
+              <div className="text-sm font-medium">
+                <span className="inline-flex items-center gap-2">
+                  {detail.voucherNo ?? "（未取号）"}
+                  {detail.voucherNo ? <CopyButton text={detail.voucherNo} size="sm" /> : null}
+                </span>
+              </div>
+            </div>
             <div><span className="text-sm text-ink-secondary">摘要</span><div className="text-sm font-medium">{detail.summary ?? "—"}</div></div>
             <div>
               <span className="text-sm text-ink-secondary">来源业务</span>

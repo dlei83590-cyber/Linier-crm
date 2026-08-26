@@ -5,7 +5,7 @@
  *
  * 统一往来单位主数据：客户/供应商/客户兼供应商。
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
@@ -14,7 +14,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { BUSINESS_PARTNER_CHANNELS, CHANNEL_UNSET_LABEL } from "@/lib/business-partner/channel";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { formatDate } from "@/lib/format";
@@ -72,8 +72,31 @@ function BusinessPartnerList() {
   const [channelInput, setChannelInput] = useState("");
   const [filters, setFilters] = useState<{ code?: string; name?: string; type?: string; region?: string; channel?: string }>({});
 
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<BusinessPartnerRow>("/api/business-partners", filters);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<BusinessPartnerRow>("/api/business-partners", filters, 20, { syncUrl: true });
+
+  // URL 筛选恢复（hydration 后一次性应用；刷新/分享后筛选不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["code", "name", "type", "region", "channel"]);
+    setCodeInput(u.code ?? "");
+    setNameInput(u.name ?? "");
+    setTypeInput(u.type ?? "");
+    setRegionInput(u.region ?? "");
+    setChannelInput(u.channel ?? "");
+    setFilters(() => {
+      const n: { code?: string; name?: string; type?: string; region?: string; channel?: string } = {};
+      if (u.code) n.code = u.code;
+      if (u.name) n.name = u.name;
+      if (u.type) n.type = u.type;
+      if (u.region) n.region = u.region;
+      if (u.channel) n.channel = u.channel;
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyFilter = () => {
     const next: { code?: string; name?: string; type?: string; region?: string; channel?: string } = {};
@@ -254,6 +277,17 @@ function BusinessPartnerList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        activeFilters={[
+          filters.code ? { key: "code", label: `编码：${filters.code}`, onClear: () => { setCodeInput(""); setFilters((prev) => { const n = { ...prev }; delete n.code; return n; }); } } : null,
+          filters.name ? { key: "name", label: `名称：${filters.name}`, onClear: () => { setNameInput(""); setFilters((prev) => { const n = { ...prev }; delete n.name; return n; }); } } : null,
+          filters.type ? { key: "type", label: `类型：${TYPE_LABELS[filters.type] ?? filters.type}`, onClear: () => { setTypeInput(""); setFilters((prev) => { const n = { ...prev }; delete n.type; return n; }); } } : null,
+          filters.region ? { key: "region", label: `区域：${filters.region}`, onClear: () => { setRegionInput(""); setFilters((prev) => { const n = { ...prev }; delete n.region; return n; }); } } : null,
+          filters.channel ? { key: "channel", label: `渠道：${filters.channel}`, onClear: () => { setChannelInput(""); setFilters((prev) => { const n = { ...prev }; delete n.channel; return n; }); } } : null,
+        ].filter((c): c is NonNullable<typeof c> => c !== null)}
         rowActions={(row) => (
           <div className="flex justify-end gap-1">
             <Link href={`/business-partners/${row.id}`} className="rounded-md border border-border px-2 py-1 text-xs text-ink-secondary transition-colors hover:bg-slate-100">

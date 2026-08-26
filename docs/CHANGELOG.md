@@ -2,6 +2,25 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+
+## [Unreleased] - UI 交互与页面美化补齐批次（feat/ui-polish-batch，普通前端补齐，零 Schema/API）
+
+### 新增
+
+- **列表筛选 URL 同步（useListQuery syncUrl，opt-in）**：page/pageSize/筛选以 replaceState 写入地址栏，刷新/分享/后退不丢筛选；readUrlFilterParams hydration 后一次性恢复；首批接入 10 个高流量列表页（销售订单/报价/发票、采购订单/申请、供应商发票、GL 凭证、往来单位、物料、费用报销）
+- **已应用筛选 chips**：EntityListWorkspace activeFilters 逐条件 × 清除（中文 label）；每页条数选择（20/50/100，切回第 1 页）；列显示/隐藏（columnsToggleKey，localStorage 记忆）
+- **主数据下拉迁移可搜索 Combobox**：客户/供应商/物料/仓库/库位/科目/付款条件/税率档案 15 处（supplier-invoices/new、gl-journal-entries/new、purchasing/orders new+edit、quotations new+edit、transfers/new）；枚举/状态保留原生 select
+- **中文字体栈 + 对比度修正**：globals.css 苹方/微软雅黑/Noto Sans SC 回退链；tokens.ts inkMuted #94a3b8 → #64748b（弱化文本 WCAG AA）
+- **登录页品牌化**：大屏左右分栏品牌区（4 能力亮点 Icon）+ 密码可见切换（aria-pressed/aria-label）
+- **单据编号复制按钮（CopyButton）**：6 个详情页（销售订单/报价/采购订单/供应商发票/销售发票/GL 凭证），clipboard + Toast 反馈
+- **零依赖 SVG 图表（charts.tsx）**：Sparkline/Donut + 单元测试；仪表盘接入「商机阶段分布」「订单状态分布」Donut（真实聚合，空数据不渲染）
+- **命令面板最近访问**：Ctrl+K 面板顶部「最近访问」分组（localStorage linier.recent，≤8 条按 route 去重，键盘 ↑↓/Enter 可选）
+- **StateActionBar sticky 能力 + 禁用原因 aria-describedby**（读屏可达）
+
+### 边界
+
+- 零 Schema / Migration / API / RBAC / Events 变更；仅 apps/web 前端 + docs/qa 文档
+- 详情页 sticky 动作栏未接线（EntityDetailWorkspace 容器 overflow-hidden 裁剪 sticky，backlog）；Sparkline 待后端趋势端点（Design Gate）；批量操作待后端批量 API（Design Gate）
 ## [Unreleased] - 菜单链路审计与无用功能清理（导航层，FRT-01）
 
 ### 新增

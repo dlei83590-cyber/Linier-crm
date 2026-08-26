@@ -8,7 +8,7 @@
  * 提供「新建供应商发票」入口（supplier-invoice:create）。
  * PermissionGuard 对齐 API requirePermission("supplier-invoice:view")。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
@@ -18,7 +18,7 @@ import type { ModuleSummaryData } from "@/lib/module-summary/types";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
 
@@ -109,8 +109,31 @@ function SupplierInvoiceList() {
     setPage(1);
   };
 
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<SupplierInvoiceRow>("/api/supplier-invoices", filters);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<SupplierInvoiceRow>("/api/supplier-invoices", filters, 20, { syncUrl: true });
+
+  // URL 筛选恢复（hydration 后一次性应用；刷新/分享后筛选不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["invoiceNo", "supplierId", "documentStatus", "dateFrom", "dateTo"]);
+    setNoInput(u.invoiceNo ?? "");
+    setSupplierInput(u.supplierId ?? "");
+    setDateFromInput(u.dateFrom ?? "");
+    setDateToInput(u.dateTo ?? "");
+    setStatusInput(u.documentStatus ?? "");
+    setFilters(() => {
+      const n: { invoiceNo?: string; supplierId?: string; documentStatus?: string; dateFrom?: string; dateTo?: string } = {};
+      if (u.invoiceNo) n.invoiceNo = u.invoiceNo;
+      if (u.supplierId) n.supplierId = u.supplierId;
+      if (u.documentStatus) n.documentStatus = u.documentStatus;
+      if (u.dateFrom) n.dateFrom = u.dateFrom;
+      if (u.dateTo) n.dateTo = u.dateTo;
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyFilter = () => {
     const next: { invoiceNo?: string; supplierId?: string; documentStatus?: string; dateFrom?: string; dateTo?: string } = {};
@@ -304,6 +327,16 @@ function SupplierInvoiceList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        activeFilters={[
+          filters.invoiceNo ? { key: "invoiceNo", label: `发票号：${filters.invoiceNo}`, onClear: () => { setNoInput(""); setFilters((prev) => { const n = { ...prev }; delete n.invoiceNo; return n; }); } } : null,
+          filters.supplierId ? { key: "supplierId", label: `供应商：${suppliers.find((s) => s.id === filters.supplierId)?.name ?? filters.supplierId}`, onClear: () => { setSupplierInput(""); setFilters((prev) => { const n = { ...prev }; delete n.supplierId; return n; }); } } : null,
+          filters.documentStatus ? { key: "documentStatus", label: `状态：${STATUS_LABELS[filters.documentStatus] ?? filters.documentStatus}`, onClear: () => { setStatusInput(""); setFilters((prev) => { const n = { ...prev }; delete n.documentStatus; return n; }); } } : null,
+          filters.dateFrom || filters.dateTo ? { key: "date", label: `发票日期：${filters.dateFrom ?? "…"} ~ ${filters.dateTo ?? "…"}`, onClear: () => { setDateFromInput(""); setDateToInput(""); setFilters((prev) => { const n = { ...prev }; delete n.dateFrom; delete n.dateTo; return n; }); } } : null,
+        ].filter((c): c is NonNullable<typeof c> => c !== null)}
       />
 
       <ConfirmActionDialog

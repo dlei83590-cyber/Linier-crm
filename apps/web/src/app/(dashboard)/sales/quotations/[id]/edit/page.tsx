@@ -29,6 +29,7 @@ import { useSession } from "@/lib/session-context";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, CARD_CLASS, INPUT_CLASS } from "@/lib/ui-classes";
 import { PageLoading } from "@/components/ui/skeleton";
+import { Combobox } from "@/components/ui/combobox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { salesStatusLabel } from "@/lib/sales-status";
 import { formatMoney } from "@/lib/format";
@@ -557,18 +558,16 @@ function QuotationEditForm() {
           </div>
           <div>
             <label className="block text-xs text-ink-secondary">付款方式（商业条款，可清空）</label>
-            <select
-              value={paymentTerm}
-              onChange={(e) => setPaymentTerm(e.target.value)}
-              className={"mt-1 " + INPUT_CLASS}
-            >
-              <option value="">未指定</option>
-              {terms.map((t) => (
-                <option key={t.id} value={t.code ?? t.name ?? t.id}>
-                  {t.name ?? t.code}
-                </option>
-              ))}
-            </select>
+            <Combobox
+              value={paymentTerm || null}
+              onValueChange={(v) => setPaymentTerm(v ?? "")}
+              options={terms.map((t) => ({
+                value: t.code ?? t.name ?? t.id,
+                label: t.name ?? t.code ?? "",
+              }))}
+              placeholder="未指定"
+              clearable
+            />
           </div>
           <div>
             <label className="block text-xs text-ink-secondary">税率档案（可选，可清空）</label>
@@ -577,19 +576,17 @@ function QuotationEditForm() {
                 税率档案变更后，明细行税额需重新定价确认（当前后端不自动重算，属契约缺口，建议保持原税档）
               </p>
             )}
-            <select
-              value={taxProfileId}
-              onChange={(e) => setTaxProfileId(e.target.value)}
+            <Combobox
+              value={taxProfileId || null}
+              onValueChange={(v) => setTaxProfileId(v ?? "")}
               disabled={!!taxProfilesError}
-              className={"mt-1 " + INPUT_CLASS}
-            >
-              <option value="">未指定</option>
-              {taxProfiles.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.code ?? ""} {t.name ?? ""}
-                </option>
-              ))}
-            </select>
+              options={taxProfiles.map((t) => ({
+                value: t.id,
+                label: `${t.code ?? ""} ${t.name ?? ""}`.trim(),
+              }))}
+              placeholder="未指定"
+              clearable
+            />
             {taxProfilesError && (
               <p className="mt-1 text-xs text-status-warning-text">
                 税率档案加载失败（已保留当前值，保存不会清空税档）
@@ -733,18 +730,17 @@ function QuotationEditForm() {
             ) : (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
               <div>
-                <select
-                  value={newItemId}
-                  onChange={(e) => setNewItemId(e.target.value)}
-                  className="focus:border-brand-500 w-full rounded-md border border-border px-2 py-1.5 text-sm focus:outline-none"
-                >
-                  <option value="">选择物料</option>
-                  {items.map((it) => (
-                    <option key={it.id} value={it.id}>
-                      {it.code ?? ""} {it.name ?? ""}
-                    </option>
-                  ))}
-                </select>
+                <Combobox
+                  value={newItemId || null}
+                  onValueChange={(v) => setNewItemId(v ?? "")}
+                  options={items.map((it) => ({
+                    value: it.id,
+                    label: `${it.code ?? ""} ${it.name ?? ""}`.trim(),
+                  }))}
+                  placeholder="选择物料"
+                  clearable
+                  size="sm"
+                />
               </div>
               <div>
                 <input

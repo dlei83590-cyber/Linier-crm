@@ -19,6 +19,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, CARD_CLASS, INPUT_CLASS } from "@/lib/ui-classes";
+import { Combobox } from "@/components/ui/combobox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 interface ItemOption {
@@ -320,22 +321,21 @@ function QuotationCreateForm() {
             <label className="block text-xs text-ink-secondary">
               {presetCustomer ? "客户（来自商机）*" : "客户 *"}
             </label>
-            <select
-              value={customerId}
-              onChange={(e) => {
-                setCustomerId(e.target.value);
+            <Combobox
+              value={customerId || null}
+              onValueChange={(v) => {
+                setCustomerId(v ?? "");
                 markDirty();
               }}
               disabled={presetCustomer !== null}
-              className={"mt-1 " + INPUT_CLASS}
-            >
-              <option value="">选择客户</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.code ?? ""} {c.name ?? ""}
-                </option>
-              ))}
-            </select>
+              options={customers.map((c) => ({
+                value: c.id,
+                label: `${c.code ?? ""} ${c.name ?? ""}`.trim(),
+              }))}
+              placeholder="选择客户"
+              clearable
+              invalid={!!fieldErrors.customerId}
+            />
             {fieldErrors.customerId && (
               <p className="mt-0.5 text-xs text-status-danger-text">{fieldErrors.customerId}</p>
             )}
@@ -386,21 +386,19 @@ function QuotationCreateForm() {
           </div>
           <div>
             <label className="block text-xs text-ink-secondary">付款方式（商业条款）</label>
-            <select
-              value={paymentTerm}
-              onChange={(e) => {
-                setPaymentTerm(e.target.value);
+            <Combobox
+              value={paymentTerm || null}
+              onValueChange={(v) => {
+                setPaymentTerm(v ?? "");
                 markDirty();
               }}
-              className={"mt-1 " + INPUT_CLASS}
-            >
-              <option value="">请选择付款方式</option>
-              {terms.map((t) => (
-                <option key={t.id} value={t.code ?? t.name ?? t.id}>
-                  {t.name ?? t.code}
-                </option>
-              ))}
-            </select>
+              options={terms.map((t) => ({
+                value: t.code ?? t.name ?? t.id,
+                label: t.name ?? t.code ?? "",
+              }))}
+              placeholder="请选择付款方式"
+              clearable
+            />
           </div>
           <div className="sm:col-span-2 lg:col-span-1">
             <label className="block text-xs text-ink-secondary">备注（可选，≤1000）</label>
@@ -465,18 +463,19 @@ function QuotationCreateForm() {
               {lines.map((line, idx) => (
                 <tr key={idx}>
                   <td className="px-3 py-2">
-                    <select
-                      value={line.itemId}
-                      onChange={(e) => updateLine(idx, { itemId: e.target.value })}
-                      className="focus:border-brand-500 w-full rounded-md border border-border px-2 py-1.5 focus:outline-none"
-                    >
-                      <option value="">选择物料</option>
-                      {items.map((it) => (
-                        <option key={it.id} value={it.id}>
-                          {it.code ?? ""} {it.name ?? ""}
-                        </option>
-                      ))}
-                    </select>
+                    <Combobox
+                      value={line.itemId || null}
+                      onValueChange={(v) => updateLine(idx, { itemId: v ?? "" })}
+                      options={items.map((it) => ({
+                        value: it.id,
+                        label: `${it.code ?? ""} ${it.name ?? ""}`.trim(),
+                      }))}
+                      placeholder="选择物料"
+                      clearable
+                      size="sm"
+                      className="w-full"
+                      invalid={!!fieldErrors[`lines.${idx}.itemId`]}
+                    />
                     {fieldErrors[`lines.${idx}.itemId`] && (
                       <p className="mt-0.5 text-xs text-status-danger-text">
                         {fieldErrors[`lines.${idx}.itemId`]}

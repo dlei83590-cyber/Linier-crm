@@ -18,6 +18,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { AppPage, EntityFormWorkspace } from "@/components/workspace";
+import { Combobox } from "@/components/ui/combobox";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 import { INVOICE_TYPE_OPTIONS, validateIssueVatFields } from "@/lib/vat-labels";
@@ -194,21 +195,20 @@ function SupplierInvoiceCreateForm() {
         <Section title="发票信息">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <FormField label="供应商" required>
-              <select
-                value={supplierId}
-                onChange={(e) => {
-                  setSupplierId(e.target.value);
+              <Combobox
+                value={supplierId || null}
+                onValueChange={(v) => {
+                  setSupplierId(v ?? "");
                   markDirty();
                 }}
-                className={inputClass}
-              >
-                <option value="">选择供应商</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.code ?? ""} {s.name ?? ""}
-                  </option>
-                ))}
-              </select>
+                options={suppliers.map((s) => ({
+                  value: s.id,
+                  label: `${s.code ?? ""} ${s.name ?? ""}`.trim(),
+                }))}
+                placeholder="选择供应商"
+                clearable
+                invalid={!!fieldErrors.supplierId}
+              />
               {fieldErrors.supplierId ? (
                 <p className="text-status-danger-text mt-0.5 text-xs">{fieldErrors.supplierId}</p>
               ) : null}
