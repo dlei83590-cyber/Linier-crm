@@ -7,7 +7,7 @@
  * AppPage → EntityListWorkspace → StatusBadge / ErrorPanel / common toolbar。
  * 不改 backend / 状态机 / action；useListQuery + filters 原样保留。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { hasPermission, actionPermission, PERMISSIONS, type RoleCode } from "@nilier-crm/shared";
@@ -15,7 +15,7 @@ import { useSession } from "@/lib/session-context";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog, ModuleKpiStrip } from "@/components/workspace";
 import type { ModuleSummaryData } from "@/lib/module-summary/types";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
@@ -84,8 +84,24 @@ function StockCountList() {
     setPage(1);
   };
 
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<StockCountRow>("/api/stock-counts", filters);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<StockCountRow>("/api/stock-counts", filters, 20, { syncUrl: true });
+  // URL 筛选恢复（hydration 后一次性应用；刷新/分享后筛选不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["countNo", "status"]);
+    setCountNoInput(u.countNo ?? "");
+    setStatusInput(u.status ?? "");
+    setFilters(() => {
+      const n: { countNo?: string; status?: string } = {};
+      if (u.countNo) n.countNo = u.countNo;
+      if (u.status) n.status = u.status;
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyFilter = () => {
     const next: { countNo?: string; status?: string } = {};
@@ -231,6 +247,40 @@ function StockCountList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        activeFilters={[
+          filters.countNo
+            ? {
+                key: "countNo",
+                label: `盘点单号：${filters.countNo}`,
+                onClear: () => {
+                  setCountNoInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.countNo;
+                    return n;
+                  });
+                },
+              }
+            : null,
+          filters.status
+            ? {
+                key: "status",
+                label: `状态：${STATUS_LABELS[filters.status] ?? filters.status}`,
+                onClear: () => {
+                  setStatusInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.status;
+                    return n;
+                  });
+                },
+              }
+            : null,
+        ].filter((c): c is NonNullable<typeof c> => c !== null)}
         rowActions={
           canDelete
             ? (row) =>

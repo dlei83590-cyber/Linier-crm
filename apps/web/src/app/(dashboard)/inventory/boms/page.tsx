@@ -8,14 +8,14 @@
  * UI-09：按钮收敛至 BUTTON_PRIMARY_CLASS / BUTTON_SECONDARY_CLASS；
  * 行操作移入 rowActions（hover 浮现，现代表格交互）；数字列右对齐 tabular-nums。
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { useSession } from "@/lib/session-context";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { useToast } from "@/components/ui/toast";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 
@@ -54,8 +54,22 @@ function BomList() {
   const [deleting, setDeleting] = useState<BomRow | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<BomRow>("/api/boms", filters);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<BomRow>("/api/boms", filters, 20, { syncUrl: true });
+  // URL 筛选恢复（hydration 后一次性应用；刷新/分享后筛选不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["status"]);
+    setStatusInput(u.status ?? "");
+    setFilters(() => {
+      const n: { status?: string } = {};
+      if (u.status) n.status = u.status;
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyFilter = () => {
     setFilters(statusInput ? { status: statusInput } : {});
@@ -152,6 +166,26 @@ function BomList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        activeFilters={[
+          filters.status
+            ? {
+                key: "status",
+                label: `状态：${STATUS_LABELS[filters.status] ?? filters.status}`,
+                onClear: () => {
+                  setStatusInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.status;
+                    return n;
+                  });
+                },
+              }
+            : null,
+        ].filter((c): c is NonNullable<typeof c> => c !== null)}
         rowActions={(row) => (
           <>
             <Link

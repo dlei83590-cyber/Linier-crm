@@ -7,7 +7,7 @@
  * AppPage → EntityListWorkspace → StatusBadge / ErrorPanel / common toolbar。
  * 保留「+ 新建质检」入口（如有）；不改 backend / 状态机 / action。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
@@ -15,7 +15,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog, ModuleKpiStrip } from "@/components/workspace";
 import type { ModuleSummaryData } from "@/lib/module-summary/types";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
@@ -91,8 +91,25 @@ function InspectionList() {
     setPage(1);
   };
 
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<InspectionRow>("/api/inspections", filters);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<InspectionRow>("/api/inspections", filters, 20, { syncUrl: true });
+
+  // URL 筛选恢复（hydration 后一次性应用；刷新/分享后筛选不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["inspectionMode", "result"]);
+    setModeInput(u.inspectionMode ?? "");
+    setResultInput(u.result ?? "");
+    setFilters(() => {
+      const n: { inspectionMode?: string; result?: string } = {};
+      if (u.inspectionMode) n.inspectionMode = u.inspectionMode;
+      if (u.result) n.result = u.result;
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyFilter = () => {
     const next: { inspectionMode?: string; result?: string } = {};
@@ -274,6 +291,14 @@ function InspectionList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        activeFilters={[
+          filters.inspectionMode ? { key: "inspectionMode", label: `质检模式：${filters.inspectionMode}`, onClear: () => { setModeInput(""); setFilters((prev) => { const n = { ...prev }; delete n.inspectionMode; return n; }); } } : null,
+          filters.result ? { key: "result", label: `结果：${RESULT_LABELS[filters.result] ?? filters.result}`, onClear: () => { setResultInput(""); setFilters((prev) => { const n = { ...prev }; delete n.result; return n; }); } } : null,
+        ].filter((c): c is NonNullable<typeof c> => c !== null)}
       />
 
       <ConfirmActionDialog

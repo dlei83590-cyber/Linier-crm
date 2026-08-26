@@ -7,14 +7,14 @@
  * 消费 FINAL 契约 GET /api/audit-logs（分页 + entityType/action/result 过滤）。
  * PermissionGuard 对齐 API requirePermission("audit:view")。
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { actionPermission } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
 
 interface AuditLogRow {
@@ -49,8 +49,27 @@ function AuditLogList() {
   const [resultInput, setResultInput] = useState("");
   const [filters, setFilters] = useState<{ entityType?: string; action?: string; result?: string }>({});
 
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<AuditLogRow>("/api/audit-logs", filters);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<AuditLogRow>("/api/audit-logs", filters, 20, { syncUrl: true });
+
+  // URL 筛选恢复（hydration 后一次性应用；刷新/分享后筛选不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["entityType", "action", "result"]);
+    setEntityTypeInput(u.entityType ?? "");
+    setActionInput(u.action ?? "");
+    setResultInput(u.result ?? "");
+    setFilters(() => {
+      const n: { entityType?: string; action?: string; result?: string } = {};
+      if (u.entityType) n.entityType = u.entityType;
+      if (u.action) n.action = u.action;
+      if (u.result) n.result = u.result;
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyFilter = () => {
     const next: { entityType?: string; action?: string; result?: string } = {};
@@ -176,6 +195,15 @@ function AuditLogList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        activeFilters={[
+          filters.entityType ? { key: "entityType", label: `实体类型：${filters.entityType}`, onClear: () => { setEntityTypeInput(""); setFilters((prev) => { const n = { ...prev }; delete n.entityType; return n; }); } } : null,
+          filters.action ? { key: "action", label: `操作：${filters.action}`, onClear: () => { setActionInput(""); setFilters((prev) => { const n = { ...prev }; delete n.action; return n; }); } } : null,
+          filters.result ? { key: "result", label: `结果：${RESULT_LABELS[filters.result] ?? filters.result}`, onClear: () => { setResultInput(""); setFilters((prev) => { const n = { ...prev }; delete n.result; return n; }); } } : null,
+        ].filter((c): c is NonNullable<typeof c> => c !== null)}
       />
     </AppPage>
   );

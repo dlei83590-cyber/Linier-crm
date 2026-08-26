@@ -19,7 +19,7 @@
  * - 范围切换即时生效（segmented control），状态筛选为客户端过滤
  * HOLD：GIS/地图服务/GeoFence Engine/推送平台/日历平台/拖拽排程/路线规划。
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
@@ -35,7 +35,7 @@ import {
 } from "@/components/workspace";
 import { useToast } from "@/components/ui/toast";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { useSession } from "@/lib/session-context";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, INPUT_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { formatDate, formatDateOnly } from "@/lib/format";
@@ -194,8 +194,19 @@ function VisitsList() {
   const [planSummary, setPlanSummary] = useState("");
 
   // 后端 parsePagination 上限 100：日历按范围拉取，超出时下方给出真实提示（不静默截断）
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<VisitRow>("/api/visits", filters, 100);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<VisitRow>("/api/visits", filters, 100, { syncUrl: true });
+  // URL 筛选恢复（hydration 后一次性应用；刷新/分享后范围不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["range"]);
+    const r: RangeMode = u.range === "month" ? "month" : "week";
+    setRange(r);
+    setFilters({ range: r });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const visibleItems = useMemo(() => {
     if (!statusInput) return items;
@@ -695,7 +706,10 @@ function VisitsList() {
 
         {/* 列表视图分页 */}
         {!error && view === "table" && !loading && visibleItems.length > 0 ? (
-          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={(size) => {
+            setPageSize(size);
+            setPage(1);
+          }} />
         ) : null}
 
         {/* 动作失败反馈（定位/签到/签退真实错误） */}

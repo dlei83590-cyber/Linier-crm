@@ -1,13 +1,13 @@
 "use client";
 
 /** Users — 用户管理列表页（Pending Pages Completion Gate — Batch 2） */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace } from "@/components/workspace";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
 import { apiFetch } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
@@ -52,8 +52,29 @@ function UserList() {
     return () => controller.abort();
   }, []);
 
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<UserRow>("/api/users", filters);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<UserRow>("/api/users", filters, 20, { syncUrl: true });
+
+  // URL 筛选恢复（hydration 后一次性应用；刷新/分享后筛选不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["email", "name", "departmentId", "isActive"]);
+    setEmailInput(u.email ?? "");
+    setNameInput(u.name ?? "");
+    setDeptInput(u.departmentId ?? "");
+    setActiveInput(u.isActive ?? "");
+    setFilters(() => {
+      const n: { email?: string; name?: string; departmentId?: string; isActive?: string } = {};
+      if (u.email) n.email = u.email;
+      if (u.name) n.name = u.name;
+      if (u.departmentId) n.departmentId = u.departmentId;
+      if (u.isActive) n.isActive = u.isActive;
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyFilter = () => {
     const next: { email?: string; name?: string; departmentId?: string; isActive?: string } = {};
@@ -180,6 +201,16 @@ function UserList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        activeFilters={[
+          filters.email ? { key: "email", label: `邮箱：${filters.email}`, onClear: () => { setEmailInput(""); setFilters((prev) => { const n = { ...prev }; delete n.email; return n; }); } } : null,
+          filters.name ? { key: "name", label: `姓名：${filters.name}`, onClear: () => { setNameInput(""); setFilters((prev) => { const n = { ...prev }; delete n.name; return n; }); } } : null,
+          filters.departmentId ? { key: "departmentId", label: `部门：${depts.find((d) => d.id === filters.departmentId)?.name ?? filters.departmentId}`, onClear: () => { setDeptInput(""); setFilters((prev) => { const n = { ...prev }; delete n.departmentId; return n; }); } } : null,
+          filters.isActive ? { key: "isActive", label: `状态：${filters.isActive === "true" ? "启用" : "停用"}`, onClear: () => { setActiveInput(""); setFilters((prev) => { const n = { ...prev }; delete n.isActive; return n; }); } } : null,
+        ].filter((c): c is NonNullable<typeof c> => c !== null)}
       />
     </AppPage>
   );

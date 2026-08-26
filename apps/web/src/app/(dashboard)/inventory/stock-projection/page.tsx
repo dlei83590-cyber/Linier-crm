@@ -7,11 +7,11 @@
  * 复用 F2-3 Workspace：AppPage → EntityListWorkspace + useListQuery + PermissionGuard。
  * 过滤：物料搜索 / 仓库（下拉，best-effort）/ 批次 / 序列号；location 过滤后端已支持，UI 下拉后续 Gate 加。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { PERMISSIONS } from "@nilier-crm/shared";
 import { AppPage, EntityListWorkspace } from "@/components/workspace";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
 import { apiFetch } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
@@ -53,8 +53,28 @@ function StockProjectionList() {
     return () => c.abort();
   }, []);
 
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<StockProjectionRow>("/api/stock-projections", filters);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<StockProjectionRow>("/api/stock-projections", filters, 20, { syncUrl: true });
+  // URL 筛选恢复（hydration 后一次性应用；刷新/分享后筛选不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["item", "warehouseId", "batchNo", "serialNo"]);
+    setItemInput(u.item ?? "");
+    setWarehouseInput(u.warehouseId ?? "");
+    setBatchInput(u.batchNo ?? "");
+    setSerialInput(u.serialNo ?? "");
+    setFilters(() => {
+      const n: { item?: string; warehouseId?: string; batchNo?: string; serialNo?: string } = {};
+      if (u.item) n.item = u.item;
+      if (u.warehouseId) n.warehouseId = u.warehouseId;
+      if (u.batchNo) n.batchNo = u.batchNo;
+      if (u.serialNo) n.serialNo = u.serialNo;
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyFilter = () => {
     const next: typeof filters = {};
@@ -164,6 +184,68 @@ function StockProjectionList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        activeFilters={[
+          filters.item
+            ? {
+                key: "item",
+                label: `物料：${filters.item}`,
+                onClear: () => {
+                  setItemInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.item;
+                    return n;
+                  });
+                },
+              }
+            : null,
+          filters.warehouseId
+            ? {
+                key: "warehouseId",
+                label: `仓库：${warehouses.find((w) => w.id === filters.warehouseId)?.name ?? filters.warehouseId}`,
+                onClear: () => {
+                  setWarehouseInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.warehouseId;
+                    return n;
+                  });
+                },
+              }
+            : null,
+          filters.batchNo
+            ? {
+                key: "batchNo",
+                label: `批次：${filters.batchNo}`,
+                onClear: () => {
+                  setBatchInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.batchNo;
+                    return n;
+                  });
+                },
+              }
+            : null,
+          filters.serialNo
+            ? {
+                key: "serialNo",
+                label: `序列号：${filters.serialNo}`,
+                onClear: () => {
+                  setSerialInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.serialNo;
+                    return n;
+                  });
+                },
+              }
+            : null,
+        ].filter((c): c is NonNullable<typeof c> => c !== null)}
       />
     </AppPage>
   );

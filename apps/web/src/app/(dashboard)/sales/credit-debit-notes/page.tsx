@@ -12,7 +12,7 @@
  * 无详情 GET 端点（/api/credit-debit-notes/{id} 仅 submit/apply），故列表内联操作 + 明细展开。
  * PermissionGuard 对齐 API requirePermission("credit-debit-note:view")。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
@@ -21,7 +21,7 @@ import type { ModuleSummaryData } from "@/lib/module-summary/types";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { SALES_STATUS_OPTIONS, approvalStatusDef, salesStatusLabel, salesStatusTone } from "@/lib/sales-status";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
 
@@ -119,8 +119,25 @@ function CnDnList() {
     setPage(1);
   };
 
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<CnDnRow>("/api/credit-debit-notes", filters);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<CnDnRow>("/api/credit-debit-notes", filters, 20, { syncUrl: true });
+
+  // URL 筛选恢复（hydration 后一次性应用；刷新/分享后筛选不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["status", "noteType"]);
+    setStatusInput(u.status ?? "");
+    setNoteTypeInput(u.noteType ?? "");
+    setFilters(() => {
+      const n: { status?: string; noteType?: string } = {};
+      if (u.status) n.status = u.status;
+      if (u.noteType) n.noteType = u.noteType;
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyFilter = () => {
     const next: { status?: string; noteType?: string } = {};
@@ -375,6 +392,14 @@ function CnDnList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        activeFilters={[
+          filters.status ? { key: "status", label: `状态：${salesStatusLabel("cnDn", filters.status)}`, onClear: () => { setStatusInput(""); setFilters((prev) => { const n = { ...prev }; delete n.status; return n; }); } } : null,
+          filters.noteType ? { key: "noteType", label: `类型：${NOTE_TYPE_LABEL[filters.noteType] ?? filters.noteType}`, onClear: () => { setNoteTypeInput(""); setFilters((prev) => { const n = { ...prev }; delete n.noteType; return n; }); } } : null,
+        ].filter((c): c is NonNullable<typeof c> => c !== null)}
         footer={
           expandedId ? (
             <div className="border-border border-t px-4 py-4 md:px-6">

@@ -6,14 +6,14 @@
  * 新建/编辑/删除（删除规则：被库位或业务单据引用 → 409 不可删但可编辑）。
  * 关联体验：每行提供「查看库位」入口 → /warehouse-locations?warehouseId={id}。
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { PERMISSIONS, actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import { AppPage, EntityListWorkspace, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { useSession } from "@/lib/session-context";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
@@ -46,8 +46,29 @@ function WarehouseList() {
   const [deleting, setDeleting] = useState<WarehouseRow | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<WarehouseRow>("/api/warehouses", filters);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<WarehouseRow>("/api/warehouses", filters, 20, { syncUrl: true });
+
+  // URL 筛选恢复（hydration 后一次性应用；刷新/分享后筛选不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["code", "name", "type", "isActive"]);
+    setCodeInput(u.code ?? "");
+    setNameInput(u.name ?? "");
+    setTypeInput(u.type ?? "");
+    setActiveInput(u.isActive ?? "");
+    setFilters(() => {
+      const n: { code?: string; name?: string; type?: string; isActive?: string } = {};
+      if (u.code) n.code = u.code;
+      if (u.name) n.name = u.name;
+      if (u.type) n.type = u.type;
+      if (u.isActive) n.isActive = u.isActive;
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyFilter = () => {
     const next: { code?: string; name?: string; type?: string; isActive?: string } = {};
@@ -142,6 +163,16 @@ function WarehouseList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        activeFilters={[
+          filters.code ? { key: "code", label: `编码：${filters.code}`, onClear: () => { setCodeInput(""); setFilters((prev) => { const n = { ...prev }; delete n.code; return n; }); } } : null,
+          filters.name ? { key: "name", label: `名称：${filters.name}`, onClear: () => { setNameInput(""); setFilters((prev) => { const n = { ...prev }; delete n.name; return n; }); } } : null,
+          filters.type ? { key: "type", label: `类型：${filters.type}`, onClear: () => { setTypeInput(""); setFilters((prev) => { const n = { ...prev }; delete n.type; return n; }); } } : null,
+          filters.isActive ? { key: "isActive", label: `状态：${filters.isActive === "true" ? "启用" : "停用"}`, onClear: () => { setActiveInput(""); setFilters((prev) => { const n = { ...prev }; delete n.isActive; return n; }); } } : null,
+        ].filter((c): c is NonNullable<typeof c> => c !== null)}
         rowActions={
           (row) => (
             <div className="flex justify-end gap-1">

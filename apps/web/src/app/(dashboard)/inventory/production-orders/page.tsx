@@ -7,14 +7,14 @@
  * UI-09：按钮收敛至 BUTTON_PRIMARY_CLASS / BUTTON_SECONDARY_CLASS；
  * 行操作移入 rowActions（hover 浮现）；数字列右对齐 tabular-nums。
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { useSession } from "@/lib/session-context";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
 
 interface OrderRow {
@@ -55,8 +55,24 @@ function ProductionOrderList() {
   const [typeInput, setTypeInput] = useState("");
   const [filters, setFilters] = useState<{ status?: string; productionType?: string }>({});
 
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<OrderRow>("/api/production-orders", filters);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<OrderRow>("/api/production-orders", filters, 20, { syncUrl: true });
+  // URL 筛选恢复（hydration 后一次性应用；刷新/分享后筛选不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["status", "productionType"]);
+    setStatusInput(u.status ?? "");
+    setTypeInput(u.productionType ?? "");
+    setFilters(() => {
+      const n: { status?: string; productionType?: string } = {};
+      if (u.status) n.status = u.status;
+      if (u.productionType) n.productionType = u.productionType;
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyFilter = () => {
     const next: { status?: string; productionType?: string } = {};
@@ -148,6 +164,40 @@ function ProductionOrderList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        activeFilters={[
+          filters.status
+            ? {
+                key: "status",
+                label: `状态：${STATUS_LABELS[filters.status] ?? filters.status}`,
+                onClear: () => {
+                  setStatusInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.status;
+                    return n;
+                  });
+                },
+              }
+            : null,
+          filters.productionType
+            ? {
+                key: "productionType",
+                label: `类型：${TYPE_LABELS[filters.productionType] ?? filters.productionType}`,
+                onClear: () => {
+                  setTypeInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.productionType;
+                    return n;
+                  });
+                },
+              }
+            : null,
+        ].filter((c): c is NonNullable<typeof c> => c !== null)}
         rowActions={(row) => (
           <Link
             href={`/inventory/production-orders/${row.id}`}
