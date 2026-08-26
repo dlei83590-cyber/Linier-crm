@@ -8,7 +8,7 @@
  * - 声明了 confirm 的动作先弹 ConfirmActionDialog
  * - busy 动作显示进行中并禁用整栏，防止重复提交
  * - FE 2.0 UI 补齐：
- *   · sticky：长详情页滚动时动作栏吸顶（top-16 顶栏下方，backdrop 半透明）
+ *   · sticky：长详情页滚动时动作栏吸顶（top-14 顶栏下方，backdrop 半透明）
  *   · disabled 动作原因：title 之外补 aria-describedby（读屏可达）
  */
 import { useId, useState } from 'react';
@@ -125,7 +125,7 @@ export function StateActionBar({
   if (!sticky) return bar;
 
   return (
-    <div className="bg-canvas/95 top-16 z-20 -mx-4 sticky px-4 py-2 backdrop-blur md:-mx-6 md:px-6">
+    <div className="bg-canvas/95 top-14 z-20 -mx-4 sticky px-4 py-2 backdrop-blur md:-mx-6 md:px-6">
       {bar}
     </div>
   );

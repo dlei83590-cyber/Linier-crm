@@ -145,6 +145,7 @@ function ReceiptDetailPage() {
         </div>
       )}
       <EntityDetailWorkspace
+        stickyHeader
         title={`到货收货详情 — ${detail.code}`}
         backHref="/purchasing/receipts"
         status={detail.status}

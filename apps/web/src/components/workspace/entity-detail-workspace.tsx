@@ -29,6 +29,8 @@ interface EntityDetailWorkspaceProps {
   children: React.ReactNode;
   /** 审计时间线区（AuditTimeline 等） */
   audit?: React.ReactNode;
+  /** 吸顶 Header（长详情页推荐；顶栏 h-14 下方吸顶） */
+  stickyHeader?: boolean;
 }
 
 export function EntityDetailWorkspace({
@@ -42,27 +44,32 @@ export function EntityDetailWorkspace({
   summary,
   children,
   audit,
+  stickyHeader = false,
 }: EntityDetailWorkspaceProps) {
   return (
-    <div className="border-border bg-surface shadow-elevation-sm overflow-hidden rounded-lg border">
-      <PageHeader
-        title={title}
-        description={description}
-        backHref={backHref}
-        actions={
-          status || actions ? (
-            <div className="flex flex-wrap items-center gap-2">
-              {status ? (
-                <StatusBadge status={status} label={statusLabel} tone={statusTone} />
-              ) : null}
-              {actions}
-            </div>
-          ) : undefined
-        }
-      />
-      {summary ? <div className="border-border border-b px-4 py-4 md:px-6">{summary}</div> : null}
-      <div className="px-4 py-4 md:px-6">{children}</div>
-      {audit ? <div className="border-border border-t px-4 py-4 md:px-6">{audit}</div> : null}
+    <div className={`border-border bg-surface shadow-elevation-sm rounded-lg border ${stickyHeader ? "" : "overflow-hidden"}`}>
+      <div className={`${stickyHeader ? "sticky top-14 z-20 rounded-t-lg bg-surface" : ""}`}>
+        <PageHeader
+          title={title}
+          description={description}
+          backHref={backHref}
+          actions={
+            status || actions ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {status ? (
+                  <StatusBadge status={status} label={statusLabel} tone={statusTone} />
+                ) : null}
+                {actions}
+              </div>
+            ) : undefined
+          }
+        />
+      </div>
+      <div className={`${stickyHeader ? "overflow-hidden rounded-b-lg" : ""}`}>
+        {summary ? <div className="border-border border-b px-4 py-4 md:px-6">{summary}</div> : null}
+        <div className="px-4 py-4 md:px-6">{children}</div>
+        {audit ? <div className="border-border border-t px-4 py-4 md:px-6">{audit}</div> : null}
+      </div>
     </div>
   );
 }

@@ -260,6 +260,7 @@ function InvoiceDetailPage() {
         </div>
       )}
       <EntityDetailWorkspace
+        stickyHeader
         title={`销售发票详情 — ${detail.code ?? "（草稿）"}`}
         backHref="/sales/invoices"
         status={detail.status}

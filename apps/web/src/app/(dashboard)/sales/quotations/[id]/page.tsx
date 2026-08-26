@@ -218,6 +218,7 @@ function QuotationDetailPage() {
         </div>
       )}
       <EntityDetailWorkspace
+        stickyHeader
         title={`报价单详情 — ${detail.code}`}
         backHref="/sales/quotations"
         status={detail.effectiveStatus ?? detail.status}

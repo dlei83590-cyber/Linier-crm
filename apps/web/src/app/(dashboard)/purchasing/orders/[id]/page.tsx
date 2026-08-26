@@ -168,6 +168,7 @@ function OrderDetailPage() {
         </div>
       )}
       <EntityDetailWorkspace
+        stickyHeader
         title={`采购订单详情 — ${detail.code}`}
         backHref="/purchasing/orders"
         status={detail.status}

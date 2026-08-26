@@ -197,6 +197,7 @@ function SupplierInvoiceDetailPage() {
         </div>
       )}
       <EntityDetailWorkspace
+        stickyHeader
         title={`供应商发票详情 — ${detail.invoiceNo}`}
         backHref="/supplier-invoices"
         status={detail.documentStatus}
