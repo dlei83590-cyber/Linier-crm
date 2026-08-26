@@ -245,7 +245,7 @@ export function EntityListWorkspace<T>({
               {rowActions ? <th scope="col" className="px-4 py-3 text-right font-semibold">操作</th> : null}
             </tr>
           </thead>
-          <tbody className="divide-border divide-y">
+          <tbody className="divide-border divide-y stagger-rows">
             {loading ? (
               <LoadingRow colSpan={visibleColumns.length + (rowActions ? 1 : 0)} />
             ) : error ? (

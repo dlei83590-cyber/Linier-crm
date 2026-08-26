@@ -162,13 +162,16 @@ function InsightCard({
   title,
   subtitle,
   children,
+  className = "",
 }: {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
+  /** Bento 网格跨列（如 lg:col-span-2） */
+  className?: string;
 }) {
   return (
-    <section className="rounded-xl border border-border bg-surface shadow-elevation-sm">
+    <section className={"rounded-xl border border-border bg-surface shadow-elevation-sm " + className}>
       <div className="border-b border-border px-4 py-3">
         <h2 className="text-sm font-semibold text-ink-primary">{title}</h2>
         {subtitle ? <p className="mt-0.5 text-xs text-ink-secondary">{subtitle}</p> : null}
@@ -424,7 +427,7 @@ export default function DashboardPage() {
 
           {data && !reportsBlock.error ? (
             <>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="stagger-grid grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {kpis.map((k) => (
                   <KpiCard
                     key={k.key}
@@ -449,8 +452,9 @@ export default function DashboardPage() {
               </div>
 
               {/* 第二屏：客户分层 / 商机漏斗 / 订单状态 / 区域分布 */}
-              <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div className="stagger-grid mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
                 <InsightCard
+                  className="lg:col-span-1"
                   title="客户分层"
                   subtitle={`在册客户 ${data.customerTiers.total} 家 · 事实计算（成交 > 报价 > 商机 > 普通）`}
                 >
@@ -475,6 +479,7 @@ export default function DashboardPage() {
                 </InsightCard>
 
                 <InsightCard
+                  className="lg:col-span-2"
                   title={`商机阶段漏斗（${periodLabel}新增 ${data.opportunities.newInPeriod}）`}
                   subtitle="在册商机按阶段快照（真实聚合）"
                 >
@@ -500,7 +505,7 @@ export default function DashboardPage() {
                 </InsightCard>
 
                 {funnelRows.length > 0 ? (
-                  <InsightCard title="商机阶段分布" subtitle="在册商机按阶段占比（真实聚合）">
+                  <InsightCard className="lg:col-span-2" title="商机阶段分布" subtitle="在册商机按阶段占比（真实聚合）">
                     <div className="flex flex-col items-center gap-3">
                       <Donut
                         segments={funnelSegments}
@@ -529,6 +534,7 @@ export default function DashboardPage() {
                 ) : null}
 
                 <InsightCard
+                  className="lg:col-span-1"
                   title={`销售订单状态（${periodLabel}）`}
                   subtitle={`共 ${data.salesOrders.count} 单 · 不含草稿/已取消`}
                 >
@@ -554,7 +560,7 @@ export default function DashboardPage() {
                 </InsightCard>
 
                 {statusRows.length > 0 ? (
-                  <InsightCard title="订单状态分布" subtitle="各状态订单数占比（真实聚合）">
+                  <InsightCard className="lg:col-span-1" title="订单状态分布" subtitle="各状态订单数占比（真实聚合）">
                     <div className="flex flex-col items-center gap-3">
                       <Donut
                         segments={statusSegments}
@@ -583,6 +589,7 @@ export default function DashboardPage() {
                 ) : null}
 
                 <InsightCard
+                  className="lg:col-span-2"
                   title="区域分布"
                   subtitle={`区域客户数 + ${periodLabel}订单数/金额（未设置归「未设置」）`}
                 >
