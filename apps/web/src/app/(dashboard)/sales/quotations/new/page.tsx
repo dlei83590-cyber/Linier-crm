@@ -19,6 +19,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, CARD_CLASS, INPUT_CLASS } from "@/lib/ui-classes";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 interface ItemOption {
   id: string;
@@ -85,6 +86,7 @@ function QuotationCreateForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiClientError | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [pendingLeave, setPendingLeave] = useState(false);
   // Q 线：CSV 批量导入（itemCode,quantity,unitPrice?；unitPrice 仅供预览，行价由系统定价引擎决定——ADR-0015 红线）
   const [csvInput, setCsvInput] = useState("");
   const [csvError, setCsvError] = useState("");
@@ -275,13 +277,17 @@ function QuotationCreateForm() {
   };
 
   return (
+    <>
     <div className={CARD_CLASS}>
       <div className="flex items-center justify-between border-b border-border p-4">
         <h1 className="text-lg font-semibold text-ink-primary">新建报价单</h1>
         <Link
           href="/sales/quotations"
           onClick={(e) => {
-            if (dirty && !window.confirm("有未保存的更改，确定离开？")) e.preventDefault();
+            if (dirty) {
+              e.preventDefault();
+              setPendingLeave(true);
+            }
           }}
           className={BUTTON_SECONDARY_CLASS}
         >
@@ -535,6 +541,20 @@ function QuotationCreateForm() {
         </div>
       </div>
     </div>
+
+      <ConfirmDialog
+        open={pendingLeave}
+        title="有未保存的更改"
+        description="有未保存的更改，确定离开？"
+        confirmLabel="离开"
+        onConfirm={() => {
+          setPendingLeave(false);
+          setDirty(false);
+          router.push("/sales/quotations");
+        }}
+        onCancel={() => setPendingLeave(false)}
+      />
+    </>
   );
 }
 

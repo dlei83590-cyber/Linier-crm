@@ -36,7 +36,7 @@ interface PoolStatus {
 }
 
 const STATUS_LABELS: Record<string, string> = { IN_POOL: "在公海", CLAIMED: "已被挑入" };
-const ENTER_REASON_LABELS: Record<string, string> = { MANUAL: "手工入池", RE_ENTER: "重新入池" };
+const ENTER_REASON_LABELS: Record<string, string> = { MANUAL: "手工入池", FIELD_RULE: "规则自动", RE_ENTER: "重新入池" };
 
 export function PoolStatusCard({ partnerId }: { partnerId: string }) {
   const [data, setData] = useState<PoolStatus | null>(null);

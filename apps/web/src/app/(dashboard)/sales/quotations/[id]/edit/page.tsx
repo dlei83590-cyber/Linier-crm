@@ -21,7 +21,7 @@
  * - 行级权限分别 Gate：Add→quotation-line:create / Save→quotation-line:edit / Delete→quotation-line:delete。
  */
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
@@ -29,6 +29,7 @@ import { useSession } from "@/lib/session-context";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, CARD_CLASS, INPUT_CLASS } from "@/lib/ui-classes";
 import { PageLoading } from "@/components/ui/skeleton";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { salesStatusLabel } from "@/lib/sales-status";
 import { formatMoney } from "@/lib/format";
 
@@ -98,6 +99,7 @@ function QuotationEditForm() {
   const params = useParams();
   const { state } = useSession();
   const id = typeof params.id === "string" ? params.id : "";
+  const router = useRouter();
 
   const [items, setItems] = useState<ItemOption[]>([]);
   const [taxProfiles, setTaxProfiles] = useState<TaxProfileOption[]>([]);
@@ -133,6 +135,9 @@ function QuotationEditForm() {
 
   const [submitting, setSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [pendingLeave, setPendingLeave] = useState(false);
+  const [pendingReload, setPendingReload] = useState(false);
+  const [pendingDeleteLine, setPendingDeleteLine] = useState<QuotationLine | null>(null);
 
   const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
   const canCreateLine = hasPermission(roles, actionPermission("quotation-line", "create"));
@@ -382,14 +387,18 @@ function QuotationEditForm() {
   };
 
   // ── 删行 → DELETE /lines/:lineId（软删，无 version CAS） ───────────────────
-  const deleteLine = async (line: QuotationLine) => {
+  // CC-10：原生 window.confirm 迁移为应用内 ConfirmDialog（红线：禁止原生弹窗）
+  const deleteLine = (line: QuotationLine) => {
     if (submitting) return;
     if (blockIfOtherScopeDirty("line")) return;
     if (lineDirtyIds.size > 1 || (lineDirtyIds.size === 1 && !lineDirtyIds.has(line.id))) {
       setFieldErrors({ scope: "请先保存或放弃其它明细行的未保存修改" });
       return;
     }
-    if (!window.confirm(`确定删除第 ${line.lineNo} 行？该操作不可撤销。`)) return;
+    setPendingDeleteLine(line);
+  };
+
+  const performDeleteLine = async (line: QuotationLine) => {
     setSubmitting(true);
     setError(null);
     setFieldErrors({});
@@ -451,6 +460,7 @@ function QuotationEditForm() {
   }
 
   return (
+    <>
     <div className={CARD_CLASS}>
       <div className="flex items-center justify-between border-b border-border p-4">
         <h1 className="text-lg font-semibold text-ink-primary">
@@ -464,7 +474,10 @@ function QuotationEditForm() {
           <Link
             href={`/sales/quotations/${id}`}
             onClick={(e) => {
-              if (anyDirty && !window.confirm("有未保存的更改，确定离开？")) e.preventDefault();
+              if (anyDirty) {
+                e.preventDefault();
+                setPendingLeave(true);
+              }
             }}
             className={BUTTON_SECONDARY_CLASS}
           >
@@ -487,13 +500,7 @@ function QuotationEditForm() {
                 </p>
                 <button
                   type="button"
-                  onClick={() => {
-                    if (window.confirm("未保存的更改将丢失，确定重新载入最新数据？")) {
-                      setError(null);
-                      setNotEditable(false);
-                      loadDetail(); // 成功后各 scope 初始值/列表重置 → dirty 全部清除
-                    }
-                  }}
+                  onClick={() => setPendingReload(true)}
                   className="bg-brand-600 hover:bg-brand-700 mt-2 rounded-md px-3 py-1 text-xs font-medium text-white"
                 >
                   重新载入最新数据
@@ -782,6 +789,47 @@ function QuotationEditForm() {
         {anyDirty && <span className="mt-3 block text-xs text-status-warning-text">有未保存的更改</span>}
       </div>
     </div>
+
+      <ConfirmDialog
+        open={pendingLeave}
+        title="有未保存的更改"
+        description="有未保存的更改，确定离开？"
+        confirmLabel="离开"
+        onConfirm={() => {
+          setPendingLeave(false);
+          router.push(`/sales/quotations/${id}`);
+        }}
+        onCancel={() => setPendingLeave(false)}
+      />
+      <ConfirmDialog
+        open={pendingReload}
+        title="重新载入最新数据"
+        description="未保存的更改将丢失，确定重新载入最新数据？"
+        confirmLabel="重新载入"
+        onConfirm={() => {
+          setPendingReload(false);
+          setError(null);
+          setNotEditable(false);
+          loadDetail(); // 成功后各 scope 初始值/列表重置 → dirty 全部清除
+        }}
+        onCancel={() => setPendingReload(false)}
+      />
+      <ConfirmDialog
+        open={pendingDeleteLine !== null}
+        title={`删除第 ${pendingDeleteLine?.lineNo ?? ""} 行？`}
+        description="该操作不可撤销。"
+        tone="danger"
+        confirmLabel="删除"
+        onConfirm={() => {
+          if (pendingDeleteLine) {
+            const line = pendingDeleteLine;
+            setPendingDeleteLine(null);
+            void performDeleteLine(line);
+          }
+        }}
+        onCancel={() => setPendingDeleteLine(null)}
+      />
+    </>
   );
 }
 

@@ -27,4 +27,6 @@ export interface OperationsReportData {
   regions: { region: string; customerCount: number; salesOrderCount: number; salesAmount: string }[];
   brands: { brand: string; lineCount: number; amount: string }[];
   channelAvailable: boolean;
+  /** 渠道维度（BusinessPartner.channel 固定枚举；未设置归「未设置」） */
+  channels: { channel: string; customerCount: number; salesOrderCount: number; salesAmount: string }[];
 }

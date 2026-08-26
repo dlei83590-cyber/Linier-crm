@@ -7,7 +7,7 @@
  * - 条目表：sticky header + hover 行 + StatusBadge（在公海/已被挑入/已移出）+ 状态筛选 chips + 分页
  * - 领取（claim）/ 移出（release）/ 手工入池只消费真实 API，且按 customer-pool:assign 权限门渲染
  * - 409 业务冲突展示后端真实提示并刷新真实状态（isPoolActionConflict）
- * - 自动匹配能力如实说明（REGION 已实现 / DEPARTMENT 未实现，不虚报）
+ * - 自动匹配能力如实说明（REGION / DEPARTMENT 已实现，GLOBAL 不自动入池）
  */
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -240,9 +240,9 @@ function PoolDetailPage() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <p>
-            自动匹配说明：当前版本仅支持 <strong>REGION（客户区域 = 公海区域字符串）自动入池</strong>，
-            命中后条目标记为「规则自动」；DEPARTMENT 公海暂未实现自动入池（仅支持手工入池）；
-            GLOBAL 公海不自动入池。手工入池适用于全部类型公海。
+            自动匹配说明：当前支持 <strong>REGION（客户区域 = 公海区域字符串）自动入池</strong>
+            与 <strong>DEPARTMENT（客户负责人所属部门 = 公海部门）自动入池</strong>，
+            命中后条目标记为「规则自动」；GLOBAL 公海不自动入池。手工入池适用于全部类型公海。
           </p>
         </div>
 
@@ -317,7 +317,7 @@ function PoolDetailPage() {
               description={
                 entriesStatus
                   ? "切换其他状态筛选查看，或手工入池新的客户"
-                  : "点击下方「手工入池」添加客户，或等待 REGION 自动匹配规则命中"
+                  : "点击下方「手工入池」添加客户，或等待 REGION / DEPARTMENT 自动匹配规则命中"
               }
             />
           ) : (

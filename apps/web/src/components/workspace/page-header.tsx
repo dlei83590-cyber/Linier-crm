@@ -1,12 +1,7 @@
 'use client';
 
-/**
- * PageHeader — 页面头部（F2-1 UI System Foundation）
- *
- * 列表/详情/表单页统一头部：返回链接（可选）→ 标题 → 描述 → 右侧操作区。
- * 结构规则：Header 在最上方，紧随其后是 Toolbar / Actions。
- */
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 interface PageHeaderProps {
   title: string;
@@ -14,8 +9,12 @@ interface PageHeaderProps {
   /** 返回列表链接（提供则显示返回入口） */
   backHref?: string;
   backLabel?: string;
-  /** 返回点击确认（返回 false 阻止导航；Dirty-State Guard 用） */
-  onBackClick?: () => boolean;
+  /**
+   * 返回点击确认（返回 false 阻止导航；Dirty-State Guard 用）。
+   * CC-10：支持异步（Promise）确认——同步 preventDefault 拦截后，
+   * 确认放行时由组件内部 router.push(backHref) 完成导航。
+   */
+  onBackClick?: () => boolean | Promise<boolean>;
   /** 右侧操作区（动作按钮等） */
   actions?: React.ReactNode;
 }
@@ -28,6 +27,7 @@ export function PageHeader({
   onBackClick,
   actions,
 }: PageHeaderProps) {
+  const router = useRouter();
   return (
     <div className="border-border bg-surface flex flex-wrap items-start justify-between gap-3 border-b px-4 py-4 md:px-6">
       <div className="min-w-0">
@@ -35,7 +35,17 @@ export function PageHeader({
           <Link
             href={backHref}
             onClick={(e) => {
-              if (onBackClick && !onBackClick()) e.preventDefault();
+              if (!onBackClick) return;
+              const result = onBackClick();
+              if (result === false) {
+                e.preventDefault();
+              } else if (result instanceof Promise) {
+                // 异步确认：必须同步拦截默认导航，确认放行后再手动跳转
+                e.preventDefault();
+                void result.then((ok) => {
+                  if (ok) router.push(backHref);
+                });
+              }
             }}
             className="text-brand-600 mb-1 inline-block text-sm hover:underline"
           >

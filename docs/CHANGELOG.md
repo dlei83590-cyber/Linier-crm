@@ -20,6 +20,52 @@
 - 不做站内信/邮件/企微/短信渠道；不做消息模板引擎/订阅规则；webhook/secret 不进 DB/前端/git（.env.example 仅占位符）
 - 经纬度只出摘要（4 位小数≈11m），精确定位不进外部渠道
 
+## [Unreleased] - cc-08-channel：销售渠道 SSOT + 经营数据渠道维度（合同收口 → 生产测试）
+
+### 新增
+
+- **销售渠道 SSOT（Migration 0055）**：BusinessPartner.channel 单一字段，固定枚举 直销/经销/电商/项目/其他（null = 未设置）；服务端 z.enum 校验 fail closed；清单唯一来源 apps/web/src/lib/business-partner/channel.ts（与 sourceChannel 获客渠道语义区分，不复用）
+- **Customer Create/Edit 渠道**：新建/编辑往来单位表单增加「销售渠道」下拉（未设置默认）；列表页渠道列 + 渠道 filter（固定枚举精确匹配；「未设置」= IS NULL）；详情页销售渠道展示
+- **经营看板渠道维度**：/api/reports/operations 新增 channels 聚合（渠道客户数 + 期间订单数/金额，未设置归「未设置」），channelAvailable 置 true；渠道分布表完整显示（BusinessPartner.channel 真实事实源）
+
+### 边界
+
+- 零事件/Outbox/错误码变更；零 BI/OLAP/DW；不引入营销归因平台/Campaign/CDP/渠道漏斗 Engine；sourceChannel 语义不变；Customer 遗留模型不动
+
+## [Unreleased] - CC-07：订单 BOM 用料统一吨数展示（Contract Close → Production-Test）
+
+### 新增
+
+- **GET /api/sales-orders/:id/material-requirements 输出吨数折算（只读）**：每行新增 requiredUom（原单位 code）、tonnage（折算吨数）、tonnageConvertible、reason（不可换算原因）；只消费现有 UomConversion 事实（1 from = factor to；正向 requiredUom→TON 相乘、反向 TON→requiredUom 相除）；无 TON 计量单位或无换算 → tonnage=null / tonnageConvertible=false / reason="缺少 xxx → TON 换算"，绝不猜测
+- **SalesOrder 详情「BOM 预计用料」统一吨数展示**：表格列 = 原料 / 原单位需求（数量+原单位）/ 折算吨数 / 当前库存 / 库存单位；吨数合计只统计可换算项；未换算物料显示"未换算"（不造 0）并明确提示"另有 N 种原料未配置 → TON 换算，未计入合计"
+- **单测**：KG→TON 正向/反向换算、无换算 → null/false/reason、无 TON 单位分支、吨数汇总只含可换算项
+
+### 边界
+
+- 零 Schema / 零 Migration（requiredUom/tonnage 为只读计算输出）；不重写 BOM 算法；不做 MRP / 自动采购 / 库存 Reservation；前端不写换算系数；不触碰 modules.ts
+
+## [Unreleased] - Phase 2C-2 收口：客户公海 DEPARTMENT/小组自动入池（零 Schema，CustomerPool 2C 收口线）
+
+### 新增
+
+- **matchCustomerPools 增加 DEPARTMENT scope 触碰规则**：CustomerOwnership.ownerId → User.departmentId ===
+  CustomerPool.scopeValue 的激活池命中 → 自动创建 FIELD_RULE 条目 + Outbox CustomerPoolEntryEntered（同事务）；
+  BusinessPartner 无 department/team 真实字段（grep 确认，ADR-0053 §3.1/§3.3），归属 SSOT = CustomerOwnership，
+  禁止 createdById 推断；REGION scope 触碰规则保持原行为（回归不变）
+- **优先级**：DEPARTMENT（客户负责人部门 = 触发源）优先于 REGION；同 scope 内 createdAt asc / id asc；无命中 → NO_MATCHING_POOL no-op
+- **I1/I2 分区校验**：REGION 路径仍要求无 active ownership（I1，防已负责客户流入区域公海）；DEPARTMENT 路径归属即触发源，
+  事务内复核归属快照仍成立（防判定与提交间归属释放竞态 → MATCH_CONDITION_CHANGED 不创建）；两路径共享 I2（active entry 不重复，
+  复用 partial unique + P2002 → RACE_LOST no-op）
+- **触发点扩展**：claim（客户负责人变更）后同步 matchCustomerPools（best-effort 不回滚 claim），
+  与既有 BP create/update 触发点并列（ADR-0053 §6.2「写入即判定」）
+- **前端**：新建公海页 / 池详情页自动匹配说明更新为「REGION + DEPARTMENT 自动入池」；公海状态卡入池方式补「规则自动」标签
+
+### 边界
+
+- 零 Schema / 零 Migration（scopeType=DEPARTMENT 枚举与 scopeValue=Department.id 语义 Migration 0049 已定义）
+- 不造 Rule Engine / condition DSL / priority engine / scheduler / sweep；CustomerPoolRule 仍 HOLD
+- 不触碰 modules.ts（Registry SSOT）；本线仅最小前端文案接线，不做视觉重构
+
 ---
 
 ## [Unreleased] - FE 2.0 UI-01：GLOBAL DESIGN SYSTEM 基元升级（零 Schema / 零 API / 零业务逻辑）

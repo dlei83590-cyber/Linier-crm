@@ -13,6 +13,7 @@ import { AppPage, EntityFormWorkspace } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
+import { BUSINESS_PARTNER_CHANNELS } from "@/lib/business-partner/channel";
 import {
   computeDuplicateUiState,
   shouldRunDuplicateCheck,
@@ -53,6 +54,7 @@ function BusinessPartnerCreateForm() {
   const [legalRepresentative, setLegalRepresentative] = useState("");
   const [region, setRegion] = useState("");
   const [industry, setIndustry] = useState("");
+  const [channel, setChannel] = useState("");
   const [companySize, setCompanySize] = useState("");
   const [contactPerson, setContactPerson] = useState("");
   const [phone, setPhone] = useState("");
@@ -64,6 +66,8 @@ function BusinessPartnerCreateForm() {
   const [registeredCapital, setRegisteredCapital] = useState("");
   const [employeeCount, setEmployeeCount] = useState("");
   const [website, setWebsite] = useState("");
+  // cc-06 客户等级→供应商评级匹配：客户等级（VIP/KEY/REGULAR/PROSPECT；仅 CUSTOMER/BOTH 可设）
+  const [customerLevel, setCustomerLevel] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiClientError | null>(null);
@@ -148,6 +152,7 @@ function BusinessPartnerCreateForm() {
         legalRepresentative: legalRepresentative.trim() || undefined,
         region: region.trim() || undefined,
         industry: industry.trim() || undefined,
+        channel: channel || undefined,
         companySize: companySize.trim() || undefined,
         contactPerson: contactPerson.trim() || undefined,
         phone: phone.trim() || undefined,
@@ -156,6 +161,7 @@ function BusinessPartnerCreateForm() {
         bankName: bankName.trim() || undefined,
         bankAccount: bankAccount.trim() || undefined,
         settlementTerms: settlementTerms.trim() || undefined,
+        customerLevel: type === "CUSTOMER" || type === "BOTH" ? customerLevel || undefined : undefined,
         registeredCapital: registeredCapital.trim() || undefined,
         employeeCount: employeeCount ? Number(employeeCount) : undefined,
         website: website.trim() || undefined,
@@ -255,6 +261,17 @@ function BusinessPartnerCreateForm() {
             ))}
           </select>
         </FormField>
+        {(type === "CUSTOMER" || type === "BOTH") && (
+          <FormField label="客户等级">
+            <select value={customerLevel} onChange={(e) => setCustomerLevel(e.target.value)} className={inputClass}>
+              <option value="">未设置</option>
+              <option value="VIP">VIP</option>
+              <option value="KEY">重点（KEY）</option>
+              <option value="REGULAR">普通（REGULAR）</option>
+              <option value="PROSPECT">潜在（PROSPECT）</option>
+            </select>
+          </FormField>
+        )}
         <FormField label="统一社会信用代码">
           <input
             value={uscc}
@@ -277,6 +294,16 @@ function BusinessPartnerCreateForm() {
         </FormField>
         <FormField label="行业">
           <input value={industry} onChange={(e) => setIndustry(e.target.value)} className={inputClass} />
+        </FormField>
+        <FormField label="销售渠道">
+          <select value={channel} onChange={(e) => setChannel(e.target.value)} className={inputClass}>
+            <option value="">未设置</option>
+            {BUSINESS_PARTNER_CHANNELS.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
         </FormField>
         <FormField label="企业规模">
           <input value={companySize} onChange={(e) => setCompanySize(e.target.value)} className={inputClass} />
