@@ -36,6 +36,11 @@ interface DeliveryLine {
   sourceSalesOrderLine?: { id: string; lineNo: number; quantity: string } | null;
 }
 
+interface WarehouseOption {
+  id: string;
+  name: string | null;
+}
+
 interface InvoiceCreatedResponse {
   invoice: { id: string; code: string | null; status: string };
   lineCount: number;
@@ -108,6 +113,8 @@ function DeliveryDetailPage() {
   const [dispatchOpen, setDispatchOpen] = useState(false);
   const [dispatchCarrier, setDispatchCarrier] = useState("");
   const [dispatchTrackingNo, setDispatchTrackingNo] = useState("");
+  const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
+  const [dispatchWarehouseId, setDispatchWarehouseId] = useState("");
   const [confirmDeliverOpen, setConfirmDeliverOpen] = useState(false);
   const [podStatus, setPodStatus] = useState<"RECEIVED" | "WAIVED">("RECEIVED");
   // 相关发票（FRT-06：下一单据链接；独立 loading/error/retry，禁止把接口失败当空列表）
@@ -251,6 +258,7 @@ function DeliveryDetailPage() {
         body: JSON.stringify({
           ...(dispatchCarrier.trim() ? { carrier: dispatchCarrier.trim() } : {}),
           ...(dispatchTrackingNo.trim() ? { trackingNo: dispatchTrackingNo.trim() } : {}),
+          warehouseId: dispatchWarehouseId,
           changeReason: "交付单发运",
         }),
       });
@@ -304,6 +312,14 @@ function DeliveryDetailPage() {
   }, [id]);
 
   const retryInvoices = () => loadInvoices();
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    apiFetch<WarehouseOption[]>("/api/warehouses?pageSize=100&isActive=true", { signal: ctrl.signal })
+      .then((b) => setWarehouses(b.data))
+      .catch(() => setWarehouses([])); // best-effort：无 warehouse:view 权限时下拉为空，发运仍需选择仓库（后端校验）
+    return () => ctrl.abort();
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -389,6 +405,7 @@ function DeliveryDetailPage() {
                 onClick={() => {
                   setDispatchCarrier("");
                   setDispatchTrackingNo("");
+                  setDispatchWarehouseId("");
                   setDispatchOpen(true);
                 }}
                 disabled={actionBusy}
@@ -494,6 +511,16 @@ function DeliveryDetailPage() {
             />
             <InfoItem label="备注" value={detail.remark} />
             <InfoItem label="创建时间" value={formatDate(detail.createdAt)} />
+            <InfoItem
+              label="库存出库"
+              value={
+                detail.status === "DISPATCHED" || detail.status === "DELIVERED" ? (
+                  <span className="font-medium text-status-success-text">已出库（库存已扣减）</span>
+                ) : (
+                  <span className="text-ink-muted">未出库</span>
+                )
+              }
+            />
           </div>
         }
       >
@@ -735,7 +762,7 @@ function DeliveryDetailPage() {
               ? "取消该交付单？仅 DRAFT/READY 可取消（DISPATCHED 及以后禁止）。确认后不可恢复。"
               : confirmAction === "unconfirm"
                 ? "反签收该送货单（DELIVERED → DISPATCHED）？将撤销确认收货、POD 回退 PENDING，并重算销售订单交付状态（订单可回未发货）。仅无已开票发票时可反签收。"
-                : "删除该送货单？仅 CANCELLED 或反签收后（DISPATCHED）状态可删除；删除后订单交付状态将重算（回未发货）。确认后不可恢复。"
+                : "删除该送货单？仅 CANCELLED 或反签收后（DISPATCHED）状态可删除；DISPATCHED 删除将自动冲销已出库库存（REVERSAL 恢复），订单交付状态重算（回未发货）。确认后不可恢复。"
         }
         confirmLabel={
           confirmAction === "ready"
@@ -769,8 +796,25 @@ function DeliveryDetailPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-ink-primary text-base font-semibold">发运交付单</h2>
-            <p className="text-ink-secondary mt-2 text-sm">发运将状态推进为 DISPATCHED（发运 ≠ 客户收货）。</p>
+            <p className="text-ink-secondary mt-2 text-sm">
+              发运将推进为 DISPATCHED 并<strong>扣减所选仓库库存</strong>（销售出库，不可逆——需删除送货单才恢复库存）。
+            </p>
             <div className="mt-4 space-y-3">
+              <div>
+                <label className="block text-xs text-ink-secondary">出库仓库（必填）</label>
+                <select
+                  value={dispatchWarehouseId}
+                  onChange={(e) => setDispatchWarehouseId(e.target.value)}
+                  className={"mt-1 " + INPUT_CLASS}
+                >
+                  <option value="">请选择出库仓库</option>
+                  {warehouses.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.name ?? w.id}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div>
                 <label className="block text-xs text-ink-secondary">承运方（可选，≤100）</label>
                 <input
@@ -801,7 +845,13 @@ function DeliveryDetailPage() {
               </button>
               <button
                 type="button"
-                onClick={handleDispatch}
+                onClick={() => {
+                  if (!dispatchWarehouseId) {
+                    setActionError(new ApiClientError(400, "请先选择出库仓库", "VALIDATION_ERROR"));
+                    return;
+                  }
+                  void handleDispatch();
+                }}
                 disabled={actionBusy}
                 className={BUTTON_PRIMARY_CLASS}
               >

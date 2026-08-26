@@ -2,6 +2,23 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - 合同收口-销售出库（CC-01 Sales Outbound）：Delivery DISPATCH 真正库存扣减
+
+### 新增
+
+- **销售出库真正库存扣减（Migration 0055）**：InventoryMovementSourceType 新增 `SALES_DELIVERY`；Delivery DISPATCH 服务端事务内（READY→DISPATCHED）复用共享 InventoryLedgerCommand Core 登记出库事实——构造 SALES_DELIVERY/OUT 原子（五元幂等 sourceType|delivery.id|line.id|OUT|BULK + movementGroupId=delivery.id）→ 同事务扣减 StockProjection + 写 InventoryMovement（全有或全无）
+- **发运前库存检查 + 库存不足 409**：InventoryInsufficientStockError 语义；Movement 不写/Projection 不变/单据保持 READY；多行统一事务；非物料行（itemId=null）跳过；数量 > 0 校验
+- **出库仓库 canonical 输入**：dispatch 请求必填 warehouseId（+ 可选 locationId 属于该仓库）；DISPATCHED 快照含出库仓库/库位/出库原子证据
+- **DISPATCHED 删除恢复库存**：DELETE 同事务写 REVERSAL/IN 原子（reversalOfMovementId 引用原 Movement）恢复 StockProjection；CANCELLED 删除无冲销；禁止 delete movement / 无 movement 直接加回投影
+- **前端最小接线**：发运对话框出库仓库选择；SO/Delivery 详情展示「已出库（库存已扣减）」；Inventory Ledger 来源过滤支持 SALES_DELIVERY
+- **复用既有成本/GL 链路**：出库结转（applyOutboundCost）与 GL COGS 过账（postGlEntry）由 ledger-command Core 既有逻辑处理，未重复接线
+
+### 边界
+
+- 零 Delivery/DeliveryLine Schema 变更（仓库维度以 InventoryMovement.warehouseId/locationId 为 durable source；仅 InventoryMovementSourceType 枚举 +1）
+- 不触碰 modules.ts / design-system / AdminShell / command-palette；销售出库暂不支持 serial 选号与批次/效期精确出库（BULK OUT fail-closed 409）
+- 删除恢复库存（REVERSAL/IN）不自动冲回成本层/GL COGS（保持 ledger-command 既有行为）
+
 ## [Unreleased] - cc-03-followup-level：跟进程度分级 + 动态必填 + 责任人（合同收口，Migration 0055）
 
 ### 新增

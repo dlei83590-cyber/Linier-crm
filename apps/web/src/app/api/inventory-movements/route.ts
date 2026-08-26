@@ -31,6 +31,8 @@ const SOURCE_TYPES = [
   "TRANSFER",
   "ADJUSTMENT",
   "CONVERSION",
+  "PRODUCTION",
+  "SALES_DELIVERY",
   "REVERSAL",
   "CORRECTION",
 ] as const;

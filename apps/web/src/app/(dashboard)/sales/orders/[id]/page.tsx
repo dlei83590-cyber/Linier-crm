@@ -496,6 +496,7 @@ function SalesOrderDetailPage() {
                 <tr>
                   <th className="px-3 py-2 font-medium">送货单号</th>
                   <th className="px-3 py-2 font-medium">状态</th>
+                  <th className="px-3 py-2 font-medium">库存出库</th>
                   <th className="px-3 py-2 text-right font-medium">行数</th>
                   <th className="px-3 py-2 font-medium">交付日期</th>
                   <th className="px-3 py-2 font-medium">创建时间</th>
@@ -519,6 +520,13 @@ function SalesOrderDetailPage() {
                         tone={salesStatusTone("delivery", dlv.status)}
                       />
                     </td>
+                    <td className="px-3 py-2">
+                      {dlv.status === "DISPATCHED" || dlv.status === "DELIVERED" ? (
+                        <span className="text-xs font-medium text-status-success-text">已出库（库存已扣减）</span>
+                      ) : (
+                        <span className="text-xs text-ink-muted">未出库</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2 text-right tabular-nums text-ink-primary">
                       {dlv._count?.lines ?? 0}
                     </td>
@@ -528,7 +536,7 @@ function SalesOrderDetailPage() {
                 ))}
                 {(detail.deliveries ?? []).length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-3 py-8 text-center text-sm text-ink-muted">
+                    <td colSpan={6} className="px-3 py-8 text-center text-sm text-ink-muted">
                       暂无送货单——确认订单后可从本页「创建送货单」生成
                     </td>
                   </tr>

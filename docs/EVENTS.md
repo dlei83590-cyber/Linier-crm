@@ -1,7 +1,7 @@
 # EVENTS 领域事件注册表（Domain Events）
 
 - 版本：v1.45
-- 日期：2026-08-20
+- 日期：2026-08-25
 - 维护者：CIO（JINZA）｜审核：CTO
 - 关联：[API_GUIDELINES.md](./API_GUIDELINES.md) ｜ [ARCHITECTURE_BASELINE.md](./ARCHITECTURE_BASELINE.md)
 
@@ -108,7 +108,7 @@
 | `DeliveryCreated`              | 创建交付单（DRAFT，经 SO 创建）                      | `{ deliveryId, deliveryCode, salesOrderId, salesOrderCode, customerId, createdBy }` | ✅ 已实现（Phase 3 POST /api/sales-orders/{id}/deliveries） |
 | `DeliveryUpdated`              | 头/行内容变更（Revision）                            | `{ deliveryId, deliveryCode, revisionNo, changeReason, changedBy }`                 | ✅ 已实现（Phase 3 PATCH 头/行）                            |
 | `DeliveryReady`                | ready（DRAFT → READY，行锁定）                       | `{ deliveryId, deliveryCode, salesOrderId, readyBy }`                               | ✅ 已实现（Phase 4 POST /ready）                            |
-| `DeliveryDispatched`           | dispatch（READY → DISPATCHED，发运）                 | `{ deliveryId, deliveryCode, carrier, trackingNo, dispatchedBy }`                   | ✅ 已实现（Phase 4 POST /dispatch）                         |
+| `DeliveryDispatched`           | dispatch（READY → DISPATCHED，发运；合同收口：同事务 SALES_DELIVERY 库存出库扣减） | `{ deliveryId, deliveryCode, carrier, trackingNo, warehouseId, locationId, outboundAtomCount, dispatchedBy }` | ✅ 已实现（Phase 4 POST /dispatch；0055 销售出库扣减）      |
 | `DeliveryConfirmed`            | confirm-delivery（DISPATCHED → DELIVERED）           | `{ deliveryId, deliveryCode, deliveredAt, confirmedBy }`                            | ✅ 已实现（Phase 4 POST /confirm-delivery）                 |
 | `DeliveryCancelled`            | cancel（DRAFT/READY → CANCELLED）                    | `{ deliveryId, deliveryCode, cancelledBy, reason }`                                 | ✅ 已实现（Phase 4 POST /cancel）                           |
 | `DeliveryUnconfirmed`          | unconfirm（DELIVERED → DISPATCHED，反签收）          | `{ deliveryId, deliveryCode, salesOrderId, customerId, unconfirmedBy, reason }`     | ✅ 已实现（2026-08-21 POST /unconfirm）                     |
