@@ -45,6 +45,10 @@ type TxMock = {
   };
   deliveryRevision: { findFirst: ReturnType<typeof vi.fn> };
   deliverySnapshot: { create: ReturnType<typeof vi.fn> };
+  // Migration 0055 协同群 Outbox：dispatch 事务内 ORDER_STAGE_CHANGED（DISPATCHED）需要 salesOrder/businessPartner/user
+  salesOrder: { findFirst: ReturnType<typeof vi.fn> };
+  businessPartner: { findFirst: ReturnType<typeof vi.fn> };
+  user: { findUnique: ReturnType<typeof vi.fn> };
 };
 
 function makeTx(delivery: ReturnType<typeof makeDelivery>, lines: unknown[] = []): TxMock {
@@ -59,6 +63,10 @@ function makeTx(delivery: ReturnType<typeof makeDelivery>, lines: unknown[] = []
     },
     deliveryRevision: { findFirst: vi.fn().mockResolvedValue(null) },
     deliverySnapshot: { create: vi.fn().mockResolvedValue({}) },
+    // 协同群 Outbox 依赖（collaborationChannelKey=null → 不写 ORDER_STAGE_CHANGED，既有断言不变）
+    salesOrder: { findFirst: vi.fn().mockResolvedValue({ id: 'so-1', code: 'SO000001', customerId: 'cus-1', totalAmount: new Prisma.Decimal('1000'), currency: 'CNY', createdById: null }) },
+    businessPartner: { findFirst: vi.fn().mockResolvedValue({ name: '客户A', collaborationChannelKey: null }) },
+    user: { findUnique: vi.fn().mockResolvedValue(null) },
   };
 }
 
