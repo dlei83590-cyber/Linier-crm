@@ -5,6 +5,7 @@ import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/l
 import { ok, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
+import { nextDocumentCode } from "@/lib/document-sequence/next-code";
 
 export const dynamic = "force-dynamic";
 
@@ -44,20 +45,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return { error: "ALREADY_CONVERTED" as const };
     }
 
-    // ③ 生成项目编号：nextNo 数据库原子递增（increment），并发取号不重复
-    const seq = await tx.documentSequence.findFirst({ where: { docType: "PROJECT", isActive: true, deletedAt: null } });
-    const prefix = seq?.prefix ?? "PJ";
-    const padLength = seq?.padLength ?? 6;
-    let projectCode: string;
-    if (seq) {
-      const updated = await tx.documentSequence.update({
-        where: { id: seq.id },
-        data: { nextNo: { increment: 1 } },
-      });
-      projectCode = `${prefix}${String(updated.nextNo - 1).padStart(padLength, "0")}`;
-    } else {
-      projectCode = `${prefix}${String(1).padStart(padLength, "0")}`;
-    }
+    // ③ 生成项目编号（单据序列重构：PJ-LNE{YYYY}{MM}{####}；缺失 fail closed）
+    const projectCode = await nextDocumentCode(tx, "PROJECT", new Date());
 
     // ④ 创建 Project（复制客户/财务/负责人/描述；stage 默认 SAMPLING）
     const project = await tx.project.create({

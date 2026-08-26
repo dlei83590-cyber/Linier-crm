@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
     const created = await prisma.$transaction(async (tx) => {
       const supplier = await tx.supplier.findFirst({ where: { id: parsed.data.supplierId, deletedAt: null }, select: { id: true } });
       if (!supplier) throw new Error('SUPPLIER_NOT_FOUND');
-      const code = await nextSupplierPaymentCode(tx);
+      const code = await nextSupplierPaymentCode(tx, new Date(parsed.data.paymentDate));
       const payment = await tx.supplierPayment.create({
         data: {
           code,

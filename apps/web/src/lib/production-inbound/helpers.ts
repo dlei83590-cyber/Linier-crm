@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { nextDocumentCode, DocumentSequenceMissingError } from '@/lib/document-sequence/next-code';
 import { executeLedgerAtoms, type LedgerAtom } from "@/lib/inventory-ledger/ledger-command";
 import { upsertInboundCost } from "@/lib/inventory-cost/moving-average";
 
@@ -20,21 +21,14 @@ export interface ProductionLineInput {
   remark?: string | null;
 }
 
-/** 生产入库单号取号（原子 increment；DocumentSequence 缺失 = 配置错误抛错） */
-export async function nextInboundNo(tx: Prisma.TransactionClient): Promise<string> {
-  const seq = await tx.documentSequence.findFirst({
-    where: { docType: "PRODUCTION_INBOUND", isActive: true, deletedAt: null },
-  });
-  if (!seq) {
-    throw new Error("PRODUCTION_INBOUND_SEQUENCE_MISSING");
+/** 生产入库单号取号（原子 increment；DocumentSequence 缺失 = 配置错误抛错；单据序列重构：PIN-LNE{YYYY}{MM}{####}） */
+export async function nextInboundNo(tx: Prisma.TransactionClient, documentDate: Date): Promise<string> {
+  try {
+    return await nextDocumentCode(tx, "PRODUCTION_INBOUND", documentDate);
+  } catch (err) {
+    if (err instanceof DocumentSequenceMissingError) throw new Error("PRODUCTION_INBOUND_SEQUENCE_MISSING");
+    throw err;
   }
-  const prefix = seq.prefix ?? "PIN";
-  const padLength = seq.padLength ?? 6;
-  const updated = await tx.documentSequence.update({
-    where: { id: seq.id },
-    data: { nextNo: { increment: 1 } },
-  });
-  return prefix + String(updated.nextNo - 1).padStart(padLength, "0");
 }
 
 /** 行金额 canonical 计算（服务端）：amount = unitCost × toQty（14,2） */

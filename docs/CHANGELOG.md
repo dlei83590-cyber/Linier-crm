@@ -3,6 +3,23 @@
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
 
+## [Unreleased] - 单据序列重构（{prefix}-LNE{YYYY}{MM}{####} 按月重排，ADR-0055）
+
+### 新增
+
+- **共享取号引擎**：`lib/document-sequence/next-code.ts`（`nextDocumentCode(tx, docType, documentDate, opts?)`）——模板行（docType 基准）缺失 fail closed；期间行 `code={docType}:{YYYYMM}` 按需派生创建 + `FOR UPDATE` 原子递增；可选 `isCodeFree` 占用校验（软删记录仍占唯一键）
+- **编号格式**：`{prefix}-LNE{YYYY}{MM}{####}`（如 `SO-LNE2026080001`），`-` 位于前缀与 LNE 之间，按月重排、4 位序号，年份/月份由单据日期按 Asia/Shanghai 归属月自动计算（无日期字段回退当前业务日）
+- **全量委托**：22 个领域 helper（quotation/sales-order/purchase-order/PR/PO/PRT/REC/WHR/invoice/delivery/receipt/write-off/CN-DN/SINV/SCN-SDN/PAY/库存/生产…）+ Project/SO convert 内联 + StockCount→Adjustment 内联统一走引擎；各 helper 签名新增 `documentDate`
+- **seed**：业务单据 `padLength 6→4` + `periodPattern='LNE{YYYY}{MM}'` + `perPeriodReset=true`；补齐缺失的 SCN/SDN 序列；upsert `update` 传播新字段（部署期重跑 seed 即迁移既有行）
+
+### 变更
+
+- `recycleDocumentSequence` 改为按期间行回退（解析 LNE 后 6 位 YYYYMM + 末 4 位序号）；历史旧格式单号不参与回收
+
+### 边界
+
+- 零 Schema / Migration；不改 JOURNAL（保留 ADR-0044 凭证字格式 记202608-0001）；历史单据不重编号；无多租户/分支/多币种序列
+
 ## [Unreleased] - UI 交互与页面美化补齐批次（feat/ui-polish-batch，普通前端补齐，零 Schema/API）
 
 ### 新增

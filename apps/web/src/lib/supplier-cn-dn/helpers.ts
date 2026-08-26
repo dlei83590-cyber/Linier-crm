@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { nextDocumentCode, DocumentSequenceMissingError } from '@/lib/document-sequence/next-code';
 
 /**
  * Sprint 5C-2 - Supplier CN/DN 领域通用函数（对齐 5C-1 helpers 模式；不放路由逻辑）
@@ -13,21 +14,19 @@ export class SupplierCnDnSequenceMissingError extends Error {
   }
 }
 
-/** DocumentSequence 原子取号（按 noteType 选 docType；创建即取号 fail closed） */
+/** DocumentSequence 原子取号（按 noteType 选 docType；创建即取号 fail closed；单据序列重构：SCN/SDN-LNE{YYYY}{MM}{####}） */
 export async function nextSupplierCnDnCode(
   tx: Prisma.TransactionClient,
   noteType: 'CREDIT' | 'DEBIT',
+  documentDate: Date,
 ): Promise<string> {
   const docType = noteType === 'CREDIT' ? 'SUPPLIER_CREDIT_NOTE' : 'SUPPLIER_DEBIT_NOTE';
-  const seq = await tx.documentSequence.findFirst({
-    where: { docType: docType as never, isActive: true, deletedAt: null },
-  });
-  if (!seq) throw new SupplierCnDnSequenceMissingError(docType);
-  const updated = await tx.documentSequence.update({
-    where: { id: seq.id },
-    data: { nextNo: { increment: 1 } },
-  });
-  return `${seq.prefix}${String(updated.nextNo - 1).padStart(seq.padLength, '0')}`;
+  try {
+    return await nextDocumentCode(tx, docType, documentDate);
+  } catch (err) {
+    if (err instanceof DocumentSequenceMissingError) throw new SupplierCnDnSequenceMissingError(docType);
+    throw err;
+  }
 }
 
 /** 行金额服务端计算：amount = quantity × unitPrice（快照单价，4dp；全程 Decimal） */

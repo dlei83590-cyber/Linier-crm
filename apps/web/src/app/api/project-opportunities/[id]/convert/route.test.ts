@@ -19,7 +19,7 @@ import { POST } from '@/app/api/project-opportunities/[id]/convert/route';
 type TxMock = {
   $queryRaw: ReturnType<typeof vi.fn>;
   projectOpportunity: { findFirst: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
-  documentSequence: { findFirst: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
+  documentSequence: { findFirst: ReturnType<typeof vi.fn>; createMany: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
   project: { create: ReturnType<typeof vi.fn> };
 };
 
@@ -49,8 +49,19 @@ function makeTx(overrides: Partial<TxMock> = {}): TxMock {
       update: vi.fn().mockResolvedValue({ id: 'opp-1', convertedAt: new Date(), convertedBy: 'u-1' }),
     },
     documentSequence: {
-      findFirst: vi.fn().mockResolvedValue(null),
-      update: vi.fn(),
+      // 单据序列重构（ADR-0055）：模板行（docType=PROJECT）+ 期间行均返回同一模板行；createMany 供期间行创建（本测试 findFirst 恒非空，不触发）
+      findFirst: vi.fn().mockResolvedValue({
+        id: 'seq-1',
+        name: '项目',
+        prefix: 'PJ',
+        startNo: 1,
+        nextNo: 1,
+        padLength: 4,
+        periodPattern: 'LNE{YYYY}{MM}',
+        perPeriodReset: true,
+      }),
+      createMany: vi.fn().mockResolvedValue({ count: 0 }),
+      update: vi.fn().mockResolvedValue({ nextNo: 2 }),
     },
     project: {
       create: vi.fn().mockImplementation(({ data }) =>

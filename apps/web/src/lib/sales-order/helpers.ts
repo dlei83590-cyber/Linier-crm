@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { nextDocumentCode } from "@/lib/document-sequence/next-code";
 import type { SalesOrderLine } from "@prisma/client";
 
 /** Sprint 4B - Sales Order 领域辅助（编号生成 / 合计重算 / Revision 创建）
@@ -8,21 +9,9 @@ import type { SalesOrderLine } from "@prisma/client";
 
 export const SALES_ORDER_DOC_TYPE = "SALES_ORDER";
 
-/** DocumentSequence 原子取号（docType=SALES_ORDER，前缀 SO，位数 6） */
-export async function nextSalesOrderCode(tx: Prisma.TransactionClient): Promise<string> {
-  const seq = await tx.documentSequence.findFirst({
-    where: { docType: "SALES_ORDER", isActive: true, deletedAt: null },
-  });
-  const prefix = seq?.prefix ?? "SO";
-  const padLength = seq?.padLength ?? 6;
-  if (seq) {
-    const updated = await tx.documentSequence.update({
-      where: { id: seq.id },
-      data: { nextNo: { increment: 1 } },
-    });
-    return `${prefix}${String(updated.nextNo - 1).padStart(padLength, "0")}`;
-  }
-  return `${prefix}${String(1).padStart(padLength, "0")}`;
+/** DocumentSequence 原子取号（docType=SALES_ORDER，前缀 SO；单据序列重构：SO-LNE{YYYY}{MM}{####}） */
+export async function nextSalesOrderCode(tx: Prisma.TransactionClient, documentDate: Date): Promise<string> {
+  return nextDocumentCode(tx, "SALES_ORDER", documentDate);
 }
 
 /** 重算销售订单头合计（subtotal/taxAmount/totalAmount，全程 Decimal） */

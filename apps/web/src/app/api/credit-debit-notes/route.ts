@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. 创建即取号（CN-/DN-2026-xxxx）+ adjustmentTotal = Σ lines（服务端计算）
-    const code = await nextCreditDebitNoteCode(tx, noteType);
+    const code = await nextCreditDebitNoteCode(tx, noteType, new Date());
     const adjustmentTotal = computeCreditDebitNoteTotal(lineData);
 
     // 5. 创建 CreditDebitNote（DRAFT）+ Lines（Customer/Currency 从 Invoice 继承；不改 AR/Invoice）

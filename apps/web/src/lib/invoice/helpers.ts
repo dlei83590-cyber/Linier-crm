@@ -1,4 +1,5 @@
 import { Prisma, type InvoiceInvoiceType } from "@prisma/client";
+import { nextDocumentCode } from "@/lib/document-sequence/next-code";
 
 /** Sprint 4D - Invoice 领域辅助（编号生成 / Revision / Snapshot 创建）
  * 对齐 Delivery/SalesOrder helpers 模式；CTO Review 96/100 锁定：
@@ -10,21 +11,9 @@ import { Prisma, type InvoiceInvoiceType } from "@prisma/client";
 
 export const INVOICE_DOC_TYPE = "INVOICE";
 
-/** DocumentSequence 原子取号（docType=INVOICE，前缀 INV，位数 6；仅 ISSUE 时调用，DRAFT 不占号） */
-export async function nextInvoiceCode(tx: Prisma.TransactionClient): Promise<string> {
-  const seq = await tx.documentSequence.findFirst({
-    where: { docType: "INVOICE", isActive: true, deletedAt: null },
-  });
-  const prefix = seq?.prefix ?? "INV";
-  const padLength = seq?.padLength ?? 6;
-  if (seq) {
-    const updated = await tx.documentSequence.update({
-      where: { id: seq.id },
-      data: { nextNo: { increment: 1 } },
-    });
-    return `${prefix}${String(updated.nextNo - 1).padStart(padLength, "0")}`;
-  }
-  return `${prefix}${String(1).padStart(padLength, "0")}`;
+/** DocumentSequence 原子取号（docType=INVOICE，前缀 INV；仅 ISSUE 时调用，DRAFT 不占号；单据序列重构：INV-LNE{YYYY}{MM}{####}） */
+export async function nextInvoiceCode(tx: Prisma.TransactionClient, documentDate: Date): Promise<string> {
+  return nextDocumentCode(tx, "INVOICE", documentDate);
 }
 
 /** 创建 InvoiceRevision（系统生成，不开放自由编辑；revisionNo 自动递增） */

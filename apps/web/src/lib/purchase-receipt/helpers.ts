@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { nextDocumentCode } from '@/lib/document-sequence/next-code';
 
 /**
  * Sprint 5B - PurchaseReceipt（采购收货事实）领域通用函数（**不放路由逻辑**；对齐 PO/PR/Invoice helpers 模式）
@@ -18,26 +19,11 @@ import { Prisma } from '@prisma/client';
  * - **红线**：5B 永不直接写库存余额 / Stock / InventoryMovement（6A 唯一事实源）。
  */
 
-/** DocumentSequence 原子取号（docType=PURCHASE_RECEIPT，前缀 REC，位数 6；创建即取号） */
-export async function nextPurchaseReceiptCode(tx: Prisma.TransactionClient): Promise<string> {
-  const seq = await tx.documentSequence.findFirst({
-    where: { docType: 'PURCHASE_RECEIPT', isActive: true, deletedAt: null },
+/** DocumentSequence 原子取号（docType=PURCHASE_RECEIPT，前缀 REC；创建即取号；单据序列重构：REC-LNE{YYYY}{MM}{####}） */
+export async function nextPurchaseReceiptCode(tx: Prisma.TransactionClient, documentDate: Date): Promise<string> {
+  return nextDocumentCode(tx, 'PURCHASE_RECEIPT', documentDate, {
+    isCodeFree: async (tx, code) => !(await tx.purchaseReceipt.findUnique({ where: { code } })),
   });
-  const prefix = seq?.prefix ?? 'REC';
-  const padLength = seq?.padLength ?? 6;
-  if (seq) {
-    // 占用校验（防 P2002 500）
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-      const updated = await tx.documentSequence.update({
-        where: { id: seq.id },
-        data: { nextNo: { increment: 1 } },
-      });
-      const code = `${prefix}${String(updated.nextNo - 1).padStart(padLength, '0')}`;
-      const exists = await tx.purchaseReceipt.findUnique({ where: { code } });
-      if (!exists) return code;
-    }
-  }
-  return `${prefix}${String(1).padStart(padLength, '0')}`;
 }
 
 /** 有效超收容差（rate 单位：0.050000 = 5%）：PO Line override 未配置 → System Default 0（CTO #6923 规则⑤，不伪造 Supplier/Item policy） */

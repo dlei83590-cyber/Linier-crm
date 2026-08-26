@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { nextDocumentCode, DocumentSequenceMissingError } from '@/lib/document-sequence/next-code';
 
 /**
  * Sprint 5C-2 - Supplier Payment 领域通用函数（对齐 5C-1 helpers 模式）
@@ -12,15 +13,12 @@ export class SupplierPaymentSequenceMissingError extends Error {
   }
 }
 
-/** DocumentSequence 原子取号（docType=PAYMENT_VOUCHER；创建即取号 fail closed） */
-export async function nextSupplierPaymentCode(tx: Prisma.TransactionClient): Promise<string> {
-  const seq = await tx.documentSequence.findFirst({
-    where: { docType: 'PAYMENT_VOUCHER' as never, isActive: true, deletedAt: null },
-  });
-  if (!seq) throw new SupplierPaymentSequenceMissingError();
-  const updated = await tx.documentSequence.update({
-    where: { id: seq.id },
-    data: { nextNo: { increment: 1 } },
-  });
-  return `${seq.prefix}${String(updated.nextNo - 1).padStart(seq.padLength, '0')}`;
+/** DocumentSequence 原子取号（docType=PAYMENT_VOUCHER；创建即取号 fail closed；单据序列重构：PV-LNE{YYYY}{MM}{####}） */
+export async function nextSupplierPaymentCode(tx: Prisma.TransactionClient, documentDate: Date): Promise<string> {
+  try {
+    return await nextDocumentCode(tx, 'PAYMENT_VOUCHER', documentDate);
+  } catch (err) {
+    if (err instanceof DocumentSequenceMissingError) throw new SupplierPaymentSequenceMissingError();
+    throw err;
+  }
 }

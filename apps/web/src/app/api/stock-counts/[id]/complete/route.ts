@@ -7,6 +7,7 @@ import { ERROR_CODES, type ErrorCode } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
 import { stockCountCompleteSchema } from '@/lib/api/schemas';
 import { computeVarianceQty } from '@/lib/stock-count/helpers';
+import { nextAdjustmentNo, InventoryAdjustmentSequenceMissingError } from '@/lib/inventory-adjustment/helpers';
 import { publishStockCountEvent } from '@/lib/stock-count/events';
 
 export const dynamic = 'force-dynamic';
@@ -152,18 +153,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // ⑨ 非零差异 → 自动生成 COUNT_VARIANCE Adjustment（DRAFT；仍需审批；绝不自动 APPLIED）
       let adjustment: { id: string; adjustmentNo: string } | null = null;
       if (diffLines.length > 0) {
-        // 取号 ADJ（创建即取号；Sequence 缺失 = 配置错误，由外层 catch 映射 500）
-        const seq = await tx.documentSequence.findFirst({
-          where: { docType: 'INVENTORY_ADJUSTMENT', isActive: true, deletedAt: null },
-        });
-        if (!seq) {
-          throw new Error('INVENTORY_ADJUSTMENT_SEQUENCE_MISSING');
-        }
-        const updated = await tx.documentSequence.update({
-          where: { id: seq.id },
-          data: { nextNo: { increment: 1 } },
-        });
-        const adjustmentNo = `${seq.prefix}${String(updated.nextNo - 1).padStart(seq.padLength, '0')}`;
+        // 取号 ADJ（创建即取号；Sequence 缺失 = 配置错误，由外层 catch 映射 500；单据序列重构：ADJ-LNE{YYYY}{MM}{####}）
+        const adjustmentNo = await nextAdjustmentNo(tx, completedAt);
 
         adjustment = await tx.inventoryAdjustment.create({
           data: {
@@ -205,8 +196,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     });
   } catch (err) {
     // ADJ DocumentSequence 缺失 = 部署配置错误（fail closed，禁 fallback——CTO Blocking ① 同款治理）
-    if (err instanceof Error && err.message === 'INVENTORY_ADJUSTMENT_SEQUENCE_MISSING') {
-      return fail(ERROR_CODES.INVENTORY_ADJUSTMENT_SEQUENCE_MISSING, 'INVENTORY_ADJUSTMENT DocumentSequence 缺失——部署配置错误，请先执行 seed 初始化', 500);
+    if (err instanceof InventoryAdjustmentSequenceMissingError) {
+      return fail(ERROR_CODES.INVENTORY_ADJUSTMENT_SEQUENCE_MISSING, err.message, 500);
     }
     console.error('[stock-count.complete]', err);
     return fail(ERROR_CODES.INTERNAL_ERROR, '完成盘点失败（事务已回滚）', 500);

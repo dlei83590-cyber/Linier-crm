@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
         manualLines: parsed.data.materialLines ?? [],
       });
 
-      const orderNo = await nextOrderNo(tx);
+      const orderNo = await nextOrderNo(tx, new Date());
       const order = await tx.productionOrder.create({
         data: {
           orderNo,

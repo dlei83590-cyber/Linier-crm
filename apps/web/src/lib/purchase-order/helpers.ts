@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { nextDocumentCode } from '@/lib/document-sequence/next-code';
 import type { PurchaseOrderLine, PrismaClient } from '@prisma/client';
 
 /**
@@ -15,26 +16,11 @@ import type { PurchaseOrderLine, PrismaClient } from '@prisma/client';
  * - 金额始终 `Prisma.Decimal`，**禁止 number 中间转换**（CTO 红线：Decimal 无 Float/Number 转换）。
  */
 
-/** DocumentSequence 原子取号（docType=PURCHASE_ORDER，前缀 PO，位数 6；创建即取号） */
-export async function nextPurchaseOrderCode(tx: Prisma.TransactionClient): Promise<string> {
-  const seq = await tx.documentSequence.findFirst({
-    where: { docType: 'PURCHASE_ORDER', isActive: true, deletedAt: null },
+/** DocumentSequence 原子取号（docType=PURCHASE_ORDER，前缀 PO；创建即取号；单据序列重构：PO-LNE{YYYY}{MM}{####}） */
+export async function nextPurchaseOrderCode(tx: Prisma.TransactionClient, documentDate: Date): Promise<string> {
+  return nextDocumentCode(tx, 'PURCHASE_ORDER', documentDate, {
+    isCodeFree: async (tx, code) => !(await tx.purchaseOrder.findUnique({ where: { code } })),
   });
-  const prefix = seq?.prefix ?? 'PO';
-  const padLength = seq?.padLength ?? 6;
-  if (seq) {
-    // 占用校验（单号回收回退后软删记录仍占 unique → 跳过已占用编号，防 P2002 500；对齐 #192 quotation 先例）
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-      const updated = await tx.documentSequence.update({
-        where: { id: seq.id },
-        data: { nextNo: { increment: 1 } },
-      });
-      const code = `${prefix}${String(updated.nextNo - 1).padStart(padLength, '0')}`;
-      const exists = await tx.purchaseOrder.findUnique({ where: { code } });
-      if (!exists) return code;
-    }
-  }
-  return `${prefix}${String(1).padStart(padLength, '0')}`;
 }
 
 /** 行金额算术（与 Invoice computeInvoiceLineAmounts 公式一致，不调用 Pricing Engine）：

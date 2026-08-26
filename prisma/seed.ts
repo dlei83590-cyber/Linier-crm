@@ -552,47 +552,40 @@ const SEED_COMMERCIAL_TERMS = [
 ];
 
 const SEED_DOCUMENT_SEQUENCES = [
-  { code: "QUO", name: "报价单", docType: "QUOTATION", prefix: "QT", nextNo: 1, padLength: 6 },
-  { code: "SO", name: "销售订单", docType: "SALES_ORDER", prefix: "SO", nextNo: 1, padLength: 6 },
-  { code: "PIN", name: "生产入库单", docType: "PRODUCTION_INBOUND", prefix: "PIN", nextNo: 1, padLength: 6 }, // P-2：inboundNo 创建即取号
-{ code: "PRD", name: "生产/外协工单", docType: "PRODUCTION_ORDER", prefix: "PRD", nextNo: 1, padLength: 6 }, // P-1 Item Sourcing：orderNo 创建即取号
-  { code: "PO", name: "采购订单", docType: "PURCHASE_ORDER", prefix: "PO", nextNo: 1, padLength: 6 },
-  // Sprint 5A：Purchase Requisition 单据序列（docType=PURCHASE_REQUISITION 为 5A 新增，prefix PR，padLength 6；幂等 upsert——仅补 PR，PO 序列复用上方已有，**禁止重复 seed**）
-  { code: "PR", name: "采购申请", docType: "PURCHASE_REQUISITION", prefix: "PR", nextNo: 1, padLength: 6 },
-  // Sprint 5B：Goods Receipt Inbound 单据序列（docType=PURCHASE_RECEIPT / WAREHOUSE_RECEIPT / PURCHASE_RETURN 为 5B 新增，prefix REC / WHR / PRT，padLength 6；幂等 upsert——创建即取号，P10 Final 命名）
-  { code: "REC", name: "采购收货单", docType: "PURCHASE_RECEIPT", prefix: "REC", nextNo: 1, padLength: 6 },
-  { code: "WHR", name: "采购入库单", docType: "WAREHOUSE_RECEIPT", prefix: "WHR", nextNo: 1, padLength: 6 },
-  { code: "PRT", name: "采购退货单", docType: "PURCHASE_RETURN", prefix: "PRT", nextNo: 1, padLength: 6 },
-  // Sprint 6A：Inventory Ledger Foundation 单据序列（docType=INVENTORY_MOVEMENT 为 6A 新增，prefix MV，padLength 6；幂等 upsert——Consumer 取号依赖此序列，缺失=配置错误 RETRY，**禁止 fallback**）
-  { code: "MV", name: "库存流水", docType: "INVENTORY_MOVEMENT", prefix: "MV", nextNo: 1, padLength: 6 },
-  // Sprint 6B：Inventory Operations 单据序列（docType=INVENTORY_TRANSFER 为 6B 新增，prefix TRF，padLength 6；幂等 upsert——创建即取号，P2 Final 命名）
-  { code: "TRF", name: "调拨单", docType: "INVENTORY_TRANSFER", prefix: "TRF", nextNo: 1, padLength: 6 },
-  // Sprint 6B-3：Stock Count / Inventory Adjustment 单据序列（docType=STOCK_COUNT 前缀 CNT、docType=INVENTORY_ADJUSTMENT 前缀 ADJ，padLength 6；幂等 upsert——创建即取号，**Sequence 缺失 fail closed，禁止 fallback 临时编号**）
-  { code: "CNT", name: "盘点单", docType: "STOCK_COUNT", prefix: "CNT", nextNo: 1, padLength: 6 },
-  { code: "ADJ", name: "库存调整单", docType: "INVENTORY_ADJUSTMENT", prefix: "ADJ", nextNo: 1, padLength: 6 },
-  // Sprint 6B-4：Inventory Conversion 单据序列（docType=INVENTORY_CONVERSION 前缀 CVT，padLength 6；幂等 upsert——创建即取号，**Sequence 缺失 fail closed，禁止 fallback 临时编号**）
-  { code: "CVT", name: "库存转换单", docType: "INVENTORY_CONVERSION", prefix: "CVT", nextNo: 1, padLength: 6 },
-  // Sprint 5C-1：Supplier Invoice 单据序列（docType=SUPPLIER_INVOICE 前缀 SINV，padLength 6；幂等 upsert——创建即取号 P1 Final，**Sequence 缺失 fail closed，禁止 fallback 临时编号**）
-  { code: "SINV", name: "供应商发票", docType: "SUPPLIER_INVOICE", prefix: "SINV", nextNo: 1, padLength: 6 },
-  { code: "PI", name: "形式发票", docType: "PROFORMA_INVOICE", prefix: "PI", nextNo: 1, padLength: 6 },
-  { code: "CI", name: "商业发票", docType: "COMMERCIAL_INVOICE", prefix: "CI", nextNo: 1, padLength: 6 },
-  // Sprint 4C：Delivery Foundation 单据序列（CTO 锁定：DELIVERY_ORDER / prefix DO / padLength 6；幂等 upsert）
-  { code: "DO", name: "送货单", docType: "DELIVERY_ORDER", prefix: "DO", nextNo: 1, padLength: 6 },
-  { code: "GRN", name: "收货单", docType: "GOODS_RECEIPT_NOTE", prefix: "GRN", nextNo: 1, padLength: 6 },
-  { code: "GI", name: "出库单", docType: "GOODS_ISSUE", prefix: "GI", nextNo: 1, padLength: 6 },
-  // Sprint 4D：Invoice Foundation 单据序列（CTO Review 必改①：DRAFT 不占号，仅 ISSUE 时取号 INV-2026-000123；幂等 upsert）
-  { code: "INV", name: "发票", docType: "INVOICE", prefix: "INV", nextNo: 1, padLength: 6 },
-  // Sprint 4E-3：Credit Note / Debit Note 单据序列（复用 4D 已建序列——docType=CREDIT_NOTE/DEBIT_NOTE 与 CN-/DN-2026-xxxx 前缀均已存在，**不重复新增**；CTO 拍板：CN/DN 为两个正式单据类型，编号/审计/法务税务展示区分）
-  { code: "CN", name: "贷项通知单", docType: "CREDIT_NOTE", prefix: "CN", nextNo: 1, padLength: 6 },
-  { code: "DN", name: "借项通知单", docType: "DEBIT_NOTE", prefix: "DN", nextNo: 1, padLength: 6 },
-  { code: "PV", name: "付款凭证", docType: "PAYMENT_VOUCHER", prefix: "PV", nextNo: 1, padLength: 6 },
-  { code: "RCT", name: "收款收据", docType: "RECEIPT", prefix: "RCT", nextNo: 1, padLength: 6 },
-  // Sprint 4E-2：WriteOff 单据序列（CTO Design Review 拍板④：创建即取号 WO-2026-xxxx；幂等 upsert）
-  { code: "WO", name: "坏账核销", docType: "WRITE_OFF", prefix: "WO", nextNo: 1, padLength: 6 },
-  { code: "EXP", name: "费用报销", docType: "EXPENSE", prefix: "EXP", nextNo: 1, padLength: 6 },
-  { code: "JRN", name: "日记账", docType: "JOURNAL", prefix: "JRN", nextNo: 1, padLength: 6 },
-  { code: "CT", name: "合同", docType: "CONTRACT", prefix: "CT", nextNo: 1, padLength: 6 },
-  { code: "PJ", name: "项目", docType: "PROJECT", prefix: "PJ", nextNo: 1, padLength: 6 },
+  // 单据序列重构（2026-08-24）：业务单据统一 {prefix}-LNE{YYYY}{MM}{####}（padLength 4，按月重排，年份/月份由单据日期自动计算）；
+  // JOURNAL 保留 ADR-0044 凭证字格式（记202608-0001，voucher-number.ts 自建期间行），不套用 LNE 格式。
+  { code: "QUO", name: "报价单", docType: "QUOTATION", prefix: "QT", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "SO", name: "销售订单", docType: "SALES_ORDER", prefix: "SO", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "PIN", name: "生产入库单", docType: "PRODUCTION_INBOUND", prefix: "PIN", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "PRD", name: "生产/外协工单", docType: "PRODUCTION_ORDER", prefix: "PRD", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "PO", name: "采购订单", docType: "PURCHASE_ORDER", prefix: "PO", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "PR", name: "采购申请", docType: "PURCHASE_REQUISITION", prefix: "PR", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "REC", name: "采购收货单", docType: "PURCHASE_RECEIPT", prefix: "REC", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "WHR", name: "采购入库单", docType: "WAREHOUSE_RECEIPT", prefix: "WHR", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "PRT", name: "采购退货单", docType: "PURCHASE_RETURN", prefix: "PRT", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "MV", name: "库存流水", docType: "INVENTORY_MOVEMENT", prefix: "MV", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "TRF", name: "调拨单", docType: "INVENTORY_TRANSFER", prefix: "TRF", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "CNT", name: "盘点单", docType: "STOCK_COUNT", prefix: "CNT", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "ADJ", name: "库存调整单", docType: "INVENTORY_ADJUSTMENT", prefix: "ADJ", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "CVT", name: "库存转换单", docType: "INVENTORY_CONVERSION", prefix: "CVT", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "SINV", name: "供应商发票", docType: "SUPPLIER_INVOICE", prefix: "SINV", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "SCN", name: "供应商贷项通知单", docType: "SUPPLIER_CREDIT_NOTE", prefix: "SCN", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "SDN", name: "供应商借项通知单", docType: "SUPPLIER_DEBIT_NOTE", prefix: "SDN", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "PI", name: "形式发票", docType: "PROFORMA_INVOICE", prefix: "PI", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "CI", name: "商业发票", docType: "COMMERCIAL_INVOICE", prefix: "CI", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "DO", name: "送货单", docType: "DELIVERY_ORDER", prefix: "DO", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "GRN", name: "收货单", docType: "GOODS_RECEIPT_NOTE", prefix: "GRN", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "GI", name: "出库单", docType: "GOODS_ISSUE", prefix: "GI", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "INV", name: "发票", docType: "INVOICE", prefix: "INV", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "CN", name: "贷项通知单", docType: "CREDIT_NOTE", prefix: "CN", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "DN", name: "借项通知单", docType: "DEBIT_NOTE", prefix: "DN", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "PV", name: "付款凭证", docType: "PAYMENT_VOUCHER", prefix: "PV", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "RCT", name: "收款收据", docType: "RECEIPT", prefix: "RCT", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "WO", name: "坏账核销", docType: "WRITE_OFF", prefix: "WO", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "EXP", name: "费用报销", docType: "EXPENSE", prefix: "EXP", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "JRN", name: "日记账", docType: "JOURNAL", prefix: "JRN", nextNo: 1, padLength: 6, periodPattern: null, perPeriodReset: false },
+  { code: "CT", name: "合同", docType: "CONTRACT", prefix: "CT", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
+  { code: "PJ", name: "项目", docType: "PROJECT", prefix: "PJ", nextNo: 1, padLength: 4, periodPattern: "LNE{YYYY}{MM}", perPeriodReset: true },
 ];
 
 /** Sprint 7 Finance 首块（CTO 解锁 2026-08-20，ADR-0033）：标准中国会计科目最小集（GL 过账映射依赖这些 code——fail closed） */
@@ -1032,11 +1025,15 @@ async function main() {
     });
   }
 
-  // Master data: document sequences
+  // Master data: document sequences（update 传播 padLength/periodPattern/perPeriodReset——部署期重跑 seed 即迁移既有行）
   for (const d of SEED_DOCUMENT_SEQUENCES) {
     await prisma.documentSequence.upsert({
       where: { code: d.code },
-      update: {},
+      update: {
+        padLength: d.padLength,
+        periodPattern: d.periodPattern ?? null,
+        perPeriodReset: d.perPeriodReset ?? false,
+      },
       create: d,
     });
   }

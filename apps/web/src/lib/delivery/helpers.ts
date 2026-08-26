@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { nextDocumentCode } from "@/lib/document-sequence/next-code";
 
 /** Sprint 4C - Delivery 领域辅助（编号生成 / Revision 创建 / 防超交分配计算）
  * 对齐 SalesOrder helpers 模式；CTO Review 锁定：
@@ -14,21 +15,9 @@ const CONFIRMED_DELIVERY_STATUSES = ["DELIVERED", "COMPLETED"] as const;
 /** 开放占用状态（DRAFT/READY/DISPATCHED，计入 openDeliveryQty 动态占用） */
 const OPEN_DELIVERY_STATUSES = ["DRAFT", "READY", "DISPATCHED"] as const;
 
-/** DocumentSequence 原子取号（docType=DELIVERY_ORDER，前缀 DO，位数 6） */
-export async function nextDeliveryCode(tx: Prisma.TransactionClient): Promise<string> {
-  const seq = await tx.documentSequence.findFirst({
-    where: { docType: "DELIVERY_ORDER", isActive: true, deletedAt: null },
-  });
-  const prefix = seq?.prefix ?? "DO";
-  const padLength = seq?.padLength ?? 6;
-  if (seq) {
-    const updated = await tx.documentSequence.update({
-      where: { id: seq.id },
-      data: { nextNo: { increment: 1 } },
-    });
-    return `${prefix}${String(updated.nextNo - 1).padStart(padLength, "0")}`;
-  }
-  return `${prefix}${String(1).padStart(padLength, "0")}`;
+/** DocumentSequence 原子取号（docType=DELIVERY_ORDER，前缀 DO；单据序列重构：DO-LNE{YYYY}{MM}{####}） */
+export async function nextDeliveryCode(tx: Prisma.TransactionClient, documentDate: Date): Promise<string> {
+  return nextDocumentCode(tx, "DELIVERY_ORDER", documentDate);
 }
 
 /** 创建 DeliveryRevision（系统生成，不开放自由编辑；revisionNo 自动递增） */

@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { nextDocumentCode } from '@/lib/document-sequence/next-code';
 
 /** Sprint 5A - PurchaseRequisition 领域通用函数（**不放路由逻辑**；对齐 CreditDebitNote/WriteOff helpers 模式）
  * CTO Design Review 97/100 + ADR-0023：
@@ -10,26 +11,11 @@ import { Prisma } from '@prisma/client';
  * - 数量始终 `Prisma.Decimal`，**禁止 number 中间转换**（CTO 红线：Decimal 无 Float/Number 转换）。
  */
 
-/** DocumentSequence 原子取号（docType=PURCHASE_REQUISITION，前缀 PR，位数 6；创建即取号） */
-export async function nextPurchaseRequisitionCode(tx: Prisma.TransactionClient): Promise<string> {
-  const seq = await tx.documentSequence.findFirst({
-    where: { docType: 'PURCHASE_REQUISITION', isActive: true, deletedAt: null },
+/** DocumentSequence 原子取号（docType=PURCHASE_REQUISITION，前缀 PR；创建即取号；单据序列重构：PR-LNE{YYYY}{MM}{####}） */
+export async function nextPurchaseRequisitionCode(tx: Prisma.TransactionClient, documentDate: Date): Promise<string> {
+  return nextDocumentCode(tx, 'PURCHASE_REQUISITION', documentDate, {
+    isCodeFree: async (tx, code) => !(await tx.purchaseRequisition.findUnique({ where: { code } })),
   });
-  const prefix = seq?.prefix ?? 'PR';
-  const padLength = seq?.padLength ?? 6;
-  if (seq) {
-    // 占用校验（防 P2002 500）
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-      const updated = await tx.documentSequence.update({
-        where: { id: seq.id },
-        data: { nextNo: { increment: 1 } },
-      });
-      const code = `${prefix}${String(updated.nextNo - 1).padStart(padLength, '0')}`;
-      const exists = await tx.purchaseRequisition.findUnique({ where: { code } });
-      if (!exists) return code;
-    }
-  }
-  return `${prefix}${String(1).padStart(padLength, '0')}`;
 }
 
 /** 校验需求数量：必须 > 0（Decimal 精确比较；返回 ok/reason，供路由映射 400/409） */

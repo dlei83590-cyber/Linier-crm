@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { nextDocumentCode, DocumentSequenceMissingError } from '@/lib/document-sequence/next-code';
 import type {
   InventoryMovementSourceType,
   InventoryMovementRole,
@@ -107,26 +108,19 @@ export function buildDimensionKey(dims: {
   ].join('|');
 }
 
-/** DocumentSequence 原子取号（docType=INVENTORY_MOVEMENT，前缀 MV，位数 6）
- * CTO #7667 Minor：**禁止 fallback `MV000001`**——DocumentSequence 缺失 = 配置错误，直接抛错
+/** DocumentSequence 原子取号（docType=INVENTORY_MOVEMENT，前缀 MV；单据序列重构：MV-LNE{YYYY}{MM}{####}）
+ * CTO #7667 Minor：**禁止 fallback**——DocumentSequence 缺失 = 配置错误，直接抛错
  * （外层 catch → RETRY 退避；运维建好 sequence 后自然恢复），绝不生成常量 1 二次撞 movementNo UNIQUE。
  */
-export async function nextInventoryMovementNo(tx: Prisma.TransactionClient): Promise<string> {
-  const seq = await tx.documentSequence.findFirst({
-    where: { docType: 'INVENTORY_MOVEMENT', isActive: true, deletedAt: null },
-  });
-  if (!seq) {
-    throw new Error(
-      'InventoryMovement DocumentSequence 缺失（docType=INVENTORY_MOVEMENT）：配置错误，需先 Seed sequence 才能生成 movementNo',
-    );
+export async function nextInventoryMovementNo(tx: Prisma.TransactionClient, documentDate: Date): Promise<string> {
+  try {
+    return await nextDocumentCode(tx, 'INVENTORY_MOVEMENT', documentDate);
+  } catch (err) {
+    if (err instanceof DocumentSequenceMissingError) {
+      throw new Error('InventoryMovement DocumentSequence 缺失（docType=INVENTORY_MOVEMENT）：配置错误，需先 Seed sequence 才能生成 movementNo');
+    }
+    throw err;
   }
-  const prefix = seq.prefix ?? 'MV';
-  const padLength = seq.padLength ?? 6;
-  const updated = await tx.documentSequence.update({
-    where: { id: seq.id },
-    data: { nextNo: { increment: 1 } },
-  });
-  return `${prefix}${String(updated.nextNo - 1).padStart(padLength, '0')}`;
 }
 
 /**
@@ -323,7 +317,7 @@ export async function executeLedgerAtom(
   }
 
   // movementNo 取号（同事务原子 increment）
-  const movementNo = await nextInventoryMovementNo(tx);
+  const movementNo = await nextInventoryMovementNo(tx, atom.occurredAt ? new Date(atom.occurredAt) : new Date());
 
   // Movement INSERT 用 PG 原子冲突语义——ON CONFLICT (五元) DO NOTHING RETURNING id，
   // 不制造 SQL error 再同事务恢复（P2002 catch 后事务已 aborted，不可恢复）

@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { nextDocumentCode } from '@/lib/document-sequence/next-code';
 
 /**
  * Sprint 5B - PurchaseReturn（采购退货独立事实，P5 Final）领域通用函数（**不放路由逻辑**；对齐 PO/PR/PurchaseReceipt/Inspection/WarehouseReceipt helpers 模式）
@@ -12,26 +13,11 @@ import { Prisma } from '@prisma/client';
  * - **红线**：5B 永不直接写库存余额 / Stock / InventoryMovement（6A 唯一事实源）；已入库退货也只记录 PurchaseReturn 事实，不写库存 OUT；财务冲减/红字发票/AP 属 5C。
  */
 
-/** DocumentSequence 原子取号（docType=PURCHASE_RETURN，前缀 PRT，位数 6；创建即取号） */
-export async function nextPurchaseReturnCode(tx: Prisma.TransactionClient): Promise<string> {
-  const seq = await tx.documentSequence.findFirst({
-    where: { docType: 'PURCHASE_RETURN', isActive: true, deletedAt: null },
+/** DocumentSequence 原子取号（docType=PURCHASE_RETURN，前缀 PRT；创建即取号；单据序列重构：PRT-LNE{YYYY}{MM}{####}） */
+export async function nextPurchaseReturnCode(tx: Prisma.TransactionClient, documentDate: Date): Promise<string> {
+  return nextDocumentCode(tx, 'PURCHASE_RETURN', documentDate, {
+    isCodeFree: async (tx, code) => !(await tx.purchaseReturn.findUnique({ where: { code } })),
   });
-  const prefix = seq?.prefix ?? 'PRT';
-  const padLength = seq?.padLength ?? 6;
-  if (seq) {
-    // 占用校验（防 P2002 500）
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-      const updated = await tx.documentSequence.update({
-        where: { id: seq.id },
-        data: { nextNo: { increment: 1 } },
-      });
-      const code = `${prefix}${String(updated.nextNo - 1).padStart(padLength, '0')}`;
-      const exists = await tx.purchaseReturn.findUnique({ where: { code } });
-      if (!exists) return code;
-    }
-  }
-  return `${prefix}${String(1).padStart(padLength, '0')}`;
 }
 
 /** 某来源已被 **RETURNED 退货单** 占用的累计退货数量（CTO #7219：Return Gate 锁内重算，防并发超退；DRAFT 不占额度） */

@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
       });
       if (found.length !== itemIds.size) throw new Error("ITEM_INVALID");
 
-      const inboundNo = await nextInboundNo(tx);
+      const inboundNo = await nextInboundNo(tx, new Date());
       const lines = parsed.data.lines.map((l: ProductionLineInput) => {
         const unitCost = new Prisma.Decimal(l.unitCost);
         const toQty = new Prisma.Decimal(l.toQty);

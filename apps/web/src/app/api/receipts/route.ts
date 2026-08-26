@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
 
   const receipt = await prisma.$transaction(async (tx) => {
     // ── 1. DocumentSequence 创建即取号（拍板④） ──────────────────────────────
-    const code = await nextReceiptCode(tx);
+    const code = await nextReceiptCode(tx, receiptDate ? new Date(receiptDate) : new Date());
     // ── 2. 创建 Receipt（UNALLOCATED；unallocatedAmount = amount） ────────────
     const amountDec = new Prisma.Decimal(amount);
     const created = await tx.receipt.create({

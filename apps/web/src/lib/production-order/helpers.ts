@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { nextDocumentCode, DocumentSequenceMissingError } from '@/lib/document-sequence/next-code';
 import type { LedgerAtom } from '@/lib/inventory-ledger/ledger-command';
 import { computeMaterialRequirement } from '@/lib/item-bom/helpers';
 
@@ -84,21 +85,14 @@ export class ProductionOrderSequenceMissingError extends Error {
   }
 }
 
-/** DocumentSequence 原子取号（docType=PRODUCTION_ORDER，前缀 PRD，位数 6；创建即取号；Sequence 缺失 fail closed） */
-export async function nextOrderNo(tx: Prisma.TransactionClient): Promise<string> {
-  const seq = await tx.documentSequence.findFirst({
-    where: { docType: 'PRODUCTION_ORDER', isActive: true, deletedAt: null },
-  });
-  if (!seq) {
-    throw new ProductionOrderSequenceMissingError();
+/** DocumentSequence 原子取号（docType=PRODUCTION_ORDER，前缀 PRD；创建即取号；Sequence 缺失 fail closed；单据序列重构：PRD-LNE{YYYY}{MM}{####}） */
+export async function nextOrderNo(tx: Prisma.TransactionClient, documentDate: Date): Promise<string> {
+  try {
+    return await nextDocumentCode(tx, 'PRODUCTION_ORDER', documentDate);
+  } catch (err) {
+    if (err instanceof DocumentSequenceMissingError) throw new ProductionOrderSequenceMissingError();
+    throw err;
   }
-  const prefix = seq.prefix ?? 'PRD';
-  const padLength = seq.padLength ?? 6;
-  const updated = await tx.documentSequence.update({
-    where: { id: seq.id },
-    data: { nextNo: { increment: 1 } },
-  });
-  return prefix + String(updated.nextNo - 1).padStart(padLength, '0');
 }
 
 /** 配方需求量（单个成品 × 配方行系数 × 损耗率）——供 POST/校验复用 */

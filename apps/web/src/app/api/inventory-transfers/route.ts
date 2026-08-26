@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
       }
 
       // ⑥ 创建（创建即取号 TRF；transferType 服务端推导）
-      const transferNo = await nextTransferNo(tx);
+      const transferNo = await nextTransferNo(tx, new Date());
       const transferType =
         data.sourceWarehouseId === data.destinationWarehouseId ? 'INTRA_WAREHOUSE' : 'INTER_WAREHOUSE';
       const transfer = await tx.inventoryTransfer.create({

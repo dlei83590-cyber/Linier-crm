@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. 创建即取号（拍板④）+ amount = Σ allocations
-    const code = await nextWriteOffCode(tx);
+    const code = await nextWriteOffCode(tx, new Date());
     const total = computeWriteOffTotal([...arAmount.values()].map((a) => ({ amount: a })));
 
     // 4. 创建 WriteOff（DRAFT）+ WriteOffAllocation 明细（不修改 AR）

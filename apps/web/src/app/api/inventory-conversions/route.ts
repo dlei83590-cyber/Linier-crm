@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
 
       // ⑥ 服务端 canonical 计算 baseQuantity（CTO 锁死①：不信任客户端；Decimal 精度统一）
       // ⑦ 创建（创建即取号 CVT；DRAFT 不落账）
-      const conversionNo = await nextConversionNo(tx);
+      const conversionNo = await nextConversionNo(tx, new Date());
       const conversion = await tx.inventoryConversion.create({
         data: {
           conversionNo,
