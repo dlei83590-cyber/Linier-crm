@@ -19,6 +19,7 @@
 | B4 | **详情聚合（Phase 1A）** | GET | /api/business-partners/:id | business-partner:view | 200 + partnerContacts/partnerAddresses/partnerTags/partnerCredit/invoiceInfoRecord |
 | B5 | 编辑（CAS version） | PATCH | /api/business-partners/:id | business-partner:edit | 200 / 409 |
 | B6 | 软删除 | DELETE | /api/business-partners/:id | business-partner:delete | 200 |
+| B7 | **仅存在已软删除的历史草稿引用**（customers/suppliers/opportunities/projects/contacts/addresses/bankAccounts 均 deletedAt≠null） | DELETE | /api/business-partners/:id | business-partner:delete | 200（历史草稿不计入引用） |
 
 ## Phase 1A detail aggregate contract（锁定）
 

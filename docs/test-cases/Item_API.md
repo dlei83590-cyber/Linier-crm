@@ -29,6 +29,7 @@
 | B8 | 更新（version 冲突） | PATCH /api/items/:id | 409 VERSION_CONFLICT |
 | B9 | 软删除（子资源级联标记） | DELETE /api/items/:id | 200 `{deleted:true}` |
 | B10 | 被价格表/项目引用时删除 | DELETE /api/items/:id（有 priceListItems） | 409 CONFLICT |
+| B10a | **仅存在已软删除的历史草稿引用**（priceListItems/projectProducts 均 deletedAt≠null） | DELETE /api/items/:id | 200 `{deleted:true}`（历史草稿不计入引用） |
 | B11 | 删除后查询 | GET /api/items/:id | 404 |
 | B12 | status 切换（ACTIVE→LOCKED） | PATCH /api/items/:id | 200；locked 后拒绝编辑（待前端/后端校验） |
 

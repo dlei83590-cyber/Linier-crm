@@ -246,13 +246,13 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     include: {
       _count: {
         select: {
-          suppliers: true,
-          customers: true,
-          opportunities: true,
-          projects: true,
-          partnerContacts: true,
-          partnerAddresses: true,
-          partnerBankAccounts: true,
+          suppliers: { where: { deletedAt: null } },
+          customers: { where: { deletedAt: null } },
+          opportunities: { where: { deletedAt: null } },
+          projects: { where: { deletedAt: null } },
+          partnerContacts: { where: { deletedAt: null } },
+          partnerAddresses: { where: { deletedAt: null } },
+          partnerBankAccounts: { where: { deletedAt: null } },
         },
       },
     },

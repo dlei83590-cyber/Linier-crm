@@ -12,7 +12,7 @@ vi.mock('@/lib/api-helpers', () => ({
 }));
 vi.mock('@/lib/api/cas', () => ({ casUpdate: vi.fn() }));
 
-import { GET, PATCH } from '@/app/api/business-partners/[id]/route';
+import { GET, PATCH, DELETE } from '@/app/api/business-partners/[id]/route';
 import { casUpdate } from '@/lib/api/cas';
 
 const casMock = casUpdate as ReturnType<typeof vi.fn>;
@@ -176,5 +176,61 @@ describe('PATCH /api/business-partners/:id — 信用等级（creditRating）写
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error.code).toBe('VERSION_CONFLICT');
+  });
+});
+
+describe('DELETE /api/business-partners/:id — 引用检查仅统计未删除（deletedAt:null）引用', () => {
+  let findFirstMock: ReturnType<typeof vi.fn>;
+  let updateMock: ReturnType<typeof vi.fn>;
+
+  /** 构造带 _count 的往来单位；counts 只统计未软删除的引用（历史草稿不计入） */
+  function bpWithCounts(counts: Record<string, number>) {
+    return {
+      id: 'bp-del-1',
+      _count: {
+        suppliers: counts.suppliers ?? 0,
+        customers: counts.customers ?? 0,
+        opportunities: counts.opportunities ?? 0,
+        projects: counts.projects ?? 0,
+        partnerContacts: counts.partnerContacts ?? 0,
+        partnerAddresses: counts.partnerAddresses ?? 0,
+        partnerBankAccounts: counts.partnerBankAccounts ?? 0,
+      },
+    };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    findFirstMock = vi.fn();
+    updateMock = vi.fn().mockResolvedValue({ id: 'bp-del-1', deletedAt: new Date() });
+    mockPrisma.businessPartner = {
+      findFirst: findFirstMock,
+      update: updateMock,
+    };
+  });
+
+  it('无任何引用 → 200 软删除', async () => {
+    findFirstMock.mockResolvedValue(bpWithCounts({}));
+    const res = await DELETE(new NextRequest('http://localhost/api/business-partners/bp-del-1', { method: 'DELETE' }), { params: Promise.resolve({ id: 'bp-del-1' }) });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.deleted).toBe(true);
+    expect(updateMock).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'bp-del-1' } }));
+  });
+
+  it('存在未删除的有效引用（customers>0）→ 409 CONFLICT', async () => {
+    findFirstMock.mockResolvedValue(bpWithCounts({ customers: 1 }));
+    const res = await DELETE(new NextRequest('http://localhost/api/business-partners/bp-del-1', { method: 'DELETE' }), { params: Promise.resolve({ id: 'bp-del-1' }) });
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error.code).toBe('CONFLICT');
+  });
+
+  it('往来单位不存在 → 404 NOT_FOUND', async () => {
+    findFirstMock.mockResolvedValue(null);
+    const res = await DELETE(new NextRequest('http://localhost/api/business-partners/bp-x', { method: 'DELETE' }), { params: Promise.resolve({ id: 'bp-x' }) });
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error.code).toBe('NOT_FOUND');
   });
 });
