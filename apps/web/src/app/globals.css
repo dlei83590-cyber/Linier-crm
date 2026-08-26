@@ -101,7 +101,7 @@ html {
   --color-border-strong: #4a4640;
   --color-ink-primary: #ece9e4;
   --color-ink-secondary: #b8b2a9;
-  --color-ink-muted: #857f76;
+  --color-ink-muted: #8f8980;
   --color-brand-50: #172554;
   --color-brand-100: #1e3a8a;
   --color-brand-500: #3b82f6;
@@ -285,10 +285,90 @@ body {
   main {
     padding: 0 !important;
   }
+  /* 打印强制亮色：覆盖主题变量（深色模式下打印仍为白底黑字，Phase 3 边界修复） */
+  :root,
+  [data-theme="dark"] {
+    --color-canvas: #f7f6f3;
+    --color-surface-hover: #f1f5f9;
+    --color-surface-active: #e2e8f0;
+    --color-scrim: rgba(15, 23, 42, 0.4);
+    --color-skeleton-1: #e2e8f0;
+    --color-skeleton-2: #f1f5f9;
+    --color-surface: #ffffff;
+    --color-border: #e2e8f0;
+    --color-border-strong: #cbd5e1;
+    --color-ink-primary: #111827;
+    --color-ink-secondary: #475569;
+    --color-ink-muted: #64748b;
+    --color-brand-50: #eff6ff;
+    --color-brand-100: #dbeafe;
+    --color-brand-500: #3b82f6;
+    --color-brand-600: #2563eb;
+    --color-brand-700: #1d4ed8;
+    --color-brand-900: #1e3a8a;
+    --color-status-neutral-bg: #f1f5f9;
+    --color-status-neutral-text: #475569;
+    --color-status-neutral-border: #e2e8f0;
+    --color-status-info-bg: #eff6ff;
+    --color-status-info-text: #1d4ed8;
+    --color-status-info-border: #bfdbfe;
+    --color-status-success-bg: #ecfdf5;
+    --color-status-success-text: #047857;
+    --color-status-success-border: #a7f3d0;
+    --color-status-warning-bg: #fffbeb;
+    --color-status-warning-text: #b45309;
+    --color-status-warning-border: #fde68a;
+    --color-status-danger-bg: #fff1f2;
+    --color-status-danger-text: #be123c;
+    --color-status-danger-border: #fecdd3;
+    --color-domain-workbench-50: #eff6ff;
+    --color-domain-workbench-500: #3b82f6;
+    --color-domain-workbench-600: #2563eb;
+    --color-domain-workbench-700: #1d4ed8;
+    --color-domain-customer-project-50: #f5f3ff;
+    --color-domain-customer-project-500: #8b5cf6;
+    --color-domain-customer-project-600: #7c3aed;
+    --color-domain-customer-project-700: #6d28d9;
+    --color-domain-sales-50: #ecfdf5;
+    --color-domain-sales-500: #10b981;
+    --color-domain-sales-600: #059669;
+    --color-domain-sales-700: #047857;
+    --color-domain-purchasing-50: #fff7ed;
+    --color-domain-purchasing-500: #f97316;
+    --color-domain-purchasing-600: #ea580c;
+    --color-domain-purchasing-700: #c2410c;
+    --color-domain-inventory-50: #ecfeff;
+    --color-domain-inventory-500: #06b6d4;
+    --color-domain-inventory-600: #0891b2;
+    --color-domain-inventory-700: #0e7490;
+    --color-domain-supplier-ap-50: #fffbeb;
+    --color-domain-supplier-ap-500: #f59e0b;
+    --color-domain-supplier-ap-600: #d97706;
+    --color-domain-supplier-ap-700: #b45309;
+    --color-domain-finance-50: #fff1f2;
+    --color-domain-finance-500: #f43f5e;
+    --color-domain-finance-600: #e11d48;
+    --color-domain-finance-700: #be123c;
+    --color-domain-master-data-50: #f0f9ff;
+    --color-domain-master-data-500: #0ea5e9;
+    --color-domain-master-data-600: #0284c7;
+    --color-domain-master-data-700: #0369a1;
+    --color-domain-system-50: #f8fafc;
+    --color-domain-system-500: #64748b;
+    --color-domain-system-600: #475569;
+    --color-domain-system-700: #334155;
+    --color-domain-reports-50: #fdf4ff;
+    --color-domain-reports-500: #d946ef;
+    --color-domain-reports-600: #c026d3;
+    --color-domain-reports-700: #a21caf;
+  }
   body,
   .bg-canvas,
   .bg-surface {
     background: #fff !important;
+  }
+  body {
+    color: #111827 !important;
   }
   .shadow-elevation-sm,
   .shadow-elevation-md,
@@ -298,4 +378,5 @@ body {
   tr {
     break-inside: avoid;
   }
+
 }
