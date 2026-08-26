@@ -55,7 +55,7 @@ export function ProjectSubresourceDialog({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4"
       onClick={onClose}
     >
       <div
@@ -100,7 +100,7 @@ export function ProjectSubresourceDialog({
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="border-border text-ink-secondary rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             取消
           </button>

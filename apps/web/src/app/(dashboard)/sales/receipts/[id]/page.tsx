@@ -443,7 +443,7 @@ function ReceiptDetailPage() {
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4"
           onClick={() => setVoidOpen(false)}
         >
           <div
@@ -481,7 +481,7 @@ function ReceiptDetailPage() {
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4"
           onClick={closeAllocateDialog}
         >
           <div
@@ -505,7 +505,7 @@ function ReceiptDetailPage() {
               {arLoading ? (
                 <p className="text-ink-muted py-6 text-center text-sm">加载应收未结项…</p>
               ) : (
-                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                <table className="min-w-full divide-y divide-border text-sm">
                   <thead className="bg-canvas text-left text-xs font-medium text-ink-secondary">
                     <tr>
                       <th className="px-3 py-2">选择</th>
@@ -516,7 +516,7 @@ function ReceiptDetailPage() {
                       <th className="px-3 py-2">本次核销</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-border">
                     {arOptions.map((ar) => {
                       const sel = selections[ar.id];
                       return (
@@ -595,7 +595,7 @@ function ReceiptDetailPage() {
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4"
           onClick={() => setReverseTarget(null)}
         >
           <div

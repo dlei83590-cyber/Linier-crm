@@ -64,7 +64,7 @@ export function RowMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="rounded-md p-1.5 text-ink-muted transition-colors duration-150 hover:bg-slate-100 hover:text-ink-primary"
+        className="rounded-md p-1.5 text-ink-muted transition-colors duration-150 hover:bg-surface-hover hover:text-ink-primary"
       >
         <IconEllipsis className="h-4 w-4" />
       </button>
@@ -78,7 +78,7 @@ export function RowMenu({
               "flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm transition-colors duration-150 " +
               (item.danger
                 ? "text-status-danger-text hover:bg-status-danger-bg"
-                : "text-ink-primary hover:bg-slate-50");
+                : "text-ink-primary hover:bg-surface-hover");
             return item.href ? (
               <Link
                 key={i}
@@ -185,7 +185,7 @@ export function DataTable<T>({
                     <button
                       type="button"
                       onClick={onRetry}
-                      className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-ink-secondary transition-colors duration-150 hover:bg-slate-50"
+                      className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-ink-secondary transition-colors duration-150 hover:bg-surface-hover"
                     >
                       <IconRefreshCw className="h-3.5 w-3.5" />
                       重试

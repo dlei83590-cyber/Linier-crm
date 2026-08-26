@@ -17,6 +17,11 @@ const config: Config = {
         },
         // FE 2.0 Design System — 语义色（单一事实来源：design-system/tokens.ts；Canvas 暖灰白 #F7F6F3）
         canvas: 'var(--color-canvas)',
+        'surface-hover': 'var(--color-surface-hover)',
+        'surface-active': 'var(--color-surface-active)',
+        scrim: 'var(--color-scrim)',
+        'skeleton-1': 'var(--color-skeleton-1)',
+        'skeleton-2': 'var(--color-skeleton-2)',
         surface: 'var(--color-surface)',
         border: {
           DEFAULT: 'var(--color-border)',

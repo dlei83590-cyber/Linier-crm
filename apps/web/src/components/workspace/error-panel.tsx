@@ -65,7 +65,7 @@ export function ErrorPanel({ error, title, onRetry }: ErrorPanelProps) {
         <button
           type="button"
           onClick={onRetry}
-          className="border-border bg-surface text-ink-primary mt-3 rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+          className="border-border bg-surface text-ink-primary mt-3 rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-surface-hover"
         >
           重试
         </button>

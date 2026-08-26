@@ -157,7 +157,7 @@ function RoleEditForm() {
                 <div className="mb-1 text-xs font-medium text-ink-secondary">{moduleLabel(module)}（{list.length}）</div>
                 <div className="flex flex-wrap gap-1">
                   {list.map((p) => (
-                    <span key={p.id} className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-ink-secondary">
+                    <span key={p.id} className="rounded bg-canvas px-1.5 py-0.5 text-xs text-ink-secondary">
                       {permissionLabel(p.code)}
                     </span>
                   ))}

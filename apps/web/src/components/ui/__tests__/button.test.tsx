@@ -15,7 +15,7 @@ describe("Button — FE 2.0 UI-01 按钮基元", () => {
     const { rerender } = render(<Button variant="secondary">a</Button>);
     expect(screen.getByRole("button").className).toContain("border-border");
     rerender(<Button variant="ghost">b</Button>);
-    expect(screen.getByRole("button").className).toContain("hover:bg-slate-100");
+    expect(screen.getByRole("button").className).toContain("hover:bg-surface-hover");
     rerender(<Button variant="danger">c</Button>);
     expect(screen.getByRole("button").className).toContain("bg-rose-600");
     rerender(<Button variant="link">d</Button>);

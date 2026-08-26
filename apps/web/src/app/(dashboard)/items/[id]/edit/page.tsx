@@ -489,7 +489,7 @@ function ItemEditForm() {
                 type="button"
                 onClick={() => removeSupplierRow(i)}
                 disabled={supplierRows.length <= 1}
-                className="border-border text-ink-secondary rounded-md border px-2 py-1 text-xs hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="border-border text-ink-secondary rounded-md border px-2 py-1 text-xs hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
               >
                 删除
               </button>
@@ -498,7 +498,7 @@ function ItemEditForm() {
           <button
             type="button"
             onClick={() => setSupplierRows((prev) => [...prev, emptySupplierRow()])}
-            className="border-border bg-surface text-ink-primary rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-slate-50"
+            className="border-border bg-surface text-ink-primary rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-surface-hover"
           >
             + 添加供应商
           </button>

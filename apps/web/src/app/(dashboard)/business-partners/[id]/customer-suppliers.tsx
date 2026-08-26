@@ -191,7 +191,7 @@ export function CustomerSuppliers({ partnerId }: { partnerId: string }) {
             <IconAlertCircle className="h-5 w-5" />
           </span>
           <p className="text-sm text-status-danger-text">{error}</p>
-          <button type="button" onClick={load} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-secondary transition-colors duration-150 hover:bg-slate-50">
+          <button type="button" onClick={load} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-secondary transition-colors duration-150 hover:bg-surface-hover">
             <IconRefreshCw className="h-3.5 w-3.5" />
             重试
           </button>

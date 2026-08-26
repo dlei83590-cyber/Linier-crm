@@ -99,7 +99,7 @@ export function Drawer({
 
   return (
     <div
-      className="animate-fade-in fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-[2px]"
+      className="animate-fade-in fixed inset-0 z-50 bg-scrim backdrop-blur-[2px]"
       onClick={() => {
         if (closeOnBackdrop) onClose();
       }}

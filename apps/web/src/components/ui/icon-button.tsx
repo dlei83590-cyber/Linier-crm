@@ -16,8 +16,8 @@ export type IconButtonSize = 'sm' | 'md' | 'lg';
 
 const VARIANT_CLASS: Record<IconButtonVariant, string> = {
   secondary:
-    'border border-border bg-surface text-ink-secondary hover:bg-slate-50 hover:text-ink-primary active:bg-slate-100',
-  ghost: 'text-ink-secondary hover:bg-slate-100 hover:text-ink-primary active:bg-slate-200',
+    'border border-border bg-surface text-ink-secondary hover:bg-surface-hover hover:text-ink-primary active:bg-surface-active',
+  ghost: 'text-ink-secondary hover:bg-surface-hover hover:text-ink-primary active:bg-surface-active',
   danger: 'text-ink-secondary hover:bg-rose-50 hover:text-rose-600 active:bg-rose-100',
 };
 

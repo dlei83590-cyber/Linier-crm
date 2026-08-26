@@ -293,7 +293,7 @@ function InvoiceDetailPage() {
                   type="button"
                   onClick={() => setConfirmAction("red-invoice")}
                   disabled={actionBusy}
-                  className="rounded-md border border-border px-3 py-1.5 text-sm font-medium text-ink-secondary hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-md border border-border px-3 py-1.5 text-sm font-medium text-ink-secondary hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {actionBusy ? "处理中…" : "红字发票"}
                 </button>
@@ -443,7 +443,7 @@ function InvoiceDetailPage() {
 
       {/* VAT 开票表单（ADR-0043）：类型 + 税务号码 + 红字引用 */}
       {confirmAction === "issue" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4">
           <div className="border-border bg-surface w-full max-w-md rounded-lg border p-5 shadow-lg">
             <h3 className="text-ink-primary text-base font-semibold">开具发票（VAT）</h3>
             <p className="text-ink-muted mt-1 text-xs">

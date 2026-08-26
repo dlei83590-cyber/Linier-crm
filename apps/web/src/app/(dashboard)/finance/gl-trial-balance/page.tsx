@@ -70,7 +70,7 @@ function TrialBalanceView() {
           <Link aria-current="page" href="/finance/gl-trial-balance" className="rounded-md bg-brand-600 px-2.5 py-1 font-medium text-white">
             试算平衡
           </Link>
-          <Link href="/finance/gl-profit-statement" className="rounded-md border border-border px-2.5 py-1 text-ink-secondary hover:bg-slate-50">
+          <Link href="/finance/gl-profit-statement" className="rounded-md border border-border px-2.5 py-1 text-ink-secondary hover:bg-surface-hover">
             利润表
           </Link>
         </nav>

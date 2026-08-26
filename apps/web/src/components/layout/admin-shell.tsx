@@ -304,7 +304,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           title={item.label}
           aria-label={item.label}
           className={`flex h-9 w-9 items-center justify-center rounded-md transition-colors duration-150 ${
-            active ? `${dc.soft} text-ink-primary` : "text-ink-muted hover:bg-slate-100 hover:text-ink-primary"
+            active ? `${dc.soft} text-ink-primary` : "text-ink-muted hover:bg-surface-hover hover:text-ink-primary"
           }`}
         >
           <ModuleIcon moduleId={item.id} className="h-[18px] w-[18px]" />
@@ -318,7 +318,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         className={`group relative flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors duration-150 ${
           active
             ? `${dc.soft} text-ink-primary`
-            : "text-ink-secondary hover:bg-slate-50 hover:text-ink-primary"
+            : "text-ink-secondary hover:bg-surface-hover hover:text-ink-primary"
         }`}
         aria-current={active ? "page" : undefined}
       >
@@ -330,7 +330,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         )}
         <span
           className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${
-            active ? `${dc.square}` : "bg-slate-100 text-ink-muted transition-colors duration-150 group-hover:bg-slate-200/70"
+            active ? `${dc.square}` : "bg-canvas text-ink-muted transition-colors duration-150 group-hover:bg-surface-hover"
           }`}
         >
           <ModuleIcon moduleId={item.id} className="h-3.5 w-3.5" />
@@ -373,19 +373,19 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               onClick={() => toggleDomain(domain.id)}
               aria-expanded={domainExpanded}
               className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-semibold transition-colors duration-150 ${
-                domainExpanded ? "bg-slate-50 text-ink-primary" : "text-ink-secondary hover:bg-slate-50 hover:text-ink-primary"
+                domainExpanded ? "bg-canvas text-ink-primary" : "text-ink-secondary hover:bg-surface-hover hover:text-ink-primary"
               }`}
             >
               <span
                 className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors duration-150 ${
-                  domainExpanded ? `${dc.soft}` : "bg-slate-100"
+                  domainExpanded ? `${dc.soft}` : "bg-canvas"
                 }`}
               >
                 <DomainIcon domainId={domain.id} className={`h-3.5 w-3.5 ${domainExpanded ? dc.text : "text-ink-muted"}`} />
               </span>
               <span className="min-w-0 flex-1 truncate text-left">{domain.label}</span>
               <svg
-                className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-200 ${domainExpanded ? "rotate-90" : ""}`}
+                className={`h-3.5 w-3.5 shrink-0 text-ink-muted transition-transform duration-200 ${domainExpanded ? "rotate-90" : ""}`}
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -404,11 +404,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                     <button
                       type="button"
                       onClick={() => toggleHold(domain.id)}
-                      className="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-sm font-medium text-ink-muted transition-colors duration-150 hover:bg-slate-50 hover:text-ink-secondary"
+                      className="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-sm font-medium text-ink-muted transition-colors duration-150 hover:bg-surface-hover hover:text-ink-secondary"
                     >
                       <span>规划中 · {hold.length}</span>
                       <span
-                        className={`text-xs text-slate-300 transition-transform duration-200 ${holdExpanded ? "rotate-90" : ""}`}
+                        className={`text-xs text-ink-muted transition-transform duration-200 ${holdExpanded ? "rotate-90" : ""}`}
                       >
                         ▸
                       </span>
@@ -422,12 +422,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                             aria-disabled="true"
                           >
                             <span className="flex min-w-0 items-center gap-2.5">
-                              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-100 text-ink-muted">
+                              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-canvas text-ink-muted">
                                 <ModuleIcon moduleId={item.id} className="h-3.5 w-3.5" />
                               </span>
                               <span className="truncate">{item.label}</span>
                             </span>
-                            <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-ink-muted">
+                            <span className="shrink-0 rounded bg-canvas px-1.5 py-0.5 text-[10px] text-ink-muted">
                               尚未开放
                             </span>
                           </span>
@@ -462,7 +462,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                       setSearchQuery("");
                       setSearchOpen(false);
                     }}
-                    className="flex items-center gap-2.5 px-4 py-2 text-sm text-ink-primary transition-colors duration-150 hover:bg-slate-50"
+                    className="flex items-center gap-2.5 px-4 py-2 text-sm text-ink-primary transition-colors duration-150 hover:bg-surface-hover"
                   >
                     <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded ${dc.soft}`}>
                       <ModuleIcon moduleId={m.id} className={`h-3 w-3 ${dc.text}`} />
@@ -476,7 +476,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                       <ModuleIcon moduleId={m.id} className={`h-3 w-3 ${dc.text}`} />
                     </span>
                     <span className="min-w-0 flex-1 truncate">{m.label}</span>
-                    <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px]">尚未开放</span>
+                    <span className="shrink-0 rounded bg-canvas px-1.5 py-0.5 text-[10px]">尚未开放</span>
                   </span>
                 )}
               </li>
@@ -507,7 +507,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <div className="flex min-w-0 items-center gap-1.5">
           <button
             type="button"
-            className="rounded-md p-2 text-ink-secondary transition-colors duration-150 hover:bg-slate-100 md:hidden"
+            className="rounded-md p-2 text-ink-secondary transition-colors duration-150 hover:bg-surface-hover md:hidden"
             onClick={() => setMenuOpen((open) => !open)}
             aria-label="切换菜单"
           >
@@ -518,7 +518,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <button
             type="button"
             onClick={() => setCollapsed((c) => !c)}
-            className="hidden rounded-md p-2 text-ink-secondary transition-colors duration-150 hover:bg-slate-100 md:block"
+            className="hidden rounded-md p-2 text-ink-secondary transition-colors duration-150 hover:bg-surface-hover md:block"
             aria-label={collapsed ? "展开侧栏" : "折叠侧栏"}
             title={collapsed ? "展开侧栏" : "折叠侧栏"}
           >
@@ -639,7 +639,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                           <Link
                             href={m.createRoute ?? m.route}
                             onClick={() => setCreateOpen(false)}
-                            className="flex items-center gap-2.5 px-3 py-2 text-sm text-ink-primary transition-colors duration-150 hover:bg-slate-50"
+                            className="flex items-center gap-2.5 px-3 py-2 text-sm text-ink-primary transition-colors duration-150 hover:bg-surface-hover"
                           >
                             <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${dc.soft}`}>
                               <ModuleIcon moduleId={m.id} className={`h-3.5 w-3.5 ${dc.text}`} />
@@ -663,7 +663,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             type="button"
             onClick={() => setPaletteOpen(true)}
             title="命令面板（Ctrl+K）"
-            className="hidden items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs text-ink-muted transition-colors duration-150 hover:bg-slate-100 hover:text-ink-primary md:flex"
+            className="hidden items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs text-ink-muted transition-colors duration-150 hover:bg-surface-hover hover:text-ink-primary md:flex"
           >
             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -677,7 +677,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             onClick={() => setTheme((prev) => (prev === "dark" ? "light" : "dark"))}
             title={theme === "dark" ? "切换到亮色模式" : "切换到暗色模式"}
             aria-label={theme === "dark" ? "切换到亮色模式" : "切换到暗色模式"}
-            className="flex h-8 w-8 items-center justify-center rounded-md border border-border text-ink-muted transition-colors duration-150 hover:bg-slate-100 hover:text-ink-primary"
+            className="flex h-8 w-8 items-center justify-center rounded-md border border-border text-ink-muted transition-colors duration-150 hover:bg-surface-hover hover:text-ink-primary"
           >
             <Icon name={theme === "dark" ? "sun" : "moon"} className="h-4 w-4" />
           </button>
@@ -693,7 +693,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               aria-expanded={userMenuOpen}
               aria-haspopup="menu"
               aria-label="用户菜单"
-              className="flex items-center gap-1.5 rounded-md p-1 transition-colors duration-150 hover:bg-slate-100"
+              className="flex items-center gap-1.5 rounded-md p-1 transition-colors duration-150 hover:bg-surface-hover"
             >
               <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-700">
                 {(user.name ?? user.email ?? "用").slice(0, 1).toUpperCase()}
@@ -721,7 +721,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 <Link
                   href="/profile"
                   onClick={() => setUserMenuOpen(false)}
-                  className="flex items-center gap-2.5 px-3 py-2 text-sm text-ink-secondary transition-colors duration-150 hover:bg-slate-50 hover:text-ink-primary"
+                  className="flex items-center gap-2.5 px-3 py-2 text-sm text-ink-secondary transition-colors duration-150 hover:bg-surface-hover hover:text-ink-primary"
                 >
                   <svg className="h-4 w-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                     <circle cx="12" cy="8" r="5" />
@@ -732,7 +732,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 <button
                   type="button"
                   onClick={() => setDensity(density === "compact" ? "default" : "compact")}
-                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-secondary transition-colors duration-150 hover:bg-slate-50 hover:text-ink-primary"
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-secondary transition-colors duration-150 hover:bg-surface-hover hover:text-ink-primary"
                 >
                   <svg className="h-4 w-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h7" />
@@ -775,7 +775,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <button
               type="button"
               aria-label="关闭菜单"
-              className="animate-fade-in absolute inset-0 bg-slate-900/30 backdrop-blur-[2px]"
+              className="animate-fade-in absolute inset-0 bg-scrim backdrop-blur-[2px]"
               onClick={() => setMenuOpen(false)}
             />
             <aside className="animate-drawer-in absolute inset-y-0 left-0 w-64 overflow-y-auto bg-surface shadow-elevation-lg">

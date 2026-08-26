@@ -310,7 +310,7 @@ function PerformanceBoard() {
               ) : (
                 <tbody className="divide-y divide-border">
                   {(tableRegion ? data.regions : data.rows).map((r) => (
-                    <tr key={tableRegion ? (r as RegionRow).region : (r as PerformanceRow).userId} className="transition-colors hover:bg-slate-50">
+                    <tr key={tableRegion ? (r as RegionRow).region : (r as PerformanceRow).userId} className="transition-colors hover:bg-surface-hover">
                       {tableRegion ? (
                         <td className={td + " text-ink-primary"}>
                           <span className="font-medium">{(r as RegionRow).region}</span>

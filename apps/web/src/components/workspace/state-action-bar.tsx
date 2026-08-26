@@ -48,7 +48,7 @@ interface StateActionBarProps {
 
 const TONE_CLASS: Record<StateActionTone, string> = {
   primary: 'bg-brand-600 text-white hover:bg-brand-700',
-  secondary: 'border border-border bg-surface text-ink-primary hover:bg-slate-50',
+  secondary: 'border border-border bg-surface text-ink-primary hover:bg-surface-hover',
   danger: 'border border-status-danger-border bg-surface text-status-danger-text hover:bg-red-50',
 };
 

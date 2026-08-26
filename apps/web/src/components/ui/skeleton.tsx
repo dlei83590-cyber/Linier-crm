@@ -6,7 +6,7 @@
 'use client';
 
 export function Skeleton({ className = "" }: { className?: string }) {
-  return <div className={`animate-shimmer rounded-md bg-slate-200/80 ${className}`} aria-hidden="true" />;
+  return <div className={`animate-shimmer rounded-md bg-surface-hover ${className}`} aria-hidden="true" />;
 }
 
 /** 文本骨架（宽度百分比） */

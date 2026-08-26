@@ -151,7 +151,7 @@ const TIER_ROWS: { key: "deal" | "quoted" | "opportunity" | "normal"; label: str
 function MiniBar({ value, max, barClass }: { value: number; max: number; barClass: string }) {
   const pct = max > 0 ? Math.max(2, Math.round((value / max) * 100)) : 0;
   return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-canvas">
       <div className={`h-full rounded-full ${barClass}`} style={{ width: `${pct}%` }} />
     </div>
   );
@@ -404,7 +404,7 @@ export default function DashboardPage() {
                   className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors motion-reduce:transition-none ${
                     kpiPeriod === p
                       ? "bg-brand-600 text-white"
-                      : "text-ink-secondary hover:bg-slate-100 hover:text-ink-primary"
+                      : "text-ink-secondary hover:bg-surface-hover hover:text-ink-primary"
                   }`}
                 >
                   {KPI_PERIOD_LABELS[p]}
@@ -652,7 +652,7 @@ export default function DashboardPage() {
                       <span
                         aria-hidden="true"
                         className={`h-2 w-2 shrink-0 rounded-full ${
-                          item.tone === "warning" ? "bg-amber-500" : "bg-slate-300"
+                          item.tone === "warning" ? "bg-amber-500" : "bg-ink-muted"
                         }`}
                       />
                       {item.label}
@@ -661,7 +661,7 @@ export default function DashboardPage() {
                   </div>
                   <span
                     className={`shrink-0 rounded-full px-2.5 py-0.5 text-sm font-semibold tabular-nums ${
-                      item.tone === "warning" ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-600"
+                      item.tone === "warning" ? "bg-amber-50 text-amber-700" : "bg-canvas text-ink-secondary"
                     }`}
                   >
                     {item.count}
@@ -698,7 +698,7 @@ export default function DashboardPage() {
                   <li key={a.id} className="flex items-start gap-3 py-2.5">
                     <span
                       aria-hidden="true"
-                      className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500"
+                      className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-canvas text-ink-secondary"
                     >
                       <IconActivity className="h-3.5 w-3.5" />
                     </span>

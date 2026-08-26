@@ -134,7 +134,7 @@ export function RowActionButtons({
           onClick={onEdit}
           title={editLabel}
           aria-label={editLabel}
-          className="rounded-md p-1.5 text-ink-secondary transition-colors hover:bg-slate-100 hover:text-brand-600"
+          className="rounded-md p-1.5 text-ink-secondary transition-colors hover:bg-surface-hover hover:text-brand-600"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden="true">
             <path

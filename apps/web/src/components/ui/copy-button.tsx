@@ -40,7 +40,7 @@ export function CopyButton({ text, label = "复制", size = "sm", className = ""
       onClick={copy}
       aria-label={label}
       title={label}
-      className={`inline-flex shrink-0 items-center justify-center rounded-md border border-border bg-surface text-ink-secondary transition-colors hover:bg-slate-50 hover:text-ink-primary ${
+      className={`inline-flex shrink-0 items-center justify-center rounded-md border border-border bg-surface text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink-primary ${
         size === "sm" ? "h-6 w-6" : "h-8 w-8"
       } ${className}`}
     >

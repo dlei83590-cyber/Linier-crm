@@ -59,7 +59,7 @@ export function ErrorRow({
         <button
           type="button"
           onClick={onRetry}
-          className="border-border text-ink-secondary mt-2 rounded-md border px-3 py-1.5 text-sm transition-colors hover:bg-slate-100"
+          className="border-border text-ink-secondary mt-2 rounded-md border px-3 py-1.5 text-sm transition-colors hover:bg-surface-hover"
         >
           重试
         </button>

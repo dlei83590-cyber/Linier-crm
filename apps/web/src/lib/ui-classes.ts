@@ -20,11 +20,11 @@ export const BUTTON_PRIMARY_CLASS =
 
 /** 次按钮（secondary）—— 与 ui Button secondary 对齐 */
 export const BUTTON_SECONDARY_CLASS =
-  'rounded-md border border-border px-3 py-1.5 text-sm font-medium text-ink-secondary transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50';
+  'rounded-md border border-border px-3 py-1.5 text-sm font-medium text-ink-secondary transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50';
 
 /** 幽灵按钮（ghost）—— 与 ui Button ghost 对齐 */
 export const BUTTON_GHOST_CLASS =
-  'rounded-md px-3 py-1.5 text-sm font-medium text-ink-secondary transition-colors hover:bg-slate-100 hover:text-ink-primary disabled:cursor-not-allowed disabled:opacity-50';
+  'rounded-md px-3 py-1.5 text-sm font-medium text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink-primary disabled:cursor-not-allowed disabled:opacity-50';
 
 /** 危险按钮（danger）—— 与 ui Button danger 对齐（Rose 语义） */
 export const BUTTON_DANGER_CLASS =

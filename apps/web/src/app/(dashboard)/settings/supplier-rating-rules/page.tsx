@@ -225,7 +225,7 @@ function SupplierRatingRules() {
                     ) : row.isActive ? (
                       <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">启用</span>
                     ) : (
-                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">停用</span>
+                      <span className="rounded bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-ink-secondary">停用</span>
                     )}
                   </td>
                   <td className="px-5 py-2 text-right">
