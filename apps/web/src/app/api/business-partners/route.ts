@@ -55,6 +55,8 @@ const businessPartnerCreateSchema = z.object({
   latitude: z.coerce.number().min(-90).max(90).nullable().optional(),
   longitude: z.coerce.number().min(-180).max(180).nullable().optional(),
   allowedRadiusMeters: z.number().int().positive().max(100000).nullable().optional(),
+  // 协同群（Migration 0055）：channel key（DB 只存 key，webhook/secret 仅在 Server 环境）
+  collaborationChannelKey: z.string().max(64).nullable().optional(),
   duplicateAcknowledged: z.boolean().optional(),
 });
 
@@ -221,6 +223,7 @@ export async function POST(request: NextRequest) {
         latitude: parsed.data.latitude ?? null,
         longitude: parsed.data.longitude ?? null,
         allowedRadiusMeters: parsed.data.allowedRadiusMeters ?? null,
+        collaborationChannelKey: parsed.data.collaborationChannelKey ?? null,
         approvalStatus: "APPROVED",
         createdById: user?.id ?? null,
         updatedById: user?.id ?? null,

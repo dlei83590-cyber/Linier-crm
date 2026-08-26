@@ -39,7 +39,7 @@
 | Phase 0 | 合同基线与架构审计（本 PR：纯审计/治理，零 Schema） | ✅ 本 PR |
 | Phase 1 | 主数据与客户主体收口（BP Customer SSOT / 产品原料视图 / 供应商收口；Customer 遗留审查→兼容→deprecate） | ✅（PR #212-#216 + Phase 1.5 Evidence Closure #218：Test Case 补齐 + Contract Evidence 结构 + Governance Finding；Runtime QA 待人工） |
 | Phase 2 | 客户管理核心（联系人增强 / 客户查重 duplicate-check / 客户公海 Pool） | 🔄（2A 全部完成 #220-222；2B 查重 Vertical Slice 完成 #225（零 Schema）；2C-0 架构审计 + ADR-0053 完成 #226；2C-1 Pool Foundation #228 已合并（0049 冻结，不再扩框架）；**2C-2 生产测试 MVP 开发中（CTO 纠偏：导航入口 /customer-pools + 列表/新建/详情 + 手工入池 + 领取 + 释放回池 + Customer 360 公海状态；自动联动 MVP——REGION + DEPARTMENT（客户负责人部门 → 部门公海）scope 触碰自动入池 matchCustomerPools 已完成；rule-engine/sweep 仍 HOLD）**；Phase 1+2A+2B Runtime QA 待人工一次 Smoke；2C MVP merge 后 7 步生产 Smoke） |
-| Phase 3 | CRM 活动/跟进/拜访计划/定位签到（Activity 决策，禁止双写） | ⬜ |
+| Phase 3 | CRM 活动/跟进/拜访计划/定位签到（Activity 决策，禁止双写） | 🔄（跟进/拜访计划/定位签到已落地 Migration 0050-0052；**自建消息底座 + 钉钉酷卡片最小接线完成 Migration 0055 + ADR-0054：签到/订单阶段 → Outbox → DingTalk 群卡片，SENT/FAILED 可重试**；审批/评论/围栏/推送平台仍 HOLD） |
 | Phase 4 | 商机/报价/订单收口（快速报价 / 打印模板 / 批量导入 / SalesOrderMaterialRequirementProjection 算料投影） | ⬜ |
 | Phase 5 | 报销 Vertical Slice（申请 ≠ 审批 ≠ 过账 ≠ 付款；客户 ROI 数据源） | ⬜ |
 | Phase 6 | 经营/绩效 BI 合同子集（解除「合同必需子集」HOLD；Rule→Facts→Result→Drill-down；自助 BI/OLAP/DW/AI 继续 HOLD） | ⬜ |

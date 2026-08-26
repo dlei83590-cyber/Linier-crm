@@ -10,6 +10,7 @@ import { computeDeliveryAllocation, createDeliveryRevision, createDeliverySnapsh
 import { publishDeliveryEvent } from "@/lib/delivery/events";
 import { recalcSalesOrderDeliveryProjections } from "@/lib/sales-order/delivery-aggregation";
 import { publishSalesOrderEvent } from "@/lib/sales-order/events";
+import { writeOrderStageChangedEvent } from "@/lib/dingtalk/events";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,8 @@ const POD_ALLOWED_STATUSES = ["RECEIVED", "WAIVED"] as const;
  *  10. 聚合整个 SalesOrder（全部行 remainingQty<=0 → DELIVERED+deliveredAt；否则有 confirmed → PARTIALLY_DELIVERED）
  *  11. 写 AuditLog（事务外，与现有模式一致）
  *  12. 发布 Domain Events（DeliveryConfirmed + SalesOrderPartiallyDelivered / SalesOrderDelivered）
+ * Migration 0055（合同收口）：confirm-delivery 事务内，若客户配置 collaborationChannelKey →
+ *   同事务写 ORDER_STAGE_CHANGED（stage=PARTIALLY_DELIVERED/DELIVERED）Outbox → DingTalk 酷卡片推送协同群。
  * 本阶段不实现 /complete（COMPLETED 仅枚举，CTO Review ⑨）。
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -156,6 +159,33 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     //   所有行 remainingQty<=0 → SO=DELIVERED + deliveredAt=now；否则有 confirmed → SO=PARTIALLY_DELIVERED
     const aggregation = await recalcSalesOrderDeliveryProjections(tx, delivery.salesOrderId, user?.id);
     const soAfter = await tx.salesOrder.findFirst({ where: { id: delivery.salesOrderId } });
+
+    // Migration 0055：客户配置协同群 → 同事务写 ORDER_STAGE_CHANGED（聚合后 SO 阶段）Outbox（外部失败不影响收货事务）
+    if (salesOrder.customerId) {
+      const customer = await tx.businessPartner.findFirst({
+        where: { id: salesOrder.customerId, deletedAt: null },
+        select: { name: true, collaborationChannelKey: true },
+      });
+      if (customer?.collaborationChannelKey) {
+        const owner = salesOrder.createdById
+          ? await tx.user.findUnique({ where: { id: salesOrder.createdById }, select: { name: true } })
+          : null;
+        await writeOrderStageChangedEvent(tx, {
+          salesOrderId: salesOrder.id,
+          salesOrderCode: salesOrder.code,
+          customerId: salesOrder.customerId,
+          customerName: customer.name,
+          stage: aggregation.soStatus,
+          stageLabel: aggregation.soStatus === "DELIVERED" ? "已交付" : "部分交付",
+          totalAmount: salesOrder.totalAmount.toString(),
+          currency: salesOrder.currency,
+          updatedAt: new Date().toISOString(),
+          ownerId: salesOrder.createdById ?? null,
+          ownerName: owner?.name ?? null,
+          channelKey: customer.collaborationChannelKey,
+        });
+      }
+    }
 
     return { delivery: updated, salesOrder, soAfter, aggregation };
   });

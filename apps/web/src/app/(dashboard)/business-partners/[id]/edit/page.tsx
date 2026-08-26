@@ -37,6 +37,7 @@ interface BusinessPartnerDetail {
   latitude: string | null;
   longitude: string | null;
   allowedRadiusMeters: number | null;
+  collaborationChannelKey: string | null;
   bankName: string | null;
   bankAccount: string | null;
   settlementTerms: string | null;
@@ -110,6 +111,9 @@ function BusinessPartnerEditForm() {
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
   const [allowedRadiusMeters, setAllowedRadiusMeters] = useState("");
+  // 协同群（Migration 0055）：channel key（DB 只存 key，不显示 secret）；选项来自 /api/dingtalk/channels
+  const [collaborationChannelKey, setCollaborationChannelKey] = useState("");
+  const [channelOptions, setChannelOptions] = useState<Array<{ key: string; name: string | null }>>([]);
   const [bankName, setBankName] = useState("");
   const [bankAccount, setBankAccount] = useState("");
   const [settlementTerms, setSettlementTerms] = useState("");
@@ -152,6 +156,7 @@ function BusinessPartnerEditForm() {
         setLatitude(d.latitude ? String(d.latitude) : "");
         setLongitude(d.longitude ? String(d.longitude) : "");
         setAllowedRadiusMeters(d.allowedRadiusMeters ? String(d.allowedRadiusMeters) : "");
+        setCollaborationChannelKey(d.collaborationChannelKey ?? "");
         setBankName(d.bankName ?? "");
         setBankAccount(d.bankAccount ?? "");
         setSettlementTerms(d.settlementTerms ?? "");
@@ -177,6 +182,10 @@ function BusinessPartnerEditForm() {
         setLoadError(err instanceof ApiClientError ? err : new ApiClientError(0, "网络错误", "NETWORK_ERROR"));
         setLoading(false);
       });
+    // 协同群选项（只读；接口仅返回 key+name，不暴露 webhook/secret）
+    apiFetch<{ channels: Array<{ key: string; name: string | null }> }>("/api/dingtalk/channels")
+      .then((body) => setChannelOptions(body.data.channels ?? []))
+      .catch(() => setChannelOptions([]));
   };
 
   useEffect(() => {
@@ -229,6 +238,7 @@ function BusinessPartnerEditForm() {
       latitude: latitude.trim() === "" ? null : Number(latitude),
       longitude: longitude.trim() === "" ? null : Number(longitude),
       allowedRadiusMeters: allowedRadiusMeters.trim() === "" ? null : Number(allowedRadiusMeters),
+      collaborationChannelKey: collaborationChannelKey.trim() === "" ? null : collaborationChannelKey.trim(),
       bankName: bankName.trim() || null,
       bankAccount: bankAccount.trim() || null,
       settlementTerms: settlementTerms.trim() || null,
@@ -393,6 +403,16 @@ function BusinessPartnerEditForm() {
         </FormField>
         <FormField label="签到范围说明">
           <p className="text-sm text-ink-muted">纬度、经度、允许半径三者齐备后，拜访签到将在服务端校验距离，超出范围将明确提示。</p>
+        </FormField>
+        <FormField label="协同群（签到/订单阶段推送）" hint="配置后，客户签到与订单阶段变更将向该协同群推送卡片（仅显示渠道标识，不暴露 webhook 密钥）。">
+          <select value={collaborationChannelKey} onChange={(e) => setCollaborationChannelKey(e.target.value)} className={inputClass}>
+            <option value="">未配置</option>
+            {channelOptions.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.name ? c.name + "（" + c.key + "）" : c.key}
+              </option>
+            ))}
+          </select>
         </FormField>
       </Section>
       <Section title="财务与开票">

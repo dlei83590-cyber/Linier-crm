@@ -2,6 +2,24 @@
 
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] - Contract Close：自建消息底座 + 钉钉酷卡片最小接线（Migration 0055，ADR-0054）
+
+### 新增
+
+- **Linier CRM 自建消息事实 → Outbox → DingTalk Adapter → 外部群**：新领域事件 CRM_CHECK_IN（签到成功 + 客户配置协同群 → 同事务 Outbox）/ ORDER_STAGE_CHANGED（订单 confirm / 交付 dispatch / confirm-delivery + 客户配置协同群 → 同事务 Outbox），EVENTS.md v1.45 注册
+- **OutboxStatus 追加 SENT / FAILED**（Migration 0055）：sender 投递钉钉成功 → SENT；失败 → FAILED + 指数退避可重试，超限 DEAD_LETTER；**外部渠道失败不影响业务事务**
+- **Channel 配置**：BusinessPartner.collaborationChannelKey（DB 只存 key，不存 secret）；webhook/secret 仅在 Server 环境 DINGTALK_CHANNELS_JSON；新增 GET /api/dingtalk/channels（仅返回 key+name，不暴露 secret）
+- **lib/dingtalk**：channel-config（env 解析，fail closed）/ adapter（钉钉群机器人加签 + actionCard POST）/ payload（签到卡：客户/签到人/时间/经纬度摘要/距离/跟进摘要 + Customer 360 deep link；订单卡：订单号/客户/阶段/金额/更新时间/责任人 + SalesOrder deep link）/ sender（claim FOR UPDATE SKIP LOCKED → POST → SENT/FAILED）
+- **触发**：复用 POST /api/domain-events/consume（domain-event:consume）同端点运行 DingTalk Sender；domain-events consumer 对两类渠道事件 SKIPPED
+- **前端最小接线**：客户档案编辑页「协同群」下拉（选项来自 GET /api/dingtalk/channels，不显示渠道密钥）
+- 单测：channel-config / adapter / payload / sender + activities POST 与 sales-order confirm 事务内 Outbox 写入（6 个测试文件）
+
+### 边界
+
+- 零新 Message Bus / Kafka / 云消息；零新权限码（复用 domain-event:consume / business-partner:view）；不改 frontend/modules.ts（Registry SSOT）
+- 不做站内信/邮件/企微/短信渠道；不做消息模板引擎/订阅规则；webhook/secret 不进 DB/前端/git（.env.example 仅占位符）
+- 经纬度只出摘要（4 位小数≈11m），精确定位不进外部渠道
+
 ## [Unreleased] - cc-08-channel：销售渠道 SSOT + 经营数据渠道维度（合同收口 → 生产测试）
 
 ### 新增

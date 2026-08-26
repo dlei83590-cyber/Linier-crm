@@ -1,6 +1,6 @@
 # EVENTS 领域事件注册表（Domain Events）
 
-- 版本：v1.42
+- 版本：v1.45
 - 日期：2026-08-20
 - 维护者：CIO（JINZA）｜审核：CTO
 - 关联：[API_GUIDELINES.md](./API_GUIDELINES.md) ｜ [ARCHITECTURE_BASELINE.md](./ARCHITECTURE_BASELINE.md)
@@ -251,6 +251,22 @@
 
 > 事件经通用 domain-events Outbox 通道同事务写入（writeDomainEvent，idempotencyKey 唯一防重）；当前无业务消费者，事件事实持久化即视为已交付（不 fake downstream delivery，CTO 裁决）。
 
+### 2.6 消息/协同（DingTalk Channel，合同收口 Migration 0055）
+
+> 架构：**Linier CRM 自建消息事实 → Outbox → DingTalk Adapter → 外部群**（Channel Adapter 模式）。业务事务只写 Outbox
+> （与业务事实同事务原子），投递由 `lib/dingtalk/sender` 消费（claim → POST 钉钉 → **SENT/FAILED** 可重试/DEAD_LETTER），
+> **严禁业务事务直接依赖钉钉成功（External Channel Failure ≠ Business Transaction Failure）**。
+> Channel 配置：DB（BusinessPartner.collaborationChannelKey）只存 key；webhook/secret 仅在 Server 环境 `DINGTALK_CHANNELS_JSON`（绝不进前端/git）。
+> 发送内容：签到 → 客户/签到人/时间/经纬度摘要/距离/跟进摘要 + Customer 360 deep link；订单阶段 → 订单号/客户/阶段/金额/更新时间/责任人 + SalesOrder deep link。
+
+| eventType             | 触发时机                                     | 载荷示例                                                                                                                                                          | 实现状态                            |
+| --------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| `CRM_CHECK_IN`        | 定位签到成功（CHECK_IN + 客户配置协同群）    | `{ activityId→aggregateId, businessPartnerId, customerName, actorId, actorName, checkinAt, latitude, longitude, locationNote, distanceMeters, followUpSummary, channelKey }` | ✅ 已实现（Migration 0055；幂等键 `CRM_CHECK_IN|{activityId}`） |
+| `ORDER_STAGE_CHANGED` | 订单阶段动作（confirm / dispatch / confirm-delivery）且客户配置协同群 | `{ salesOrderId, salesOrderCode, customerId, customerName, stage, stageLabel, totalAmount, currency, updatedAt, ownerId, ownerName, channelKey }`                 | ✅ 已实现（Migration 0055；幂等键 `ORDER_STAGE_CHANGED|{salesOrderId}|{stage}`） |
+
+> 订阅方：`lib/dingtalk/sender`（经 `POST /api/domain-events/consume` 触发；domain-event consumer 对两类事件 SKIPPED）。
+> 幂等：producer 幂等键防重复入队；sender 成功 → SENT，失败 → FAILED + 指数退避重试，超限 DEAD_LETTER（人工调查）。
+
 ## 3. 订阅方约定
 
 | 订阅方          | 监听事件                         | 用途                                 |
@@ -271,6 +287,7 @@
 
 | 日期       | 版本  | 说明                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | ---------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-08-25 | v1.45 | **自建消息底座 + 钉钉酷卡片最小接线（合同收口，Migration 0055，ADR-0054）**：新注册 `CRM_CHECK_IN`（定位签到成功 + 客户配置协同群 → 同事务 Outbox，幂等键 `CRM_CHECK_IN|{activityId}`，载荷含客户/签到人/时间/经纬度摘要/距离/跟进摘要/channelKey）与 `ORDER_STAGE_CHANGED`（订单阶段动作 confirm/dispatch/confirm-delivery + 客户配置协同群 → 同事务 Outbox，幂等键 `ORDER_STAGE_CHANGED|{salesOrderId}|{stage}`，载荷含订单号/客户/阶段/金额/更新时间/责任人/channelKey）；OutboxStatus 追加 SENT/FAILED；投递由 `lib/dingtalk/sender` 消费（经 POST /api/domain-events/consume 触发，domain-event consumer 对两类事件 SKIPPED）——业务事实先落 Linier CRM，外部渠道失败 ≠ 业务事务失败 |
 | 2026-08-21 | v1.44 | **发票红冲应收回退 + 送货单反签收（用户指令）**：红字发票 ISSUE 不再创建独立负应收——回退**原票** AR（adjustedAmount -= |红字| + balanceAmount 重算 + 原票 Invoice.balanceAmount 同步 + AR Revision/Snapshot）；红字发票删除（ISSUED）= 撤销红冲恢复原票应收；新事件 `DeliveryUnconfirmed`（送货单反签收 DELIVERED→DISPATCHED + SO 交付投影重算，订单回未发货 CONFIRMED） |
 | 2026-08-20 | v1.43 | **销售贷/借项反冲减 + 发票红冲（Migration 0045）**：新增领域事件 `InvoiceAdjustmentReversed`（CN/DN 反冲：APPLIED→REVERSED，回退 AR.adjustedAmount/balanceAmount + GL 反向凭证，事务内 Outbox 原子写，幂等键 `InvoiceAdjustmentReversed|noteId`）；`InvoiceAdjustmentApplied` 补注册 GL consumer 白名单（#163 漏注册修复）；红字发票 DRAFT 创建（POST /api/invoices/:id/red-invoice）发布 `InvoiceCreated`（载荷含 redLetter/redInvoiceRefId/originalCode） |
 | 2026-08-20 | v1.42 | **会计期间体系（ADR-0044，Migration 0038）**：**无事件变更**——凭证字/附件张数为凭证头属性、期间状态为内部主数据，均非领域事件；GL 过账期间校验（assertPeriodOpen）为消费侧行为，不改事件载荷 |
