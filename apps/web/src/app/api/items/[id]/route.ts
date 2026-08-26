@@ -160,7 +160,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   const refs = await prisma.item.findFirst({
     where: { id },
-    include: { _count: { select: { priceListItems: true, projectProducts: true } } },
+    include: { _count: { select: { priceListItems: { where: { deletedAt: null } }, projectProducts: { where: { deletedAt: null } } } } },
   });
   if (refs && (refs._count.priceListItems > 0 || refs._count.projectProducts > 0)) {
     return failConflict(ERROR_CODES.CONFLICT, "物料已被价格表或项目引用，不能删除");
