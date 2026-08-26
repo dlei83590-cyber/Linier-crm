@@ -55,6 +55,7 @@ interface PartnerDetail {
   groupName?: string | null;
   region?: string | null;
   industry?: string | null;
+  channel?: string | null;
   companySize?: string | null;
   creditRating?: string | null;
   sourceChannel?: string | null;
@@ -505,6 +506,7 @@ function PartnerDetailPage() {
                 <InfoItem label="集团" value={detail.groupName} />
                 <InfoItem label="区域" value={detail.region} />
                 <InfoItem label="行业" value={detail.industry} />
+                <InfoItem label="销售渠道" value={detail.channel ?? "未设置"} />
                 <InfoItem label="来源渠道" value={detail.sourceChannel} />
                 <InfoItem label="信用等级" value={cr?.rating ? (CREDIT_RATING_LABELS[cr.rating] ?? cr.rating) : null} />
                 <InfoItem label="结算条款" value={detail.settlementTerms} />

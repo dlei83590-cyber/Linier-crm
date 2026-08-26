@@ -124,3 +124,20 @@
 | I5 | 有送货单禁止删除 | DELETE（有 Delivery） | 409 SALES_ORDER_NOT_EDITABLE（保持交付溯源） |
 | I6 | 回退后报价单可编辑 | 回退后 PATCH /api/quotations/:id | 200（status=DRAFT 命中 EDITABLE_STATUSES） |
 | I7 | 回退后报价单可删除 | 回退后 DELETE /api/quotations/:id | 200（DRAFT + salesOrderId=null） |
+
+## J. Q 线投影：BOM 预计用料 / 统一吨数展示（CC-07，2026-08-26）
+
+> 端点：GET /api/sales-orders/:id/material-requirements（只读，权限 sales-order:view）
+> 算法：需求 = Σ(订单行数量 × ItemBomLine.qtyPerFinishedUnit × (1+lossRate))，按原料汇总；成品取 ACTIVE 默认配方。
+> 红线：只做需求预测，不自动下采购单 / 不预留 / 不 MRP（HOLD）；前端禁止自写换算系数；未换算项不得伪装成 0。
+
+| # | 用例 | 场景 | 预期 |
+| --- | --- | --- | --- |
+| J1 | KG→TON 换算（正向） | 原料 stockUom=KG，存在 UomConversion(KG→TON, factor=0.001)，requiredQty=2000 | tonnage=2、tonnageConvertible=true、reason=null、requiredUom=KG；页面显示 2.000 TON |
+| J2 | 反向换算 | 仅存在 UomConversion(TON→KG, factor=1000) | tonnage = requiredQty ÷ factor（2000÷1000=2），tonnageConvertible=true |
+| J3 | 无换算 | 原料无任何 TON 相关 UomConversion | tonnage=null、tonnageConvertible=false、reason="缺少 KG → TON 换算"；页面显示"未换算"，不造 0 |
+| J4 | 无 TON 计量单位 | UnitOfMeasure 无 code=TON/name=吨 | 全部行 tonnage=null、reason="缺少 TON 计量单位（无法换算）"，不查询 UomConversion |
+| J5 | 原料无库存单位 | Item.stockUomId 为空 | tonnage=null、reason="原料缺少库存计量单位，无法换算" |
+| J6 | 吨数汇总 | 多原料混有可换算/不可换算 | 合计只统计 tonnageConvertible=true 的行；页面明确提示未换算物料数（N 种原料未配置 → TON 换算） |
+| J7 | 输出契约 | 200 | 每行：itemId/itemCode/itemName/uom（原单位名）/requiredUom（原单位 code）/requiredQty/tonnage/tonnageConvertible/reason/onHandQty（StockProjection SSOT） |
+| J8 | 权限/不存在 | 无 sales-order:view / 订单不存在 | 403 / 404 SALES_ORDER_NOT_FOUND |

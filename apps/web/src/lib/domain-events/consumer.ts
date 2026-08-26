@@ -23,6 +23,9 @@ export const DOMAIN_EVENT_RETRY_CAP_SECONDS = 300;
 /** 库存链事件白名单：这些事件由 inventory-ledger/consumer 消费，本 consumer 跳过 */
 const INVENTORY_CHAIN_EVENTS = new Set(['WarehouseReceiptPosted', 'PurchaseReturned', 'InventoryMovementCommitted']);
 
+/** DingTalk 渠道事件白名单（Migration 0055）：这些事件由 lib/dingtalk/sender 消费（SENT/FAILED/DEAD_LETTER），本 consumer 跳过 */
+const DINGTALK_CHANNEL_EVENTS = new Set(['CRM_CHECK_IN', 'ORDER_STAGE_CHANGED']);
+
 /** GL 过账消费事件（Sprint 7 Finance 首块，ADR-0033 + ADR-0042）：消费 5C/销售侧会计事件 → 自动过账（同事务） */
 const GL_POSTED_EVENTS = new Set([
   'SupplierInvoicePosted',
@@ -59,7 +62,7 @@ export interface ConsumeDomainEventResult {
 export async function runDomainEventConsumer(): Promise<ConsumeDomainEventResult[]> {
   const claimed = await prisma.$transaction(async (tx) => {
     const rows = await tx.$queryRaw<ClaimedOutboxRow[]>(
-      Prisma.sql`SELECT "id", "eventType", "aggregateType", "aggregateId", "payload" FROM "OutboxMessage" WHERE "status" = 'PENDING' AND ("nextAttemptAt" IS NULL OR "nextAttemptAt" <= now()) AND "eventType" NOT IN ('WarehouseReceiptPosted', 'PurchaseReturned', 'InventoryMovementCommitted') ORDER BY "createdAt" ASC LIMIT ${DOMAIN_EVENT_BATCH_SIZE} FOR UPDATE SKIP LOCKED`,
+      Prisma.sql`SELECT "id", "eventType", "aggregateType", "aggregateId", "payload" FROM "OutboxMessage" WHERE "status" = 'PENDING' AND ("nextAttemptAt" IS NULL OR "nextAttemptAt" <= now()) AND "eventType" NOT IN ('WarehouseReceiptPosted', 'PurchaseReturned', 'InventoryMovementCommitted', 'CRM_CHECK_IN', 'ORDER_STAGE_CHANGED') ORDER BY "createdAt" ASC LIMIT ${DOMAIN_EVENT_BATCH_SIZE} FOR UPDATE SKIP LOCKED`,
     );
     if (rows.length === 0) return [];
     await tx.outboxMessage.updateMany({
@@ -71,8 +74,8 @@ export async function runDomainEventConsumer(): Promise<ConsumeDomainEventResult
 
   const results: ConsumeDomainEventResult[] = [];
   for (const row of claimed) {
-    if (INVENTORY_CHAIN_EVENTS.has(row.eventType)) {
-      await prisma.outboxMessage.update({ where: { id: row.id }, data: { status: 'PENDING' } });
+    if (INVENTORY_CHAIN_EVENTS.has(row.eventType) || DINGTALK_CHANNEL_EVENTS.has(row.eventType)) {
+      await prisma.outboxMessage.update({ where: { id: row.id }, data: { status: 'PENDING', lockedAt: null, lockedBy: null } });
       results.push({ outboxId: row.id, eventType: row.eventType, outcome: 'SKIPPED' });
       continue;
     }

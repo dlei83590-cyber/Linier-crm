@@ -10,7 +10,11 @@ vi.mock('@/lib/api-helpers', () => ({
   writeAuditLog: vi.fn().mockResolvedValue(undefined),
   requestLog: vi.fn(),
 }));
+vi.mock('@/lib/domain-events/writer', () => ({
+  writeDomainEvent: vi.fn().mockResolvedValue(undefined),
+}));
 
+import { writeDomainEvent } from '@/lib/domain-events/writer';
 import { POST, GET } from '@/app/api/business-partners/[id]/activities/route';
 
 type TxMock = {
@@ -18,6 +22,7 @@ type TxMock = {
   partnerContact: { findFirst: ReturnType<typeof vi.fn> };
   user: { findFirst: ReturnType<typeof vi.fn> };
   customerActivity: { findFirst: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
+  user: { findUnique: ReturnType<typeof vi.fn> };
 };
 
 function makeTx(overrides: Partial<TxMock> = {}): TxMock {
@@ -30,6 +35,7 @@ function makeTx(overrides: Partial<TxMock> = {}): TxMock {
       findFirst: vi.fn().mockResolvedValue(null),
       create: vi.fn().mockResolvedValue({ id: 'act-1', activityType: 'FOLLOW_UP', businessPartnerId: 'bp-1' }),
     },
+    user: { findUnique: vi.fn().mockResolvedValue({ id: 'u-1', name: '张三' }) },
     ...overrides,
   };
 }
@@ -164,6 +170,49 @@ describe('POST /api/business-partners/:id/activities — Phase 3 MVP 跟进活�
     mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx2));
     await POST(makeRequest({ activityType: 'FOLLOW_UP', summary: 'x', contactId: 'c-other' }), { params: Promise.resolve({ id: 'bp-1' }) });
     expect(tx2.customerActivity.create).not.toHaveBeenCalled();
+  });
+
+  it('签到成功 + 客户配置协同群 → 同事务写 CRM_CHECK_IN Outbox（Migration 0055；幂等键=活动 id，含 deep link 载荷）', async () => {
+    const tx = makeTx();
+    tx.businessPartner.findFirst.mockResolvedValue({
+      id: 'bp-1', name: '上海示例客户', latitude: '31.23', longitude: '121.47', allowedRadiusMeters: 500,
+      collaborationChannelKey: 'sales-group',
+    });
+    tx.customerActivity.create
+      .mockResolvedValueOnce({ id: 'ck-1', activityType: 'CHECK_IN' })
+      .mockResolvedValueOnce({ id: 'fu-1', activityType: 'FOLLOW_UP', summary: '签到：2026-09-02T05:00:00.000Z（客户会议室）' });
+    mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx));
+    const res = await POST(
+      makeRequest({ activityType: 'CHECK_IN', latitude: 31.2301, longitude: 121.4701, locationNote: '客户会议室' }),
+      { params: Promise.resolve({ id: 'bp-1' }) },
+    );
+    expect(res.status).toBe(201);
+    expect(writeDomainEvent).toHaveBeenCalledTimes(1);
+    const envelope = (writeDomainEvent as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(envelope.eventType).toBe('CRM_CHECK_IN');
+    expect(envelope.aggregateType).toBe('CustomerActivity');
+    expect(envelope.aggregateId).toBe('ck-1');
+    expect(envelope.idempotencyKey).toBe('CRM_CHECK_IN|ck-1');
+    expect(envelope.payload.channelKey).toBe('sales-group');
+    expect(envelope.payload.customerName).toBe('上海示例客户');
+    expect(envelope.payload.actorName).toBe('张三');
+    expect(envelope.payload.businessPartnerId).toBe('bp-1');
+    expect(envelope.payload.checkinAt).toBeTruthy();
+  });
+
+  it('签到成功 + 未配置协同群 → 不写 CRM_CHECK_IN（业务事实仍成功；外部渠道缺省不阻断）', async () => {
+    const tx = makeTx();
+    tx.businessPartner.findFirst.mockResolvedValue({
+      id: 'bp-1', name: '上海示例客户', latitude: '31.23', longitude: '121.47', allowedRadiusMeters: 500,
+      collaborationChannelKey: null,
+    });
+    mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx));
+    const res = await POST(
+      makeRequest({ activityType: 'CHECK_IN', latitude: 31.2301, longitude: 121.4701 }),
+      { params: Promise.resolve({ id: 'bp-1' }) },
+    );
+    expect(res.status).toBe(201);
+    expect(writeDomainEvent).not.toHaveBeenCalled();
   });
 });
 

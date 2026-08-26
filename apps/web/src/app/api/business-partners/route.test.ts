@@ -14,7 +14,7 @@ vi.mock('@/lib/customer-pool/match', () => ({
   matchCustomerPools: vi.fn().mockResolvedValue({ matched: false, poolsMatched: [], entryCreated: false }),
 }));
 
-import { POST } from '@/app/api/business-partners/route';
+import { GET, POST } from '@/app/api/business-partners/route';
 import { matchCustomerPools } from '@/lib/customer-pool/match';
 
 type BpRow = {
@@ -34,6 +34,7 @@ function bp(partial: Partial<BpRow> & { id: string; name: string }): BpRow {
 
 let bpMock: {
   findUnique: ReturnType<typeof vi.fn>;
+  count: ReturnType<typeof vi.fn>;
   findMany: ReturnType<typeof vi.fn>;
   create: ReturnType<typeof vi.fn>;
 };
@@ -64,6 +65,7 @@ describe('POST /api/business-partners — Phase 2B create guard', () => {
     vi.clearAllMocks();
     bpMock = {
       findUnique: vi.fn().mockResolvedValue(null),
+      count: vi.fn().mockResolvedValue(0),
       findMany: vi.fn(({ where }: { where?: Record<string, unknown> }) => {
         if (where && 'uscc' in where) return Promise.resolve(usccRows);
         return Promise.resolve(bpRows);
@@ -198,5 +200,57 @@ describe('POST /api/business-partners — Phase 2B create guard', () => {
     expect(res.status).toBe(201);
     expect(matchCustomerPools).toHaveBeenCalledTimes(1);
     expect(matchCustomerPools).toHaveBeenCalledWith('bp-new');
+  });
+
+  it('24. channel 合法枚举（直销）→ 201 且 create 持久化 channel（SSOT 固定字符串）', async () => {
+    const res = await POST(makeRequest({ ...baseBody, channel: '直销' }));
+    expect(res.status).toBe(201);
+    const createArgs = (bpMock.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(createArgs.data.channel).toBe('直销');
+  });
+
+  it('24b. channel 非法值（不在固定枚举）→ 400 VALIDATION_ERROR（fail closed，不落库）', async () => {
+    const res = await POST(makeRequest({ ...baseBody, channel: '代理' }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(bpMock.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /api/business-partners — 列表渠道 filter（channel 固定枚举精确匹配）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    bpMock = {
+      findUnique: vi.fn().mockResolvedValue(null),
+      count: vi.fn().mockResolvedValue(1),
+      findMany: vi.fn().mockResolvedValue([
+        { id: 'bp-1', code: 'BP-C-0001', name: '客户A', type: 'CUSTOMER', channel: '直销', region: '华东', isActive: true, approvalStatus: 'APPROVED', createdAt: '2026-08-01T00:00:00.000Z' },
+      ]),
+      create: vi.fn(),
+    };
+    mockPrisma['businessPartner'] = bpMock;
+  });
+
+  it('channel=直销 → where 精确匹配 channel（固定枚举精确过滤）', async () => {
+    const res = await GET(new NextRequest('http://localhost/api/business-partners?channel=直销'));
+    expect(res.status).toBe(200);
+    const findArgs = (bpMock.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(findArgs.where.channel).toBe('直销');
+    const body = await res.json();
+    expect(body.data[0].channel).toBe('直销');
+  });
+
+  it('channel=未设置 → where.channel IS NULL（null 渠道归「未设置」）', async () => {
+    const res = await GET(new NextRequest('http://localhost/api/business-partners?channel=未设置'));
+    expect(res.status).toBe(200);
+    const findArgs = (bpMock.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(findArgs.where.channel).toBeNull();
+  });
+
+  it('无 channel 参数 → where 不含 channel 条件', async () => {
+    await GET(new NextRequest('http://localhost/api/business-partners?page=1&pageSize=20'));
+    const findArgs = (bpMock.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(findArgs.where.channel).toBeUndefined();
   });
 });

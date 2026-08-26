@@ -5,7 +5,7 @@
  *
  * - REGION：继续使用真实区域值（客户档案 BusinessPartner.region 字符串，OQ-1 不建字典）；
  * - DEPARTMENT：真实 Department selector（禁手打 Department ID）；
- * - 页面明确：当前自动匹配仅 REGION；DEPARTMENT 自动匹配未实现（仅手工入池），不虚报。
+ * - 页面明确自动规则：REGION（客户区域 = 公海区域）与 DEPARTMENT（客户负责人所属部门 = 公海部门）均自动入池。
  */
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -20,7 +20,7 @@ import { useToast } from "@/components/ui/toast";
 const SCOPE_OPTIONS = [
   { value: "GLOBAL", label: "全局（不限制范围）" },
   { value: "REGION", label: "区域（按客户区域字符串）" },
-  { value: "DEPARTMENT", label: "部门（按操作者部门）" },
+  { value: "DEPARTMENT", label: "部门（按客户负责人部门自动入池）" },
 ];
 
 interface DepartmentOption {
@@ -111,9 +111,9 @@ function PoolCreateForm() {
     >
       {/* FRT-03 #8：自动匹配能力如实说明，不虚报 */}
       <div className="rounded-md border border-status-info-border bg-status-info-bg p-3 text-sm text-status-info-text">
-        自动匹配说明：当前版本仅支持 <strong>REGION 自动入池</strong>（新建客户时，客户区域 =
-        公海区域字符串即自动进入公海，来源标记「规则自动」）。DEPARTMENT 公海暂不支持自动入池，
-        仅支持手工入池（操作者部门须与公海部门一致）；GLOBAL 公海不自动入池。
+        自动匹配说明：当前支持 <strong>REGION 自动入池</strong>（客户区域 = 公海区域字符串即自动进入公海）
+        与 <strong>DEPARTMENT 自动入池</strong>（客户负责人所属部门 = 公海部门即自动进入公海），
+        命中后来源标记「规则自动」。GLOBAL 公海不自动入池；手工入池适用于全部类型公海。
       </div>
       <section className="rounded-md border border-border p-4">
         <h2 className="mb-3 text-sm font-semibold text-ink-primary">基本信息</h2>
@@ -133,7 +133,7 @@ function PoolCreateForm() {
           </FormField>
 
           {scopeType === "DEPARTMENT" ? (
-            <FormField label="部门" required hint="选择操作者部门；DEPARTMENT 自动匹配未实现，仅手工入池校验">
+            <FormField label="部门" required hint="选择部门；客户负责人属于该部门时自动入池；手工入池要求操作者部门一致">
               {deptLoading ? (
                 <p className="text-sm text-ink-muted">部门列表加载中…</p>
               ) : deptLoadError ? (

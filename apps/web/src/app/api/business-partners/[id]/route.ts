@@ -10,6 +10,7 @@ import { z } from "zod";
 import { validateUscc, normalizeUscc } from "@/lib/tax-invoice";
 import { casUpdate } from "@/lib/api/cas";
 import { matchCustomerPools } from "@/lib/customer-pool/match";
+import { BUSINESS_PARTNER_CHANNELS } from "@/lib/business-partner/channel";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,11 @@ const businessPartnerUpdateSchema = z
     industry: z.string().max(100).nullable().optional(),
     companySize: z.string().max(100).nullable().optional(),
     creditRating: z.string().max(100).nullable().optional(),
+    // cc-06 客户等级→供应商评级匹配：客户等级（复用 CustomerLevel 枚举；可空）
+    customerLevel: z.enum(["VIP", "KEY", "REGULAR", "PROSPECT"]).nullable().optional(),
     sourceChannel: z.string().max(100).nullable().optional(),
+    // 销售渠道（Migration 0055；SSOT = 固定枚举，服务端校验 fail closed；null = 未设置）
+    channel: z.enum(BUSINESS_PARTNER_CHANNELS).nullable().optional(),
     foundedDate: z.string().datetime().nullable().optional(),
     registeredCapital: z.string().nullable().optional(),
     employeeCount: z.number().int().nonnegative().nullable().optional(),
@@ -49,6 +54,8 @@ const businessPartnerUpdateSchema = z
     latitude: z.coerce.number().min(-90).max(90).nullable().optional(),
     longitude: z.coerce.number().min(-180).max(180).nullable().optional(),
     allowedRadiusMeters: z.number().int().positive().max(100000).nullable().optional(),
+    // 协同群（Migration 0055）：channel key（DB 只存 key，webhook/secret 仅在 Server 环境）
+    collaborationChannelKey: z.string().max(64).nullable().optional(),
     isActive: z.boolean().optional(),
     // 开票资料（ADR-0043，I1：uscc GB 32100-2015 校验；I10：maker-checker 走 approvalStatus）
     taxInvoiceInfo: z

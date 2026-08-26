@@ -121,6 +121,7 @@ export const MODULE_LABELS: Record<string, string> = {
   "partner-tag": "伙伴标签",
   "partner-bank-account": "伙伴银行账户",
   "partner-credit": "伙伴信用",
+  "customer-supplier-rating-rule": "客户等级-供应商评级规则",
   "item-category": "物料分类",
   "item-specification": "物料规格",
   "item-uom": "物料计量",

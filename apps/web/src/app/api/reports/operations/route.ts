@@ -6,6 +6,7 @@ import { ok, failValidation } from "@/lib/api/response";
 import { requestLog } from "@/lib/api/logger";
 import { BUSINESS_TIMEZONE_OFFSET_MS } from "@/lib/gl/period";
 import { reportPeriodKey, TARGET_DIMENSION_TYPES, achievementRate } from "@/lib/reports/constants";
+import { CHANNEL_UNSET_LABEL } from "@/lib/business-partner/channel";
 
 export const dynamic = "force-dynamic";
 
@@ -159,9 +160,11 @@ export async function GET(request: NextRequest) {
     normal: Math.max(customerTotal - dealSet.size - quotedOnly.size - opportunityOnly.size, 0),
   };
 
-  // ===== 固定区域维度（BusinessPartner.region）：区域客户数 + 期间订单数/金额 =====
-  const [regionCustomerGroups, regionOrders] = await Promise.all([
+  // ===== 固定区域维度（BusinessPartner.region）+ 固定渠道维度（BusinessPartner.channel）=====
+  // 同一份期间订单集合 + 同一批订单客户档案（region + channel 一次取齐），禁止双查（口径一致）
+  const [regionCustomerGroups, channelCustomerGroups, regionOrders] = await Promise.all([
     prisma.businessPartner.groupBy({ by: ["region"], where: customerWhere, _count: { _all: true } }),
+    prisma.businessPartner.groupBy({ by: ["channel"], where: customerWhere, _count: { _all: true } }),
     prisma.salesOrder.findMany({
       where: orderActiveWhere,
       select: { customerId: true, totalAmount: true },
@@ -171,7 +174,7 @@ export async function GET(request: NextRequest) {
   const regionCustomers = regionCustomerIds.length
     ? await prisma.businessPartner.findMany({
         where: { id: { in: regionCustomerIds } },
-        select: { id: true, region: true },
+        select: { id: true, region: true, channel: true },
       })
     : [];
   const regionByCustomer = new Map(regionCustomers.map((c) => [c.id, c.region]));
@@ -203,6 +206,42 @@ export async function GET(request: NextRequest) {
   const regions = [...regionAgg.entries()]
     .map(([region, v]) => ({
       region,
+      customerCount: v.customerCount,
+      salesOrderCount: v.salesOrderCount,
+      salesAmount: v.salesAmount.toString(),
+    }))
+    .sort((a, b) => b.salesOrderCount - a.salesOrderCount);
+
+  // ===== 固定渠道维度（BusinessPartner.channel）：渠道客户数 + 期间订单数/金额（未设置归「未设置」） =====
+  const channelByCustomer = new Map(regionCustomers.map((c) => [c.id, c.channel]));
+  const channelAgg = new Map<
+    string,
+    { customerCount: number; salesOrderCount: number; salesAmount: Prisma.Decimal }
+  >();
+  for (const o of regionOrders) {
+    const channel = channelByCustomer.get(o.customerId) ?? CHANNEL_UNSET_LABEL;
+    const cur = channelAgg.get(channel) ?? {
+      customerCount: 0,
+      salesOrderCount: 0,
+      salesAmount: new Prisma.Decimal(0),
+    };
+    cur.salesOrderCount += 1;
+    cur.salesAmount = cur.salesAmount.plus(o.totalAmount ?? 0);
+    channelAgg.set(channel, cur);
+  }
+  for (const g of channelCustomerGroups) {
+    const channel = g.channel ?? CHANNEL_UNSET_LABEL;
+    const cur = channelAgg.get(channel) ?? {
+      customerCount: 0,
+      salesOrderCount: 0,
+      salesAmount: new Prisma.Decimal(0),
+    };
+    cur.customerCount += g._count._all;
+    channelAgg.set(channel, cur);
+  }
+  const channels = [...channelAgg.entries()]
+    .map(([channel, v]) => ({
+      channel,
       customerCount: v.customerCount,
       salesOrderCount: v.salesOrderCount,
       salesAmount: v.salesAmount.toString(),
@@ -258,7 +297,9 @@ export async function GET(request: NextRequest) {
     customerTiers,
     regions,
     brands,
-    // channel：当前无明确 SSOT 事实源 → 前端显示「暂无渠道事实数据」（CTO ⑦；禁造字段）
-    channelAvailable: false,
+    // 渠道维度（cc-08-channel，Migration 0055）：BusinessPartner.channel 固定枚举 SSOT；
+    // 未设置渠道归「未设置」；禁止营销归因平台/Campaign/CDP/渠道漏斗 Engine
+    channelAvailable: true,
+    channels,
   });
 }

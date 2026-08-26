@@ -693,7 +693,9 @@ model BusinessPartner {
   industry             String? // 所属行业
   companySize          String? // 企业规模
   creditRating         String? // 信用等级
-  sourceChannel        String? // 来源渠道
+  customerLevel        CustomerLevel? // 客户等级（订单推荐供应商评级依据；复用 CustomerLevel 枚举，VIP>KEY>REGULAR>PROSPECT）
+  sourceChannel        String? // 来源渠道（获客渠道：展会/转介绍…）
+  channel              String? // 销售渠道（固定枚举：直销/经销/电商/项目/其他；null=未设置，Migration 0055）
   foundedDate          DateTime? // 成立日期
   registeredCapital    Decimal?      @db.Decimal(14, 2) // 注册资本（万元）
   employeeCount        Int? // 员工人数
@@ -707,6 +709,7 @@ model BusinessPartner {
   latitude            Decimal?       @db.Decimal(10, 7) // 签到范围：客户坐标纬度（-90..90；Migration 0051）
   longitude           Decimal?       @db.Decimal(10, 7) // 签到范围：客户坐标经度（-180..180；Migration 0051）
   allowedRadiusMeters Int?           // 签到范围：允许签到半径（米）；null = 不限制（Migration 0051）
+  collaborationChannelKey String? // 协同群 channel key（Migration 0055：DB 只存 key 不存 secret；webhook/secret 仅在 Server 环境 DINGTALK_CHANNELS_JSON）
   isActive            Boolean        @default(true)
   createdById         String?
   updatedById         String?
@@ -3096,6 +3099,26 @@ model PartnerCredit {
   @@index([deletedAt])
 }
 
+/// 客户等级→最低供应商评级配置（订单推荐供应商评级门槛；专用极小配置模型，非 Generic Rule Engine）
+/// 语义：customerLevel 的客户创建销售订单时，推荐供应商须满足 PartnerCredit.rating ≥ minimumSupplierRating；无规则 = 不设门槛
+model CustomerSupplierRatingRule {
+  id                    String               @id @default(cuid())
+  customerLevel         CustomerLevel        @unique // 客户等级（VIP/KEY/REGULAR/PROSPECT）
+  minimumSupplierRating CustomerCreditRating // 最低供应商评级门槛（PartnerCredit.rating；AAA > AA > A > BBB > BB > B > C）
+  isActive              Boolean              @default(true)
+  // 统一审计字段
+  createdById          String?
+  updatedById          String?
+  approvedById         String?
+  approvalStatus       ApprovalStatus       @default(APPROVED)
+  version              Int                  @default(1)
+  deletedAt            DateTime?
+  createdAt            DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime             @updatedAt @db.Timestamptz(3)
+
+  @@index([deletedAt])
+}
+
 /// 供应商（BusinessPartner 角色扩展，partnerId 必填 type=SUPPLIER/BOTH）
 model Supplier {
   id            String   @id @default(cuid())
@@ -5465,11 +5488,15 @@ enum InventoryMovementType {
 }
 
 /// Outbox 状态（P8 Final：语义 = 库存消费成功才确认完成；不混"投递/消费/投影"）
+/// Migration 0055：追加渠道投递终态 SENT / FAILED——业务事务 → Outbox INSERT → sender POST 钉钉 →
+/// SENT（投递成功）/ FAILED（可重试，指数退避，超限 DEAD_LETTER）；外部渠道失败不影响业务事务
 enum OutboxStatus {
   PENDING
   PROCESSING
   PROCESSED
   DEAD_LETTER
+  SENT
+  FAILED
 }
 
 /// Sprint 6B：调拨单状态（P2 Final：DRAFT→SUBMITTED→APPROVED→EXECUTED/CANCELLED；EXECUTED 才触发双边 Movement）

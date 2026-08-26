@@ -84,4 +84,67 @@ describe('GET /api/quotations/:id — FRT-06 已转订单链接投影', () => {
     const res = await GET(makeRequest(), { params: Promise.resolve({ id: 'qt-x' }) });
     expect(res.status).toBe(404);
   });
+
+  it('CC-05 打印投影：详情携带客户联系/地址 + 销售负责人 + 行单位/规格（additive 只读，防回归删除）', async () => {
+    mockPrisma.quotation = {
+      findFirst: vi.fn().mockResolvedValue({
+        ...baseQuotation,
+        customer: {
+          id: 'c-1',
+          code: 'C001',
+          name: '客户A',
+          fullName: '客户A有限公司',
+          contactPerson: '王经理',
+          phone: '13800000000',
+          email: 'wang@example.com',
+          address: '上海市浦东新区某路 100 号',
+          customerOwnerships: [{ owner: { id: 'u-9', name: '张销售', email: 'zhang@example.com' } }],
+        },
+        lines: [
+          {
+            id: 'l-1',
+            quotationId: 'qt-1',
+            lineNo: 10,
+            itemId: 'i-1',
+            description: '线性模组',
+            quantity: '100',
+            unitPrice: '1234.568',
+            lineAmount: '123456.8',
+            taxAmount: '16049.38',
+            totalAmount: '139506.18',
+            version: 1,
+            item: { id: 'i-1', code: 'FG-001', name: '线性模组', model: 'SMH45A', spec: '行程 450mm' },
+            uom: { id: 'uom-1', code: 'PC', name: '件', symbol: '件' },
+          },
+        ],
+      }),
+    };
+    const res = await GET(makeRequest(), { params: Promise.resolve({ id: 'qt-1' }) });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // 响应事实：客户联系/地址 + 销售负责人（归属 SSOT）随详情返回
+    expect(body.data.customer.contactPerson).toBe('王经理');
+    expect(body.data.customer.address).toContain('上海市浦东新区');
+    expect(body.data.customer.customerOwnerships[0].owner.name).toBe('张销售');
+    // 响应事实：行单位 + 规格
+    expect(body.data.lines[0].uom.symbol).toBe('件');
+    expect(body.data.lines[0].item.spec).toBe('行程 450mm');
+
+    // 防回归：include 结构携带打印投影（customer select + lines.uom）
+    const findFirst = (mockPrisma.quotation as { findFirst: ReturnType<typeof vi.fn> }).findFirst;
+    const include = findFirst.mock.calls[0][0] as {
+      include: {
+        customer: { select: Record<string, unknown> };
+        lines: { include: { uom: unknown; item: { select: Record<string, unknown> } } };
+      };
+    };
+    expect(include.include.customer.select.fullName).toBe(true);
+    expect(include.include.customer.select.contactPerson).toBe(true);
+    expect(include.include.customer.select.address).toBe(true);
+    expect(include.include.customer.select.customerOwnerships).toBeDefined();
+    expect(include.include.lines.include.uom).toEqual({
+      select: { id: true, code: true, name: true, symbol: true },
+    });
+    expect(include.include.lines.include.item.select.spec).toBe(true);
+  });
 });
