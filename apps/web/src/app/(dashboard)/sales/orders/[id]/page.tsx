@@ -72,13 +72,19 @@ interface SalesOrderDetail {
   createdAt: string;
 }
 
-/** Q 线投影：BOM 预计用料行（GET /api/sales-orders/:id/material-requirements） */
+/** Q 线投影：BOM 预计用料行（GET /api/sales-orders/:id/material-requirements）
+ * 吨数折算：只消费后端 UomConversion 事实；无换算 → tonnage=null/tonnageConvertible=false/reason。
+ * 红线：前端禁止自写换算系数，禁止把未换算项显示为 0。 */
 interface MaterialRequirement {
   itemId: string;
   itemCode: string | null;
   itemName: string | null;
   uom: string | null;
+  requiredUom: string | null;
   requiredQty: number;
+  tonnage: number | null;
+  tonnageConvertible: boolean;
+  reason: string | null;
   onHandQty: number;
 }
 
@@ -545,26 +551,64 @@ function SalesOrderDetailPage() {
         ) : materials.length === 0 ? (
           <p className="text-ink-muted text-xs">无配方原料需求（订单行成品无 ACTIVE 配方）。</p>
         ) : (
+          <>
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="text-ink-muted border-border border-b text-xs">
                 <th className="px-2 py-2">原料</th>
-                <th className="px-2 py-2">单位</th>
-                <th className="px-2 py-2">预计数量</th>
+                <th className="px-2 py-2">原单位需求</th>
+                <th className="px-2 py-2">折算吨数</th>
                 <th className="px-2 py-2">当前库存</th>
+                <th className="px-2 py-2">库存单位</th>
               </tr>
             </thead>
             <tbody className="divide-border divide-y">
               {materials.map((m) => (
                 <tr key={m.itemId ?? m.itemCode ?? m.itemName ?? ""}>
                   <td className="px-2 py-2">{m.itemName ?? m.itemCode ?? "—"}</td>
-                  <td className="px-2 py-2">{m.uom ?? "—"}</td>
-                  <td className="px-2 py-2 tabular-nums">{m.requiredQty.toFixed(4)}</td>
+                  <td className="px-2 py-2 tabular-nums">
+                    {m.requiredQty.toFixed(4)} {m.requiredUom ?? m.uom ?? ""}
+                  </td>
+                  <td className="px-2 py-2 tabular-nums">
+                    {m.tonnageConvertible && m.tonnage !== null ? (
+                      `${m.tonnage.toFixed(3)} TON`
+                    ) : (
+                      <span
+                        className="text-ink-muted"
+                        title={m.reason ?? "未配置 → TON 换算"}
+                      >
+                        未换算
+                      </span>
+                    )}
+                  </td>
                   <td className="px-2 py-2 tabular-nums">{m.onHandQty}</td>
+                  <td className="px-2 py-2">{m.uom ?? "—"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+          {(() => {
+            // 吨数汇总只统计可换算项；未换算物料数明确提示（不造 0）
+            const convertible = materials.filter(
+              (m) => m.tonnageConvertible && m.tonnage !== null,
+            );
+            const totalTonnage = convertible.reduce((acc, m) => acc + (m.tonnage ?? 0), 0);
+            const unconverted = materials.length - convertible.length;
+            return (
+              <p className="text-ink-secondary mt-3 text-xs">
+                预计用料吨数合计（仅可换算项）：
+                <span className="tabular-nums font-medium">
+                  {totalTonnage.toFixed(3)} TON
+                </span>
+                {unconverted > 0 && (
+                  <span className="text-status-warning-text">
+                    （另有 {unconverted} 种原料未配置 → TON 换算，未计入合计）
+                  </span>
+                )}
+              </p>
+            );
+          })()}
+          </>
         )}
         <h2 className="text-ink-primary mt-4 mb-3 text-sm font-semibold">推荐供应商（Q 线）</h2>
         {suppliersLoading ? (

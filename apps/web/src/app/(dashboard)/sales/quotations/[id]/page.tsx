@@ -7,8 +7,9 @@
  * F2-6B 批 1：状态 Gate + 权限 Gate 后提供 Edit 入口（DRAFT/REJECTED）与
  * Convert→SO（ACCEPTED + 未过期 + 未转换，quotation:approve）动作按钮。
  * 其余 factActions（submit/accept/cancel）仍不开放。
- * 商机→报价→订单 MVP：新增「打印」（v1 window.print + print CSS，globals.css @media print；
- * 不引入 PDF 引擎），转换成功跳转 /sales/orders/[id]。
+ * 商机→报价→订单 MVP：新增「打印」入口（→ /sales/quotations/[id]/print 独立 Print View，
+ * 浏览器打印 + A4 print CSS，不引入 PDF 引擎；原页面 window.print 升级为打印视图路由），
+ * 转换成功跳转 /sales/orders/[id]。
  * PermissionGuard 对齐 API requirePermission("quotation:view")。
  */
 import { useEffect, useState } from "react";
@@ -223,13 +224,12 @@ function QuotationDetailPage() {
         statusTone={salesStatusTone("quotation", detail.effectiveStatus ?? detail.status)}
         actions={
           <>
-            <button
-              type="button"
-              onClick={() => window.print()}
+            <Link
+              href={`/sales/quotations/${id}/print`}
               className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-canvas"
             >
               打印
-            </button>
+            </Link>
             {(canEdit || canSubmit || canAccept || canCancel || (canConvert && canApprove)) && (
               <>
                 {canEdit && (detail.status === "DRAFT" || detail.status === "REJECTED") && (

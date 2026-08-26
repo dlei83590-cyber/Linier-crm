@@ -1,0 +1,302 @@
+/**
+ * Quotation Print View — A4 标准打印样式（CC-05；页面级全局 CSS，不动 globals.css / design-system）
+ *
+ * 类名前缀 qv-（Quotation View）避免与 Tailwind / 全局样式冲突。
+ * 屏幕：灰色画布上白色 A4 纸张预览（阴影区分）。
+ * 打印：@page A4（margin 0，页内 padding 充当页边距）；thead 跨页重复；
+ * 工具栏隐藏（无按钮进入纸张内容）；tr 不跨页截断；金额右对齐 + 等宽数字；
+ * 中文字体栈（PingFang/微软雅黑/思源黑体兜底）。
+ */
+
+@page {
+  size: A4;
+  margin: 0;
+}
+
+.qv-viewport {
+  min-height: 100vh;
+  background: #e8ebef;
+  padding: 24px 16px 56px;
+}
+
+.qv-screen-panel {
+  max-width: 840px;
+  margin: 0 auto;
+  padding: 24px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.qv-toolbar {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.qv-sheet {
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  padding: 14mm 16mm;
+  background: #fff;
+  color: #111827;
+  box-shadow: 0 8px 24px rgb(15 23 42 / 0.12);
+  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC",
+    "Source Han Sans SC", "Helvetica Neue", Arial, sans-serif;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* ---------- 单据头部 ---------- */
+.qv-doc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  padding-bottom: 10mm;
+  border-bottom: 2px solid #111827;
+}
+
+.qv-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.qv-logo-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #2563eb, #1e3a8a);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.qv-brand-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e3a8a;
+}
+
+.qv-doc-title {
+  margin-top: 2px;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 8px;
+  color: #111827;
+}
+
+.qv-meta-table {
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.qv-meta-table th {
+  padding: 2px 10px 2px 0;
+  text-align: right;
+  font-weight: 500;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.qv-meta-table td {
+  padding: 2px 0;
+  text-align: left;
+  color: #111827;
+  white-space: nowrap;
+}
+
+/* ---------- 内容块 ---------- */
+.qv-block {
+  margin-top: 7mm;
+}
+
+.qv-block-title {
+  margin-bottom: 3mm;
+  padding-left: 3mm;
+  border-left: 3px solid #2563eb;
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.qv-customer-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  row-gap: 2.5mm;
+  column-gap: 8mm;
+}
+
+.qv-span-full {
+  grid-column: 1 / -1;
+}
+
+.qv-label {
+  display: inline-block;
+  width: 22mm;
+  color: #475569;
+}
+
+.qv-value {
+  color: #111827;
+}
+
+/* ---------- 报价行 ---------- */
+.qv-lines-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.qv-lines-table th,
+.qv-lines-table td {
+  padding: 2.2mm 2.5mm;
+  border: 1px solid #cbd5e1;
+  text-align: left;
+  vertical-align: top;
+}
+
+.qv-lines-table thead th {
+  background: #f1f5f9;
+  font-weight: 600;
+  color: #334155;
+}
+
+.qv-col-no {
+  width: 9mm;
+  text-align: center !important;
+}
+
+.qv-col-uom {
+  width: 14mm;
+  text-align: center !important;
+}
+
+.qv-col-amount {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.qv-empty-cell {
+  padding: 8mm 2.5mm !important;
+  text-align: center;
+  color: #94a3b8;
+}
+
+/* ---------- 汇总 ---------- */
+.qv-summary {
+  margin-top: 5mm;
+  margin-left: auto;
+  width: 90mm;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5mm;
+  font-size: 12px;
+}
+
+.qv-summary-row {
+  display: flex;
+  justify-content: space-between;
+  color: #334155;
+}
+
+.qv-summary-row span:last-child {
+  font-variant-numeric: tabular-nums;
+}
+
+.qv-summary-total {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 2mm;
+  border-top: 1px solid #111827;
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.qv-summary-total span:last-child {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 条款 / 备注 ---------- */
+.qv-paragraph {
+  margin: 0;
+  white-space: pre-wrap;
+  color: #111827;
+}
+
+/* ---------- 底部 ---------- */
+.qv-doc-footer {
+  display: grid;
+  grid-template-columns: 1.1fr 1.4fr 1.4fr;
+  gap: 10mm;
+  margin-top: 12mm;
+  padding-top: 6mm;
+  border-top: 1px solid #cbd5e1;
+}
+
+.qv-footer-label {
+  font-size: 11px;
+  color: #475569;
+}
+
+.qv-footer-value {
+  margin-top: 2mm;
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.qv-sign-line {
+  margin-top: 6mm;
+  border-bottom: 1px solid #94a3b8;
+}
+
+.qv-seal-box {
+  margin-top: 2mm;
+  width: 30mm;
+  height: 26mm;
+  border: 1px dashed #94a3b8;
+  border-radius: 4px;
+}
+
+/* 打印：工具栏隐藏；关键小块不跨页；表头跨页重复；行不截断 */
+@media print {
+  .qv-viewport {
+    padding: 0;
+    background: #fff;
+  }
+
+  .qv-toolbar {
+    display: none !important;
+  }
+
+  .qv-sheet {
+    width: auto;
+    min-height: auto;
+    margin: 0;
+    padding: 12mm 14mm;
+    box-shadow: none;
+  }
+
+  .qv-lines-table thead {
+    display: table-header-group;
+  }
+
+  .qv-lines-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .qv-no-break {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
