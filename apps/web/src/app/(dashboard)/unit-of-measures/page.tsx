@@ -5,7 +5,7 @@
  *
  * 删除遵循「有应用不可删除（可编辑）」：被物料/单据行/换算引用 → 后端 409，前端 toast 提示。
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
@@ -13,7 +13,7 @@ import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { formatDate } from "@/lib/format";
@@ -58,8 +58,27 @@ function UomList() {
   const [activeInput, setActiveInput] = useState("");
   const [filters, setFilters] = useState<{ code?: string; name?: string; isActive?: string }>({});
 
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<UomRow>("/api/unit-of-measures", filters);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<UomRow>("/api/unit-of-measures", filters, 20, { syncUrl: true });
+
+  // URL 筛选恢复（hydration 后一次性应用；刷新/分享后筛选不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["code", "name", "isActive"]);
+    setCodeInput(u.code ?? "");
+    setNameInput(u.name ?? "");
+    setActiveInput(u.isActive ?? "");
+    setFilters(() => {
+      const n: { code?: string; name?: string; isActive?: string } = {};
+      if (u.code) n.code = u.code;
+      if (u.name) n.name = u.name;
+      if (u.isActive) n.isActive = u.isActive;
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyFilter = () => {
     const next: { code?: string; name?: string; isActive?: string } = {};
@@ -204,6 +223,15 @@ function UomList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        activeFilters={[
+          filters.code ? { key: "code", label: `编码：${filters.code}`, onClear: () => { setCodeInput(""); setFilters((prev) => { const n = { ...prev }; delete n.code; return n; }); } } : null,
+          filters.name ? { key: "name", label: `名称：${filters.name}`, onClear: () => { setNameInput(""); setFilters((prev) => { const n = { ...prev }; delete n.name; return n; }); } } : null,
+          filters.isActive ? { key: "isActive", label: `状态：${filters.isActive === "true" ? "启用" : "停用"}`, onClear: () => { setActiveInput(""); setFilters((prev) => { const n = { ...prev }; delete n.isActive; return n; }); } } : null,
+        ].filter((c): c is NonNullable<typeof c> => c !== null)}
         rowActions={(row) => (
           <div className="flex justify-end gap-1">
             {canEdit && (

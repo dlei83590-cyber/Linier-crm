@@ -8,14 +8,14 @@
  * 展示惰性投影 effectiveStatus / effectiveAgingBucket（后端 computeArProjection）。
  * PermissionGuard 对齐 API requirePermission("accounts-receivable:view")。
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { SALES_STATUS_OPTIONS, salesStatusLabel, salesStatusTone } from "@/lib/sales-status";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { formatDate, formatMoney } from "@/lib/format";
 
 interface ArRow {
@@ -42,8 +42,24 @@ function ArList() {
   // OPEN/PARTIALLY_PAID/PAID/CLOSED → status；OVERDUE → effectiveStatus（与 backend contract 一致）
   const [filters, setFilters] = useState<{ status?: string; effectiveStatus?: string }>({});
 
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<ArRow>("/api/accounts-receivables", filters);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<ArRow>("/api/accounts-receivables", filters, 20, { syncUrl: true });
+
+  // URL 筛选恢复（hydration 后一次性应用；刷新/分享后筛选不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["status", "effectiveStatus"]);
+    setStatusInput(u.effectiveStatus ?? u.status ?? "");
+    setFilters(() => {
+      const n: { status?: string; effectiveStatus?: string } = {};
+      if (u.effectiveStatus) n.effectiveStatus = u.effectiveStatus;
+      else if (u.status) n.status = u.status;
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyFilter = () => {
     const next: { status?: string; effectiveStatus?: string } = {};
@@ -164,6 +180,13 @@ function ArList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        activeFilters={[
+          filters.status || filters.effectiveStatus ? { key: "status", label: `状态：${salesStatusLabel("ar", filters.status ?? filters.effectiveStatus ?? "")}`, onClear: () => { setStatusInput(""); setFilters((prev) => { const n = { ...prev }; delete n.status; delete n.effectiveStatus; return n; }); } } : null,
+        ].filter((c): c is NonNullable<typeof c> => c !== null)}
       />
     </AppPage>
   );

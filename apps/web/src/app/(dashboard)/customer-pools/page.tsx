@@ -8,13 +8,13 @@
  * - 三态统一由 EntityListWorkspace 提供（Skeleton / ErrorRow+Retry / EmptyState）
  * - 动作按钮只消费真实 API + 权限门（新建 = customer-pool:create）
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import {
   buildPoolListParams,
   poolListHasFilter,
@@ -43,8 +43,29 @@ function CustomerPoolList() {
   // 筛选状态 → 查询参数（useMemo 保持引用稳定，避免 useListQuery 每渲染重查）
   const queryParams = useMemo(() => buildPoolListParams(filters), [filters]);
 
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<PoolRow>("/api/customer-pools", queryParams);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<PoolRow>("/api/customer-pools", queryParams, 20, { syncUrl: true });
+
+  // URL 筛选恢复（hydration 后一次性应用；刷新/分享后筛选不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["code", "name", "scopeType", "isActive"]);
+    setCodeInput(u.code ?? "");
+    setNameInput(u.name ?? "");
+    setScopeInput((u.scopeType ?? "") as PoolListFilterState["scopeType"]);
+    setActiveInput((u.isActive ?? "") as PoolListFilterState["isActive"]);
+    setFilters(() => {
+      const n: PoolListFilterState = {};
+      if (u.code) n.code = u.code;
+      if (u.name) n.name = u.name;
+      if (u.scopeType) n.scopeType = u.scopeType as PoolListFilterState["scopeType"];
+      if (u.isActive) n.isActive = u.isActive as PoolListFilterState["isActive"];
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyFilter = () => {
     setFilters({ code: codeInput, name: nameInput, scopeType: scopeInput, isActive: activeInput });
@@ -187,6 +208,16 @@ function CustomerPoolList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        activeFilters={[
+          filters.code ? { key: "code", label: `编码：${filters.code}`, onClear: () => { setCodeInput(""); setFilters((prev) => { const n = { ...prev }; delete n.code; return n; }); } } : null,
+          filters.name ? { key: "name", label: `名称：${filters.name}`, onClear: () => { setNameInput(""); setFilters((prev) => { const n = { ...prev }; delete n.name; return n; }); } } : null,
+          filters.scopeType ? { key: "scopeType", label: `范围：${SCOPE_LABELS[filters.scopeType] ?? filters.scopeType}`, onClear: () => { setScopeInput(""); setFilters((prev) => { const n = { ...prev }; delete n.scopeType; return n; }); } } : null,
+          filters.isActive ? { key: "isActive", label: `状态：${filters.isActive === "true" ? "启用" : "停用"}`, onClear: () => { setActiveInput(""); setFilters((prev) => { const n = { ...prev }; delete n.isActive; return n; }); } } : null,
+        ].filter((c): c is NonNullable<typeof c> => c !== null)}
         rowActions={(r: PoolRow) => (
           <div className="flex justify-end gap-1">
             <Link

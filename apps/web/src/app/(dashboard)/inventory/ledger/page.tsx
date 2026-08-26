@@ -8,12 +8,12 @@
  * 复用 F2-3 Workspace：AppPage → EntityListWorkspace + useListQuery + PermissionGuard。
  * 行链接 → /inventory/ledger/[id] 详情。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { PERMISSIONS } from "@nilier-crm/shared";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
 import { apiFetch } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
@@ -90,8 +90,34 @@ function MovementList() {
     return () => c.abort();
   }, []);
 
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<MovementRow>("/api/inventory-movements", filters);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<MovementRow>("/api/inventory-movements", filters, 20, { syncUrl: true });
+  // URL 筛选恢复（hydration 后一次性应用；刷新/分享后筛选不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["item", "warehouseId", "movementType", "direction", "sourceType", "dateFrom", "dateTo"]);
+    setItemInput(u.item ?? "");
+    setWarehouseInput(u.warehouseId ?? "");
+    setMovementTypeInput(u.movementType ?? "");
+    setDirectionInput(u.direction ?? "");
+    setSourceTypeInput(u.sourceType ?? "");
+    setDateFromInput((u.dateFrom ?? "").slice(0, 10));
+    setDateToInput((u.dateTo ?? "").slice(0, 10));
+    setFilters(() => {
+      const n: { item?: string; warehouseId?: string; movementType?: string; direction?: string; sourceType?: string; dateFrom?: string; dateTo?: string } = {};
+      if (u.item) n.item = u.item;
+      if (u.warehouseId) n.warehouseId = u.warehouseId;
+      if (u.movementType) n.movementType = u.movementType;
+      if (u.direction) n.direction = u.direction;
+      if (u.sourceType) n.sourceType = u.sourceType;
+      if (u.dateFrom) n.dateFrom = u.dateFrom;
+      if (u.dateTo) n.dateTo = u.dateTo;
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyFilter = () => {
     const next: typeof filters = {};
@@ -261,6 +287,98 @@ function MovementList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        activeFilters={[
+          filters.item
+            ? {
+                key: "item",
+                label: `物料：${filters.item}`,
+                onClear: () => {
+                  setItemInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.item;
+                    return n;
+                  });
+                },
+              }
+            : null,
+          filters.warehouseId
+            ? {
+                key: "warehouseId",
+                label: `仓库：${warehouses.find((w) => w.id === filters.warehouseId)?.name ?? filters.warehouseId}`,
+                onClear: () => {
+                  setWarehouseInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.warehouseId;
+                    return n;
+                  });
+                },
+              }
+            : null,
+          filters.movementType
+            ? {
+                key: "movementType",
+                label: `类型：${filters.movementType}`,
+                onClear: () => {
+                  setMovementTypeInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.movementType;
+                    return n;
+                  });
+                },
+              }
+            : null,
+          filters.direction
+            ? {
+                key: "direction",
+                label: `方向：${filters.direction}`,
+                onClear: () => {
+                  setDirectionInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.direction;
+                    return n;
+                  });
+                },
+              }
+            : null,
+          filters.sourceType
+            ? {
+                key: "sourceType",
+                label: `来源：${filters.sourceType}`,
+                onClear: () => {
+                  setSourceTypeInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.sourceType;
+                    return n;
+                  });
+                },
+              }
+            : null,
+          filters.dateFrom || filters.dateTo
+            ? {
+                key: "date",
+                label: `日期：${filters.dateFrom?.slice(0, 10) ?? "…"} ~ ${filters.dateTo?.slice(0, 10) ?? "…"}`,
+                onClear: () => {
+                  setDateFromInput("");
+                  setDateToInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.dateFrom;
+                    delete n.dateTo;
+                    return n;
+                  });
+                },
+              }
+            : null,
+        ].filter((c): c is NonNullable<typeof c> => c !== null)}
       />
     </AppPage>
   );

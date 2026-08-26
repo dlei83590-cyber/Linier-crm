@@ -6,11 +6,11 @@
  * 只读投影（5C-1C1 POST 产生 ApOpenItem）：openAmount 为服务端计算，前端不计算不写；
  * 付款/核销/冲销属 5C-2 HOLD，本页不提供任何写入口。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { apiFetch } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { formatDate, formatMoney } from "@/lib/format";
@@ -64,8 +64,25 @@ function ApOpenItemList() {
     return () => controller.abort();
   }, []);
 
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<ApOpenItemRow>("/api/ap-open-items", filters);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<ApOpenItemRow>("/api/ap-open-items", filters, 20, { syncUrl: true });
+
+  // URL 筛选恢复（hydration 后一次性应用；刷新/分享后筛选不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["supplierId", "settlementStatus"]);
+    setSupplierInput(u.supplierId ?? "");
+    setStatusInput(u.settlementStatus ?? "");
+    setFilters(() => {
+      const n: { supplierId?: string; settlementStatus?: string } = {};
+      if (u.supplierId) n.supplierId = u.supplierId;
+      if (u.settlementStatus) n.settlementStatus = u.settlementStatus;
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyFilter = () => {
     const next: { supplierId?: string; settlementStatus?: string } = {};
@@ -168,6 +185,14 @@ function ApOpenItemList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        activeFilters={[
+          filters.supplierId ? { key: "supplierId", label: `供应商：${suppliers.find((s) => s.id === filters.supplierId)?.name ?? filters.supplierId}`, onClear: () => { setSupplierInput(""); setFilters((prev) => { const n = { ...prev }; delete n.supplierId; return n; }); } } : null,
+          filters.settlementStatus ? { key: "settlementStatus", label: `结算状态：${SETTLEMENT_LABELS[filters.settlementStatus] ?? filters.settlementStatus}`, onClear: () => { setStatusInput(""); setFilters((prev) => { const n = { ...prev }; delete n.settlementStatus; return n; }); } } : null,
+        ].filter((c): c is NonNullable<typeof c> => c !== null)}
       />
     </AppPage>
   );

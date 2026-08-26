@@ -37,8 +37,8 @@ function PeriodCloseView() {
   const [closing, setClosing] = useState(false);
   const [closeError, setCloseError] = useState<ApiClientError | null>(null);
   const [lastResult, setLastResult] = useState<CloseResult | null>(null);
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<PeriodCloseRow>("/api/gl/period-closes", {});
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<PeriodCloseRow>("/api/gl/period-closes", {}, 20, { syncUrl: true });
 
   const [reopenTarget, setReopenTarget] = useState<PeriodCloseRow | null>(null);
   const toast = useToast();
@@ -128,6 +128,10 @@ function PeriodCloseView() {
           pageSize={pageSize}
           total={total}
           onPageChange={setPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setPage(1);
+          }}
         />
       </div>
 

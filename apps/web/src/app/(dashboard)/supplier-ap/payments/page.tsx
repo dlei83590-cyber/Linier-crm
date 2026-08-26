@@ -1,7 +1,7 @@
 "use client";
 
 /** Supplier Payments — 付款核销列表页（5C-2，CTO 解锁 2026-08-19） */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
@@ -9,7 +9,7 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog, ModuleKpiStrip } from "@/components/workspace";
 import type { ModuleSummaryData } from "@/lib/module-summary/types";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { formatDate, formatMoney } from "@/lib/format";
 import { useToast } from "@/components/ui/toast";
@@ -83,8 +83,29 @@ function PaymentList() {
     setPage(1);
   };
 
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<PaymentRow>("/api/supplier-payments", filters);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<PaymentRow>("/api/supplier-payments", filters, 20, { syncUrl: true });
+
+  // URL 筛选恢复（hydration 后一次性应用；刷新/分享后筛选不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["supplierId", "dateFrom", "dateTo", "status"]);
+    setSupplierInput(u.supplierId ?? "");
+    setDateFromInput(u.dateFrom ?? "");
+    setDateToInput(u.dateTo ?? "");
+    setStatusInput(u.status ?? "");
+    setFilters(() => {
+      const n: { supplierId?: string; dateFrom?: string; dateTo?: string; status?: string } = {};
+      if (u.supplierId) n.supplierId = u.supplierId;
+      if (u.dateFrom) n.dateFrom = u.dateFrom;
+      if (u.dateTo) n.dateTo = u.dateTo;
+      if (u.status) n.status = u.status;
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyFilter = () => {
     const next: { supplierId?: string; dateFrom?: string; dateTo?: string; status?: string } = {};
@@ -191,6 +212,15 @@ function PaymentList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        activeFilters={[
+          filters.supplierId ? { key: "supplierId", label: `供应商：${suppliers.find((s) => s.id === filters.supplierId)?.name ?? filters.supplierId}`, onClear: () => { setSupplierInput(""); setFilters((prev) => { const n = { ...prev }; delete n.supplierId; return n; }); } } : null,
+          filters.dateFrom || filters.dateTo ? { key: "date", label: `付款日期：${filters.dateFrom ?? "…"} ~ ${filters.dateTo ?? "…"}`, onClear: () => { setDateFromInput(""); setDateToInput(""); setFilters((prev) => { const n = { ...prev }; delete n.dateFrom; delete n.dateTo; return n; }); } } : null,
+          filters.status ? { key: "status", label: `状态：${STATUS_LABELS[filters.status] ?? filters.status}`, onClear: () => { setStatusInput(""); setFilters((prev) => { const n = { ...prev }; delete n.status; return n; }); } } : null,
+        ].filter((c): c is NonNullable<typeof c> => c !== null)}
       />
 
       <ConfirmActionDialog

@@ -7,7 +7,7 @@
  * AppPage → EntityListWorkspace → StatusBadge / ErrorPanel / common toolbar。
  * 不改 backend / 状态机 / action；useListQuery + filters 原样保留。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { hasPermission, actionPermission, PERMISSIONS, type RoleCode } from "@nilier-crm/shared";
@@ -15,7 +15,7 @@ import { useSession } from "@/lib/session-context";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog, ModuleKpiStrip } from "@/components/workspace";
 import type { ModuleSummaryData } from "@/lib/module-summary/types";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
@@ -85,8 +85,24 @@ function AdjustmentList() {
     setPage(1);
   };
 
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<AdjustmentRow>("/api/inventory-adjustments", filters);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<AdjustmentRow>("/api/inventory-adjustments", filters, 20, { syncUrl: true });
+  // URL 筛选恢复（hydration 后一次性应用；刷新/分享后筛选不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["adjustmentNo", "status"]);
+    setNoInput(u.adjustmentNo ?? "");
+    setStatusInput(u.status ?? "");
+    setFilters(() => {
+      const n: { adjustmentNo?: string; status?: string } = {};
+      if (u.adjustmentNo) n.adjustmentNo = u.adjustmentNo;
+      if (u.status) n.status = u.status;
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyFilter = () => {
     const next: { adjustmentNo?: string; status?: string } = {};
@@ -233,6 +249,40 @@ function AdjustmentList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        activeFilters={[
+          filters.adjustmentNo
+            ? {
+                key: "adjustmentNo",
+                label: `调整单号：${filters.adjustmentNo}`,
+                onClear: () => {
+                  setNoInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.adjustmentNo;
+                    return n;
+                  });
+                },
+              }
+            : null,
+          filters.status
+            ? {
+                key: "status",
+                label: `状态：${STATUS_LABELS[filters.status] ?? filters.status}`,
+                onClear: () => {
+                  setStatusInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.status;
+                    return n;
+                  });
+                },
+              }
+            : null,
+        ].filter((c): c is NonNullable<typeof c> => c !== null)}
         rowActions={
           canDelete
             ? (row) =>

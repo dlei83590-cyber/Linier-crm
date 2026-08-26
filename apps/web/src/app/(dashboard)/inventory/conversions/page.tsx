@@ -7,7 +7,7 @@
  * AppPage → EntityListWorkspace → StatusBadge / ErrorPanel / common toolbar。
  * 不改 backend / 状态机 / action；useListQuery + filters 原样保留。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { hasPermission, actionPermission, PERMISSIONS, type RoleCode } from "@nilier-crm/shared";
@@ -15,7 +15,7 @@ import { useSession } from "@/lib/session-context";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog, ModuleKpiStrip } from "@/components/workspace";
 import type { ModuleSummaryData } from "@/lib/module-summary/types";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
@@ -84,8 +84,24 @@ function ConversionList() {
     setPage(1);
   };
 
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<ConversionRow>("/api/inventory-conversions", filters);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<ConversionRow>("/api/inventory-conversions", filters, 20, { syncUrl: true });
+  // URL 筛选恢复（hydration 后一次性应用；刷新/分享后筛选不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["conversionNo", "status"]);
+    setNoInput(u.conversionNo ?? "");
+    setStatusInput(u.status ?? "");
+    setFilters(() => {
+      const n: { conversionNo?: string; status?: string } = {};
+      if (u.conversionNo) n.conversionNo = u.conversionNo;
+      if (u.status) n.status = u.status;
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyFilter = () => {
     const next: { conversionNo?: string; status?: string } = {};
@@ -237,6 +253,40 @@ function ConversionList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        activeFilters={[
+          filters.conversionNo
+            ? {
+                key: "conversionNo",
+                label: `转换单号：${filters.conversionNo}`,
+                onClear: () => {
+                  setNoInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.conversionNo;
+                    return n;
+                  });
+                },
+              }
+            : null,
+          filters.status
+            ? {
+                key: "status",
+                label: `状态：${STATUS_LABELS[filters.status] ?? filters.status}`,
+                onClear: () => {
+                  setStatusInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.status;
+                    return n;
+                  });
+                },
+              }
+            : null,
+        ].filter((c): c is NonNullable<typeof c> => c !== null)}
         rowActions={
           canDelete
             ? (row) =>

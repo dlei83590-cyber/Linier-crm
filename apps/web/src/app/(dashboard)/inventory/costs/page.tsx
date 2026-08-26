@@ -1,12 +1,12 @@
 "use client";
 
 /** 库存成本（移动加权平均）— 只读列表页（D9 HOLD 解除，ADR-0038；成本敏感仅 SUPER_ADMIN/ADMIN） */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityListWorkspace } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { formatMoney } from "@/lib/format";
 
 interface CostRow {
@@ -25,8 +25,22 @@ function InventoryCostList() {
   const [codeInput, setCodeInput] = useState("");
   const [filters, setFilters] = useState<{ itemCode?: string }>({});
 
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<CostRow>("/api/inventory-costs", filters);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<CostRow>("/api/inventory-costs", filters, 20, { syncUrl: true });
+  // URL 筛选恢复（hydration 后一次性应用；刷新/分享后筛选不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["itemCode"]);
+    setCodeInput(u.itemCode ?? "");
+    setFilters(() => {
+      const n: { itemCode?: string } = {};
+      if (u.itemCode) n.itemCode = u.itemCode;
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyFilter = () => {
     const next: { itemCode?: string } = {};
@@ -67,6 +81,26 @@ function InventoryCostList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        activeFilters={[
+          filters.itemCode
+            ? {
+                key: "itemCode",
+                label: `物料编码：${filters.itemCode}`,
+                onClear: () => {
+                  setCodeInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.itemCode;
+                    return n;
+                  });
+                },
+              }
+            : null,
+        ].filter((c): c is NonNullable<typeof c> => c !== null)}
       />
     </AppPage>
   );

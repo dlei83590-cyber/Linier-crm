@@ -8,7 +8,7 @@
  * 不改 backend / 状态机 / action；Create/Edit 表单见 F2-4A2；Tabs 见 F2-4B。
  * UI-06：阶段文案/语义色统一消费 lib/project-stage.ts；进度列右对齐 tabular-nums；行操作收进右侧浮现区。
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
@@ -16,7 +16,7 @@ import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shar
 import { useSession } from "@/lib/session-context";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
-import { useListQuery } from "@/lib/use-list-query";
+import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
 import {
   PROJECT_PRIORITY_LABELS,
@@ -62,8 +62,28 @@ function ProjectList() {
     priority?: string;
   }>({});
 
-  const { items, total, page, pageSize, loading, error, setPage, refresh } =
-    useListQuery<ProjectRow>("/api/projects", filters);
+  const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
+    useListQuery<ProjectRow>("/api/projects", filters, 20, { syncUrl: true });
+  // URL 筛选恢复（hydration 后一次性应用；刷新/分享后筛选不丢失）
+  const urlRestored = useRef(false);
+  useEffect(() => {
+    if (urlRestored.current) return;
+    urlRestored.current = true;
+    const u = readUrlFilterParams(["code", "name", "stage", "priority"]);
+    setCodeInput(u.code ?? "");
+    setNameInput(u.name ?? "");
+    setStageInput(u.stage ?? "");
+    setPriorityInput(u.priority ?? "");
+    setFilters(() => {
+      const n: { code?: string; name?: string; stage?: string; priority?: string } = {};
+      if (u.code) n.code = u.code;
+      if (u.name) n.name = u.name;
+      if (u.stage) n.stage = u.stage;
+      if (u.priority) n.priority = u.priority;
+      return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyFilter = () => {
     const next: { code?: string; name?: string; stage?: string; priority?: string } = {};
@@ -222,6 +242,68 @@ function ProjectList() {
         pageSize={pageSize}
         total={total}
         onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        activeFilters={[
+          filters.code
+            ? {
+                key: "code",
+                label: `项目编号：${filters.code}`,
+                onClear: () => {
+                  setCodeInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.code;
+                    return n;
+                  });
+                },
+              }
+            : null,
+          filters.name
+            ? {
+                key: "name",
+                label: `项目名称：${filters.name}`,
+                onClear: () => {
+                  setNameInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.name;
+                    return n;
+                  });
+                },
+              }
+            : null,
+          filters.stage
+            ? {
+                key: "stage",
+                label: `阶段：${PROJECT_STAGE_LABELS[filters.stage] ?? filters.stage}`,
+                onClear: () => {
+                  setStageInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.stage;
+                    return n;
+                  });
+                },
+              }
+            : null,
+          filters.priority
+            ? {
+                key: "priority",
+                label: `优先级：${PROJECT_PRIORITY_LABELS[filters.priority] ?? filters.priority}`,
+                onClear: () => {
+                  setPriorityInput("");
+                  setFilters((prev) => {
+                    const n = { ...prev };
+                    delete n.priority;
+                    return n;
+                  });
+                },
+              }
+            : null,
+        ].filter((c): c is NonNullable<typeof c> => c !== null)}
         rowActions={(row) => (
           <div className="flex justify-end gap-1">
             <button
