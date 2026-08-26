@@ -118,7 +118,7 @@ export function Donut({
       role="img"
       aria-label={centerLabel ? `${centerLabel}：${centerValue ?? ""}` : "占比图"}
     >
-      <circle cx={cx} cy={cy} r={radius} fill="none" stroke="#e2e8f0" strokeWidth={thickness} aria-hidden="true" />
+      <circle cx={cx} cy={cy} r={radius} fill="none" stroke="var(--color-border)" strokeWidth={thickness} aria-hidden="true" />
       {total > 0
         ? visible.map((seg, i) => {
             const len = (seg.value / total) * circumference;

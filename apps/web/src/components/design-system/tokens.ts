@@ -103,12 +103,14 @@ export const SEMANTIC_COLORS = {
 } as const;
 
 // ===== Status Color（状态色：语义三元组；FE 2.0 = Success Emerald / Warning Amber / Danger Rose / Info Blue / Neutral Slate）=====
+// Phase 1 深色模式：值改为 CSS 变量引用（最终色值 SSOT = globals.css :root / [data-theme="dark"]），
+// 保证 inline style 消费点（status-badge / badge / empty-state / timeline / error-panel 等）自动跟随主题。
 export const STATUS_COLORS = {
-  neutral: { bg: '#f1f5f9', text: '#475569', border: '#e2e8f0' },
-  info: { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe' },
-  success: { bg: '#ecfdf5', text: '#047857', border: '#a7f3d0' },
-  warning: { bg: '#fffbeb', text: '#b45309', border: '#fde68a' },
-  danger: { bg: '#fff1f2', text: '#be123c', border: '#fecdd3' },
+  neutral: { bg: 'var(--color-status-neutral-bg)', text: 'var(--color-status-neutral-text)', border: 'var(--color-status-neutral-border)' },
+  info: { bg: 'var(--color-status-info-bg)', text: 'var(--color-status-info-text)', border: 'var(--color-status-info-border)' },
+  success: { bg: 'var(--color-status-success-bg)', text: 'var(--color-status-success-text)', border: 'var(--color-status-success-border)' },
+  warning: { bg: 'var(--color-status-warning-bg)', text: 'var(--color-status-warning-text)', border: 'var(--color-status-warning-border)' },
+  danger: { bg: 'var(--color-status-danger-bg)', text: 'var(--color-status-danger-text)', border: 'var(--color-status-danger-border)' },
 } as const;
 
 export type StatusTone = keyof typeof STATUS_COLORS;

@@ -64,7 +64,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-brand-50 via-canvas to-slate-100">
+    <div className="flex min-h-screen bg-gradient-to-br from-brand-50 via-canvas to-canvas">
       {/* 品牌区：md 及以上显示（约 50% 宽），移动端隐藏 */}
       <aside className="relative hidden overflow-hidden bg-gradient-to-br from-brand-600 via-brand-700 to-brand-900 md:flex md:w-1/2 md:items-center md:justify-center">
         {/* 装饰光晕（纯视觉，读屏忽略） */}
