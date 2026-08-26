@@ -246,35 +246,44 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     include: {
       _count: {
         select: {
-          suppliers: { where: { deletedAt: null } },
           customers: { where: { deletedAt: null } },
           opportunities: { where: { deletedAt: null } },
           projects: { where: { deletedAt: null } },
-          partnerContacts: { where: { deletedAt: null } },
-          partnerAddresses: { where: { deletedAt: null } },
-          partnerBankAccounts: { where: { deletedAt: null } },
         },
       },
     },
   });
   if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "往来单位不存在");
 
-  // 引用检查：被客户/供应商/项目/联系人等引用 → 不可删除（可编辑）
+  // 引用检查：仅独立业务事实（客户/商机/项目）→ 不可删除（可编辑）；
+  // 供应商档案（1:1 扩展）/角色/联系人/地址/银行账户/标签/信用/开票资料为自有子资源，随主档级联软删
   const referenced =
-    existing._count.suppliers +
     existing._count.customers +
     existing._count.opportunities +
-    existing._count.projects +
-    existing._count.partnerContacts +
-    existing._count.partnerAddresses +
-    existing._count.partnerBankAccounts;
+    existing._count.projects;
   if (referenced > 0) {
-    return failConflict(ERROR_CODES.CONFLICT, "往来单位已被客户/供应商/项目等引用，不能删除（可编辑）");
+    return failConflict(ERROR_CODES.CONFLICT, "往来单位已被客户/商机/项目引用，不能删除（可编辑）");
   }
 
-  await prisma.businessPartner.update({
-    where: { id },
-    data: { deletedAt: new Date(), isActive: false, updatedById: user?.id ?? null },
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    // 供应商档案扩展（1:1）及其子资源级联软删（对齐 Supplier DELETE 契约）
+    const supplier = await tx.supplier.findFirst({ where: { partnerId: id, deletedAt: null }, select: { id: true } });
+    if (supplier) {
+      await tx.supplierQualification.updateMany({ where: { supplierId: supplier.id, deletedAt: null }, data: { deletedAt: now, isActive: false, updatedById: user?.id ?? null } });
+      await tx.supplierCertificate.updateMany({ where: { supplierId: supplier.id, deletedAt: null }, data: { deletedAt: now, isActive: false, updatedById: user?.id ?? null } });
+      await tx.supplierSettlement.updateMany({ where: { supplierId: supplier.id, deletedAt: null }, data: { deletedAt: now, isActive: false, updatedById: user?.id ?? null } });
+      await tx.supplier.update({ where: { id: supplier.id }, data: { deletedAt: now, isActive: false, updatedById: user?.id ?? null } });
+    }
+    // 自有子资源级联软删
+    await tx.businessPartnerRole.updateMany({ where: { partnerId: id, deletedAt: null }, data: { deletedAt: now, isActive: false, updatedById: user?.id ?? null } });
+    await tx.partnerContact.updateMany({ where: { partnerId: id, deletedAt: null }, data: { deletedAt: now, isActive: false, updatedById: user?.id ?? null } });
+    await tx.partnerAddress.updateMany({ where: { partnerId: id, deletedAt: null }, data: { deletedAt: now, isActive: false, updatedById: user?.id ?? null } });
+    await tx.partnerBankAccount.updateMany({ where: { partnerId: id, deletedAt: null }, data: { deletedAt: now, isActive: false, updatedById: user?.id ?? null } });
+    await tx.partnerTag.updateMany({ where: { partnerId: id, deletedAt: null }, data: { deletedAt: now, isActive: false, updatedById: user?.id ?? null } });
+    await tx.partnerCredit.updateMany({ where: { partnerId: id, deletedAt: null }, data: { deletedAt: now, isActive: false, updatedById: user?.id ?? null } });
+    await tx.businessPartnerInvoiceInfo.updateMany({ where: { partnerId: id, deletedAt: null }, data: { deletedAt: now, isActive: false, updatedById: user?.id ?? null } });
+    await tx.businessPartner.update({ where: { id }, data: { deletedAt: now, isActive: false, updatedById: user?.id ?? null } });
   });
 
   await writeAuditLog({
