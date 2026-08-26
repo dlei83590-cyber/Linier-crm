@@ -4,17 +4,11 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
-import {
-  modulesByDomainGrouped,
-  uiCapabilities,
-  type FrontendModule,
-} from "@/lib/frontend/modules";
 import { KpiCard, ErrorPanel } from "@/components/workspace";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
-import { domainClass } from "@/components/design-system/domain-class";
 import {
   buildDashboardKpis,
   formatTodayCn,
@@ -31,7 +25,6 @@ import {
   IconUserPlus,
   IconTarget,
   IconMapPin,
-  IconPlus,
   IconActivity,
 } from "@/components/ui/icons";
 
@@ -45,8 +38,6 @@ import {
  * ③ 待处理工作：待确认订单（/api/sales-orders/summary DRAFT）+ 待审批报销
  *    （/api/expenses?status=PENDING → meta.total）——有真实 API 才显示；无 API 数据源不渲染
  * ④ 最近动态：GET /api/audit-logs（audit:view，真实操作记录）
- * ⑤ 快捷操作 / 业务入口：唯一数据源 = Module Registry（modulesByDomainGrouped 三态投影，
- *    快捷操作严格消费 ui.create + 权威 createRoute/createPermission）
  *
  * 规则保持：不造 backend 不存在的按钮/动作；权限不足不渲染对应区块；
  * 日期只在 hydration 后由浏览器本地时区生成（避免 SSR 跨时区 mismatch）。
@@ -302,26 +293,6 @@ export default function DashboardPage() {
     [canSalesOrders, canExpenses, ordersBlock.data, ordersBlock.error, expensesBlock.data, expensesBlock.error],
   );
   const pendingTotal = pendingItems.reduce((sum, i) => sum + i.count, 0);
-
-  // 快捷操作：仅 ui.create=true 且带权威 createRoute + createPermission 且权限通过的 ready 模块
-  const quickActions: FrontendModule[] = modulesByDomainGrouped()
-    .flatMap((g) => g.ready)
-    .filter(
-      (m) =>
-        uiCapabilities(m.id).create &&
-        !!m.createRoute &&
-        !!m.createPermission &&
-        hasPermission(roles, m.createPermission),
-    );
-
-  // 业务入口：ready 模块按域分组（权限过滤），排除 workbench（Dashboard 自身不做 self-link）
-  const entryGroups = modulesByDomainGrouped()
-    .filter((g) => g.domain.id !== "workbench")
-    .map((g) => ({
-      domain: g.domain,
-      ready: g.ready.filter((m) => m.permission === null || hasPermission(roles, m.permission)),
-    }))
-    .filter((g) => g.ready.length > 0);
 
   const greeting = greetingForUser(user);
 
@@ -745,62 +716,6 @@ export default function DashboardPage() {
         </section>
       ) : null}
 
-      {/* ⑤ 快捷操作（Registry ui.create 投影 + 权威 createRoute/createPermission） */}
-      <section className="rounded-xl border border-border bg-surface p-6 shadow-elevation-sm">
-        <SectionTitle title="快捷操作" />
-        {quickActions.length > 0 ? (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {quickActions.map((m) => (
-              <Link
-                key={m.id}
-                href={m.createRoute!}
-                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-2 text-sm font-medium text-ink-secondary transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 motion-reduce:transition-none"
-              >
-                <IconPlus className="h-4 w-4" aria-hidden="true" />
-                新建{m.label}
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <p className="mt-2 text-sm text-ink-muted">
-            暂无已开放的快捷操作。模块开放创建能力后会自动出现在这里。
-          </p>
-        )}
-      </section>
-
-      {/* ⑥ 业务入口（Registry ready 域分组 + 权限过滤，域色 Accent 识别） */}
-      <section className="rounded-xl border border-border bg-surface p-6 shadow-elevation-sm">
-        <SectionTitle title="业务入口" />
-        {entryGroups.length > 0 ? (
-          <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {entryGroups.map(({ domain, ready }) => {
-              const dc = domainClass(domain.id);
-              return (
-                <div key={domain.id} className="rounded-lg border border-border bg-canvas/60 p-4">
-                  <h3 className={`flex items-center gap-2 text-sm font-semibold ${dc.text}`}>
-                    <span aria-hidden="true" className={`h-2 w-2 rounded-full ${dc.dot}`} />
-                    {domain.label}
-                  </h3>
-                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    {ready.map((m) => (
-                      <Link
-                        key={m.id}
-                        href={m.route}
-                        className="flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm font-medium text-ink-secondary transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 motion-reduce:transition-none"
-                      >
-                        <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${dc.dot}`} />
-                        <span className="truncate">{m.label}</span>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="mt-2 text-sm text-ink-muted">暂无已开放的模块。</p>
-        )}
-      </section>
     </div>
   );
 }
