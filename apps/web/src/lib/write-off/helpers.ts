@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { nextDocumentCode } from "@/lib/document-sequence/next-code";
 
 /** Sprint 4E-2 - WriteOff 领域通用函数（**不放路由逻辑**；对齐 Invoice/Receipt helpers 模式）
  * CTO Design Review 97/100 拍板③：
@@ -11,21 +12,9 @@ import { Prisma } from "@prisma/client";
 
 export const WRITE_OFF_DOC_TYPE = "WRITE_OFF";
 
-/** DocumentSequence 原子取号（docType=WRITE_OFF，前缀 WO，位数 6；创建即取号——拍板④） */
-export async function nextWriteOffCode(tx: Prisma.TransactionClient): Promise<string> {
-  const seq = await tx.documentSequence.findFirst({
-    where: { docType: "WRITE_OFF", isActive: true, deletedAt: null },
-  });
-  const prefix = seq?.prefix ?? "WO";
-  const padLength = seq?.padLength ?? 6;
-  if (seq) {
-    const updated = await tx.documentSequence.update({
-      where: { id: seq.id },
-      data: { nextNo: { increment: 1 } },
-    });
-    return `${prefix}${String(updated.nextNo - 1).padStart(padLength, "0")}`;
-  }
-  return `${prefix}${String(1).padStart(padLength, "0")}`;
+/** DocumentSequence 原子取号（docType=WRITE_OFF，前缀 WO；创建即取号——拍板④；单据序列重构：WO-LNE{YYYY}{MM}{####}） */
+export async function nextWriteOffCode(tx: Prisma.TransactionClient, documentDate: Date): Promise<string> {
+  return nextDocumentCode(tx, "WRITE_OFF", documentDate);
 }
 
 /** 写销总额：Σ WriteOffAllocation.amount（多 AR 汇总；Decimal 全程，禁止 number） */

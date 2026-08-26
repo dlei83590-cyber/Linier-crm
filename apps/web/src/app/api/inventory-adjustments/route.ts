@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
       }
 
       // ④ 创建（创建即取号 ADJ；DRAFT；createdById NOT NULL maker-checker）
-      const adjustmentNo = await nextAdjustmentNo(tx);
+      const adjustmentNo = await nextAdjustmentNo(tx, new Date());
       const adjustment = await tx.inventoryAdjustment.create({
         data: {
           adjustmentNo,

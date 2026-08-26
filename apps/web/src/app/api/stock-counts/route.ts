@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
   const actorId = user!.id;
 
   try {
-    const countNo = await nextCountNo(prisma);
+    const countNo = await nextCountNo(prisma, new Date());
     const count = await prisma.stockCount.create({
       data: {
         countNo,

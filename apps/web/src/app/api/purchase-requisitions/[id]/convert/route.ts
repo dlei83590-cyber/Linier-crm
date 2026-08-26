@@ -91,7 +91,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
 
       // ④ 原子取号（DocumentSequence docType=PURCHASE_ORDER）
-      const code = await nextPurchaseOrderCode(tx);
+      const code = await nextPurchaseOrderCode(tx, new Date());
 
       // ⑤ 创建 PO（DRAFT，sourceType=REQUISITION，requisitionId 溯源）
       const po = await tx.purchaseOrder.create({

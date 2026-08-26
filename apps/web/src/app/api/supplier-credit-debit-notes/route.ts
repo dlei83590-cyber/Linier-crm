@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
         };
       });
 
-      const code = await nextSupplierCnDnCode(tx, parsed.data.noteType);
+      const code = await nextSupplierCnDnCode(tx, parsed.data.noteType, new Date());
       const note = await tx.supplierCreditDebitNote.create({
         data: {
           code,

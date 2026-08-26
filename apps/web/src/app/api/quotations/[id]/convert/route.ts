@@ -8,6 +8,7 @@ import { requestLog } from "@/lib/api/logger";
 import { effectiveStatusOf } from "@/lib/quotation/helpers";
 import { publishQuotationEvent } from "@/lib/quotation/events";
 import { publishSalesOrderEvent } from "@/lib/sales-order/events";
+import { nextSalesOrderCode } from "@/lib/sales-order/helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -55,20 +56,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return { error: "ALREADY_CONVERTED" as const };
     }
 
-    // ③ 原子取号（DocumentSequence docType=SALES_ORDER，前缀 SO，位数 6）
-    const seq = await tx.documentSequence.findFirst({ where: { docType: "SALES_ORDER", isActive: true, deletedAt: null } });
-    const prefix = seq?.prefix ?? "SO";
-    const padLength = seq?.padLength ?? 6;
-    let salesOrderCode: string;
-    if (seq) {
-      const updated = await tx.documentSequence.update({
-        where: { id: seq.id },
-        data: { nextNo: { increment: 1 } },
-      });
-      salesOrderCode = `${prefix}${String(updated.nextNo - 1).padStart(padLength, "0")}`;
-    } else {
-      salesOrderCode = `${prefix}${String(1).padStart(padLength, "0")}`;
-    }
+    // ③ 原子取号（docType=SALES_ORDER；单据序列重构：SO-LNE{YYYY}{MM}{####}）
+    const salesOrderCode = await nextSalesOrderCode(tx, new Date());
 
     // ④ 创建 SalesOrder（status=DRAFT；继承商业字段；Quotation 无 paymentTerm/incoterm 字段 → 置空待后续维护）
     const salesOrder = await tx.salesOrder.create({

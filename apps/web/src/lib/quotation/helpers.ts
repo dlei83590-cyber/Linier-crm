@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { nextDocumentCode } from "@/lib/document-sequence/next-code";
 import type { QuotationLine } from "@prisma/client";
 
 /** Sprint 4A - Quotation 领域辅助（编号生成 / 合计重算 / Revision 创建 / 惰性过期判定） */
@@ -14,31 +15,13 @@ export function effectiveStatusOf(q: { status: string; validUntil: Date | null }
     : { status: q.status, effectiveStatus: q.status, isExpired: false };
 }
 
-/** DocumentSequence 原子取号（docType=QUOTATION，前缀 QT，位数 6）
- * 修复（2026-08-23）：单号回收后 nextNo 可能指向已被软删记录占用的编号（P2002 唯一冲突）——
- * 取号后校验编号未被占用，冲突则继续递增（循环最多 100 次防死循环）。
+/** DocumentSequence 原子取号（docType=QUOTATION，前缀 QT；单据序列重构：QT-LNE{YYYY}{MM}{####}）
+ * 占用校验（对齐 2026-08-23 修复）：单号回收后软删记录仍占唯一键，取号后校验编号未被占用，冲突则继续递增。
  */
-export async function nextQuotationCode(tx: Prisma.TransactionClient): Promise<string> {
-  const seq = await tx.documentSequence.findFirst({
-    where: { docType: "QUOTATION", isActive: true, deletedAt: null },
+export async function nextQuotationCode(tx: Prisma.TransactionClient, documentDate: Date): Promise<string> {
+  return nextDocumentCode(tx, "QUOTATION", documentDate, {
+    isCodeFree: async (tx, code) => !(await tx.quotation.findUnique({ where: { code } })),
   });
-  const prefix = seq?.prefix ?? "QT";
-  const padLength = seq?.padLength ?? 6;
-  let nextNo = seq?.nextNo ?? 1;
-  if (!seq) {
-    return `${prefix}${String(nextNo).padStart(padLength, "0")}`;
-  }
-  for (let i = 0; i < 100; i++) {
-    const code = `${prefix}${String(nextNo).padStart(padLength, "0")}`;
-    // 校验编号未被占用（含软删记录——软删仍占唯一键）
-    const exists = await tx.quotation.findUnique({ where: { code }, select: { id: true } });
-    if (!exists) {
-      await tx.documentSequence.update({ where: { id: seq.id }, data: { nextNo: nextNo + 1 } });
-      return code;
-    }
-    nextNo += 1;
-  }
-  throw new Error("QUOTATION_CODE_EXHAUSTED");
 }
 
 /** 重算报价头合计（subtotal/taxAmount/totalAmount，全程 Decimal） */

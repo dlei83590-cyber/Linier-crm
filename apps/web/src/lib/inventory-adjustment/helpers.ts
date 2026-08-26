@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { nextDocumentCode, DocumentSequenceMissingError } from '@/lib/document-sequence/next-code';
 import type { LedgerAtom } from '@/lib/inventory-ledger/ledger-command';
 
 /**
@@ -26,19 +27,14 @@ export class InventoryAdjustmentSequenceMissingError extends Error {
   }
 }
 
-/** DocumentSequence 原子取号（docType=INVENTORY_ADJUSTMENT，前缀 ADJ，位数 6；创建即取号；Sequence 缺失 fail closed） */
-export async function nextAdjustmentNo(tx: Prisma.TransactionClient): Promise<string> {
-  const seq = await tx.documentSequence.findFirst({
-    where: { docType: 'INVENTORY_ADJUSTMENT', isActive: true, deletedAt: null },
-  });
-  if (!seq) {
-    throw new InventoryAdjustmentSequenceMissingError();
+/** DocumentSequence 原子取号（docType=INVENTORY_ADJUSTMENT，前缀 ADJ；创建即取号；Sequence 缺失 fail closed；单据序列重构：ADJ-LNE{YYYY}{MM}{####}） */
+export async function nextAdjustmentNo(tx: Prisma.TransactionClient, documentDate: Date): Promise<string> {
+  try {
+    return await nextDocumentCode(tx, 'INVENTORY_ADJUSTMENT', documentDate);
+  } catch (err) {
+    if (err instanceof DocumentSequenceMissingError) throw new InventoryAdjustmentSequenceMissingError();
+    throw err;
   }
-  const updated = await tx.documentSequence.update({
-    where: { id: seq.id },
-    data: { nextNo: { increment: 1 } },
-  });
-  return `${seq.prefix}${String(updated.nextNo - 1).padStart(seq.padLength, '0')}`;
 }
 
 /** 调整行去重键（同一调整单内五维组合只能出现一次，防重复调整同一库存维度） */

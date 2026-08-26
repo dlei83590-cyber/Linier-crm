@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { nextDocumentCode, DocumentSequenceMissingError } from '@/lib/document-sequence/next-code';
 
 /**
  * Sprint 6B-3 - Stock Count 领域通用函数（**不放路由逻辑**；对齐 6B-2 Transfer helpers 模式）
@@ -23,19 +24,14 @@ export class StockCountSequenceMissingError extends Error {
   }
 }
 
-/** DocumentSequence 原子取号（docType=STOCK_COUNT，前缀 CNT，位数 6；创建即取号；Sequence 缺失 fail closed） */
-export async function nextCountNo(tx: Prisma.TransactionClient): Promise<string> {
-  const seq = await tx.documentSequence.findFirst({
-    where: { docType: 'STOCK_COUNT', isActive: true, deletedAt: null },
-  });
-  if (!seq) {
-    throw new StockCountSequenceMissingError();
+/** DocumentSequence 原子取号（docType=STOCK_COUNT，前缀 CNT；创建即取号；Sequence 缺失 fail closed；单据序列重构：CNT-LNE{YYYY}{MM}{####}） */
+export async function nextCountNo(tx: Prisma.TransactionClient, documentDate: Date): Promise<string> {
+  try {
+    return await nextDocumentCode(tx, 'STOCK_COUNT', documentDate);
+  } catch (err) {
+    if (err instanceof DocumentSequenceMissingError) throw new StockCountSequenceMissingError();
+    throw err;
   }
-  const updated = await tx.documentSequence.update({
-    where: { id: seq.id },
-    data: { nextNo: { increment: 1 } },
-  });
-  return `${seq.prefix}${String(updated.nextNo - 1).padStart(seq.padLength, '0')}`;
 }
 
 /** 盘点行去重键（同一盘点单内五维组合只能出现一次，防重复盘同一库存维度） */

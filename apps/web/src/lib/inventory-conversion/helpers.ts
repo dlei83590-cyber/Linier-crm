@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { nextDocumentCode, DocumentSequenceMissingError } from '@/lib/document-sequence/next-code';
 import type { LedgerAtom } from '@/lib/inventory-ledger/ledger-command';
 
 /**
@@ -26,19 +27,14 @@ export class InventoryConversionSequenceMissingError extends Error {
   }
 }
 
-/** DocumentSequence 原子取号（docType=INVENTORY_CONVERSION，前缀 CVT，位数 6；创建即取号；Sequence 缺失 fail closed） */
-export async function nextConversionNo(tx: Prisma.TransactionClient): Promise<string> {
-  const seq = await tx.documentSequence.findFirst({
-    where: { docType: 'INVENTORY_CONVERSION', isActive: true, deletedAt: null },
-  });
-  if (!seq) {
-    throw new InventoryConversionSequenceMissingError();
+/** DocumentSequence 原子取号（docType=INVENTORY_CONVERSION，前缀 CVT；创建即取号；Sequence 缺失 fail closed；单据序列重构：CVT-LNE{YYYY}{MM}{####}） */
+export async function nextConversionNo(tx: Prisma.TransactionClient, documentDate: Date): Promise<string> {
+  try {
+    return await nextDocumentCode(tx, 'INVENTORY_CONVERSION', documentDate);
+  } catch (err) {
+    if (err instanceof DocumentSequenceMissingError) throw new InventoryConversionSequenceMissingError();
+    throw err;
   }
-  const updated = await tx.documentSequence.update({
-    where: { id: seq.id },
-    data: { nextNo: { increment: 1 } },
-  });
-  return `${seq.prefix}${String(updated.nextNo - 1).padStart(seq.padLength, '0')}`;
 }
 
 /**

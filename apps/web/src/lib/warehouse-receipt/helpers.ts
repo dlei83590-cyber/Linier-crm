@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { nextDocumentCode } from '@/lib/document-sequence/next-code';
 
 /**
  * Sprint 5B - WarehouseReceipt（采购入库事实）领域通用函数（**不放路由逻辑**；对齐 PO/PR/PurchaseReceipt/Inspection helpers 模式）
@@ -11,26 +12,11 @@ import { Prisma } from '@prisma/client';
  * - **红线**：5B 永不直接写库存余额 / Stock / InventoryMovement（6A 唯一事实源；D10：只有 POSTED 才触发 6A InventoryMovement(IN)）。
  */
 
-/** DocumentSequence 原子取号（docType=WAREHOUSE_RECEIPT，前缀 WHR，位数 6；创建即取号） */
-export async function nextWarehouseReceiptCode(tx: Prisma.TransactionClient): Promise<string> {
-  const seq = await tx.documentSequence.findFirst({
-    where: { docType: 'WAREHOUSE_RECEIPT', isActive: true, deletedAt: null },
+/** DocumentSequence 原子取号（docType=WAREHOUSE_RECEIPT，前缀 WHR；创建即取号；单据序列重构：WHR-LNE{YYYY}{MM}{####}） */
+export async function nextWarehouseReceiptCode(tx: Prisma.TransactionClient, documentDate: Date): Promise<string> {
+  return nextDocumentCode(tx, 'WAREHOUSE_RECEIPT', documentDate, {
+    isCodeFree: async (tx, code) => !(await tx.warehouseReceipt.findUnique({ where: { code } })),
   });
-  const prefix = seq?.prefix ?? 'WHR';
-  const padLength = seq?.padLength ?? 6;
-  if (seq) {
-    // 占用校验（防 P2002 500）
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-      const updated = await tx.documentSequence.update({
-        where: { id: seq.id },
-        data: { nextNo: { increment: 1 } },
-      });
-      const code = `${prefix}${String(updated.nextNo - 1).padStart(padLength, '0')}`;
-      const exists = await tx.warehouseReceipt.findUnique({ where: { code } });
-      if (!exists) return code;
-    }
-  }
-  return `${prefix}${String(1).padStart(padLength, '0')}`;
 }
 
 /** 某 Inspection 已被 **POSTED 入库单** 占用的累计数量（CTO #7192 Blocking：**只有 POSTED 才消耗正式可入库额度**，

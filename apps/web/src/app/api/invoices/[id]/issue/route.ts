@@ -129,7 +129,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     // ── 6. DocumentSequence(INVOICE) 原子取号（编号延后生成，DRAFT 不消耗） ──
-    const code = await nextInvoiceCode(tx);
+    const code = await nextInvoiceCode(tx, new Date());
 
     // ── 7. status = ISSUED + code + VAT 要素回写（I3：ISSUE 后冻结；红字金额服务端取反） ──
     const updated = await tx.invoice.update({

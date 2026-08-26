@@ -59,7 +59,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     // ② 原子取号（DocumentSequence docType=DELIVERY_ORDER，前缀 DO，位数 6）
-    const code = await nextDeliveryCode(tx);
+    const code = await nextDeliveryCode(tx, fields.deliveryDate ? new Date(fields.deliveryDate) : new Date());
 
     // ③ 创建 Delivery 头（status=DRAFT；customerId 继承 SO.customerId；deliveryDate 默认 now）
     const delivery = await tx.delivery.create({

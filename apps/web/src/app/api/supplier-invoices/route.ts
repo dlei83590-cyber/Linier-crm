@@ -140,7 +140,7 @@ export async function POST(request: NextRequest) {
       const totals = aggregateSupplierInvoiceTotals(computed);
 
       // ⑥ 创建即取号 SINV（P1 Final；Sequence 缺失 fail closed）
-      const invoiceNo = await nextSupplierInvoiceNo(tx);
+      const invoiceNo = await nextSupplierInvoiceNo(tx, new Date(data.invoiceDate));
 
       // ⑦ 创建（DRAFT；不产生 AP/GRIR/MatchRun）
       const invoice = await tx.supplierInvoice.create({

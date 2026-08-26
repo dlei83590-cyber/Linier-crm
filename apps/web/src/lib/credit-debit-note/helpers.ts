@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { nextDocumentCode } from "@/lib/document-sequence/next-code";
 
 /** Sprint 4E-3 - CreditDebitNote 领域通用函数（**不放路由逻辑**；对齐 WriteOff/Receipt helpers 模式）
  * CTO Design Review 98/100 + ADR-0022：
@@ -14,25 +15,13 @@ export function creditDebitNoteDocType(noteType: "CREDIT" | "DEBIT"): "CREDIT_NO
   return noteType === "CREDIT" ? "CREDIT_NOTE" : "DEBIT_NOTE";
 }
 
-/** DocumentSequence 原子取号（docType=CREDIT_NOTE/DEBIT_NOTE，前缀 CN/DN，位数 6；创建即取号） */
+/** DocumentSequence 原子取号（docType=CREDIT_NOTE/DEBIT_NOTE，前缀 CN/DN；创建即取号；单据序列重构：CN/DN-LNE{YYYY}{MM}{####}） */
 export async function nextCreditDebitNoteCode(
   tx: Prisma.TransactionClient,
   noteType: "CREDIT" | "DEBIT",
+  documentDate: Date,
 ): Promise<string> {
-  const docType = creditDebitNoteDocType(noteType);
-  const seq = await tx.documentSequence.findFirst({
-    where: { docType, isActive: true, deletedAt: null },
-  });
-  const prefix = seq?.prefix ?? (noteType === "CREDIT" ? "CN" : "DN");
-  const padLength = seq?.padLength ?? 6;
-  if (seq) {
-    const updated = await tx.documentSequence.update({
-      where: { id: seq.id },
-      data: { nextNo: { increment: 1 } },
-    });
-    return `${prefix}${String(updated.nextNo - 1).padStart(padLength, "0")}`;
-  }
-  return `${prefix}${String(1).padStart(padLength, "0")}`;
+  return nextDocumentCode(tx, creditDebitNoteDocType(noteType), documentDate);
 }
 
 /** 调整总额：Σ lines.totalAmount（服务端计算，禁止直传头金额；Decimal 全程） */

@@ -8,6 +8,7 @@ import { requestLog } from "@/lib/api/logger";
 import { quotationUpdateSchema } from "@/lib/api/schemas";
 import { createQuotationRevision, effectiveStatusOf } from "@/lib/quotation/helpers";
 import { publishQuotationEvent } from "@/lib/quotation/events";
+import { recycleDocumentSequence } from "@/lib/document-sequence/recycle";
 
 export const dynamic = "force-dynamic";
 
@@ -162,23 +163,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     await tx.quotationRevision.updateMany({ where: { quotationId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
     await tx.quotationSnapshot.updateMany({ where: { quotationId: id, deletedAt: null }, data: { deletedAt: now, isActive: false } });
 
-    // 单号回收：若被删报价为最后一张（序号 == DocumentSequence.nextNo-1），nextNo 回退一位，
-    // 下次新建报价复用该单号；updateMany where {id, nextNo} CAS——并发取号已推进则跳过回收（不误回退他人单号）
-    const seq = await tx.documentSequence.findFirst({
-      where: { docType: "QUOTATION", isActive: true, deletedAt: null },
-      select: { id: true, nextNo: true, prefix: true, padLength: true },
-    });
-    if (seq) {
-      const prefix = seq.prefix ?? "QT";
-      const numStr = quotation.code.startsWith(prefix) ? quotation.code.slice(prefix.length) : null;
-      const parsed = numStr !== null && numStr !== "" && !Number.isNaN(Number(numStr)) ? Number(numStr) : null;
-      if (parsed !== null && parsed === seq.nextNo - 1) {
-        await tx.documentSequence.updateMany({
-          where: { id: seq.id, nextNo: seq.nextNo },
-          data: { nextNo: seq.nextNo - 1 },
-        });
-      }
-    }
+    // 单号回收（单据序列重构后按月重排）：期间行 nextNo 回退一位，下次新建复用该单号；CAS 防并发误回退
+    await recycleDocumentSequence(tx, "QUOTATION", quotation.code);
   });
 
   await writeAuditLog({

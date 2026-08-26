@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { nextDocumentCode } from "@/lib/document-sequence/next-code";
 
 /** Sprint 4E-2 - Receipt 领域辅助（编号生成 / Revision / Snapshot 创建）
  * 对齐 Invoice/SalesOrder helpers 模式；CTO Design Review 97/100 锁定：
@@ -10,21 +11,9 @@ import { Prisma } from "@prisma/client";
 
 export const RECEIPT_DOC_TYPE = "RECEIPT";
 
-/** DocumentSequence 原子取号（docType=RECEIPT，前缀 RCT，位数 6；创建即取号——拍板④） */
-export async function nextReceiptCode(tx: Prisma.TransactionClient): Promise<string> {
-  const seq = await tx.documentSequence.findFirst({
-    where: { docType: "RECEIPT", isActive: true, deletedAt: null },
-  });
-  const prefix = seq?.prefix ?? "RCT";
-  const padLength = seq?.padLength ?? 6;
-  if (seq) {
-    const updated = await tx.documentSequence.update({
-      where: { id: seq.id },
-      data: { nextNo: { increment: 1 } },
-    });
-    return `${prefix}${String(updated.nextNo - 1).padStart(padLength, "0")}`;
-  }
-  return `${prefix}${String(1).padStart(padLength, "0")}`;
+/** DocumentSequence 原子取号（docType=RECEIPT，前缀 RCT；创建即取号——拍板④；单据序列重构：RCT-LNE{YYYY}{MM}{####}） */
+export async function nextReceiptCode(tx: Prisma.TransactionClient, documentDate: Date): Promise<string> {
+  return nextDocumentCode(tx, "RECEIPT", documentDate);
 }
 
 /** 创建 ReceiptRevision（系统生成，不开放自由编辑；revisionNo 自动递增） */

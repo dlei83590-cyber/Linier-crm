@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
   let created: { id: string; code: string; totalAmount: Prisma.Decimal } | null = null;
   try {
     created = await prisma.$transaction(async (tx) => {
-      const code = await nextPurchaseOrderCode(tx);
+      const code = await nextPurchaseOrderCode(tx, new Date());
       const header = await tx.purchaseOrder.create({
         data: {
           code,

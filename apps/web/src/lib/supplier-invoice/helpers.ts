@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { nextDocumentCode, DocumentSequenceMissingError } from '@/lib/document-sequence/next-code';
 
 /**
  * Sprint 5C-1A - Supplier Invoice Foundation 领域通用函数（**不放路由逻辑**；对齐 6B helpers 模式）
@@ -24,19 +25,14 @@ export class SupplierInvoiceSequenceMissingError extends Error {
   }
 }
 
-/** DocumentSequence 原子取号（docType=SUPPLIER_INVOICE，前缀 SINV，位数 6；创建即取号 P1 Final；缺失 fail closed） */
-export async function nextSupplierInvoiceNo(tx: Prisma.TransactionClient): Promise<string> {
-  const seq = await tx.documentSequence.findFirst({
-    where: { docType: 'SUPPLIER_INVOICE', isActive: true, deletedAt: null },
-  });
-  if (!seq) {
-    throw new SupplierInvoiceSequenceMissingError();
+/** DocumentSequence 原子取号（docType=SUPPLIER_INVOICE，前缀 SINV；创建即取号 P1 Final；缺失 fail closed；单据序列重构：SINV-LNE{YYYY}{MM}{####}） */
+export async function nextSupplierInvoiceNo(tx: Prisma.TransactionClient, documentDate: Date): Promise<string> {
+  try {
+    return await nextDocumentCode(tx, 'SUPPLIER_INVOICE', documentDate);
+  } catch (err) {
+    if (err instanceof DocumentSequenceMissingError) throw new SupplierInvoiceSequenceMissingError();
+    throw err;
   }
-  const updated = await tx.documentSequence.update({
-    where: { id: seq.id },
-    data: { nextNo: { increment: 1 } },
-  });
-  return `${seq.prefix}${String(updated.nextNo - 1).padStart(seq.padLength, '0')}`;
 }
 
 /** 行金额服务端计算（CTO 红线：不信任客户端；全程 Decimal，禁 number 中间转换——对齐 6B canonical 纪律） */

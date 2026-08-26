@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
   let lineIds: Array<{ lineId: string; itemId: string; quantity: Prisma.Decimal; uomId: string | null }>;
   try {
     const created = await prisma.$transaction(async (tx) => {
-      const quotationCode = await nextQuotationCode(tx);
+      const quotationCode = await nextQuotationCode(tx, new Date());
       const quotation = await tx.quotation.create({
         data: {
           code: quotationCode,
