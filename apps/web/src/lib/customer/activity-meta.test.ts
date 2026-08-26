@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   activityTypeMeta,
   activityStatusMeta,
+  activityFollowUpLevelMeta,
 } from "./activity-meta";
 
 describe("activityTypeMeta — 活动类型展示元数据（FE 2.0）", () => {
@@ -68,5 +69,24 @@ describe("activityStatusMeta — 跟进审批状态展示元数据（FE 2.0）",
   it("null（VISIT_PLAN/CHECK_IN 不参与审批）→ null（不渲染徽标）", () => {
     expect(activityStatusMeta(null)).toBeNull();
     expect(activityStatusMeta(undefined)).toBeNull();
+  });
+});
+
+describe("activityFollowUpLevelMeta — 跟进程度展示元数据（followup-level，Migration 0055）", () => {
+  it("BASIC → 普通跟进 / neutral", () => {
+    expect(activityFollowUpLevelMeta("BASIC")).toEqual({ label: "普通跟进", tone: "neutral" });
+  });
+  it("IMPORTANT → 重点跟进 / warning", () => {
+    expect(activityFollowUpLevelMeta("IMPORTANT")).toEqual({ label: "重点跟进", tone: "warning" });
+  });
+  it("DECISION → 决策推进 / danger", () => {
+    expect(activityFollowUpLevelMeta("DECISION")).toEqual({ label: "决策推进", tone: "danger" });
+  });
+  it("未知程度 → 原值文案 + neutral（禁止静默吞掉未知 enum）", () => {
+    expect(activityFollowUpLevelMeta("URGENT_X")).toEqual({ label: "URGENT_X", tone: "neutral" });
+  });
+  it("null/undefined（未分级）→ null（不渲染徽标）", () => {
+    expect(activityFollowUpLevelMeta(null)).toBeNull();
+    expect(activityFollowUpLevelMeta(undefined)).toBeNull();
   });
 });

@@ -19,11 +19,17 @@ import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
-import { StatusBadge } from "@/components/workspace";
+import { ReferenceSelector, StatusBadge } from "@/components/workspace";
 import { INPUT_CLASS, BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { formatDate } from "@/lib/format";
-import { activityTypeMeta, activityStatusMeta, type ActivityTypeKey } from "@/lib/customer/activity-meta";
+import {
+  activityTypeMeta,
+  activityStatusMeta,
+  activityFollowUpLevelMeta,
+  type ActivityTypeKey,
+} from "@/lib/customer/activity-meta";
 import type { StatusTone } from "@/components/design-system";
+import { loadUserOptions, type UserOption } from "@/lib/frontend/user-options";
 import { ActivityTypeIcon, IconAlertCircle, IconRefreshCw } from "./icons";
 import { GEOLOCATION_OPTIONS, geolocationErrorMessage } from "@/lib/visit/geolocation";
 
@@ -34,6 +40,10 @@ interface ActivityRow {
   summary: string | null;
   nextAction: string | null;
   reminderAt: string | null;
+  // followup-level（Migration 0055）：跟进程度 + 责任人只读投影
+  followUpLevel: "BASIC" | "IMPORTANT" | "DECISION" | null;
+  responsibleUserId: string | null;
+  responsibleUser: { id: string; name: string | null; email: string | null } | null;
   planDate: string | null;
   checkinAt: string | null;
   latitude: string | null;
@@ -169,9 +179,32 @@ export function ActivityTimeline({
   const [mode, setMode] = useState<ActivityMode>(initialMode);
   const [summary, setSummary] = useState("");
   const [nextAction, setNextAction] = useState("");
+  // followup-level（Migration 0055）：跟进程度 + 下次跟进时间 + 责任人
+  const [followUpLevel, setFollowUpLevel] = useState<"BASIC" | "IMPORTANT" | "DECISION">("BASIC");
+  const [reminderAt, setReminderAt] = useState("");
+  const [responsibleUserId, setResponsibleUserId] = useState("");
+  const [userOptions, setUserOptions] = useState<UserOption[]>([]);
+  const [usersLoading, setUsersLoading] = useState(true);
+  const [usersUnavailable, setUsersUnavailable] = useState(false);
   const [planDate, setPlanDate] = useState("");
   const [geo, setGeo] = useState<{ lat: string; lng: string } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // 负责人选择器数据源（/api/users?isActive=true，User SSOT）；无 user:view 权限 → 加载失败（服务端投影兜底）
+  useEffect(() => {
+    const controller = new AbortController();
+    loadUserOptions(controller.signal)
+      .then((opts) => {
+        if (opts === null) {
+          setUsersUnavailable(true);
+        } else {
+          setUserOptions(opts);
+        }
+      })
+      .catch(() => setUsersUnavailable(true))
+      .finally(() => setUsersLoading(false));
+    return () => controller.abort();
+  }, []);
 
   // 评论
   const [comments, setComments] = useState<Record<string, ActivityCommentRow[]>>({});
@@ -287,8 +320,25 @@ export function ActivityTimeline({
           setFormError("跟进内容必填");
           return;
         }
+        // followup-level 动态必填（与服务端 zod 一致）：BASIC=跟进内容；IMPORTANT=+下一步行动+下次跟进时间；DECISION=上述+负责人
+        if (followUpLevel !== "BASIC" && !nextAction.trim()) {
+          setFormError("重点跟进/决策推进必须填写下一步行动");
+          return;
+        }
+        if (followUpLevel !== "BASIC" && !reminderAt) {
+          setFormError("重点跟进/决策推进必须填写下次跟进时间");
+          return;
+        }
+        if (followUpLevel === "DECISION" && !usersUnavailable && !responsibleUserId) {
+          setFormError("决策推进必须选择负责人");
+          return;
+        }
+        body.followUpLevel = followUpLevel;
         body.summary = summary.trim();
         body.nextAction = nextAction.trim() || undefined;
+        if (reminderAt) body.reminderAt = new Date(reminderAt).toISOString();
+        // 负责人：有选择 → 传真实 User.id；无 user:view（userOptions=null）→ 不传，服务端按客户/商机负责人投影
+        if (responsibleUserId) body.responsibleUserId = responsibleUserId;
       } else if (mode === "VISIT_PLAN") {
         if (!planDate) {
           setFormError("请选择拜访计划日期（必填）");
@@ -317,6 +367,9 @@ export function ActivityTimeline({
       }
       setSummary("");
       setNextAction("");
+      setFollowUpLevel("BASIC");
+      setReminderAt("");
+      setResponsibleUserId("");
       setPlanDate("");
       setGeo(null);
       load();
@@ -356,8 +409,60 @@ export function ActivityTimeline({
           </div>
           {mode === "FOLLOW_UP" && (
             <>
+              {/* followup-level（Migration 0055）：跟进程度 → 动态必填维度 */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-ink-muted">跟进程度：</span>
+                {(
+                  [
+                    ["BASIC", "普通跟进"],
+                    ["IMPORTANT", "重点跟进"],
+                    ["DECISION", "决策推进"],
+                  ] as const
+                ).map(([lv, label]) => (
+                  <button
+                    key={lv}
+                    type="button"
+                    onClick={() => setFollowUpLevel(lv)}
+                    className={
+                      "rounded-full px-3 py-1 text-xs font-medium transition-colors duration-150 " +
+                      (followUpLevel === lv
+                        ? "bg-brand-600 text-white"
+                        : "border border-border bg-surface text-ink-secondary hover:bg-slate-50")
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <textarea value={summary} onChange={(e) => setSummary(e.target.value)} className={INPUT_CLASS} rows={2} placeholder="跟进内容（必填）" />
-              <input value={nextAction} onChange={(e) => setNextAction(e.target.value)} className={INPUT_CLASS} placeholder="下次行动（可选）" />
+              <input value={nextAction} onChange={(e) => setNextAction(e.target.value)} className={INPUT_CLASS} placeholder={"下次行动" + (followUpLevel === "BASIC" ? "（可选）" : "（必填）")} />
+              {followUpLevel !== "BASIC" && (
+                <input
+                  type="datetime-local"
+                  value={reminderAt}
+                  onChange={(e) => setReminderAt(e.target.value)}
+                  className={INPUT_CLASS}
+                />
+              )}
+              {followUpLevel === "DECISION" && (
+                <div className="flex flex-col gap-1">
+                  <ReferenceSelector
+                    id="followup-responsible-user"
+                    label="负责人"
+                    value={responsibleUserId}
+                    onChange={setResponsibleUserId}
+                    options={userOptions.map((u) => ({ value: u.id, label: u.name ?? u.email }))}
+                    loading={usersLoading}
+                    placeholder="选择负责人"
+                    required
+                  />
+                  {usersUnavailable && (
+                    <p className="text-xs text-ink-muted">
+                      无用户列表权限（user:view）时由系统默认负责人兜底：客户负责人 → 商机负责人。
+                    </p>
+                  )}
+                </div>
+              )}
             </>
           )}
           {mode === "VISIT_PLAN" && (
@@ -414,6 +519,9 @@ export function ActivityTimeline({
             const typeMeta = activityTypeMeta(a.activityType as ActivityTypeKey);
             const node = TONE_NODE[typeMeta.tone];
             const statusMeta = activityStatusMeta(a.status);
+            // followup-level（Migration 0055）：跟进程度徽标（null=未分级不渲染）
+            const levelMeta = a.activityType === "FOLLOW_UP" ? activityFollowUpLevelMeta(a.followUpLevel) : null;
+            const levelTone = levelMeta ? TONE_NODE[levelMeta.tone] : null;
             const isLast = idx === items.length - 1;
             return (
               <li key={a.id} className="flex gap-3">
@@ -432,13 +540,24 @@ export function ActivityTimeline({
                     {statusMeta && (
                       <StatusBadge status={a.status ?? ""} label={statusMeta.label} tone={statusMeta.tone} />
                     )}
+                    {levelMeta && levelTone && (
+                      <span className={"rounded-full px-2 py-0.5 text-xs font-medium " + levelTone.soft + " " + levelTone.text}>
+                        {levelMeta.label}
+                      </span>
+                    )}
                     <span className="text-xs text-ink-muted">{formatDate(a.occurredAt)}</span>
                     <span className="text-xs text-ink-muted">操作人 {userName(a.createdBy)}</span>
+                    {a.activityType === "FOLLOW_UP" && a.responsibleUser && (
+                      <span className="text-xs text-ink-muted">负责人 {userName(a.responsibleUser)}</span>
+                    )}
                     {a.contact?.name && <span className="text-xs text-ink-muted">联系人：{a.contact.name}</span>}
                   </div>
 
                   {a.summary && <p className="mt-1.5 text-sm text-ink-primary">{a.summary}</p>}
                   {a.nextAction && <p className="mt-1 text-xs text-ink-secondary">下次行动：{a.nextAction}</p>}
+                  {a.activityType === "FOLLOW_UP" && a.reminderAt && (
+                    <p className="mt-1 text-xs text-ink-secondary">下次跟进：{formatDate(a.reminderAt)}</p>
+                  )}
                   {a.activityType === "CHECK_IN" && (
                     <p className="mt-1 text-xs text-ink-secondary">
                       位置：{a.latitude ?? "—"}, {a.longitude ?? "—"} {a.locationNote ? "（" + a.locationNote + "）" : ""}
