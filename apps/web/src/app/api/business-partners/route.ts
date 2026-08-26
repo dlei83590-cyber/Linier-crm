@@ -36,6 +36,8 @@ const businessPartnerCreateSchema = z.object({
   industry: z.string().max(100).nullable().optional(),
   companySize: z.string().max(100).nullable().optional(),
   creditRating: z.string().max(100).nullable().optional(),
+  // cc-06 客户等级→供应商评级匹配：客户等级（复用 CustomerLevel 枚举；可空）
+  customerLevel: z.enum(["VIP", "KEY", "REGULAR", "PROSPECT"]).nullable().optional(),
   sourceChannel: z.string().max(100).nullable().optional(),
   // 销售渠道（Migration 0055；SSOT = 固定枚举，服务端校验 fail closed；null = 未设置）
   channel: z.enum(BUSINESS_PARTNER_CHANNELS).nullable().optional(),
@@ -203,6 +205,7 @@ export async function POST(request: NextRequest) {
         industry: parsed.data.industry ?? null,
         companySize: parsed.data.companySize ?? null,
         creditRating: parsed.data.creditRating ?? null,
+        customerLevel: parsed.data.customerLevel ?? null,
         sourceChannel: parsed.data.sourceChannel ?? null,
         channel: parsed.data.channel ?? null,
         foundedDate: parsed.data.foundedDate ? new Date(parsed.data.foundedDate) : null,

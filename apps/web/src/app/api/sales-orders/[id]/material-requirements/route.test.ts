@@ -39,9 +39,17 @@ describe('GET /api/sales-orders/:id/material-requirements — BOM 预计用料�
         { bomId: 'bom-2', componentItemId: 'rm-1', qtyPerFinishedUnit: '1', lossRate: '0' },
       ]),
     };
+    mockPrisma.unitOfMeasure = {
+      findFirst: vi.fn().mockResolvedValue({ id: 'uom-ton', code: 'TON', name: '吨' }),
+    };
+    mockPrisma.uomConversion = {
+      findMany: vi.fn().mockResolvedValue([
+        { itemId: 'rm-1', fromUomId: 'uom-kg', toUomId: 'uom-ton', factor: '0.001' },
+      ]),
+    };
     mockPrisma.item = {
       findMany: vi.fn().mockResolvedValue([
-        { id: 'rm-1', code: 'RM001', name: '钢材', stockUom: { code: 'KG', name: '千克' } },
+        { id: 'rm-1', code: 'RM001', name: '钢材', stockUom: { id: 'uom-kg', code: 'KG', name: '千克' } },
       ]),
     };
     mockPrisma.stockProjection = {
@@ -59,6 +67,70 @@ describe('GET /api/sales-orders/:id/material-requirements — BOM 预计用料�
     expect(row.requiredQty).toBeCloseTo(101, 4);
     expect(row.onHandQty).toBe(500);
     expect(row.uom).toBe('千克');
+  });
+
+  it('KG→TON 换算：requiredUom=KG、tonnage=requiredQty × factor、tonnageConvertible=true、reason=null', async () => {
+    const res = await GET(makeRequest(), { params: Promise.resolve({ id: 'so-1' }) });
+    const body = await res.json();
+    const row = body.data.find((r: { itemCode: string }) => r.itemCode === 'RM001');
+    expect(row.requiredUom).toBe('KG');
+    // 101 KG × 0.001 = 0.101 TON
+    expect(row.tonnage).toBeCloseTo(0.101, 6);
+    expect(row.tonnageConvertible).toBe(true);
+    expect(row.reason).toBeNull();
+  });
+
+  it('反向换算 TON→KG（factor=1000）：tonnage = requiredQty ÷ factor', async () => {
+    mockPrisma.uomConversion = {
+      findMany: vi.fn().mockResolvedValue([
+        { itemId: 'rm-1', fromUomId: 'uom-ton', toUomId: 'uom-kg', factor: '1000' },
+      ]),
+    };
+    const res = await GET(makeRequest(), { params: Promise.resolve({ id: 'so-1' }) });
+    const body = await res.json();
+    const row = body.data.find((r: { itemCode: string }) => r.itemCode === 'RM001');
+    // 101 KG ÷ 1000 = 0.101 TON
+    expect(row.tonnage).toBeCloseTo(0.101, 6);
+    expect(row.tonnageConvertible).toBe(true);
+    expect(row.reason).toBeNull();
+  });
+
+  it('无 UomConversion → 不猜：tonnage=null、tonnageConvertible=false、reason=缺少 KG → TON 换算', async () => {
+    mockPrisma.uomConversion = { findMany: vi.fn().mockResolvedValue([]) };
+    const res = await GET(makeRequest(), { params: Promise.resolve({ id: 'so-1' }) });
+    const body = await res.json();
+    const row = body.data.find((r: { itemCode: string }) => r.itemCode === 'RM001');
+    expect(row.tonnage).toBeNull();
+    expect(row.tonnageConvertible).toBe(false);
+    expect(row.reason).toBe('缺少 KG → TON 换算');
+    expect(row.requiredUom).toBe('KG');
+  });
+
+  it('无 TON 计量单位 → 全部行 tonnage=null、reason=缺少 TON 计量单位（不查询 UomConversion）', async () => {
+    mockPrisma.unitOfMeasure = { findFirst: vi.fn().mockResolvedValue(null) };
+    const uomConversionFindMany = vi.fn();
+    mockPrisma.uomConversion = { findMany: uomConversionFindMany };
+    const res = await GET(makeRequest(), { params: Promise.resolve({ id: 'so-1' }) });
+    const body = await res.json();
+    const row = body.data.find((r: { itemCode: string }) => r.itemCode === 'RM001');
+    expect(row.tonnage).toBeNull();
+    expect(row.tonnageConvertible).toBe(false);
+    expect(row.reason).toBe('缺少 TON 计量单位（无法换算）');
+    expect(uomConversionFindMany).not.toHaveBeenCalled();
+  });
+
+  it('原料无库存计量单位 → reason=原料缺少库存计量单位', async () => {
+    mockPrisma.item = {
+      findMany: vi.fn().mockResolvedValue([
+        { id: 'rm-1', code: 'RM001', name: '钢材', stockUom: null },
+      ]),
+    };
+    const res = await GET(makeRequest(), { params: Promise.resolve({ id: 'so-1' }) });
+    const body = await res.json();
+    const row = body.data.find((r: { itemCode: string }) => r.itemCode === 'RM001');
+    expect(row.tonnage).toBeNull();
+    expect(row.tonnageConvertible).toBe(false);
+    expect(row.reason).toBe('原料缺少库存计量单位，无法换算');
   });
 
   it('订单不存在 → 404', async () => {

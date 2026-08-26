@@ -131,3 +131,21 @@
 | I2 | 分页上限 | GET ?pageSize=1000 | 钳制到 100（parsePagination） |
 | I3 | 无效 JSON body | POST 非法 JSON | 400（safeParse catch null） |
 | I4 | 不启动 Sales Order 代码 | 全仓 | 无 sales-order 新增文件（CTO 指示） |
+
+## J. CC-05 报价打印视图（打印只读投影）
+
+> 范围：新增 /sales/quotations/[id]/print 独立 Print View + GET /api/quotations/:id 打印只读投影
+> （additive include：客户联系/地址 + 当前销售负责人（CustomerOwnership SSOT）+ 行单位/规格）。
+> 禁止：PDF/Word 引擎、模板拖拽器、富文本模板平台；零 Schema；浏览器打印（window.print + A4 print CSS）。
+
+| # | 用例 | 方法/路径 | 预期 |
+| --- | --- | --- | --- |
+| J1 | 详情携带客户联系/地址 | GET /api/quotations/:id | customer 含 fullName/contactPerson/phone/email/address |
+| J2 | 详情携带销售负责人 | GET /api/quotations/:id | customer.customerOwnerships[0].owner = 客户当前 active ownership（releasedAt=null），无归属时为 null |
+| J3 | 详情携带行单位/规格 | GET /api/quotations/:id | lines[].uom {id,code,name,symbol}；item.spec 随行返回 |
+| J4 | 打印视图渲染 | /sales/quotations/[id]/print | 报价单号/日期/有效期/客户/报价行（序号/编码/名称/规格/数量/单位/单价/金额）/汇总（小计/税额/总金额）/条款/备注/销售负责人 |
+| J5 | 金额格式化 | 打印视图 | 千分位 + 2 位小数（formatMoneyValue），右对齐 |
+| J6 | 无明细空态 | 空 lines 打印视图 | 「暂无明细行」，汇总按 0.00 展示 |
+| J7 | 打印按钮 | 打印视图工具栏 | window.print()；工具栏 print 时隐藏（无按钮进入纸张内容） |
+| J8 | 权限 | 无 quotation:view | 403（PermissionGuard + API requirePermission 双门禁） |
+| J9 | 入口 | 报价详情「打印」 | 跳转 /sales/quotations/[id]/print（不再直接 window.print 详情页） |

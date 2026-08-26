@@ -11,13 +11,14 @@
  * PermissionGuard 对齐 API requirePermission("sales-order:edit")。
  */
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, CARD_CLASS, INPUT_CLASS } from "@/lib/ui-classes";
 import { PageLoading } from "@/components/ui/skeleton";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { salesStatusLabel } from "@/lib/sales-status";
 import { formatMoney } from "@/lib/format";
 
@@ -54,6 +55,7 @@ function toIso(value: string): string | null {
 function SalesOrderEditForm() {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
+  const router = useRouter();
 
   const [detail, setDetail] = useState<SalesOrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -67,6 +69,8 @@ function SalesOrderEditForm() {
   const [init, setInit] = useState({ requestedDeliveryDate: "", paymentTerm: "", incoterm: "", remark: "" });
   const [submitting, setSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [pendingLeave, setPendingLeave] = useState(false);
+  const [pendingReload, setPendingReload] = useState(false);
 
   const dirty =
     requestedDeliveryDate !== init.requestedDeliveryDate ||
@@ -189,6 +193,7 @@ function SalesOrderEditForm() {
   }
 
   return (
+    <>
     <div className={CARD_CLASS}>
       <div className="flex items-center justify-between border-b border-border p-4">
         <h1 className="text-lg font-semibold text-ink-primary">
@@ -202,7 +207,10 @@ function SalesOrderEditForm() {
           <Link
             href={`/sales/orders/${id}`}
             onClick={(e) => {
-              if (dirty && !window.confirm("有未保存的更改，确定离开？")) e.preventDefault();
+              if (dirty) {
+                e.preventDefault();
+                setPendingLeave(true);
+              }
             }}
             className={BUTTON_SECONDARY_CLASS}
           >
@@ -223,13 +231,7 @@ function SalesOrderEditForm() {
                 <p className="text-xs">数据已被他人修改，未保存的更改可能丢失。重新载入最新数据后请重新确认修改。</p>
                 <button
                   type="button"
-                  onClick={() => {
-                    if (window.confirm("未保存的更改将丢失，确定重新载入最新数据？")) {
-                      setError(null);
-                      setNotEditable(false);
-                      loadDetail();
-                    }
-                  }}
+                  onClick={() => setPendingReload(true)}
                   className="bg-brand-600 hover:bg-brand-700 mt-2 rounded-md px-3 py-1 text-xs font-medium text-white"
                 >
                   重新载入最新数据
@@ -312,6 +314,32 @@ function SalesOrderEditForm() {
         </div>
       </div>
     </div>
+
+      <ConfirmDialog
+        open={pendingLeave}
+        title="有未保存的更改"
+        description="有未保存的更改，确定离开？"
+        confirmLabel="离开"
+        onConfirm={() => {
+          setPendingLeave(false);
+          router.push(`/sales/orders/${id}`);
+        }}
+        onCancel={() => setPendingLeave(false)}
+      />
+      <ConfirmDialog
+        open={pendingReload}
+        title="重新载入最新数据"
+        description="未保存的更改将丢失，确定重新载入最新数据？"
+        confirmLabel="重新载入"
+        onConfirm={() => {
+          setPendingReload(false);
+          setError(null);
+          setNotEditable(false);
+          loadDetail();
+        }}
+        onCancel={() => setPendingReload(false)}
+      />
+    </>
   );
 }
 

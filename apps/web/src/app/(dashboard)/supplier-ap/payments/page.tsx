@@ -137,7 +137,7 @@ function PaymentList() {
           <>
             <select value={supplierInput} onChange={(e) => setSupplierInput(e.target.value)} className={SELECT_CLASS}>
               <option value="">全部供应商</option>
-              {suppliers.map((s) => (<option key={s.id} value={s.id}>{s.name ?? s.id}</option>))}
+              {suppliers.map((s) => (<option key={s.id} value={s.id}>{s.name ?? "未命名供应商"}</option>))}
             </select>
             <input type="date" value={dateFromInput} onChange={(e) => setDateFromInput(e.target.value)} className={SELECT_CLASS} />
             <input type="date" value={dateToInput} onChange={(e) => setDateToInput(e.target.value)} className={SELECT_CLASS} />

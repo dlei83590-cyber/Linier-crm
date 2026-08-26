@@ -41,6 +41,7 @@ interface BusinessPartnerDetail {
   bankAccount: string | null;
   settlementTerms: string | null;
   creditRating: string | null;
+  customerLevel: string | null; // cc-06：客户等级（VIP/KEY/REGULAR/PROSPECT）
   registeredCapital: string | null;
   employeeCount: number | null;
   website: string | null;
@@ -113,6 +114,8 @@ function BusinessPartnerEditForm() {
   const [bankAccount, setBankAccount] = useState("");
   const [settlementTerms, setSettlementTerms] = useState("");
   const [creditRating, setCreditRating] = useState("");
+  // cc-06 客户等级→供应商评级匹配：客户等级（VIP/KEY/REGULAR/PROSPECT；仅 CUSTOMER/BOTH 可设）
+  const [customerLevel, setCustomerLevel] = useState("");
   const [registeredCapital, setRegisteredCapital] = useState("");
   const [employeeCount, setEmployeeCount] = useState("");
   const [website, setWebsite] = useState("");
@@ -153,6 +156,7 @@ function BusinessPartnerEditForm() {
         setBankAccount(d.bankAccount ?? "");
         setSettlementTerms(d.settlementTerms ?? "");
         setCreditRating(d.creditRating ?? "");
+        setCustomerLevel(d.customerLevel ?? "");
         setRegisteredCapital(d.registeredCapital ? String(d.registeredCapital) : "");
         setEmployeeCount(d.employeeCount ? String(d.employeeCount) : "");
         setWebsite(d.website ?? "");
@@ -229,6 +233,7 @@ function BusinessPartnerEditForm() {
       bankAccount: bankAccount.trim() || null,
       settlementTerms: settlementTerms.trim() || null,
       creditRating: creditRating.trim() || null,
+      customerLevel: type === "CUSTOMER" || type === "BOTH" ? customerLevel || null : null,
       registeredCapital: registeredCapital.trim() || null,
       employeeCount: employeeCount ? Number(employeeCount) : null,
       website: website.trim() || null,
@@ -315,6 +320,18 @@ function BusinessPartnerEditForm() {
             ))}
           </select>
         </FormField>
+        {(type === "CUSTOMER" || type === "BOTH") && (
+          <FormField label="客户等级">
+            <select value={customerLevel} onChange={(e) => setCustomerLevel(e.target.value)} className={inputClass}>
+              <option value="">未设置</option>
+              <option value="VIP">VIP</option>
+              <option value="KEY">重点（KEY）</option>
+              <option value="REGULAR">普通（REGULAR）</option>
+              <option value="PROSPECT">潜在（PROSPECT）</option>
+            </select>
+            <p className="text-xs text-ink-muted">客户等级用于销售订单的推荐供应商评级门槛匹配（系统设置-客户等级→最低供应商评级）。</p>
+          </FormField>
+        )}
         <FormField label="统一社会信用代码">
           <input value={uscc} onChange={(e) => setUscc(e.target.value)} className={inputClass} placeholder="18 位统一社会信用代码（GB 32100-2015）" />
         </FormField>

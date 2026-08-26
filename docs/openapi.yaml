@@ -1342,6 +1342,132 @@ paths:
           $ref: "#/components/responses/NotFound"
 
   # ==========================================================================
+  # 客户等级 → 最低供应商评级规则（Contract Close cc-06，ADR-0054）
+  # 专用配置模型 CustomerSupplierRatingRule（非 Generic Rule Engine）；系统设置简单表格维护
+  # 权限码：customer-supplier-rating-rule 的 view/create/edit/delete
+  # ==========================================================================
+  /api/customer-supplier-rating-rules:
+    get:
+      tags: [System Settings]
+      summary: List customer→supplier rating rules (paginated, isActive filter)
+      operationId: listCustomerSupplierRatingRules
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, default: 20, maximum: 100 } }
+        - { name: isActive, in: query, schema: { type: string, enum: [true, false], description: 仅启用/停用 } }
+      responses:
+        "200":
+          description: Paginated list（soft-deleted filtered）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerSupplierRatingRuleListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [System Settings]
+      summary: Create customer→supplier rating rule (customerLevel unique; duplicate → 409)
+      operationId: createCustomerSupplierRatingRule
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerSupplierRatingRuleCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerSupplierRatingRule"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/customer-supplier-rating-rules/{id}:
+    get:
+      tags: [System Settings]
+      summary: Get rating rule detail
+      operationId: getCustomerSupplierRatingRule
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerSupplierRatingRule"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [System Settings]
+      summary: Update rating rule (minimumSupplierRating / isActive; optimistic lock version)
+      operationId: updateCustomerSupplierRatingRule
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerSupplierRatingRuleUpdate"
+      responses:
+        "200":
+          description: OK（version+1）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerSupplierRatingRule"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [System Settings]
+      summary: Soft-delete rating rule (rule inactive → recommendation no longer filtered)
+      operationId: deleteCustomerSupplierRatingRule
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ==========================================================================
   # Settings（第三批，三层 Key-Value）
   # 权限码：system-setting / tenant-setting / user-setting 的 view/create/edit/delete
   # key 唯一（SYSTEM 全局唯一；TENANT 按 tenantId+key；USER 按 userId+key）
@@ -7952,6 +8078,34 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/sales-orders/{id}/supplier-recommendations:
+    get:
+      tags: [Sales Orders]
+      summary: Recommended suppliers for sales order (Q-line read projection; cc-06 customer level → supplier rating match)
+      description: |
+        SalesOrder.customerId → BusinessPartner.customerLevel → CustomerSupplierRatingRule（isActive）
+        → 过滤：供应商 PartnerCredit.rating ≥ minimumSupplierRating（无规则/客户未设等级 = 不设门槛，展示全部）
+        → 排序：优选供应商优先（SupplierItem.isPreferred 计数）→ 供应商评级降序 → 覆盖商品数降序
+        返回 basis 文案（页面必须展示推荐依据）；用户仍可人工选择（不建 Matching Engine / 复杂评分）。
+      operationId: getSalesOrderSupplierRecommendations
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string }, description: salesOrderId }
+      responses:
+        "200":
+          description: OK（rows + customerLevel/minimumSupplierRating/ruleApplied/basis）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierRecommendationsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/deliveries/{id}:
     get:
       tags: [Deliveries]
@@ -13674,6 +13828,79 @@ components:
 
   schemas:
     # --------------------------------------------------------------------------
+    # 客户等级 → 最低供应商评级匹配（Contract Close cc-06，ADR-0054）
+    # --------------------------------------------------------------------------
+    CustomerSupplierRatingRule:
+      type: object
+      required: [id, customerLevel, minimumSupplierRating, isActive, version]
+      properties:
+        id: { type: string }
+        customerLevel: { $ref: "#/components/schemas/CustomerLevel", description: 客户等级（VIP/KEY/REGULAR/PROSPECT） }
+        minimumSupplierRating: { $ref: "#/components/schemas/CustomerCreditRating", description: 最低供应商评级门槛（PartnerCredit.rating；AAA 最高） }
+        isActive: { type: boolean, description: 启用；false = 规则停用（推荐不过滤） }
+        approvalStatus: { type: string, description: APPROVED（配置即生效） }
+        version: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CustomerSupplierRatingRuleCreate:
+      type: object
+      required: [customerLevel, minimumSupplierRating]
+      properties:
+        customerLevel: { $ref: "#/components/schemas/CustomerLevel" }
+        minimumSupplierRating: { $ref: "#/components/schemas/CustomerCreditRating" }
+        isActive: { type: boolean, default: true }
+
+    CustomerSupplierRatingRuleUpdate:
+      type: object
+      required: [version]
+      properties:
+        minimumSupplierRating: { $ref: "#/components/schemas/CustomerCreditRating" }
+        isActive: { type: boolean }
+        version: { type: integer, description: 乐观锁版本（必填） }
+
+    CustomerSupplierRatingRuleListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/CustomerSupplierRatingRule" }
+        meta: { $ref: "#/components/schemas/PaginationMeta" }
+
+    SupplierRecommendationRow:
+      type: object
+      required: [supplierId, itemCount, preferredCount]
+      properties:
+        supplierId: { type: string }
+        supplierCode: { type: string, nullable: true }
+        supplierName: { type: string, nullable: true }
+        creditRating: { type: string, nullable: true, description: BusinessPartner.creditRating（自由文本，兼容展示） }
+        supplierRating: { type: string, nullable: true, enum: [AAA, AA, A, BBB, BB, B, C], description: PartnerCredit.rating（canonical 供应商评级；规则门槛比较依据） }
+        settlementTerms: { type: string, nullable: true }
+        itemCount: { type: integer, description: 覆盖商品数 }
+        preferredCount: { type: integer, description: 优选商品数（SupplierItem.isPreferred） }
+        totalPrice: { type: number, description: 采购参考价合计 }
+
+    SupplierRecommendationsResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          required: [rows, customerLevel, minimumSupplierRating, ruleApplied, basis]
+          properties:
+            rows:
+              type: array
+              items: { $ref: "#/components/schemas/SupplierRecommendationRow" }
+            customerLevel: { type: string, nullable: true, enum: [VIP, KEY, REGULAR, PROSPECT], description: 订单客户等级（可空） }
+            minimumSupplierRating: { type: string, nullable: true, enum: [AAA, AA, A, BBB, BB, B, C], description: 命中的规则门槛（无规则 = null） }
+            ruleApplied: { type: boolean, description: 是否命中启用规则 }
+            basis: { type: string, description: 推荐依据文案（页面必须展示） }
+
+    # --------------------------------------------------------------------------
     # Customer Foundation（Sprint 3C-1）
     # --------------------------------------------------------------------------
     CustomerLevel:
@@ -17462,6 +17689,8 @@ components:
         updatedById: { type: [string, "null"] }
         deletedAt: { type: [string, "null"], format: date-time }
         isActive: { type: boolean }
+        item: { type: object, nullable: true, description: "GET 详情含 {id,code,name,model,spec}（打印视图产品编码/名称/规格）" }
+        uom: { type: object, nullable: true, description: "GET 详情含 {id,code,name,symbol}（打印视图单位列，CC-05）" }
 
     QuotationLineCreate:
       type: object
@@ -17537,7 +17766,7 @@ components:
             id: { type: string }
             code: { type: string }
             customerId: { type: string }
-            customer: { type: object, nullable: true, description: "GET 详情含 {id,code,name}" }
+            customer: { type: object, nullable: true, description: "GET 详情含 {id,code,name,fullName,contactPerson,phone,email,address,customerOwnerships(active owner → 打印视图销售负责人)}" }
             opportunityId: { type: [string, "null"] }
             projectId: { type: [string, "null"] }
             status: { $ref: "#/components/schemas/QuotationStatus" }

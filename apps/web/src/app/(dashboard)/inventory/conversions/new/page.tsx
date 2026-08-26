@@ -174,7 +174,7 @@ function ConversionCreateForm() {
           >
             <option value="">选择单位</option>
             {uoms.map((u) => (
-              <option key={u.id} value={u.id}>{u.symbol ?? u.code ?? u.id}</option>
+              <option key={u.id} value={u.id}>{u.symbol ?? u.code ?? "未命名单位"}</option>
             ))}
           </select>
           {fieldErrors[`${role}.uomId`] ? (

@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 const EDITABLE_STATUSES = ["DRAFT", "REJECTED"] as const;
 
-/** GET /api/quotations/:id（详情含 lines/revisions/snapshots/customer + 惰性过期投影） */
+/** GET /api/quotations/:id（详情含 lines/revisions/snapshots/customer + 惰性过期投影；CC-05 打印只读投影：客户联系/地址/销售负责人 + 行单位） */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await authenticate(request);
   const denied = requirePermission(user, "quotation:view");
@@ -24,13 +24,36 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const quotation = await prisma.quotation.findFirst({
     where: { id, deletedAt: null },
     include: {
-      customer: { select: { id: true, code: true, name: true } },
+      // CC-05 打印视图只读投影（additive）：客户联系/地址 + 当前销售负责人（客户归属 SSOT 派生）
+      customer: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          fullName: true,
+          contactPerson: true,
+          phone: true,
+          email: true,
+          address: true,
+          // 销售负责人 = 客户当前 active ownership 的 owner（CustomerOwnership SSOT，至多一条 active）
+          customerOwnerships: {
+            where: { releasedAt: null, deletedAt: null },
+            select: { owner: { select: { id: true, name: true, email: true } } },
+            orderBy: { claimedAt: "desc" },
+            take: 1,
+          },
+        },
+      },
       // FRT-06（最小 additive fix）：转换投影随详情返回，报价详情可直接展示已转订单链接
       salesOrder: { select: { id: true, code: true, status: true } },
       lines: {
         where: { deletedAt: null },
         orderBy: { lineNo: "asc" },
-        include: { item: { select: { id: true, code: true, name: true, model: true } }, priceSnapshot: true },
+        include: {
+          item: { select: { id: true, code: true, name: true, model: true, spec: true } },
+          priceSnapshot: true,
+          uom: { select: { id: true, code: true, name: true, symbol: true } }, // CC-05 打印视图单位列
+        },
       },
       revisions: { where: { deletedAt: null }, orderBy: { revisionNo: "desc" } },
       snapshots: { where: { deletedAt: null }, orderBy: { generatedAt: "desc" } },

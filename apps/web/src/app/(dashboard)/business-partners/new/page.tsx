@@ -66,6 +66,8 @@ function BusinessPartnerCreateForm() {
   const [registeredCapital, setRegisteredCapital] = useState("");
   const [employeeCount, setEmployeeCount] = useState("");
   const [website, setWebsite] = useState("");
+  // cc-06 客户等级→供应商评级匹配：客户等级（VIP/KEY/REGULAR/PROSPECT；仅 CUSTOMER/BOTH 可设）
+  const [customerLevel, setCustomerLevel] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiClientError | null>(null);
@@ -159,6 +161,7 @@ function BusinessPartnerCreateForm() {
         bankName: bankName.trim() || undefined,
         bankAccount: bankAccount.trim() || undefined,
         settlementTerms: settlementTerms.trim() || undefined,
+        customerLevel: type === "CUSTOMER" || type === "BOTH" ? customerLevel || undefined : undefined,
         registeredCapital: registeredCapital.trim() || undefined,
         employeeCount: employeeCount ? Number(employeeCount) : undefined,
         website: website.trim() || undefined,
@@ -258,6 +261,17 @@ function BusinessPartnerCreateForm() {
             ))}
           </select>
         </FormField>
+        {(type === "CUSTOMER" || type === "BOTH") && (
+          <FormField label="客户等级">
+            <select value={customerLevel} onChange={(e) => setCustomerLevel(e.target.value)} className={inputClass}>
+              <option value="">未设置</option>
+              <option value="VIP">VIP</option>
+              <option value="KEY">重点（KEY）</option>
+              <option value="REGULAR">普通（REGULAR）</option>
+              <option value="PROSPECT">潜在（PROSPECT）</option>
+            </select>
+          </FormField>
+        )}
         <FormField label="统一社会信用代码">
           <input
             value={uscc}
