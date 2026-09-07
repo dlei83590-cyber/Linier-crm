@@ -6,6 +6,7 @@ import { type SessionUser } from "@/lib/session-context";
 import { setAuthToken } from "@/lib/auth-token";
 import { Icon } from "@/components/ui/icon";
 import type { IconName } from "@/components/ui/icon";
+import { ICP_BEIAN, ICP_LINK } from "@/lib/site-config";
 
 interface LoginResponse {
   success: boolean;
@@ -64,7 +65,8 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-brand-50 via-canvas to-canvas">
+    <div className="flex min-h-screen flex-col bg-gradient-to-br from-brand-50 via-canvas to-canvas">
+      <div className="flex flex-1 flex-col md:flex-row">
       {/* 品牌区：md 及以上显示（约 50% 宽），移动端隐藏 */}
       <aside className="relative hidden overflow-hidden bg-gradient-to-br from-brand-600 via-brand-700 to-brand-900 md:flex md:w-1/2 md:items-center md:justify-center">
         {/* 装饰光晕（纯视觉，读屏忽略） */}
@@ -173,6 +175,20 @@ export default function LoginPage() {
           )}
         </div>
       </main>
+      </div>
+
+      {ICP_BEIAN ? (
+        <footer className="flex-none border-t border-border/40 bg-surface/60 py-2.5 text-center text-xs text-ink-muted">
+          <a
+            href={ICP_LINK}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="transition-colors hover:text-ink-primary"
+          >
+            {ICP_BEIAN}
+          </a>
+        </footer>
+      ) : null}
     </div>
   );
 }

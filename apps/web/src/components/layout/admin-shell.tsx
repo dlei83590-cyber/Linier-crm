@@ -21,6 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CommandPalette, type RecentVisit } from "./command-palette";
 import { useTableDensity } from "@/lib/table-density-context";
 import { Icon } from "@/components/ui/icon";
+import { ICP_BEIAN, ICP_LINK } from "@/lib/site-config";
 
 /**
  * Admin Shell — UI-02 Frontend Experience 2.0（App Shell 重做）
@@ -795,6 +796,18 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           Build: {process.env.NEXT_PUBLIC_BUILD_ID ?? "-"} · Git Commit: {process.env.NEXT_PUBLIC_GIT_SHA ?? "-"} ·
           Deployment: {process.env.NEXT_PUBLIC_DEPLOYMENT_ENV ?? "-"}
         </p>
+        {ICP_BEIAN ? (
+          <p className="mt-0.5">
+            <a
+              href={ICP_LINK}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-ink-muted/80 transition-colors hover:text-ink-primary"
+            >
+              {ICP_BEIAN}
+            </a>
+          </p>
+        ) : null}
       </footer>
 
       {/* 命令面板（Ctrl+K / ⌘K；键盘导航 / Esc / backdrop 保留） */}
