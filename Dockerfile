@@ -1,6 +1,11 @@
 # syntax=docker/dockerfile:1
 FROM node:22-alpine AS base
 
+# China deployment (ADR-0048): corepack 下载 pnpm 本体 + pnpm/npm 拉包 registry 都走 npmmirror
+# （.npmrc 只影响 pnpm install；corepack 默认仍访问 registry.npmjs.org，国内直连超时）
+ENV COREPACK_NPM_REGISTRY=https://registry.npmmirror.com
+ENV NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
+
 # Install dependencies only when needed
 FROM base AS deps
 RUN apk add --no-cache libc6-compat
