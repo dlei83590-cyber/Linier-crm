@@ -783,6 +783,11 @@ erDiagram
 > 架构原则（CTO 最终模型）：**BusinessPartner 为唯一主体，Customer/Supplier 均为角色（BusinessPartnerRole），
 > 联系人/地址/标签/银行/信用全部 Partner 级共享，绝不建两套**。
 > Customer 3C-1 已交付子模型保留兼容，Sprint 5 统一迁移（ADR-0011）。
+>
+> **企业资质与类型（ADR-0056，Migration 0057）**：`BusinessPartner.qualifications`（EnterpriseQualification[] 多选：科技型中小企业 /
+> 创新型中小企业 / 高新技术企业 / 专精特新中小企业 / 专精特新「小巨人」）、`ownershipType`（国有 / 私企 / 外资 / 合资）、
+> `listingStatus`（上市 / 非上市）——均为主数据标注事实，不参与价格/信用/审批/推荐自动判定；
+> 与 `SupplierQualification`（供应商认证证书：证书号/有效期/附件）语义不同，不合并。
 
 ```mermaid
 erDiagram

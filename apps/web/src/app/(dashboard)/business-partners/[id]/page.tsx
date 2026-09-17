@@ -23,7 +23,13 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, ErrorPanel, StatusBadge } from "@/components/workspace";
 import { PageLoading } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Badge } from "@/components/ui/badge";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import {
+  enterpriseQualificationLabel,
+  enterpriseOwnershipLabel,
+  enterpriseListingLabel,
+} from "@/lib/business-partner/enterprise-profile";
 import { useSession } from "@/lib/session-context";
 import { formatDate, formatMoney, formatMoneyValue } from "@/lib/format";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
@@ -58,6 +64,10 @@ interface PartnerDetail {
   channel?: string | null;
   companySize?: string | null;
   creditRating?: string | null;
+  // 企业资质与类型（Migration 0057；用户指令 2026-09-17）
+  qualifications?: string[] | null;
+  ownershipType?: string | null;
+  listingStatus?: string | null;
   sourceChannel?: string | null;
   foundedDate?: string | null;
   registeredCapital?: string | null;
@@ -527,6 +537,22 @@ function PartnerDetailPage() {
                 <InfoItem label="法定代表人" value={detail.legalRepresentative} />
                 <InfoItem label="注册地址" value={<TruncateCell text={detail.registeredAddress ?? ""} />} />
                 <InfoItem label="企业规模" value={detail.companySize} />
+                <InfoItem label="所有制性质" value={enterpriseOwnershipLabel(detail.ownershipType)} />
+                <InfoItem label="上市状态" value={enterpriseListingLabel(detail.listingStatus)} />
+                <InfoItem
+                  label="企业资质"
+                  value={
+                    (detail.qualifications ?? []).length > 0 ? (
+                      <span className="flex flex-wrap gap-1">
+                        {(detail.qualifications ?? []).map((q) => (
+                          <Badge key={q} tone="info">
+                            {enterpriseQualificationLabel(q)}
+                          </Badge>
+                        ))}
+                      </span>
+                    ) : null
+                  }
+                />
                 <InfoItem label="成立日期" value={formatDate(detail.foundedDate)} />
                 <InfoItem label="注册资本（万元）" value={detail.registeredCapital} />
                 <InfoItem label="员工人数" value={detail.employeeCount != null ? String(detail.employeeCount) : null} />

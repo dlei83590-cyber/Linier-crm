@@ -11,6 +11,11 @@ import { validateUscc, normalizeUscc } from "@/lib/tax-invoice";
 import { casUpdate } from "@/lib/api/cas";
 import { matchCustomerPools } from "@/lib/customer-pool/match";
 import { BUSINESS_PARTNER_CHANNELS } from "@/lib/business-partner/channel";
+import {
+  ENTERPRISE_QUALIFICATIONS,
+  ENTERPRISE_OWNERSHIP_TYPES,
+  ENTERPRISE_LISTING_STATUSES,
+} from "@/lib/business-partner/enterprise-profile";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +45,10 @@ const businessPartnerUpdateSchema = z
     sourceChannel: z.string().max(100).nullable().optional(),
     // 销售渠道（Migration 0055；SSOT = 固定枚举，服务端校验 fail closed；null = 未设置）
     channel: z.enum(BUSINESS_PARTNER_CHANNELS).nullable().optional(),
+    // 企业资质与类型（Migration 0057；用户指令 2026-09-17）：资质多选 + 所有制/上市两维度单选（服务端 fail closed）
+    qualifications: z.array(z.enum(ENTERPRISE_QUALIFICATIONS)).max(ENTERPRISE_QUALIFICATIONS.length).optional(),
+    ownershipType: z.enum(ENTERPRISE_OWNERSHIP_TYPES).nullable().optional(),
+    listingStatus: z.enum(ENTERPRISE_LISTING_STATUSES).nullable().optional(),
     foundedDate: z.string().datetime().nullable().optional(),
     registeredCapital: z.string().nullable().optional(),
     employeeCount: z.number().int().nonnegative().nullable().optional(),
@@ -164,6 +173,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const cas = await casUpdate(tx, 'businessPartner', id, version, {
       ...partnerUpdates,
       type: partnerUpdates.type as PartnerType | undefined,
+      // 企业资质 canonical：去重（禁止重复 code 落库；枚举已由 zod fail closed）
+      qualifications:
+        partnerUpdates.qualifications === undefined
+          ? undefined
+          : Array.from(new Set(partnerUpdates.qualifications)),
       invoiceInfo: partnerUpdates.invoiceInfo === undefined ? undefined : partnerUpdates.invoiceInfo === null ? Prisma.JsonNull : (partnerUpdates.invoiceInfo as Prisma.InputJsonValue),
       tags: partnerUpdates.tags === undefined ? undefined : partnerUpdates.tags === null ? Prisma.JsonNull : (partnerUpdates.tags as Prisma.InputJsonValue),
       foundedDate: partnerUpdates.foundedDate === undefined ? undefined : partnerUpdates.foundedDate === null ? null : new Date(partnerUpdates.foundedDate),

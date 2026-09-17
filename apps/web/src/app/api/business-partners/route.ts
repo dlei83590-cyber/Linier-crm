@@ -8,6 +8,11 @@ import { handleServerError } from "@/lib/api/server-error";
 import { normalizeUscc, isValidUscc } from "@/lib/business-partner/normalize";
 import { findBusinessPartnerDuplicates } from "@/lib/business-partner/duplicate-check";
 import { BUSINESS_PARTNER_CHANNELS, CHANNEL_UNSET_LABEL } from "@/lib/business-partner/channel";
+import {
+  ENTERPRISE_QUALIFICATIONS,
+  ENTERPRISE_OWNERSHIP_TYPES,
+  ENTERPRISE_LISTING_STATUSES,
+} from "@/lib/business-partner/enterprise-profile";
 import { matchCustomerPools } from "@/lib/customer-pool/match";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
@@ -41,6 +46,10 @@ const businessPartnerCreateSchema = z.object({
   sourceChannel: z.string().max(100).nullable().optional(),
   // 销售渠道（Migration 0055；SSOT = 固定枚举，服务端校验 fail closed；null = 未设置）
   channel: z.enum(BUSINESS_PARTNER_CHANNELS).nullable().optional(),
+  // 企业资质与类型（Migration 0057；用户指令 2026-09-17）：资质多选 + 所有制/上市两维度单选（服务端 fail closed）
+  qualifications: z.array(z.enum(ENTERPRISE_QUALIFICATIONS)).max(ENTERPRISE_QUALIFICATIONS.length).optional(),
+  ownershipType: z.enum(ENTERPRISE_OWNERSHIP_TYPES).nullable().optional(),
+  listingStatus: z.enum(ENTERPRISE_LISTING_STATUSES).nullable().optional(),
   foundedDate: z.string().datetime().nullable().optional(),
   registeredCapital: z.string().nullable().optional(),
   employeeCount: z.number().int().nonnegative().nullable().optional(),
@@ -210,6 +219,9 @@ export async function POST(request: NextRequest) {
         customerLevel: parsed.data.customerLevel ?? null,
         sourceChannel: parsed.data.sourceChannel ?? null,
         channel: parsed.data.channel ?? null,
+        qualifications: Array.from(new Set(parsed.data.qualifications ?? [])),
+        ownershipType: parsed.data.ownershipType ?? null,
+        listingStatus: parsed.data.listingStatus ?? null,
         foundedDate: parsed.data.foundedDate ? new Date(parsed.data.foundedDate) : null,
         registeredCapital: parsed.data.registeredCapital ?? null,
         employeeCount: parsed.data.employeeCount ?? null,
