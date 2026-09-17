@@ -32,15 +32,12 @@ interface ItemDetail {
   lifecycle?: string | null;
   series?: string | null;
   model?: string | null;
-  variant?: string | null;
   spec?: string | null;
   brand?: string | null;
   manufacturer?: string | null;
   oemCode?: string | null;
-  barcode?: string | null;
-  drawingNo?: string | null;
-  drawingVersion?: string | null;
-  revision?: string | null;
+  precisionGrade?: string | null;
+  preload?: string | null;
   description?: string | null;
   isSalable?: boolean | null;
   isPurchasable?: boolean | null;
@@ -78,7 +75,8 @@ const ITEM_TYPE_OPTIONS = [
 const SOURCING_OPTIONS = [
   { value: "BOUGHT", label: "外购（直接采购/销售）" },
   { value: "SELF_MANUFACTURED", label: "自产（物料组合，本厂加工）" },
-  { value: "OEM_OUTSOURCED", label: "OEM 外协（我方供料 + 加工费）" },
+  { value: "OEM_OUTSOURCED", label: "OEM 外协（含工不含料：我方供料 + 加工费）" },
+  { value: "OEM_OUTSOURCED_FULL", label: "OEM 外协（含工含料：外协厂包工包料）" },
 ];
 
 const STATUS_OPTIONS = [
@@ -153,15 +151,12 @@ function ItemEditForm() {
   const [categoryId, setCategoryId] = useState("");
   const [series, setSeries] = useState("");
   const [model, setModel] = useState("");
-  const [variant, setVariant] = useState("");
   const [spec, setSpec] = useState("");
   const [brand, setBrand] = useState("");
   const [manufacturer, setManufacturer] = useState("");
   const [oemCode, setOemCode] = useState("");
-  const [barcode, setBarcode] = useState("");
-  const [drawingNo, setDrawingNo] = useState("");
-  const [drawingVersion, setDrawingVersion] = useState("");
-  const [revision, setRevision] = useState("");
+  const [precisionGrade, setPrecisionGrade] = useState("");
+  const [preload, setPreload] = useState("");
   const [lifecycle, setLifecycle] = useState("");
   const [status, setStatus] = useState("ACTIVE");
   const [stockUomId, setStockUomId] = useState("");
@@ -207,15 +202,12 @@ function ItemEditForm() {
         setCategoryId(d.categoryId ?? "");
         setSeries(d.series ?? "");
         setModel(d.model ?? "");
-        setVariant(d.variant ?? "");
         setSpec(d.spec ?? "");
         setBrand(d.brand ?? "");
         setManufacturer(d.manufacturer ?? "");
         setOemCode(d.oemCode ?? "");
-        setBarcode(d.barcode ?? "");
-        setDrawingNo(d.drawingNo ?? "");
-        setDrawingVersion(d.drawingVersion ?? "");
-        setRevision(d.revision ?? "");
+        setPrecisionGrade(d.precisionGrade ?? "");
+        setPreload(d.preload ?? "");
         setLifecycle(d.lifecycle ?? "");
         setStatus(d.status ?? "ACTIVE");
         setStockUomId(d.stockUomId ?? "");
@@ -281,15 +273,12 @@ function ItemEditForm() {
       categoryId: categoryId || null,
       series: series.trim() || null,
       model: model.trim() || null,
-      variant: variant.trim() || null,
       spec: spec.trim() || null,
       brand: brand.trim() || null,
       manufacturer: manufacturer.trim() || null,
       oemCode: oemCode.trim() || null,
-      barcode: barcode.trim() || null,
-      drawingNo: drawingNo.trim() || null,
-      drawingVersion: drawingVersion.trim() || null,
-      revision: revision.trim() || null,
+      precisionGrade: precisionGrade.trim() || null,
+      preload: preload.trim() || null,
       lifecycle: lifecycle || null,
       status: status || undefined,
       stockUomId: stockUomId || null,
@@ -560,26 +549,17 @@ function ItemEditForm() {
         <FormField label="型号">
           <input value={model} onChange={(e) => setModel(e.target.value)} className={inputClass} />
         </FormField>
-        <FormField label="变型">
-          <input value={variant} onChange={(e) => setVariant(e.target.value)} className={inputClass} />
-        </FormField>
         <FormField label="规格">
           <input value={spec} onChange={(e) => setSpec(e.target.value)} className={inputClass} />
         </FormField>
         <FormField label="OEM 编码">
           <input value={oemCode} onChange={(e) => setOemCode(e.target.value)} className={inputClass} />
         </FormField>
-        <FormField label="条码">
-          <input value={barcode} onChange={(e) => setBarcode(e.target.value)} className={inputClass} />
+        <FormField label="产品精度等级">
+          <input value={precisionGrade} onChange={(e) => setPrecisionGrade(e.target.value)} className={inputClass} />
         </FormField>
-        <FormField label="图号">
-          <input value={drawingNo} onChange={(e) => setDrawingNo(e.target.value)} className={inputClass} />
-        </FormField>
-        <FormField label="图版">
-          <input value={drawingVersion} onChange={(e) => setDrawingVersion(e.target.value)} className={inputClass} />
-        </FormField>
-        <FormField label="版本">
-          <input value={revision} onChange={(e) => setRevision(e.target.value)} className={inputClass} />
+        <FormField label="预压值">
+          <input value={preload} onChange={(e) => setPreload(e.target.value)} className={inputClass} />
         </FormField>
       </Section>
 

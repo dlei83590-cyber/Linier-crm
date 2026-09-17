@@ -33,3 +33,13 @@
 
 - 零破坏：现有 Item/ProductionInbound/UomConversion/InventoryConversion 语义不变；sourcingType 默认 BOUGHT
 - DB 迁移向后兼容；新表无既有数据迁移需求
+
+---
+
+## 追加（2026-09-17，用户指令「物料管理 修改一」，Migration 0056）
+
+- **决策 1 扩展——商品来源第 4 值**：`ItemSourcingType` 追加 **`OEM_OUTSOURCED_FULL`＝OEM 外协（含工含料：外协厂包工包料）**；既有 `OEM_OUTSOURCED` 明确为**含工不含料：我方供料 + 加工费**（语义未变，仅中文标注补齐）。二者为**并列来源事实**，不是工单类型：本次不新增生产/外协工单流程，`ProductionOrderType.OEM_OUTSOURCING`（我方供料 + 加工费 + 领料 OUT → 成品 IN）保持原样，含工含料是否走工单化留待后续 Gate。
+- **决策 1 附带——Item 技术属性两列**：`Item.precisionGrade`（产品精度等级）、`Item.preload`（预压值）为**通用物料技术属性**（可空、无默认、无回填）。与既有 `LinearGuideSpecification.precisionGrade/preload`（直线导轨 1:1 专用扩展列）**并存但不互为真相**：导轨专用规格仍以 LinearGuideSpecification 为权威，本次不建立双向同步（避免平行真相写入）。
+- **技术属性表单收敛（前端范围）**：物料新建/编辑「技术属性」分区移除 变型 / 条码 / 图号 / 图版 / 版本；对应 `Item` 列与 API 字段**保留**（`/api/items/:id/revisions` 仍写 `Item.revision`），本次仅收敛页面呈现，零数据删除。
+- **影响**：Migration 0056（仅 ALTER TYPE ADD VALUE + ALTER TABLE ADD COLUMN）；`POST/PATCH /api/items` zod schema 追加 `precisionGrade/preload` 与 `OEM_OUTSOURCED_FULL`；零新权限、零新错误码、零新事件、零新 API。
+- **边界**：不触碰 BOM 需求量、移动加权成本、库存 Ledger、GL；不改 `isPurchasable/isManufacturable` 功能开关语义。

@@ -29,9 +29,10 @@ enum ItemType {
 
 /// 商品来源（P-1/Item Sourcing）：成品三大来源 + 原料/半成品
 enum ItemSourcingType {
-  BOUGHT            // ①外购（成品直接销售/原料采购）——默认
-  SELF_MANUFACTURED // ②自产（物料组合，本厂加工；BOM 配方驱动）
-  OEM_OUTSOURCED    // ②OEM 外协（我方供料 + 加工费，外协厂加工）
+  BOUGHT              // ①外购（成品直接销售/原料采购）——默认
+  SELF_MANUFACTURED   // ②自产（物料组合，本厂加工；BOM 配方驱动）
+  OEM_OUTSOURCED      // ②OEM 外协（含工不含料：我方供料 + 加工费，外协厂加工）
+  OEM_OUTSOURCED_FULL // ②OEM 外协（含工含料：外协厂包工包料，原料由外协厂承担；Migration 0056）
 }
 
 /// 配方状态（P-1/ItemBom）：草稿 / 生效 / 归档（同成品同时仅一个 ACTIVE 默认配方）
@@ -460,7 +461,7 @@ model Item {
   mnemonic      String? // 助记码
   name          String // 中文名称
   itemType      ItemType        @default(FINISHED_GOOD) // 分类枚举（CTO #2075：10 类）
-  sourcingType  ItemSourcingType @default(BOUGHT) // 商品来源（P-1：外购/自产/OEM；成品三大来源，BOUGHT=外购成品直接销售）
+  sourcingType  ItemSourcingType @default(BOUGHT) // 商品来源（P-1：外购/自产/OEM 外协；OEM 分含工不含料/含工含料，BOUGHT=外购成品直接销售）
   // 五级层级（CTO #2075）：Level1 Category → Level2 SubCategory → Level3 Series → Level4 Model → Level5 Variant
   categoryId    String? // Level2 SubCategory（ItemCategory 树叶子）
   category      ItemCategory?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
@@ -472,6 +473,8 @@ model Item {
   manufacturer  String? // 制造商
   // Identification（CTO #2075）：CustomerCode/SupplierCode 由 SupplierItem（+Sprint 4 CustomerItem）承载
   oemCode       String? // OEM 编码
+  precisionGrade String? // 产品精度等级（技术属性，如 C/H/P/SP/UP；Migration 0056）
+  preload       String? // 预压值（技术属性，如 Z0/ZA/ZB；Migration 0056）
   barcode       String? // 条码
   qrCode        String? // 二维码内容
   drawingNo     String? // 图号（关联 File Center attachmentType=DRAWING）

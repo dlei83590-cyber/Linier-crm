@@ -35,6 +35,16 @@
 - 409：version 冲突（并发编辑）
 - 422：校验失败（必填/格式）
 
+## 字段契约（技术属性 / 商品来源，2026-09-17 用户指令「物料管理 修改一」）
+
+| 分区     | 字段              | 后端事实                                            | 页面                    |
+| -------- | ----------------- | --------------------------------------------------- | ----------------------- |
+| 商品来源 | `sourcingType`    | `ItemSourcingType`：BOUGHT / SELF_MANUFACTURED / OEM_OUTSOURCED（含工不含料）/ OEM_OUTSOURCED_FULL（含工含料，Migration 0056） | 新建/编辑下拉、详情、BOM 详情 |
+| 技术属性 | 系列/型号/规格/OEM 编码 | `Item.series/model/spec/oemCode`                       | 新建/编辑、详情         |
+| 技术属性 | 产品精度等级      | `Item.precisionGrade`（Migration 0056）               | 新建/编辑、详情         |
+| 技术属性 | 预压值            | `Item.preload`（Migration 0056）                      | 新建/编辑、详情         |
+| 技术属性 | 已移除呈现        | `Item.variant/barcode/drawingNo/drawingVersion/revision`（列与 API 保留，页面不再呈现） | —                       |
+
 ## Frontend Current State（ui 层事实，2026-08-14）
 
 | 能力              | 状态                           |

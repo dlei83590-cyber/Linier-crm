@@ -3,6 +3,22 @@
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
 
+## [Unreleased] - 物料管理修改一：商品来源新增 OEM 外协（含工含料）+ 技术属性调整（用户指令 2026-09-17）
+
+### 新增
+
+- **商品来源**：新增 `ItemSourcingType.OEM_OUTSOURCED_FULL`（OEM 外协·含工含料 = 外协厂包工包料，原料由外协厂承担），与既有 `OEM_OUTSOURCED`（含工不含料 = 我方供料 + 加工费）并存；物料新建/编辑下拉、物料详情「商品来源」、BOM 详情成品来源标签同步
+- **技术属性**：新增 `Item.precisionGrade`（产品精度等级）、`Item.preload`（预压值）——物料新建/编辑「技术属性」分区可维护，物料详情页展示；API `POST/PATCH /api/items` 同步接受两字段
+
+### 变更
+
+- 物料新建/编辑「技术属性」分区移除 变型 / 条码 / 图号 / 图版 / 版本 五项表单字段，物料详情「技术属性」移除对应展示项（`Item` 列与 API 字段保留，零数据删除、零回填）
+
+### 边界
+
+- Migration 0056 仅 `ALTER TYPE "ItemSourcingType" ADD VALUE` + `ALTER TABLE "Item" ADD COLUMN`（不重建表、不改既有列、不删列、不迁移数据）
+- 不改 OEM 生产/外协工单流程（`ProductionOrderType.OEM_OUTSOURCING` ＝ 我方供料 + 加工费，语义不变）；不改 BOM / 移动加权成本 / 库存契约；`LinearGuideSpecification.precisionGrade/preload`（导轨专用扩展列）不变更
+
 ## [Unreleased] - 单据序列管理模块适配（基础资料 /document-sequences，ADR-0055 补全）
 
 ### 新增

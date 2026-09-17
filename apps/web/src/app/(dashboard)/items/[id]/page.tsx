@@ -38,15 +38,12 @@ interface ItemDetail {
   lifecycle?: string | null;
   series?: string | null;
   model?: string | null;
-  variant?: string | null;
   spec?: string | null;
   brand?: string | null;
   manufacturer?: string | null;
   oemCode?: string | null;
-  barcode?: string | null;
-  drawingNo?: string | null;
-  drawingVersion?: string | null;
-  revision?: string | null;
+  precisionGrade?: string | null;
+  preload?: string | null;
   description?: string | null;
   isSalable?: boolean | null;
   isPurchasable?: boolean | null;
@@ -124,7 +121,8 @@ interface AuditLogRow {
 const SOURCING_LABELS: Record<string, string> = {
   BOUGHT: "外购（直接采购/销售）",
   SELF_MANUFACTURED: "自产（物料组合）",
-  OEM_OUTSOURCED: "OEM 外协（我方供料+加工费）",
+  OEM_OUTSOURCED: "OEM 外协（含工不含料：我方供料+加工费）",
+  OEM_OUTSOURCED_FULL: "OEM 外协（含工含料：外协厂包工包料）",
 };
 
 const ITEM_TYPE_LABELS: Record<string, string> = {
@@ -696,13 +694,10 @@ function ItemDetailPage() {
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               <InfoItem label="系列" value={detail.series} />
               <InfoItem label="型号" value={detail.model} />
-              <InfoItem label="变型" value={detail.variant} />
               <InfoItem label="规格" value={detail.spec} />
               <InfoItem label="OEM 编码" value={detail.oemCode} />
-              <InfoItem label="条码" value={detail.barcode} />
-              <InfoItem label="图号" value={detail.drawingNo} />
-              <InfoItem label="图版" value={detail.drawingVersion} />
-              <InfoItem label="版本" value={detail.revision} />
+              <InfoItem label="产品精度等级" value={detail.precisionGrade} />
+              <InfoItem label="预压值" value={detail.preload} />
             </div>
           </section>
 

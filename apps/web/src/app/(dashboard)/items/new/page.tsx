@@ -49,7 +49,8 @@ const emptySupplierRow = (): SupplierRow => ({
 const SOURCING_OPTIONS = [
   { value: "BOUGHT", label: "外购（直接采购/销售）" },
   { value: "SELF_MANUFACTURED", label: "自产（物料组合，本厂加工）" },
-  { value: "OEM_OUTSOURCED", label: "OEM 外协（我方供料 + 加工费）" },
+  { value: "OEM_OUTSOURCED", label: "OEM 外协（含工不含料：我方供料 + 加工费）" },
+  { value: "OEM_OUTSOURCED_FULL", label: "OEM 外协（含工含料：外协厂包工包料）" },
 ];
 
 const ITEM_TYPE_OPTIONS = [
@@ -108,15 +109,12 @@ function ItemCreateForm() {
   const [categoryId, setCategoryId] = useState("");
   const [series, setSeries] = useState("");
   const [model, setModel] = useState("");
-  const [variant, setVariant] = useState("");
   const [spec, setSpec] = useState("");
   const [brand, setBrand] = useState("");
   const [manufacturer, setManufacturer] = useState("");
   const [oemCode, setOemCode] = useState("");
-  const [barcode, setBarcode] = useState("");
-  const [drawingNo, setDrawingNo] = useState("");
-  const [drawingVersion, setDrawingVersion] = useState("");
-  const [revision, setRevision] = useState("");
+  const [precisionGrade, setPrecisionGrade] = useState("");
+  const [preload, setPreload] = useState("");
   const [lifecycle, setLifecycle] = useState("");
   const [status, setStatus] = useState("ACTIVE");
   const [stockUomId, setStockUomId] = useState("");
@@ -177,15 +175,12 @@ function ItemCreateForm() {
       categoryId: categoryId || undefined,
       series: series.trim() || undefined,
       model: model.trim() || undefined,
-      variant: variant.trim() || undefined,
       spec: spec.trim() || undefined,
       brand: brand.trim() || undefined,
       manufacturer: manufacturer.trim() || undefined,
       oemCode: oemCode.trim() || undefined,
-      barcode: barcode.trim() || undefined,
-      drawingNo: drawingNo.trim() || undefined,
-      drawingVersion: drawingVersion.trim() || undefined,
-      revision: revision.trim() || undefined,
+      precisionGrade: precisionGrade.trim() || undefined,
+      preload: preload.trim() || undefined,
       lifecycle: lifecycle || undefined,
       status: status || undefined,
       stockUomId: stockUomId || undefined,
@@ -349,26 +344,17 @@ function ItemCreateForm() {
         <FormField label="型号">
           <input value={model} onChange={(e) => setModel(e.target.value)} className={inputClass} />
         </FormField>
-        <FormField label="变型">
-          <input value={variant} onChange={(e) => setVariant(e.target.value)} className={inputClass} />
-        </FormField>
         <FormField label="规格">
           <input value={spec} onChange={(e) => setSpec(e.target.value)} className={inputClass} />
         </FormField>
         <FormField label="OEM 编码">
           <input value={oemCode} onChange={(e) => setOemCode(e.target.value)} className={inputClass} />
         </FormField>
-        <FormField label="条码">
-          <input value={barcode} onChange={(e) => setBarcode(e.target.value)} className={inputClass} />
+        <FormField label="产品精度等级">
+          <input value={precisionGrade} onChange={(e) => setPrecisionGrade(e.target.value)} className={inputClass} />
         </FormField>
-        <FormField label="图号">
-          <input value={drawingNo} onChange={(e) => setDrawingNo(e.target.value)} className={inputClass} />
-        </FormField>
-        <FormField label="图版">
-          <input value={drawingVersion} onChange={(e) => setDrawingVersion(e.target.value)} className={inputClass} />
-        </FormField>
-        <FormField label="版本">
-          <input value={revision} onChange={(e) => setRevision(e.target.value)} className={inputClass} />
+        <FormField label="预压值">
+          <input value={preload} onChange={(e) => setPreload(e.target.value)} className={inputClass} />
         </FormField>
       </Section>
 

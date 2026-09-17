@@ -16257,6 +16257,10 @@ components:
     ItemStatus:
       type: string
       enum: [ACTIVE, INACTIVE, LOCKED, ARCHIVED]
+    ItemSourcingType:
+      type: string
+      description: 商品来源（P-1 Item Sourcing，ADR-0049；OEM 含工不含料 / 含工含料并列）
+      enum: [BOUGHT, SELF_MANUFACTURED, OEM_OUTSOURCED, OEM_OUTSOURCED_FULL]
     ItemCostType:
       type: string
       enum: [STANDARD, LAST_PURCHASE, AVERAGE, CURRENT]
@@ -16272,11 +16276,14 @@ components:
         code: { type: string }
         name: { type: string }
         itemType: { $ref: "#/components/schemas/ItemType" }
+        sourcingType: { $ref: "#/components/schemas/ItemSourcingType" }
         categoryId: { type: [string, "null"] }
         series: { type: [string, "null"] }
         model: { type: [string, "null"] }
         variant: { type: [string, "null"] }
         oemCode: { type: [string, "null"] }
+        precisionGrade: { type: [string, "null"], description: 产品精度等级（技术属性；Migration 0056） }
+        preload: { type: [string, "null"], description: 预压值（技术属性；Migration 0056） }
         barcode: { type: [string, "null"] }
         qrCode: { type: [string, "null"] }
         drawingNo: { type: [string, "null"] }
@@ -16314,6 +16321,7 @@ components:
         mnemonic: { type: string }
         name: { type: string }
         itemType: { $ref: "#/components/schemas/ItemType" }
+        sourcingType: { $ref: "#/components/schemas/ItemSourcingType" }
         categoryId: { type: string }
         series: { type: string }
         model: { type: string }
@@ -16322,6 +16330,8 @@ components:
         brand: { type: string }
         manufacturer: { type: string }
         oemCode: { type: string }
+        precisionGrade: { type: string, description: 产品精度等级（技术属性；Migration 0056） }
+        preload: { type: string, description: 预压值（技术属性；Migration 0056） }
         barcode: { type: string }
         qrCode: { type: string }
         drawingNo: { type: string }
@@ -16342,10 +16352,13 @@ components:
         code: { type: string }
         name: { type: string }
         itemType: { $ref: "#/components/schemas/ItemType" }
+        sourcingType: { $ref: "#/components/schemas/ItemSourcingType" }
         categoryId: { type: string }
         series: { type: string }
         model: { type: string }
         variant: { type: string }
+        precisionGrade: { type: [string, "null"], description: 产品精度等级（技术属性；Migration 0056） }
+        preload: { type: [string, "null"], description: 预压值（技术属性；Migration 0056） }
         status: { $ref: "#/components/schemas/ItemStatus" }
         lifecycle: { type: string }
         stockUomId: { type: string }

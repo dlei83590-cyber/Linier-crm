@@ -959,11 +959,14 @@ erDiagram
         string code UK
         string name
         ItemType itemType
+        ItemSourcingType sourcingType
         string categoryId FK
         string series
         string model
         string variant
         string oemCode
+        string precisionGrade
+        string preload
         string barcode
         string qrCode
         string drawingNo
