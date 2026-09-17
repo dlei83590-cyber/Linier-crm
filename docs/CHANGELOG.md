@@ -3,6 +3,24 @@
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
 
+## [Unreleased] - 往来单位修改二：企业资质 + 企业类型（所有制/上市状态）勾选（用户指令 2026-09-17）
+
+### 新增
+
+- **企业资质**：`BusinessPartner.qualifications`（`EnterpriseQualification[]` 多选勾选）——科技型中小企业 / 创新型中小企业 / 高新技术企业 / 专精特新中小企业 / 专精特新「小巨人」企业；默认空数组 = 未认定
+- **企业类型（拆两个独立维度，用户确认）**：`ownershipType`（所有制性质：国有 / 私企 / 外资 / 合资）与 `listingStatus`（上市状态：上市 / 非上市），均可空 = 未设置
+- **共用勾选组件**：`components/ui/checkbox-group.tsx`（多选 / 单选可反选）；SSOT 常量 `lib/business-partner/enterprise-profile.ts`（枚举 + 中文标签 + 勾选选项 + 展示映射）
+- **页面**：往来单位新建/编辑新增「企业资质与类型」分区；详情「工商资料」展示所有制性质 / 上市状态 / 企业资质徽章
+
+### 变更
+
+- `POST/PATCH /api/business-partners` schema 接受三字段（z.enum fail closed；`qualifications` 落库前去重 canonical）
+
+### 边界
+
+- Migration 0057 仅 CREATE TYPE + ALTER TABLE ADD COLUMN（不重建表、不改既有列、不删列；`qualifications` NOT NULL DEFAULT 空数组，存量行零回填）
+- 不复用/不合并 `SupplierQualification`（供应商认证证书：证书号/有效期/附件，另一维度）；不参与任何自动判定（价格/信用/审批/推荐）；零新权限/错误码/事件/API/依赖
+
 ## [Unreleased] - 物料管理修改一：商品来源新增 OEM 外协（含工含料）+ 技术属性调整（用户指令 2026-09-17）
 
 ### 新增

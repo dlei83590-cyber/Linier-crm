@@ -14,6 +14,12 @@ import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 import { validateUscc } from "@/lib/tax-invoice";
 import { BUSINESS_PARTNER_CHANNELS } from "@/lib/business-partner/channel";
+import {
+  ENTERPRISE_QUALIFICATION_OPTIONS,
+  ENTERPRISE_OWNERSHIP_OPTIONS,
+  ENTERPRISE_LISTING_OPTIONS,
+} from "@/lib/business-partner/enterprise-profile";
+import { CheckboxGroup } from "@/components/ui/checkbox-group";
 import { useToast } from "@/components/ui/toast";
 import { PageLoading } from "@/components/ui/skeleton";
 
@@ -43,6 +49,9 @@ interface BusinessPartnerDetail {
   settlementTerms: string | null;
   creditRating: string | null;
   customerLevel: string | null; // cc-06：客户等级（VIP/KEY/REGULAR/PROSPECT）
+  qualifications: string[]; // 企业资质（Migration 0057；多选）
+  ownershipType: string | null; // 所有制性质（Migration 0057）
+  listingStatus: string | null; // 上市状态（Migration 0057）
   registeredCapital: string | null;
   employeeCount: number | null;
   website: string | null;
@@ -120,6 +129,10 @@ function BusinessPartnerEditForm() {
   const [creditRating, setCreditRating] = useState("");
   // cc-06 客户等级→供应商评级匹配：客户等级（VIP/KEY/REGULAR/PROSPECT；仅 CUSTOMER/BOTH 可设）
   const [customerLevel, setCustomerLevel] = useState("");
+  // 企业资质与类型（Migration 0057；用户指令 2026-09-17）：资质多选 + 所有制/上市两维度单选
+  const [qualifications, setQualifications] = useState<string[]>([]);
+  const [ownershipType, setOwnershipType] = useState("");
+  const [listingStatus, setListingStatus] = useState("");
   const [registeredCapital, setRegisteredCapital] = useState("");
   const [employeeCount, setEmployeeCount] = useState("");
   const [website, setWebsite] = useState("");
@@ -162,6 +175,9 @@ function BusinessPartnerEditForm() {
         setSettlementTerms(d.settlementTerms ?? "");
         setCreditRating(d.creditRating ?? "");
         setCustomerLevel(d.customerLevel ?? "");
+        setQualifications(d.qualifications ?? []);
+        setOwnershipType(d.ownershipType ?? "");
+        setListingStatus(d.listingStatus ?? "");
         setRegisteredCapital(d.registeredCapital ? String(d.registeredCapital) : "");
         setEmployeeCount(d.employeeCount ? String(d.employeeCount) : "");
         setWebsite(d.website ?? "");
@@ -244,6 +260,9 @@ function BusinessPartnerEditForm() {
       settlementTerms: settlementTerms.trim() || null,
       creditRating: creditRating.trim() || null,
       customerLevel: type === "CUSTOMER" || type === "BOTH" ? customerLevel || null : null,
+      qualifications,
+      ownershipType: ownershipType || null,
+      listingStatus: listingStatus || null,
       registeredCapital: registeredCapital.trim() || null,
       employeeCount: employeeCount ? Number(employeeCount) : null,
       website: website.trim() || null,
@@ -357,6 +376,32 @@ function BusinessPartnerEditForm() {
             <option value="false">否</option>
           </select>
         </FormField>
+      </Section>
+      {/* 企业资质与类型（Migration 0057；用户指令 2026-09-17） */}
+      <Section title="企业资质与类型">
+        <CheckboxGroup
+          label="企业资质（可多选）"
+          multi
+          options={ENTERPRISE_QUALIFICATION_OPTIONS}
+          value={qualifications}
+          onChange={setQualifications}
+          className="col-span-full"
+          hint="政府/主管部门认定资格；勾选即生效，扩展项按 Migration 追加。"
+        />
+        <CheckboxGroup
+          label="企业类型 · 所有制性质（单选）"
+          options={ENTERPRISE_OWNERSHIP_OPTIONS}
+          value={ownershipType ? [ownershipType] : []}
+          onChange={(v) => setOwnershipType(v[0] ?? "")}
+          className="col-span-full"
+        />
+        <CheckboxGroup
+          label="企业类型 · 上市状态（单选）"
+          options={ENTERPRISE_LISTING_OPTIONS}
+          value={listingStatus ? [listingStatus] : []}
+          onChange={(v) => setListingStatus(v[0] ?? "")}
+          className="col-span-full"
+        />
       </Section>
       <Section title="联系与区域">
         <FormField label="区域">

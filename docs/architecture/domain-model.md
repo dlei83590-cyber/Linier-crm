@@ -50,6 +50,7 @@ PriceAudit（价格审计）
 - 开票结算：invoiceInfo / bankName / bankAccount / settlementTerms
 - **中国企业字段（Sprint 2C 补充）**：shortName（客户简称）/ fullName（客户全称）/ groupName（集团名称）/ region（所属区域）/ industry（所属行业）/ companySize（企业规模）/ creditRating（信用等级）/ sourceChannel（来源渠道）/ foundedDate（成立日期）/ registeredCapital（注册资本,万元）/ employeeCount（员工人数）/ website（官网）/ wechatOfficialAccount（微信公众号）/ tags（企业标签,Json）
 - **销售渠道（cc-08-channel，Migration 0055）**：channel（销售渠道，固定枚举 直销/经销/电商/项目/其他；null=未设置）——与 sourceChannel（获客渠道）语义区分；经营看板「渠道」维度事实源（ADR-0054）
+- **企业资质与类型（用户指令 2026-09-17，Migration 0057，ADR-0056）**：qualifications（企业资质，EnterpriseQualification[] 多选：科技型中小企业/创新型中小企业/高新技术企业/专精特新中小企业/专精特新「小巨人」；空数组=未认定）/ ownershipType（所有制性质：国有/私企/外资/合资）/ listingStatus（上市状态：上市/非上市）；与 SupplierQualification（供应商认证证书）语义不同、不复用
 
 ### 2.3 PriceList + PriceListItem（含税价格体系）
 

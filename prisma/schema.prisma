@@ -85,6 +85,30 @@ enum PartnerType {
   BOTH
 }
 
+/// 企业资质（政府/主管部门认定资格；BusinessPartner.qualifications 多选数组，Migration 0057）
+/// 与 SupplierQualification（供应商认证资质：ISO9001 等，含证书号/有效期/附件）语义不同，不复用
+enum EnterpriseQualification {
+  TECH_SME // 科技型中小企业
+  INNOVATIVE_SME // 创新型中小企业
+  HIGH_TECH_ENTERPRISE // 高新技术企业
+  SPECIALIZED_SME // 专精特新中小企业
+  LITTLE_GIANT // 专精特新「小巨人」企业
+}
+
+/// 所有制性质（BusinessPartner.ownershipType 单选，Migration 0057）
+enum EnterpriseOwnershipType {
+  STATE_OWNED // 国有
+  PRIVATE // 私企
+  FOREIGN // 外资
+  JOINT // 合资
+}
+
+/// 上市状态（BusinessPartner.listingStatus 单选，Migration 0057）
+enum EnterpriseListingStatus {
+  LISTED // 上市
+  UNLISTED // 非上市
+}
+
 /// 价格类型（采购价/销售价/VIP/代理/工程/战略客户/区域价/客户专属价/历史价）
 enum PriceType {
   PURCHASE // 采购价
@@ -699,6 +723,10 @@ model BusinessPartner {
   customerLevel        CustomerLevel? // 客户等级（订单推荐供应商评级依据；复用 CustomerLevel 枚举，VIP>KEY>REGULAR>PROSPECT）
   sourceChannel        String? // 来源渠道（获客渠道：展会/转介绍…）
   channel              String? // 销售渠道（固定枚举：直销/经销/电商/项目/其他；null=未设置，Migration 0055）
+  // 企业资质与类型（用户指令 2026-09-17，Migration 0057；多选资质 + 所有制/上市两个独立维度）
+  qualifications       EnterpriseQualification[] @default([]) // 企业资质（政府认定资格，多选勾选）
+  ownershipType        EnterpriseOwnershipType? // 所有制性质（国有/私企/外资/合资；null=未设置）
+  listingStatus        EnterpriseListingStatus? // 上市状态（上市/非上市；null=未设置）
   foundedDate          DateTime? // 成立日期
   registeredCapital    Decimal?      @db.Decimal(14, 2) // 注册资本（万元）
   employeeCount        Int? // 员工人数

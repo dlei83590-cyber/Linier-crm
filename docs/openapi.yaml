@@ -16257,6 +16257,18 @@ components:
     ItemStatus:
       type: string
       enum: [ACTIVE, INACTIVE, LOCKED, ARCHIVED]
+    EnterpriseQualification:
+      type: string
+      description: 企业资质（往来单位；Migration 0057，扩展需追加枚举值 + Migration）
+      enum: [TECH_SME, INNOVATIVE_SME, HIGH_TECH_ENTERPRISE, SPECIALIZED_SME, LITTLE_GIANT]
+    EnterpriseOwnershipType:
+      type: string
+      description: 所有制性质（往来单位；Migration 0057）
+      enum: [STATE_OWNED, PRIVATE, FOREIGN, JOINT]
+    EnterpriseListingStatus:
+      type: string
+      description: 上市状态（往来单位；Migration 0057）
+      enum: [LISTED, UNLISTED]
     ItemSourcingType:
       type: string
       description: 商品来源（P-1 Item Sourcing，ADR-0049；OEM 含工不含料 / 含工含料并列）
@@ -21117,6 +21129,12 @@ components:
         region: { type: [string, 'null'] }
         industry: { type: [string, 'null'] }
         channel: { type: [string, 'null'], description: 销售渠道（固定枚举 直销/经销/电商/项目/其他；null=未设置，Migration 0055） }
+        qualifications:
+          type: array
+          description: 企业资质（政府认定资格，多选；Migration 0057）
+          items: { $ref: "#/components/schemas/EnterpriseQualification" }
+        ownershipType: { oneOf: [{ $ref: "#/components/schemas/EnterpriseOwnershipType" }, { type: 'null' }], description: 所有制性质（单选；null=未设置，Migration 0057） }
+        listingStatus: { oneOf: [{ $ref: "#/components/schemas/EnterpriseListingStatus" }, { type: 'null' }], description: 上市状态（单选；null=未设置，Migration 0057） }
         companySize: { type: [string, 'null'] }
         contactPerson: { type: [string, 'null'] }
         phone: { type: [string, 'null'] }
@@ -21161,6 +21179,12 @@ components:
         region: { type: [string, 'null'] }
         industry: { type: [string, 'null'] }
         channel: { type: [string, 'null'], description: 销售渠道（固定枚举 直销/经销/电商/项目/其他；null=未设置） }
+        qualifications:
+          type: array
+          description: 企业资质（多选勾选；Migration 0057）
+          items: { $ref: "#/components/schemas/EnterpriseQualification" }
+        ownershipType: { oneOf: [{ $ref: "#/components/schemas/EnterpriseOwnershipType" }, { type: 'null' }] }
+        listingStatus: { oneOf: [{ $ref: "#/components/schemas/EnterpriseListingStatus" }, { type: 'null' }] }
         companySize: { type: [string, 'null'] }
         contactPerson: { type: [string, 'null'] }
         phone: { type: [string, 'null'] }
@@ -21183,6 +21207,12 @@ components:
         region: { type: [string, 'null'] }
         industry: { type: [string, 'null'] }
         channel: { type: [string, 'null'], description: 销售渠道（固定枚举 直销/经销/电商/项目/其他；null=未设置） }
+        qualifications:
+          type: array
+          description: 企业资质（多选勾选；Migration 0057）
+          items: { $ref: "#/components/schemas/EnterpriseQualification" }
+        ownershipType: { oneOf: [{ $ref: "#/components/schemas/EnterpriseOwnershipType" }, { type: 'null' }] }
+        listingStatus: { oneOf: [{ $ref: "#/components/schemas/EnterpriseListingStatus" }, { type: 'null' }] }
         contactPerson: { type: [string, 'null'] }
         phone: { type: [string, 'null'] }
         email: { type: [string, 'null'] }

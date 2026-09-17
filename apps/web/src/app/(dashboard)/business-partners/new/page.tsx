@@ -15,6 +15,12 @@ import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 import { BUSINESS_PARTNER_CHANNELS } from "@/lib/business-partner/channel";
 import {
+  ENTERPRISE_QUALIFICATION_OPTIONS,
+  ENTERPRISE_OWNERSHIP_OPTIONS,
+  ENTERPRISE_LISTING_OPTIONS,
+} from "@/lib/business-partner/enterprise-profile";
+import { CheckboxGroup } from "@/components/ui/checkbox-group";
+import {
   computeDuplicateUiState,
   shouldRunDuplicateCheck,
   isStaleDuplicateResult,
@@ -68,6 +74,10 @@ function BusinessPartnerCreateForm() {
   const [website, setWebsite] = useState("");
   // cc-06 客户等级→供应商评级匹配：客户等级（VIP/KEY/REGULAR/PROSPECT；仅 CUSTOMER/BOTH 可设）
   const [customerLevel, setCustomerLevel] = useState("");
+  // 企业资质与类型（Migration 0057；用户指令 2026-09-17）：资质多选 + 所有制/上市两维度单选
+  const [qualifications, setQualifications] = useState<string[]>([]);
+  const [ownershipType, setOwnershipType] = useState("");
+  const [listingStatus, setListingStatus] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiClientError | null>(null);
@@ -153,6 +163,9 @@ function BusinessPartnerCreateForm() {
         region: region.trim() || undefined,
         industry: industry.trim() || undefined,
         channel: channel || undefined,
+        qualifications,
+        ownershipType: ownershipType || undefined,
+        listingStatus: listingStatus || undefined,
         companySize: companySize.trim() || undefined,
         contactPerson: contactPerson.trim() || undefined,
         phone: phone.trim() || undefined,
@@ -287,6 +300,32 @@ function BusinessPartnerCreateForm() {
         <FormField label="法定代表人">
           <input value={legalRepresentative} onChange={(e) => setLegalRepresentative(e.target.value)} className={inputClass} />
         </FormField>
+      </Section>
+      {/* 企业资质与类型（Migration 0057；用户指令 2026-09-17） */}
+      <Section title="企业资质与类型">
+        <CheckboxGroup
+          label="企业资质（可多选）"
+          multi
+          options={ENTERPRISE_QUALIFICATION_OPTIONS}
+          value={qualifications}
+          onChange={setQualifications}
+          className="col-span-full"
+          hint="政府/主管部门认定资格；勾选即生效，扩展项按 Migration 追加。"
+        />
+        <CheckboxGroup
+          label="企业类型 · 所有制性质（单选）"
+          options={ENTERPRISE_OWNERSHIP_OPTIONS}
+          value={ownershipType ? [ownershipType] : []}
+          onChange={(v) => setOwnershipType(v[0] ?? "")}
+          className="col-span-full"
+        />
+        <CheckboxGroup
+          label="企业类型 · 上市状态（单选）"
+          options={ENTERPRISE_LISTING_OPTIONS}
+          value={listingStatus ? [listingStatus] : []}
+          onChange={(v) => setListingStatus(v[0] ?? "")}
+          className="col-span-full"
+        />
       </Section>
       <Section title="联系与区域">
         <FormField label="区域">
