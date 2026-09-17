@@ -16,7 +16,7 @@ const itemUpdateSchema = z
     mnemonic: z.string().max(50).nullable().optional(),
     name: z.string().min(1).max(200).optional(),
     itemType: z.enum(["FINISHED_GOOD", "RAW_MATERIAL", "SEMI_FINISHED", "PURCHASED_PART", "ACCESSORY", "SERVICE", "CONSUMABLE", "ASSET", "TOOLING", "PACKAGING"]).optional(),
-    sourcingType: z.enum(["BOUGHT", "SELF_MANUFACTURED", "OEM_OUTSOURCED"]).optional(),
+    sourcingType: z.enum(["BOUGHT", "SELF_MANUFACTURED", "OEM_OUTSOURCED", "OEM_OUTSOURCED_FULL"]).optional(),
     categoryId: z.string().min(1).nullable().optional(),
     series: z.string().max(100).nullable().optional(),
     model: z.string().max(100).nullable().optional(),
@@ -25,6 +25,8 @@ const itemUpdateSchema = z
     brand: z.string().max(100).nullable().optional(),
     manufacturer: z.string().max(200).nullable().optional(),
     oemCode: z.string().max(100).nullable().optional(),
+    precisionGrade: z.string().max(50).nullable().optional(), // 产品精度等级（技术属性）
+    preload: z.string().max(50).nullable().optional(), // 预压值（技术属性）
     barcode: z.string().max(100).nullable().optional(),
     qrCode: z.string().max(200).nullable().optional(),
     drawingNo: z.string().max(100).nullable().optional(),

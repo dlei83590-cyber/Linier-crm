@@ -47,7 +47,8 @@ const STATUS_TONE_MAP: Record<string, "neutral" | "info" | "success" | "warning"
 const SOURCING_LABELS: Record<string, string> = {
   BOUGHT: "外购",
   SELF_MANUFACTURED: "自产",
-  OEM_OUTSOURCED: "OEM 外协",
+  OEM_OUTSOURCED: "OEM 外协（含工不含料）",
+  OEM_OUTSOURCED_FULL: "OEM 外协（含工含料）",
 };
 
 function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {

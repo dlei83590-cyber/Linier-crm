@@ -38,6 +38,7 @@ PriceAudit（价格审计）
 - 类别：`ItemCategory` = FINISHED_GOOD / RAW_MATERIAL / ACCESSORY / PURCHASED_PART / SERVICE / PACKAGING
 - 通用字段：code（内部编码,唯一）/ name（中文名称）/ model（型号）/ mnemonic（助记码）/ unitId
 - **工业字段（Sprint 2C 补充，库存可直接复用）**：brand（品牌）/ manufacturer（制造商）/ oemCode（OEM 编码）/ customerItemNo（客户料号）/ supplierItemNo（供应商料号）/ drawingNo（图号）/ drawingVersion（图纸版本）/ lifecycle（生命周期 INTRO/GROWTH/MATURE/DECLINE/EOL）/ obsolete（停产标记）/ replacementItemId（替代料,自关联）/ minPackQty（最小包装）/ procurementLeadTime（采购周期,天）/ moq（MOQ）/ safetyStock（安全库存）
+- **商品来源与技术属性（ADR-0049 追加，Migration 0056）**：sourcingType（商品来源 ItemSourcingType = 外购 / 自产 / OEM 外协·含工不含料 / OEM 外协·含工含料）/ precisionGrade（产品精度等级）/ preload（预压值）
 - 扩展模型 `LinearGuideSpecification`（1:1）：系列 / 滑块型式 / 导轨型式 / 互换性 / 精度等级 /
   预压力 / 导轨长度 / 额定动负荷 / 额定静负荷 / 额定力矩 / 润滑 / 防尘 / 材质 / 硬度 / 安装方式
 - 示例：SG45 / SM45H / SR35 / SV25；合同示例 `SMH45A-2-R1515-Z0-N-22.5`
