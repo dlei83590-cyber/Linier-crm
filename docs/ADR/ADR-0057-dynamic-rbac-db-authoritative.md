@@ -1,9 +1,22 @@
 # ADR-0057：动态 RBAC（DB 权限集为鉴权权威）— Design/Scope Gate
 
-- 状态：**Proposed（提案，待 CTO 裁决；未批准前不得进入实现）**
-- 日期：2026-09-20
+- 状态：**Accepted（2026-09-20 用户指令「执行建议」：采纳方案 A 与下方全部建议项，进入 P1/P2 实施）**
+- 日期：2026-09-20（2026-09-20 裁决并进入实施）
 - 维护者：CIO（JINZA）｜审核：CTO
 - 关联：ADR-0028（静态 RBAC 目录一致性 Gate）、ADR-0029 附录 A（权限树 + 角色权限分配落地及生效边界）、ADR-0045（httpOnly 会话 cookie）、PR #293（权限树/分配）、PR #294（目录零缺口补齐）、AGENTS.md §3/§5
+
+---
+
+## 0. 裁决记录（2026-09-20，「执行建议」= 采纳全部建议项）
+
+| # | 问题 | 裁决 | 落点 |
+|---|---|---|---|
+| Q1 | 是否采纳方案 A（DB 权限集为鉴权权威） | **采纳 A**；方案 B 否决（回收无效 + 平行真相）、方案 C 不采用 | P2 后端判定切换 |
+| Q2 | `SUPER_ADMIN` 角色的 `permissionCodes` 是否禁止修改 | **禁止修改**（保持恒为全集，避免一次误操作锁死系统） | P2（`PATCH /api/roles/:id` 拒绝 SUPER_ADMIN 的 permissionCodes 变更） |
+| Q3 | 内置角色 seed 回填策略 | **仅首次回填**（角色当前无任何权限关联时；不覆盖运营侧后续调整） | P1（已实现） |
+| Q4 | 是否引入 maker-checker（第二人审批） | **本轮不引入**（最小变更；列为 backlog，需单独 Design Gate） | 不在 P1-P4 范围 |
+| Q5 | 权限变更后的会话语义 | **下次请求/刷新生效**（不做实时推送、不做会话内热更新） | P2/P3 |
+| Q6 | 自定义角色准入要求 | **不设额外准入**（按 DB 分配真实生效，无隐式门槛） | P2 |
 
 ---
 
@@ -57,8 +70,12 @@
 
 ### 3.2 迁移与等价性
 - **回填策略（需裁决）**：seed 仅对「当前没有任何 RolePermission 关联」的角色执行一次回填（幂等、不覆盖运营侧调整），还是每次 seed 都强制对齐静态表（会覆盖运营调整）。建议前者 + 一次性迁移记录。
-- 回填前必须校验 `permissionsForRole(code) ⊆ DB 目录`：**当前已满足（缺口 0，见 PR #294）**，任何缺口必须在 seed 中 fail loud（禁止静默跳过）。
-- **等价性验收证据**：对 5 个内置角色 × 目录全量 code（1538）生成权限判定矩阵，切换前后 diff 必须为空；矩阵脚本与输出纳入 PR 证据。
+- 回填前必须校验 `permissionsForRole(code) ⊆ DB 目录`，任何缺口必须 **fail loud**（seed 抛错，禁止静默跳过 / 部分回填）。
+- **P1 实测发现并修复的目录缺口（重要）**：静态宇宙并非只有 `ALL_ACTION_PERMISSIONS`——`Object.values(PERMISSIONS)` 中的 10 个 `:write` 码此前**从未注册到 DB 目录**（`purchase-requisition/purchase-order/purchase-receipt/inspection/warehouse-receipt/purchase-return/inventory-transfer/stock-count/inventory-adjustment/inventory-conversion` 的 `:write`）。若不修复，P1 回填会在生产 seed 直接抛错。已在 `prisma/seed.ts` `SEED_PERMISSIONS` 补齐（纯新增行）。修复后实测：DB 目录 **1548** 码，静态宇宙 **1522** 码 ⊆ 目录，**5 个内置角色缺码均为 0**。
+- **等价性验收证据（改为 CI 机器校验，替代一次性脚本）**：`packages/shared/src/rbac/index.test.ts` 内置两类不变量——
+  （a）**目录前置不变量**：解析 `prisma/seed.ts` 得到 DB 目录，断言静态宇宙与每个内置角色的静态权限集 ⊆ 目录（缺码即 CI 失败）；
+  （b）**等价性矩阵**：5 内置角色 × 静态宇宙全量对照 `hasPermission ≡ hasEffectivePermission(permissionsForRole(role))`，不一致即失败。
+  生产侧另有运维 SQL 证据查询（见 P2 部署前置）。
 
 ### 3.3 前端契约
 - `GET /api/auth/me` 响应增加 `permissions: string[]`（`SessionProvider` 持有）。
@@ -72,8 +89,8 @@
 
 ### 3.5 安全不变量（必须随实现落地）
 1. **防自锁**：不允许把系统变成「无任何用户可管理角色」——删除/降权 `role:edit` 前必须存在至少一个仍持有 `role:edit` 的启用用户（锁内校验）。
-2. **SUPER_ADMIN 保护（需裁决）**：DB 权威下建议 `PATCH /api/roles/:id` 拒绝对 `SUPER_ADMIN` 角色的 `permissionCodes` 修改（保持恒为全集），否则可被一次误操作锁死系统。
-3. **越权提升**：持有 `role:edit` 者可为自己所属角色授予任意权限（含 `role:edit` 自身）。是否引入 maker-checker（角色权限变更需第二人审批，复用既有 Workflow）**需 CTO 裁决**。
+2. **SUPER_ADMIN 保护（裁决 = 禁止修改）**：`PATCH /api/roles/:id` 与 `POST /api/roles` 拒绝对 `SUPER_ADMIN` 角色的 `permissionCodes` 变更（409/400，保持恒为全集），否则可被一次误操作锁死系统。
+3. **越权提升**：持有 `role:edit` 者可为自己所属角色授予任意权限（含 `role:edit` 自身）。裁决 = **本轮不引入 maker-checker**（最小变更），列为独立 backlog（需单独 Design Gate）；当前缓解 = 权限变更全量审计 + SUPER_ADMIN 不可改 + 防自锁校验。
 4. **审计证据**：`role.create/update` 已记录 `permissionCount` + `permissionAdded/Removed`（PR #293）；本 ADR 生效后该审计即为访问控制变更的法定证据链。
 
 ### 3.6 回滚
@@ -100,14 +117,29 @@
 
 | 阶段 | 内容 | 行为变化 |
 |---|---|---|
-| **P1** | seed 回填内置角色 + `hasEffectivePermission` 纯函数 + 单测 + 判定矩阵脚本 | **无**（仅数据与工具） |
-| **P2** | 后端判定切换（`authenticate`/`requirePermission`）+ `/api/auth/me` 返回 `permissions` | 内置角色等价；自定义角色开始按 DB 生效 |
+| **P1** | `hasEffectivePermission` + `normalizePermissions` 纯函数；seed 首回填内置角色（幂等 + fail loud）；**补齐目录缺失的 10 个 `:write` 码**；`packages/shared/src/rbac/index.test.ts`（目录前置不变量 + 等价性矩阵 + fail-closed） | **无**（仅数据与工具） |
+| **P2** | 后端判定切换（`authenticate`/`requirePermission`）+ `/api/auth/me` 返回 `permissions` + SUPER_ADMIN 保护 + 防自锁校验 | 内置角色等价；自定义角色开始按 DB 生效 |
 | **P3** | 前端判定迁移（分域 5-7 批） | 逐域 UI 可见性对齐后端 |
 | **P4** | 文档/QA/ROADMAP 收口 + Runtime Acceptance（各角色登录 → 200/403 矩阵） | 收口 |
 
+### 5.1 部署前置（**Blocking**，P2 上线必须满足）
+
+1. **P1 已部署且 seed 已执行**：本仓库镜像内置 seed 工具链（Dockerfile 注释「Prisma migrate/seed tooling for Railway pre-deploy command」），生产 pre-deploy 会执行 `pnpm db:seed` → 内置角色权限回填随之落地。**P2 合并前必须确认该前提成立。**
+2. **运维证据查询**（回填结果核对，任一环境可执行）：
+
+```sql
+SELECT r.code, count(rp."A") AS permission_count
+FROM "Role" r LEFT JOIN "_RolePermissions" rp ON rp."B" = r.id
+GROUP BY r.code ORDER BY r.code;
+```
+
+   期望基数以 `packages/shared/src/rbac/index.test.ts` 的静态为准：`SUPER_ADMIN`/`ADMIN` = **1522**（= 去重后的静态权限宇宙大小），`VIEWER` = **0**，`MANAGER`/`MEMBER` 取其静态集去重后的数量。若任一内置角色为 0 而静态基数不为 0 → 回填未执行，**不得部署 P2**。
+
+3. 未满足时**不得合并 P2**：切换后所有用户（含 SUPER_ADMIN）将恒 403（fail-closed 设计使然，非缺陷）。
+
 ---
 
-## 6. 未决问题（需 CTO 裁决后方可进入 P1）
+## 6. 未决问题（**已裁决，见 §0**；保留原始清单供追溯）
 
 1. 是否采纳方案 A？若否决，是否采用方案 C 的显式声明？
 2. `SUPER_ADMIN` 角色的 `permissionCodes` 是否禁止修改（建议禁止）？
@@ -130,3 +162,5 @@
 ## 8. 若长期不实施（维持现状的必备声明）
 
 在方案 A 落地前，系统必须持续如实声明：**权限树与角色权限分配是治理台账与审计证据，不构成访问控制**；访问控制仍由 `packages/shared` 静态角色权限映射决定（该声明已存在于 ADR-0029 附录 A、CHANGELOG、QA、契约卡 §5.3/§5.4）。
+
+**P1 已落地后的状态（2026-09-20）**：本 ADR 已 Accepted 且 P1 已实现（seed 回填 + 判权纯函数 + CI 不变量），但**运行时判定尚未切换**（P2 未部署）。因此上述声明**在 P2 部署完成前仍然有效**；P4 收口时须同步更新 ADR-0029 附录 A / CHANGELOG / QA / 契约卡中的「不构成访问控制」表述。

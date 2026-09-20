@@ -3,6 +3,25 @@
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
 
+## [Unreleased] - ADR-0057 动态 RBAC 采纳（P1：seed 回填 + 判权纯函数 + CI 不变量，2026-09-20）
+
+### 新增
+
+- **判权纯函数**（`packages/shared/src/rbac`）：`hasEffectivePermission(permissions, required)`（DB 权限集判定，fail-closed，**不读取静态映射**）+ `normalizePermissions`（去重排序）
+- **CI 不变量单测** `packages/shared/src/rbac/index.test.ts`：① 目录前置不变量——解析 `prisma/seed.ts` 得到 DB 权限目录，断言静态宇宙（1522 码）与 5 个内置角色的静态权限集全部 ⊆ 目录；② 等价性矩阵——5 内置角色 × 静态宇宙全量对照 `hasPermission ≡ hasEffectivePermission(permissionsForRole(role))`；③ fail-closed 与「禁止回退静态表」保护
+- **seed 内置角色权限回填**：`prisma/seed.ts` 为 SUPER_ADMIN / ADMIN / MANAGER / MEMBER 首次回填 `RolePermissions`（取值 = 当前静态 `permissionsForRole`，切换前后行为等价）；仅当角色无任何权限关联时执行（幂等、不覆盖运营侧调整）；静态码缺目录即 fail loud 抛错
+
+### 变更
+
+- `prisma/seed.ts` `SEED_PERMISSIONS` 补齐 **10 个 `:write` 码**（purchase-requisition / purchase-order / purchase-receipt / inspection / warehouse-receipt / purchase-return / inventory-transfer / stock-count / inventory-adjustment / inventory-conversion）——这些码此前只存在于 shared `PERMISSIONS` 常量（静态向 SUPER_ADMIN / ADMIN 授予）却未注册到 DB 目录，会导致 P1 回填在生产 fail loud；补齐后 DB 目录 **1548** 码 ⊇ 静态宇宙 **1522** 码（缺码 = 0）
+- **ADR-0057 状态 Proposed → Accepted**（2026-09-20 用户指令「执行建议」：采纳方案 A + Q1-Q6 裁决 —— A 方案 / SUPER_ADMIN 权限禁止改 / 回填仅首次 / 暂不引入 maker-checker / 下次请求生效 / 自定义角色不设额外准入）
+
+### 边界
+
+- **运行时行为零变化**：本轮**不切换**鉴权（`requirePermission` 仍用静态角色映射）；判定切换到 P2
+- 零 Schema / 零 Migration / 零 API / 零前端变更；不改既有权限码语义（仅新增注册行）
+- **P2 部署前置（Blocking）**：生产须先执行 seed（镜像已内置 pre-deploy seed 工具链）并以 ADR-0057 §5.1 SQL 核对内置角色权限数；未满足时不得合并 P2（否则 fail-closed 将导致全员 403）
+
 ## [Unreleased] - 系统权限树开发与角色权限分配（用户指令，2026-09-20）
 
 ### 新增
