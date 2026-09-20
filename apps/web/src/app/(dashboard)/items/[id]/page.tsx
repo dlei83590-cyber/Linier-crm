@@ -10,8 +10,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import {
   AppPage,
@@ -170,11 +170,11 @@ function ItemDetailPage() {
   const canEdit =
     state.status === "authenticated" &&
     state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("item", "edit"));
+    can(state.user, actionPermission("item", "edit"));
   const canEditBom =
     state.status === "authenticated" &&
     state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("bom", "edit"));
+    can(state.user, actionPermission("bom", "edit"));
 
   const [detail, setDetail] = useState<ItemDetail | null>(null);
   const [audit, setAudit] = useState<AuditEvent[]>([]);

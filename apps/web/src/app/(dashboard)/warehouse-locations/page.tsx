@@ -8,8 +8,8 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { hasPermission, actionPermission, PERMISSIONS, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { actionPermission, PERMISSIONS } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
@@ -33,10 +33,10 @@ function LocationListInner() {
   const searchParams = useSearchParams();
   const initialWarehouseId = searchParams.get("warehouseId") ?? "";
   const { state } = useSession();
-  const roles = (state.user?.roles ?? []) as RoleCode[];
-  const canCreate = hasPermission(roles, actionPermission("warehouse-location", "create"));
-  const canEdit = hasPermission(roles, actionPermission("warehouse-location", "edit"));
-  const canDelete = hasPermission(roles, actionPermission("warehouse-location", "delete"));
+  // ADR-0057：按会话有效权限集判定（DB 权威）
+  const canCreate = can(state.user, actionPermission("warehouse-location", "create"));
+  const canEdit = can(state.user, actionPermission("warehouse-location", "edit"));
+  const canDelete = can(state.user, actionPermission("warehouse-location", "delete"));
   const [deleting, setDeleting] = useState<LocationRow | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
 

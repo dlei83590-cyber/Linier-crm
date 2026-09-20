@@ -4,8 +4,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
@@ -27,10 +27,10 @@ function CommercialTermList() {
   const router = useRouter();
   const toast = useToast();
   const { state } = useSession();
-  const roles = (state.user?.roles ?? []) as RoleCode[];
-  const canCreate = hasPermission(roles, actionPermission("commercial-term", "create"));
-  const canEdit = hasPermission(roles, actionPermission("commercial-term", "edit"));
-  const canDelete = hasPermission(roles, actionPermission("commercial-term", "delete"));
+  // ADR-0057：按会话有效权限集判定（DB 权威）
+  const canCreate = can(state.user, actionPermission("commercial-term", "create"));
+  const canEdit = can(state.user, actionPermission("commercial-term", "edit"));
+  const canDelete = can(state.user, actionPermission("commercial-term", "delete"));
   const [deleting, setDeleting] = useState<CommercialTermRow | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
