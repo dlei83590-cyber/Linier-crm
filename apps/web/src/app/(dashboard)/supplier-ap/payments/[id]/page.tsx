@@ -4,8 +4,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { AppPage, EntityFormWorkspace, StatusBadge, ErrorPanel, ReasonDialog, DetailTable } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { SELECT_CLASS } from "@/lib/ui-classes";
@@ -49,9 +49,8 @@ const METHOD_LABELS: Record<string, string> = { BANK_TRANSFER: "银行转账", C
 
 function PaymentDetailView() {
   const { state } = useSession();
-  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
-  const canEdit = hasPermission(roles, actionPermission("supplier-payment", "edit"));
-  const canClose = hasPermission(roles, actionPermission("supplier-payment", "close"));
+  const canEdit = can(state.user, actionPermission("supplier-payment", "edit"));
+  const canClose = can(state.user, actionPermission("supplier-payment", "close"));
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const id = params.id;

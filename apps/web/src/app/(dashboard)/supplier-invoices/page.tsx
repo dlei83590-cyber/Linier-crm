@@ -10,7 +10,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
+import { actionPermission } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog, ModuleKpiStrip } from "@/components/workspace";
@@ -19,7 +19,7 @@ import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
-import { useSession } from "@/lib/session-context";
+import { can, useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
 
 interface SupplierInvoiceRow {
@@ -58,12 +58,11 @@ const TONE_MAP: Record<string, StatusTone> = {
 function SupplierInvoiceList() {
   const { state } = useSession();
   const toast = useToast();
-  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
   const canCreate =
     state.status === "authenticated" &&
     state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("supplier-invoice", "create"));
-  const canDelete = hasPermission(roles, actionPermission("supplier-invoice", "delete"));
+    can(state.user, actionPermission("supplier-invoice", "create"));
+  const canDelete = can(state.user, actionPermission("supplier-invoice", "delete"));
   const [suppliers, setSuppliers] = useState<Array<{ id: string; name: string | null }>>([]);
   const [supplierInput, setSupplierInput] = useState("");
   const [dateFromInput, setDateFromInput] = useState("");
