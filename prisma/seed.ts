@@ -1,6 +1,8 @@
 import { PrismaClient, Role } from "@prisma/client";
 import { hash } from "bcryptjs";
 import { taxConfig } from "@nilier-crm/config";
+// ADR-0057（动态 RBAC）：seed 回填内置角色权限集 = 当前静态基线（等价性），并对目录缺口 fail loud
+import { normalizePermissions, permissionsForRole, type RoleCode } from "@nilier-crm/shared";
 
 const prisma = new PrismaClient();
 
@@ -41,6 +43,20 @@ const SEED_PERMISSIONS: Array<{ name: string; code: string; module: string; desc
   { name: "Write project visits", code: "project-visit:write", module: "project-visit" },
   { name: "Read project risks", code: "project-risk:read", module: "project-risk" },
   { name: "Write project risks", code: "project-risk:write", module: "project-risk" },
+  // ADR-0057 P1（Permission Catalog Reconciliation 续）：以下 10 个 write 码此前只存在于
+  // shared PERMISSIONS 常量（静态向 SUPER_ADMIN/ADMIN 授予），但从未注册到 DB 目录
+  // → 内置角色权限回填会因缺码 fail loud（P2 切换后这些权限将静默消失）。
+  // 纯新增行（upsert），不改既有权限码语义。
+  { name: "Write purchase requisitions", code: "purchase-requisition:write", module: "purchase-requisition" },
+  { name: "Write purchase orders", code: "purchase-order:write", module: "purchase-order" },
+  { name: "Write purchase receipts", code: "purchase-receipt:write", module: "purchase-receipt" },
+  { name: "Write inspections", code: "inspection:write", module: "inspection" },
+  { name: "Write warehouse receipts", code: "warehouse-receipt:write", module: "warehouse-receipt" },
+  { name: "Write purchase returns", code: "purchase-return:write", module: "purchase-return" },
+  { name: "Write inventory transfers", code: "inventory-transfer:write", module: "inventory-transfer" },
+  { name: "Write stock counts", code: "stock-count:write", module: "stock-count" },
+  { name: "Write inventory adjustments", code: "inventory-adjustment:write", module: "inventory-adjustment" },
+  { name: "Write inventory conversions", code: "inventory-conversion:write", module: "inventory-conversion" },
 ];
 
 /** 细粒度动作级权限（view/create/edit/delete/approve/audit/export/import/assign/close），供审批流直接复用 */
@@ -904,6 +920,41 @@ async function main() {
       update: {},
       create: permission,
     });
+  }
+
+  // ===== ADR-0057 P1：动态 RBAC 前提数据——内置角色 RolePermissions 回填 =====
+  // 背景：P2 起运行时鉴权以 DB 权限集为权威（hasEffectivePermission），静态 ROLE_PERMISSIONS
+  // 降级为 seed 基线。回填前必须保证「静态角色权限码 ⊆ DB 权限目录」，否则切换后对应权限会静默消失
+  // → 本段 fail loud（缺码即抛错，禁止静默跳过 / 部分回填）。
+  // 幂等策略（ADR-0057 裁决 Q3）：仅当角色当前没有任何权限关联时回填一次，不覆盖运营侧后续调整。
+  // 等价性：回填值 = 当前静态 permissionsForRole(code)（切换前后行为一致，见 packages/shared 单测）。
+  for (const role of SEED_ROLES) {
+    const saved = await prisma.role.findUnique({
+      where: { code: role.code },
+      select: { id: true, code: true, _count: { select: { permissions: true } } },
+    });
+    if (!saved || saved._count.permissions > 0) continue;
+
+    const codes = normalizePermissions(permissionsForRole(saved.code as RoleCode));
+    if (codes.length === 0) continue;
+
+    const found = await prisma.permission.findMany({
+      where: { code: { in: codes } },
+      select: { code: true },
+    });
+    if (found.length !== codes.length) {
+      const foundCodes = new Set(found.map((p) => p.code));
+      const missing = codes.filter((c) => !foundCodes.has(c));
+      throw new Error(
+        `[seed] ADR-0057 RBAC backfill blocked: role ${saved.code} static permissions missing from DB catalog: ${missing.join(", ")}`,
+      );
+    }
+
+    await prisma.role.update({
+      where: { id: saved.id },
+      data: { permissions: { connect: codes.map((code) => ({ code })) } },
+    });
+    console.log(`[seed] ADR-0057 RBAC backfill ${saved.code}: ${codes.length} permissions`);
   }
 
   // Admin user

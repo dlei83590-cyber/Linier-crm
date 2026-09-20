@@ -129,3 +129,24 @@ export function permissionsForRole(role: RoleCode): PermissionCode[] {
 export function hasPermission(roles: RoleCode[], required: PermissionCode): boolean {
   return roles.some((role) => permissionsForRole(role).includes(required));
 }
+
+/**
+ * ADR-0057（动态 RBAC）：有效权限集判定——DB 权限集为鉴权权威。
+ *
+ * - 输入 = 会话解析出的有效权限码集合（UserRole → Role → Permission.code）。
+ * - **fail-closed**：集合为空 / 未命中即 false。
+ * - **禁止回退 ROLE_PERMISSIONS 静态表**（不得 silent degradation）：本函数不读取静态映射，
+ *   即使传空集也不得因为「角色名是 SUPER_ADMIN」而放行。
+ * - 纯函数、无 IO；解析（查询 + 去重）由调用方负责（api-helpers.authenticate）。
+ */
+export function hasEffectivePermission(
+  permissions: readonly PermissionCode[],
+  required: PermissionCode,
+): boolean {
+  return permissions.includes(required);
+}
+
+/** 规范化有效权限集：去重 + 排序（会话载荷稳定，便于比较、缓存与审计） */
+export function normalizePermissions(codes: readonly PermissionCode[]): PermissionCode[] {
+  return [...new Set(codes)].sort();
+}
