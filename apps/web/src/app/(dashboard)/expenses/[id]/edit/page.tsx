@@ -12,8 +12,8 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityFormWorkspace, ErrorPanel } from "@/components/workspace";
 import { PageLoading } from "@/components/ui/skeleton";
@@ -332,8 +332,7 @@ function ExpenseEditForm() {
 
 export default function Page() {
   const { state } = useSession();
-  const roles = (state.user?.roles ?? []) as RoleCode[];
-  const canEdit = hasPermission(roles, actionPermission("project-expense", "edit"));
+  const canEdit = can(state.user, actionPermission("project-expense", "edit"));
   return (
     <PermissionGuard permission={actionPermission("project-expense", "view")}>
       {canEdit ? (
