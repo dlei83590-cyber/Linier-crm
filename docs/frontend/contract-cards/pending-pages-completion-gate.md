@@ -100,7 +100,7 @@
 - 三层树（域 → 模块 → 动作）由前端契约完成（`lib/frontend/permission-tree.ts`：域映射 + 三态选择 + 搜索过滤；未登记模块回退「其他（未归类）」使漂移可见）
 - 目录权威性：= shared PERMISSION_MODULES × PERMISSION_ACTIONS + SYSTEM_PERMISSIONS（ADR-0028）；seed 已补齐此前只存在于静态目录、未注册到 DB 的 34 个模块
 - 前端消费：/roles/new 与 /roles/[id]/edit 权限树勾选 → POST/PATCH permissionCodes；目录外历史权限码**保留并在保存时原样提交**（禁止静默丢弃）
-- 生效边界（如实声明）：permissionCodes 落库 + 审计留痕；**运行时鉴权仍为 packages/shared 静态角色权限映射**（hasPermission/requirePermission），动态鉴权（DB 为鉴权权威）为后续独立 ADR 范围
+- 生效边界（如实声明）：permissionCodes 落库 + 审计留痕；**运行时鉴权仍为 packages/shared 静态角色权限映射**（hasPermission/requirePermission），动态鉴权（DB 为鉴权权威）为后续独立 ADR 范围（提案 ADR-0057，状态 Proposed）
 
 ## 6. Batch 3 — 走访/风险独立页改引导（复用项目内子资源）
 

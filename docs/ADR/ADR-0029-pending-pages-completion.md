@@ -55,4 +55,4 @@ main 上 9 个前端页面仍为 PlaceholderPage 骨架（modules.ts 全部 avai
 - **分配写入口复用既有 API**（未新增写端点）：`POST /api/roles`（connect）、`PATCH /api/roles/:id`（全量替换）；服务端对 permissionCodes 去重，未知 code 仍 fail-closed 400。
 - **审计证据**：`role.update` 的 before/after 记录 permissionCount 与 permissionAdded/permissionRemoved（可追溯谁授予/回收了哪些权限）。
 - **目录外权限码红线**：角色已持有但未在 Permission 目录登记的 code 一律**保留在选择集中并在保存时原样提交**，界面显式提示（禁止静默丢弃）。
-- **生效边界（未闭环，必须如实声明）**：本次交付的是「可查、可选、可存、可审计」的权限分配；**运行时鉴权仍为 packages/shared 静态角色权限映射**（`hasPermission` / `requirePermission`），`Role.permissions` 不参与判定。DB 分配成为鉴权权威＝独立 Design/ADR Gate，范围包括：seed 回填内置角色关联、`authenticate` 解析有效权限集、`requirePermission`（666 处引用）与前端 `hasPermission`（245 处）改用权限码、SessionProvider 改造与回归验证。
+- **生效边界（未闭环，必须如实声明）**：本次交付的是「可查、可选、可存、可审计」的权限分配；**运行时鉴权仍为 packages/shared 静态角色权限映射**（`hasPermission` / `requirePermission`），`Role.permissions` 不参与判定。DB 分配成为鉴权权威＝独立 Design/ADR Gate（**已出提案 ADR-0057「动态 RBAC」，状态 Proposed，待 CTO 裁决，未批准前不进入实现**），范围包括：seed 回填内置角色关联、`authenticate` 解析有效权限集、`requirePermission`（666 处引用）与前端 `hasPermission`（245 处）改用权限码、SessionProvider 改造与回归验证。
