@@ -10,8 +10,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { PERMISSIONS, actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
 import { CopyButton } from "@/components/ui/copy-button";
@@ -82,10 +82,9 @@ function OrderDetailPage() {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
   const { state } = useSession();
-  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
-  const canEdit = hasPermission(roles, actionPermission("purchase-order", "edit"));
-  const canApprove = hasPermission(roles, actionPermission("purchase-order", "approve"));
-  const canClose = hasPermission(roles, actionPermission("purchase-order", "close"));
+  const canEdit = can(state.user, actionPermission("purchase-order", "edit"));
+  const canApprove = can(state.user, actionPermission("purchase-order", "approve"));
+  const canClose = can(state.user, actionPermission("purchase-order", "close"));
   const [detail, setDetail] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | null>(null);
