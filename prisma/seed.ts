@@ -229,6 +229,11 @@ const SEED_ACTION_MODULES = [
   "item-revision",
   "item-tag",
   "item-attachment",
+  // 同类补全：warehouse-location 此前仅以受限行注册（view/edit/create/delete），
+  // 但 static ALL_ACTION_PERMISSIONS 仍向 SUPER_ADMIN/ADMIN 授予另 6 个动作
+  // （approve/audit/export/import/assign/close）→ DB 权限目录缺失 6 个 code。
+  // 注册为动作模块后 10 个动作码全部入目录（既有 4 个 upsert 幂等，零删除）。
+  "warehouse-location",
 ] as const;
 
 const SEED_ACTIONS = ["view", "create", "edit", "delete", "approve", "audit", "export", "import", "assign", "close"] as const;

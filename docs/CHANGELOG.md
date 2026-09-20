@@ -15,6 +15,7 @@
 ### 变更
 
 - `prisma/seed.ts`：补齐 34 个此前只在 shared `PERMISSION_MODULES` 注册、DB 目录缺失的模块（customer / supplier / item 子模块 / menu / file / dashboard-* / industry / tag 等），使 DB 权限目录成为权限树的完整权威目录
+- `prisma/seed.ts`：`warehouse-location` 注册为动作模块——此前仅以受限行注册（view/edit/create/delete），静态 `ALL_ACTION_PERMISSIONS` 另授的 6 个动作（approve/audit/export/import/assign/close）在 DB 目录缺失；补齐后静态动作码 ⊆ DB 目录（零删除、既有 code upsert 幂等）
 - 角色写接口：permissionCodes 服务端去重；`role.update` 审计记录 permissionCount + permissionAdded/permissionRemoved（分配可追溯）
 - 单测：`lib/frontend/permission-tree.test.ts`（域映射完整性、三级树、三态、选择集不可变、搜索、统计）
 
