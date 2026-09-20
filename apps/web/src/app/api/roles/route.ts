@@ -65,7 +65,8 @@ export async function POST(request: NextRequest) {
     return failConflict(ERROR_CODES.CONFLICT, "角色编码已存在");
   }
 
-  const permissionCodes = parsed.data.permissionCodes ?? [];
+  // 权限分配（系统权限树）：去重后按 Permission 目录 code 校验；未知 code → 400
+  const permissionCodes = [...new Set(parsed.data.permissionCodes ?? [])];
   if (permissionCodes.length > 0) {
     const found = await prisma.permission.findMany({ where: { code: { in: permissionCodes } }, select: { code: true } });
     if (found.length !== permissionCodes.length) {
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest) {
     action: "role.create",
     entityType: "role",
     entityId: created.id,
-    afterData: { code: created.code, name: created.name },
+    afterData: { code: created.code, name: created.name, permissionCount: permissionCodes.length },
     ...meta,
   });
 

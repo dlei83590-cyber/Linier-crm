@@ -48,10 +48,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const parsed = roleUpdateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
-  const existing = await prisma.role.findUnique({ where: { id }, select: { id: true, code: true, name: true } });
+  const existing = await prisma.role.findUnique({
+    where: { id },
+    select: { id: true, code: true, name: true, permissions: { select: { code: true } } },
+  });
   if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "角色不存在");
 
-  const permissionCodes = parsed.data.permissionCodes ?? [];
+  // 权限分配（系统权限树）：去重后按 Permission 目录 code 校验；未知 code → 400（不做静默裁剪）
+  const permissionCodes = [...new Set(parsed.data.permissionCodes ?? [])];
   if (parsed.data.permissionCodes && permissionCodes.length > 0) {
     const found = await prisma.permission.findMany({ where: { code: { in: permissionCodes } }, select: { code: true } });
     if (found.length !== permissionCodes.length) {
@@ -70,13 +74,25 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     },
   });
 
+  // 权限分配审计证据：记录权限总数与本次新增/移除明细（before/after 双写，可追溯谁授予/回收了什么）
+  const beforeCodes = existing.permissions.map((p) => p.code);
+  const afterCodes = parsed.data.permissionCodes ? permissionCodes : beforeCodes;
+  const beforeSet = new Set(beforeCodes);
+  const afterSet = new Set(afterCodes);
+
   await writeAuditLog({
     actorId: user?.id,
     action: "role.update",
     entityType: "role",
     entityId: id,
-    beforeData: { code: existing.code, name: existing.name },
-    afterData: { code: updated.code, name: updated.name },
+    beforeData: { code: existing.code, name: existing.name, permissionCount: beforeSet.size },
+    afterData: {
+      code: updated.code,
+      name: updated.name,
+      permissionCount: afterSet.size,
+      permissionAdded: afterCodes.filter((c) => !beforeSet.has(c)).sort(),
+      permissionRemoved: beforeCodes.filter((c) => !afterSet.has(c)).sort(),
+    },
     ...meta,
   });
 

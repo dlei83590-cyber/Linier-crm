@@ -33,6 +33,26 @@ main 上 9 个前端页面仍为 PlaceholderPage 骨架（modules.ts 全部 avai
 
 ## 后续（独立 backlog，不在本 Gate）
 
-- roles 前端权限勾选式管理（需要权限目录分页/搜索 API + 治理确认）
+- roles 前端权限勾选式管理（需要权限目录分页/搜索 API + 治理确认）→ **2026-09-20 已落地，见下方附录**
 - department 树形渲染（当前扁平 parent 列展示）
 - ADR-0028 CI 静态 Gate 实现（扫描 requirePermission vs PERMISSION_MODULES，独立 Governance backlog）
+
+---
+
+## 附录 A（2026-09-20）：系统权限树 + 角色权限分配落地
+
+- 状态：**已实现**（用户指令「系统权限树开发和分配」；本附录修订决策 5 的前端 UX 结论，其余决策不变）
+- 决策 5 原判断（千级 checkbox 不可用）仍然成立，本次以**权限树**而非平铺 checkbox 解决：
+
+| 层 | 内容 |
+|---|---|
+| 域 | MODULE_DOMAINS（与 Sidebar/导航同一 IA 契约，9 域 + 「其他（未归类）」回退） |
+| 模块 | Permission.module（165 个），中文标签 moduleLabel |
+| 动作 | Permission.code 的 action 段（PERMISSION_ACTIONS ∪ SYSTEM_PERMISSIONS） |
+
+- **新增只读端点** `GET /api/permissions`（权限 `role:view`）：返回 DB Permission 目录 `{ items:[{id,code,module,action,name}], total }`（配置型全量数据，无分页）。
+- **权限目录补齐**：34 个模块此前只存在于 shared `PERMISSION_MODULES`（静态 RBAC 已向 SUPER_ADMIN/ADMIN 授权）却从未注册到 DB（customer / supplier / item 子模块 / menu / file / dashboard-* / industry / tag 等），导致权限树与角色分配无法表达这些权限。本次在 `prisma/seed.ts` 补齐注册（纯新增 upsert 行，**零 Schema / 零 Migration**，不改既有权限码语义，不改运行时静态鉴权）。
+- **分配写入口复用既有 API**（未新增写端点）：`POST /api/roles`（connect）、`PATCH /api/roles/:id`（全量替换）；服务端对 permissionCodes 去重，未知 code 仍 fail-closed 400。
+- **审计证据**：`role.update` 的 before/after 记录 permissionCount 与 permissionAdded/permissionRemoved（可追溯谁授予/回收了哪些权限）。
+- **目录外权限码红线**：角色已持有但未在 Permission 目录登记的 code 一律**保留在选择集中并在保存时原样提交**，界面显式提示（禁止静默丢弃）。
+- **生效边界（未闭环，必须如实声明）**：本次交付的是「可查、可选、可存、可审计」的权限分配；**运行时鉴权仍为 packages/shared 静态角色权限映射**（`hasPermission` / `requirePermission`），`Role.permissions` 不参与判定。DB 分配成为鉴权权威＝独立 Design/ADR Gate，范围包括：seed 回填内置角色关联、`authenticate` 解析有效权限集、`requirePermission`（666 处引用）与前端 `hasPermission`（245 处）改用权限码、SessionProvider 改造与回归验证。

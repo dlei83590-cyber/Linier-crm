@@ -3,6 +3,27 @@
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
 
+## [Unreleased] - 系统权限树开发与角色权限分配（用户指令，2026-09-20）
+
+### 新增
+
+- **权限目录只读端点** `GET /api/permissions`（权限 `role:view`）：返回 DB Permission 目录全量 `{ items:[{id,code,module,action,name}], total }`，作为权限树与角色分配的数据源
+- **系统权限树（前端）**：`components/system/permission-tree.tsx`（域 → 模块 → 动作三层，三态勾选 / 全选 / 清空 / 搜索 / 已选统计）+ 分组契约 `lib/frontend/permission-tree.ts`（域映射、树构建、选择集纯函数；未登记模块回退「其他（未归类）」使漂移可见）
+- **角色权限分配**：`/roles/new` 与 `/roles/[id]/edit` 接入权限树 → `POST /api/roles` / `PATCH /api/roles/:id`（permissionCodes 全量替换）；目录外历史权限码保留提示并原样提交（禁止静默丢弃）
+- **权限模块中文标签补全** 26 项（gl / ap-open-item / supplier-payment* / *-line 等）
+
+### 变更
+
+- `prisma/seed.ts`：补齐 34 个此前只在 shared `PERMISSION_MODULES` 注册、DB 目录缺失的模块（customer / supplier / item 子模块 / menu / file / dashboard-* / industry / tag 等），使 DB 权限目录成为权限树的完整权威目录
+- 角色写接口：permissionCodes 服务端去重；`role.update` 审计记录 permissionCount + permissionAdded/permissionRemoved（分配可追溯）
+- 单测：`lib/frontend/permission-tree.test.ts`（域映射完整性、三级树、三态、选择集不可变、搜索、统计）
+
+### 边界
+
+- **零 Schema / 零 Migration**（Role / Permission / RolePermissions 已存在，纯新增 seed 行）
+- **权限分配运行时生效未闭环（如实声明）**：运行时鉴权仍为 `packages/shared` 静态角色权限映射（`hasPermission`/`requirePermission`），DB `Role.permissions` 暂不参与判定；动态鉴权为后续独立 Design/ADR Gate（见 ADR-0029 附录 A）
+- 不改既有权限码语义 / 不新增权限码 / 不改 ADR-0028 静态目录（seed 模块仍 ⊆ PERMISSION_MODULES，CI Gate 不变）
+
 ## [Unreleased] - 往来单位修改二：企业资质 + 企业类型（所有制/上市状态）勾选（用户指令 2026-09-17）
 
 ### 新增

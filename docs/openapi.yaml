@@ -13165,6 +13165,26 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+  # ===== 系统权限树：权限目录只读（2026-08-25，角色权限分配数据源）=====
+  /api/permissions:
+    get:
+      tags: [Roles]
+      summary: 权限目录（域/模块/动作；角色分配数据源，只读）
+      description: |
+        DB Permission 目录全量只读返回（与 shared PERMISSION_MODULES × PERMISSION_ACTIONS + SYSTEM_PERMISSIONS 对齐，ADR-0028）。
+        域/模块/动作三层分组由前端权限树契约完成（lib/frontend/permission-tree.ts），本端点只返回规范事实。
+        权限码：role:view。本端点不产生任何鉴权事实。
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionCatalogResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   # ===== AP Open Items 只读查询（2026-08-18，Pending Pages：ap-open-items；5C-1C1 会计投影，无 5C-2 写端点）=====
   /api/ap-open-items:
     get:
@@ -21487,7 +21507,29 @@ components:
       properties:
         name: { type: string }
         description: { type: [string, 'null'] }
-        permissionCodes: { type: array, items: { type: string }, description: 全量替换 RolePermissions（API 能力；前端只读展示） }
+        permissionCodes: { type: array, items: { type: string }, description: 全量替换 RolePermissions（按 Permission 目录 code 校验，未知 code → 400 VALIDATION_ERROR；服务端去重；前端权限树提交完整选择集）
+    PermissionCatalogItem:
+      type: object
+      required: [id, code, module, action]
+      properties:
+        id: { type: string }
+        code: { type: string, description: 权限码（module:action，如 purchase-order:create） }
+        module: { type: string, description: 权限模块（与 shared PERMISSION_MODULES / seed 注册一致） }
+        action: { type: string, description: code 中 ":" 之后的动作段（PERMISSION_ACTIONS ∪ SYSTEM_PERMISSIONS 动作） }
+        name: { type: string }
+    PermissionCatalogResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          required: [items, total]
+          properties:
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/PermissionCatalogItem" }
+            total: { type: integer, description: 目录权限总数（非分页；权限目录为配置型全量数据） }
   # ===== AP Open Items 只读查询 schemas（2026-08-18，Pending Pages：ap-open-items）=====
     ApOpenItem:
       type: object
