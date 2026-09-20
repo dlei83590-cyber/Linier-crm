@@ -3,8 +3,8 @@
 /** Departments — 部门管理列表页（Pending Pages Completion Gate — Batch 2） */
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
@@ -26,7 +26,7 @@ function DepartmentList() {
   const canCreate =
     state.status === "authenticated" &&
     state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("department", "create"));
+    can(state.user, actionPermission("department", "create"));
 
   const [codeInput, setCodeInput] = useState("");
   const [nameInput, setNameInput] = useState("");

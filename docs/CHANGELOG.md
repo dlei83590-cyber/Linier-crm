@@ -3,6 +3,20 @@
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
 
+## [Unreleased] - ADR-0057 P3 批次 1：前端判定基础设施 + 系统域迁移（2026-09-20）
+
+### 变更
+
+- **前端唯一判定入口**：`can(user, permission)` 与 `useCan()`（`lib/session-context.tsx`）——按会话有效权限集（DB 权威）判定；`permission === null` 表示无权限要求；未认证 / 空集 / 未命中一律 false（fail-closed，**不回退静态角色映射**）
+- **`PermissionGuard`** 改用 `can(state.user, permission)`（页面级守卫与后端 `requirePermission` 同源）
+- **导航与快捷创建**：`shell.filterVisibleGroups(permissions)` / `shell.quickCreateItems(permissions, groups)` 改为消费权限集（不再接受角色 code）；`admin-shell` 传 `state.user.permissions`；`shell.test.ts` 基线改用 `permissionsForRole(...)`（内置角色等价集）
+- **系统域页面迁移**（12 处 → `can(state.user, code)`）：`roles`（列表/编辑）、`users`、`departments`、`settings/supplier-rating-rules`
+
+### 边界
+
+- 其余 **221 处 / 84 文件**页级判定仍按静态映射，按域分批迁移（ADR-0057 P3 批次 2-7，批次划分已入 ADR）；迁移完成前自定义角色的页面按钮可见性可能少于 API 实际授权（保守方向，不产生越权）
+- 零 Schema / 零 Migration / 零 API 契约变更；不改任何业务动作语义与状态机
+
 ## [Unreleased] - ADR-0057 P2：运行时鉴权切换为 DB 权限集权威（2026-09-20）
 
 ### 变更

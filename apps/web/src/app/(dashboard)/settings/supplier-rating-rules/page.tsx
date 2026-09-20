@@ -9,8 +9,8 @@
  * REGISTRY DELTA REQUIRED：本页暂无独立菜单入口（modules.ts Registry SSOT 由 CC-10 统一维护）。
  */
 import { useCallback, useEffect, useState } from "react";
-import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
@@ -32,10 +32,10 @@ const LEVEL_OPTIONS = ["VIP", "KEY", "REGULAR", "PROSPECT"] as const;
 function SupplierRatingRules() {
   const toast = useToast();
   const { state } = useSession();
-  const roles = (state.user?.roles ?? []) as RoleCode[];
-  const canCreate = hasPermission(roles, actionPermission("customer-supplier-rating-rule", "create"));
-  const canEdit = hasPermission(roles, actionPermission("customer-supplier-rating-rule", "edit"));
-  const canDelete = hasPermission(roles, actionPermission("customer-supplier-rating-rule", "delete"));
+  // ADR-0057：按会话有效权限集判定（DB 权威）
+  const canCreate = can(state.user, actionPermission("customer-supplier-rating-rule", "create"));
+  const canEdit = can(state.user, actionPermission("customer-supplier-rating-rule", "edit"));
+  const canDelete = can(state.user, actionPermission("customer-supplier-rating-rule", "delete"));
 
   const [rows, setRows] = useState<RatingRuleRow[]>([]);
   const [loading, setLoading] = useState(true);

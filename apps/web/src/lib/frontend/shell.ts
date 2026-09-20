@@ -6,7 +6,7 @@
  * SSOT 只读）。本文件不依赖 React / DOM，可直接单测。
  */
 
-import { hasPermission, type RoleCode } from "@nilier-crm/shared";
+import { hasEffectivePermission } from "@nilier-crm/shared";
 import {
   modulesByDomainGrouped,
   type DomainModuleGroup,
@@ -24,13 +24,13 @@ export function parseCollapsedPreference(raw: string | null): boolean {
 
 /**
  * 权限过滤后的可见域分组（Registry 投影，唯一事实源）。
- * 规则：模块 permission 为 null（所有登录用户可见）或角色持有该权限才可见；
- * 过滤后为空的一级域整组隐藏。
+ * 规则：模块 permission 为 null（所有登录用户可见）或**会话有效权限集**（ADR-0057：DB 权威）持有该权限才可见；
+ * 过滤后为空的一级域整组隐藏。参数为权限码集合（不再接受角色 code——禁止回退静态角色映射）。
  */
-export function filterVisibleGroups(roles: RoleCode[]): DomainModuleGroup[] {
+export function filterVisibleGroups(permissions: readonly string[]): DomainModuleGroup[] {
   const groups = modulesByDomainGrouped();
   const visible = (ms: FrontendModule[]) =>
-    ms.filter((m) => m.permission === null || hasPermission(roles, m.permission));
+    ms.filter((m) => m.permission === null || hasEffectivePermission(permissions, m.permission));
   return groups
     .map((g) => ({
       domain: g.domain,
@@ -88,7 +88,7 @@ export interface QuickCreateItem {
  * （禁止用 route + '/new' 推导），并做 createPermission 权限过滤。
  */
 export function quickCreateItems(
-  roles: RoleCode[],
+  permissions: readonly string[],
   groups: DomainModuleGroup[],
 ): QuickCreateItem[] {
   return groups.flatMap((g) =>
@@ -98,7 +98,7 @@ export function quickCreateItems(
           m.capabilities.ui.create &&
           m.createRoute != null &&
           m.createPermission != null &&
-          hasPermission(roles, m.createPermission),
+          hasEffectivePermission(permissions, m.createPermission),
       )
       .map((m) => ({ module: m, domainId: g.domain.id })),
   );

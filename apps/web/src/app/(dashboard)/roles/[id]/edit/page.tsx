@@ -15,8 +15,8 @@
  */
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityFormWorkspace } from "@/components/workspace";
 import { PageLoading } from "@/components/ui/skeleton";
@@ -53,7 +53,7 @@ function RoleEditForm() {
   const canEdit =
     state.status === "authenticated" &&
     state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("role", "edit"));
+    can(state.user, actionPermission("role", "edit"));
 
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
