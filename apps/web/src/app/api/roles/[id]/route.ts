@@ -63,6 +63,22 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
   }
 
+  // ADR-0057 安全不变量①（裁决 Q2）：SUPER_ADMIN 权限恒为全集，禁止通过 API 修改（防一次误操作锁死系统）
+  if (parsed.data.permissionCodes && existing.code === "SUPER_ADMIN") {
+    return failConflict(ERROR_CODES.CONFLICT, "SUPER_ADMIN 角色权限由系统治理（恒为全集），不允许修改");
+  }
+
+  // ADR-0057 安全不变量②（防自锁）：不得让系统失去全部 role:edit 持有者
+  // （DB 权威下权限回收立即影响访问控制，需保证至少一个角色仍可管理角色）
+  if (parsed.data.permissionCodes && !permissionCodes.includes("role:edit")) {
+    const otherRoleEditHolders = await prisma.role.count({
+      where: { id: { not: id }, permissions: { some: { code: "role:edit" } } },
+    });
+    if (otherRoleEditHolders === 0) {
+      return failConflict(ERROR_CODES.CONFLICT, "系统必须保留至少一个持有 role:edit 的角色（防自锁）");
+    }
+  }
+
   const updated = await prisma.role.update({
     where: { id },
     data: {

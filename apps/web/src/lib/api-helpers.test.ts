@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Prisma } from "@prisma/client";
 import { NextRequest } from "next/server";
-import { assertProjectWritable, authenticate } from "@/lib/api-helpers";
+import { assertProjectWritable, authenticate, requirePermission } from "@/lib/api-helpers";
 
 const authMocks = vi.hoisted(() => ({
   verifySessionToken: vi.fn(),
@@ -64,7 +64,15 @@ describe("authenticate — ADR-0045 双来源认证（Bearer → httpOnly cookie
       email: "a@b.c",
       name: "Admin",
       isActive: true,
-      roles: [{ role: { code: "SUPER_ADMIN" } }],
+      // ADR-0057：authenticate 解析 DB 有效权限集（UserRole → Role → Permission）
+      roles: [
+        {
+          role: {
+            code: "SUPER_ADMIN",
+            permissions: [{ code: "role:view" }, { code: "role:edit" }, { code: "role:view" }],
+          },
+        },
+      ],
     });
   });
 
@@ -109,5 +117,67 @@ describe("authenticate — ADR-0045 双来源认证（Bearer → httpOnly cookie
       headers: { cookie: "linier_session=tok" },
     });
     expect(await authenticate(req)).toBeNull();
+  });
+
+  it("ADR-0057：解析 DB 有效权限集（跨角色合并 + 去重 + 排序）", async () => {
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: "u1",
+      email: "a@b.c",
+      name: "Admin",
+      isActive: true,
+      roles: [
+        { role: { code: "MANAGER", permissions: [{ code: "item:view" }, { code: "item:edit" }] } },
+        { role: { code: "AUDITOR", permissions: [{ code: "item:view" }, { code: "audit:view" }] } },
+      ],
+    });
+    const req = new NextRequest("http://localhost/api/auth/me", {
+      headers: { cookie: "linier_session=tok" },
+    });
+    const u = await authenticate(req);
+    expect(u?.permissions).toEqual(["audit:view", "item:edit", "item:view"]);
+    expect(u?.roles).toEqual(["MANAGER", "AUDITOR"]);
+  });
+
+  it("ADR-0057：无任何角色授权 → permissions 为空数组（不注入默认权限）", async () => {
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: "u2",
+      email: "n@b.c",
+      name: null,
+      isActive: true,
+      roles: [],
+    });
+    const req = new NextRequest("http://localhost/api/auth/me", {
+      headers: { cookie: "linier_session=tok" },
+    });
+    const u = await authenticate(req);
+    expect(u?.permissions).toEqual([]);
+  });
+});
+
+describe("requirePermission — ADR-0057 DB 权限集判定（fail-closed，禁止回退静态表）", () => {
+  const user = {
+    id: "u1",
+    email: "a@b.c",
+    name: "Admin",
+    roles: ["SUPER_ADMIN"],
+    permissions: ["role:view"],
+  };
+
+  it("未认证 → 401", () => {
+    const res = requirePermission(null, "role:view");
+    expect(res?.status).toBe(401);
+  });
+
+  it("命中权限码 → null（放行）", () => {
+    expect(requirePermission(user, "role:view")).toBeNull();
+  });
+
+  it("未命中 → 403", () => {
+    expect(requirePermission(user, "role:edit")?.status).toBe(403);
+  });
+
+  it("禁止回退静态表：角色名为 SUPER_ADMIN 但权限集为空 → 403", () => {
+    expect(requirePermission({ ...user, permissions: [] }, "gl:create")?.status).toBe(403);
+    expect(requirePermission({ ...user, permissions: [] }, "role:view")?.status).toBe(403);
   });
 });

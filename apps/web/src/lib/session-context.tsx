@@ -10,7 +10,13 @@ export interface SessionUser {
   id: string;
   email: string;
   name: string | null;
+  /** 角色 code 列表（展示/审计；**鉴权判定以 permissions 为准**——ADR-0057） */
   roles: string[];
+  /**
+   * ADR-0057（动态 RBAC）：有效权限集（DB 权威：UserRole → Role → Permission.code，去重排序）。
+   * P2 起由 /api/auth/me 与 /api/auth/login 返回；P3 起前端判定统一改用该集合（can(code)）。
+   */
+  permissions: string[];
 }
 
 type SessionStatus = "loading" | "authenticated" | "unauthenticated";

@@ -117,8 +117,8 @@
 
 | 阶段 | 内容 | 行为变化 |
 |---|---|---|
-| **P1** | `hasEffectivePermission` + `normalizePermissions` 纯函数；seed 首回填内置角色（幂等 + fail loud）；**补齐目录缺失的 10 个 `:write` 码**；`packages/shared/src/rbac/index.test.ts`（目录前置不变量 + 等价性矩阵 + fail-closed） | **无**（仅数据与工具） |
-| **P2** | 后端判定切换（`authenticate`/`requirePermission`）+ `/api/auth/me` 返回 `permissions` + SUPER_ADMIN 保护 + 防自锁校验 | 内置角色等价；自定义角色开始按 DB 生效 |
+| **P1 ✅（PR #296）** | `hasEffectivePermission` + `normalizePermissions` 纯函数；seed 首回填内置角色（幂等 + fail loud）；**补齐目录缺失的 10 个 `:write` 码**；`packages/shared/src/rbac/index.test.ts`（目录前置不变量 + 等价性矩阵 + fail-closed） | **无**（仅数据与工具） |
+| **P2 ✅（本 PR）** | 后端判定切换（`authenticate`/`requirePermission`）+ `/api/auth/me`、`/api/auth/login` 返回 `permissions` + 项目详情 capabilities 改用有效权限集 + SUPER_ADMIN 保护 + 防自锁校验 | 内置角色等价；自定义角色开始按 DB 生效 |
 | **P3** | 前端判定迁移（分域 5-7 批） | 逐域 UI 可见性对齐后端 |
 | **P4** | 文档/QA/ROADMAP 收口 + Runtime Acceptance（各角色登录 → 200/403 矩阵） | 收口 |
 
@@ -163,4 +163,6 @@ GROUP BY r.code ORDER BY r.code;
 
 在方案 A 落地前，系统必须持续如实声明：**权限树与角色权限分配是治理台账与审计证据，不构成访问控制**；访问控制仍由 `packages/shared` 静态角色权限映射决定（该声明已存在于 ADR-0029 附录 A、CHANGELOG、QA、契约卡 §5.3/§5.4）。
 
-**P1 已落地后的状态（2026-09-20）**：本 ADR 已 Accepted 且 P1 已实现（seed 回填 + 判权纯函数 + CI 不变量），但**运行时判定尚未切换**（P2 未部署）。因此上述声明**在 P2 部署完成前仍然有效**；P4 收口时须同步更新 ADR-0029 附录 A / CHANGELOG / QA / 契约卡中的「不构成访问控制」表述。
+**P1/P2 已落地后的状态（2026-09-20）**：本 ADR 已 Accepted，P1（seed 回填 + 判权纯函数 + CI 不变量）与 P2（后端判定切换 + 会话 `permissions` + SUPER_ADMIN 保护 + 防自锁）均已实现，ADR-0029 附录 A / QA / 契约卡中的「不构成访问控制」表述已同步更新为「DB 权限集为鉴权权威」。
+
+**仍未闭环**：前端 UI 可见性仍按静态映射（P3，245 处调用点分域迁移）；P4 收口含各角色运行时验收（200/403 矩阵）。P2 部署前须满足 §5.1 前置（生产已执行 seed）。

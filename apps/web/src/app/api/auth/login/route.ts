@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword, signSessionToken, SESSION_COOKIE_NAME, SESSION_COOKIE_MAX_AGE_SECONDS } from "@/lib/auth";
+import { normalizePermissions } from "@nilier-crm/shared";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
   const user = await prisma.user.findUnique({
     where: { email },
     include: {
-      roles: { include: { role: true } },
+      roles: { include: { role: { include: { permissions: { select: { code: true } } } } } },
     },
   });
 
@@ -52,6 +53,10 @@ export async function POST(request: NextRequest) {
   }
 
   const roles = user.roles.map((membership) => membership.role.code);
+  // ADR-0057：登录响应与 /api/auth/me 同源同形，携带 DB 有效权限集（前端 P3 起据此判定）
+  const permissions = normalizePermissions(
+    user.roles.flatMap((membership) => membership.role.permissions.map((p) => p.code)),
+  );
   const token = await signSessionToken({ sub: user.id, email: user.email, roles });
 
   const res = NextResponse.json({
@@ -63,6 +68,7 @@ export async function POST(request: NextRequest) {
         email: user.email,
         name: user.name,
         roles,
+        permissions,
       },
     },
   });

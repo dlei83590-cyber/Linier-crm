@@ -15108,6 +15108,14 @@ components:
         roles:
           type: array
           items: { type: string }
+          description: 角色 code 列表（展示/审计；**鉴权判定以 permissions 为准**）
+        permissions:
+          type: array
+          items: { type: string }
+          description: |
+            ADR-0057（动态 RBAC）：会话有效权限集 = UserRole → Role → Permission.code（去重排序）。
+            requirePermission 的唯一判定来源（DB 权威）；角色权限调整在**下一次请求/刷新**生效。
+            空数组 = 无任何权限（fail-closed，不回退静态角色映射）。
 
     ErrorResponse:
       type: object

@@ -3,6 +3,24 @@
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
 
+## [Unreleased] - ADR-0057 P2：运行时鉴权切换为 DB 权限集权威（2026-09-20）
+
+### 变更
+
+- **`requirePermission` 判定来源切换**（`apps/web/src/lib/api-helpers.ts`）：由 `hasPermission(roles, code)`（静态角色映射）改为 `hasEffectivePermission(user.permissions, code)`（会话有效权限集 = `UserRole → Role → Permission.code`，去重排序）。**函数签名不变 → 666 个 API 调用点零改动**；fail-closed，**不回退静态表**。
+- **`authenticate` 解析有效权限集**：查询关联 `role.permissions`，`SessionUser` 新增 `permissions: string[]`（`roles` 保留供展示/审计，不再参与判定）。角色权限调整在**下一次请求/刷新**生效（不做实时推送、不做会话内热更新）。
+- **会话契约**：`GET /api/auth/me` 与 `POST /api/auth/login` 返回 `permissions[]`（同源同形）；前端 `SessionUser` 同步新增该字段（P3 起 `can(code)` 消费）。
+- **项目详情 capabilities 投影**（`GET /api/projects/:id`）改用有效权限集，与 `requirePermission` 同源（消除同一请求内两种权限真相）。
+- **安全不变量**：① `SUPER_ADMIN` 角色 `permissionCodes` 禁止修改（409，防一次误操作锁死系统）；② 防自锁——若变更将导致系统中不再存在任何持有 `role:edit` 的角色则 409 拒绝。
+- **单测**（`apps/web/src/lib/api-helpers.test.ts`）：跨角色权限合并去重排序、无角色 → 空集、`requirePermission` 401/403/放行、**禁止回退静态表**（角色名为 SUPER_ADMIN 但权限集为空 → 403）。
+
+### 边界
+
+- 内置角色行为等价（P1 seed 回填 = 静态基线）；**自定义角色自本 PR 起按其 DB 分配真实生效**（Q6 裁决：不设额外准入）。
+- **前端 UI 可见性仍按静态映射**（245 处 `hasPermission(roles, ...)`）——P3 分域迁移；迁移完成前，自定义角色的界面可见性可能少于 API 实际授权（保守方向，不产生越权）。
+- 零 Schema / 零 Migration / 零新权限码 / 零路由变更。
+- **部署前置（Blocking）**：P2 上线前生产须已执行 seed 且内置角色权限数符合 ADR-0057 §5.1 期望（未满足时 fail-closed 会导致全员 403）。
+
 ## [Unreleased] - ADR-0057 动态 RBAC 采纳（P1：seed 回填 + 判权纯函数 + CI 不变量，2026-09-20）
 
 ### 新增

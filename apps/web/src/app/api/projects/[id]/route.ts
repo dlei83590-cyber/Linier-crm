@@ -6,7 +6,7 @@ import { ok, failValidation, failConflict, failNotFound } from '@/lib/api/respon
 import { ERROR_CODES } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
 import { casUpdate } from "@/lib/api/cas";
-import { hasPermission, type RoleCode } from '@nilier-crm/shared';
+import { hasEffectivePermission } from '@nilier-crm/shared';
 import { getAllowedProjectTransitions } from '@/lib/project-transition';
 import { z } from 'zod';
 
@@ -40,22 +40,23 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params;
 
   // 子资源能力投影：与独立子资源 API 的 view 权限一致（事实基线见 apps/web/src/app/api/projects/[id]/*/route.ts）
-  const roles = (user?.roles ?? []) as RoleCode[];
+  // ADR-0057：与 requirePermission 同源——按会话有效权限集（DB 权威）投影，不再读静态角色映射
+  const permissions = user?.permissions ?? [];
   const capabilities = {
-    stakeholders: hasPermission(roles, 'project-stakeholder:view'),
-    members: hasPermission(roles, 'project-member:view'),
-    milestones: hasPermission(roles, 'project-milestone:view'),
-    tasks: hasPermission(roles, 'project-task:view'),
-    budgets: hasPermission(roles, 'project-budget:view'),
-    expenses: hasPermission(roles, 'project-expense:view'),
-    products: hasPermission(roles, 'project-product:view'),
-    risks: hasPermission(roles, 'project-risk:view'),
-    visits: hasPermission(roles, 'project-visit:view'),
-    progresses: hasPermission(roles, 'project-progress:view'),
-    acceptances: hasPermission(roles, 'project-acceptance:view'),
-    closure: hasPermission(roles, 'project-closure:view'),
-    tags: hasPermission(roles, 'project-tag:view'),
-    attachments: hasPermission(roles, 'project-attachment:view'),
+    stakeholders: hasEffectivePermission(permissions, 'project-stakeholder:view'),
+    members: hasEffectivePermission(permissions, 'project-member:view'),
+    milestones: hasEffectivePermission(permissions, 'project-milestone:view'),
+    tasks: hasEffectivePermission(permissions, 'project-task:view'),
+    budgets: hasEffectivePermission(permissions, 'project-budget:view'),
+    expenses: hasEffectivePermission(permissions, 'project-expense:view'),
+    products: hasEffectivePermission(permissions, 'project-product:view'),
+    risks: hasEffectivePermission(permissions, 'project-risk:view'),
+    visits: hasEffectivePermission(permissions, 'project-visit:view'),
+    progresses: hasEffectivePermission(permissions, 'project-progress:view'),
+    acceptances: hasEffectivePermission(permissions, 'project-acceptance:view'),
+    closure: hasEffectivePermission(permissions, 'project-closure:view'),
+    tags: hasEffectivePermission(permissions, 'project-tag:view'),
+    attachments: hasEffectivePermission(permissions, 'project-attachment:view'),
   };
 
   const project = await prisma.project.findFirst({
