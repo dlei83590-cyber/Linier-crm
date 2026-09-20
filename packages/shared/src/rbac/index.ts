@@ -126,6 +126,15 @@ export function permissionsForRole(role: RoleCode): PermissionCode[] {
   return ROLE_PERMISSIONS[role] ?? [];
 }
 
+/**
+ * @deprecated ADR-0057（2026-09-20）：静态角色权限判定**不得用于运行时鉴权**。
+ *
+ * 运行时判定唯一入口 = `hasEffectivePermission(会话有效权限集, code)`（DB 权威）。
+ * 本函数仅保留两种合法用途：
+ *  1. `prisma/seed.ts` 回填内置角色权限集的**静态基线**取值（经 `permissionsForRole`）；
+ *  2. `packages/shared/src/rbac/index.test.ts` 的**切换前后等价性矩阵**对照。
+ * 任何前端/后端业务代码新增 `hasPermission` 调用都视为回归（P3 已把 apps/web 全部判定迁到 can()）。
+ */
 export function hasPermission(roles: RoleCode[], required: PermissionCode): boolean {
   return roles.some((role) => permissionsForRole(role).includes(required));
 }

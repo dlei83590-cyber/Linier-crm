@@ -3,6 +3,20 @@
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
 
+## [Unreleased] - ADR-0057 P3 批次 2-7：前端判定全量迁移完成（2026-09-20）
+
+### 变更
+
+- **全部剩余页级判定迁移到 `can(user, permission)`**（与后端 `requirePermission` 同源）：基础资料域 49 处 / 客户与项目域 57 处 / 销售域 33 处 / 采购域 38 处 / 库存域 27 处 / 财务与分析域 17 处（含批次 1 共 **245 处**）
+- **验收口径**：`apps/web/src` 内 `hasPermission(` 调用点 **= 0**；`packages/shared` 的 `hasPermission` 标记 `@deprecated`（仅保留 seed 静态基线与等价性矩阵单测用途）
+- 语义保持等价：权限码字符串、判定方向（view/edit/approve/delete…）与入口显隐逻辑均未改动；仅判定数据源由静态角色映射改为会话有效权限集
+
+### 边界
+
+- **自定义角色**前后端可见性现已一致（消除「UI 少于 API 授权」窗口）；内置角色前后等价（P1 seed 回填）
+- 零 Schema / 零 Migration / 零 API 契约变更 / 零新权限码
+- **Runtime Acceptance（P4）未执行**：各角色登录后的 200/403 矩阵需在部署环境人工验证，本条目不声称已验证
+
 ## [Unreleased] - ADR-0057 P3 批次 1：前端判定基础设施 + 系统域迁移（2026-09-20）
 
 ### 变更

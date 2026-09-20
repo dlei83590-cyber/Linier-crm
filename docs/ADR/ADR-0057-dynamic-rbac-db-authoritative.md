@@ -119,22 +119,22 @@
 |---|---|---|
 | **P1 ✅（PR #296）** | `hasEffectivePermission` + `normalizePermissions` 纯函数；seed 首回填内置角色（幂等 + fail loud）；**补齐目录缺失的 10 个 `:write` 码**；`packages/shared/src/rbac/index.test.ts`（目录前置不变量 + 等价性矩阵 + fail-closed） | **无**（仅数据与工具） |
 | **P2 ✅（本 PR）** | 后端判定切换（`authenticate`/`requirePermission`）+ `/api/auth/me`、`/api/auth/login` 返回 `permissions` + 项目详情 capabilities 改用有效权限集 + SUPER_ADMIN 保护 + 防自锁校验 | 内置角色等价；自定义角色开始按 DB 生效 |
-| **P3 🔄（批次 1 已落地）** | 前端判定迁移（基础设施 + 分域批次） | 逐域 UI 可见性对齐后端 |
+| **P3 ✅（批次 1-7 全部落地）** | 前端判定迁移（基础设施 + 6 个域批次，共 245 处调用点） | 前端 UI 可见性与后端判定完全同源 |
 
 **P3 批次划分与进度**：
 
 | 批次 | 范围 | 状态 |
 |---|---|---|
 | 1 | 基础设施：`can(user, permission)` / `useCan()`（session-context）、`PermissionGuard`、`shell.filterVisibleGroups` / `quickCreateItems`（导航可见性 + 快捷创建）、admin-shell、shell 单测迁移；**系统域页面**（roles 列表/编辑、users、departments、settings·supplier-rating-rules） | ✅ |
-| 2 | 基础资料域（items / business-partners / price-lists / technical-standards / unit-of-measures / commercial-terms / document-sequences / warehouses / warehouse-locations） | 待做 |
-| 3 | 客户与项目域（projects 详情 40 处 / project-opportunities / visits / expenses / customer-pools） | 待做 |
-| 4 | 销售域（quotations / sales-orders / deliveries / invoices / AR / receipts / CN-DN） | 待做 |
-| 5 | 采购域（purchase-requisitions / purchase-orders / receipts / inspections / warehouse-receipts / returns） | 待做 |
-| 6 | 库存域（transfers / stock-counts / adjustments / conversions / boms / production-orders / stock-projection / ledger） | 待做 |
-| 7 | 财务与分析域（supplier-invoices / supplier-ap / gl / reports / dashboard） | 待做 |
+| 2 | 基础资料域（items / business-partners / price-lists / technical-standards / unit-of-measures / commercial-terms / document-sequences / warehouses / warehouse-locations）—— 49 处 / 14 文件 | ✅ |
+| 3 | 客户与项目域（projects 详情 40 处 / project-opportunities / visits / expenses）—— 57 处 / 12 文件 | ✅ |
+| 4 | 销售域（quotations / orders / deliveries / invoices / receipts / credit-debit-notes）—— 33 处 / 12 文件 | ✅ |
+| 5 | 采购域（requisitions / orders / receipts / inspections / warehouse-receipts / returns）—— 38 处 / 24 文件 | ✅ |
+| 6 | 库存域（transfers / stock-counts / adjustments / conversions / boms / production-orders）—— 27 处 / 12 文件 | ✅ |
+| 7 | 财务与分析域（supplier-invoices / supplier-ap / finance / reports / dashboard）—— 17 处 / 10 文件 | ✅ |
 
-> 迁移完成前，前端页级按钮可见性仍按静态映射（内置角色等价；自定义角色 UI 可能少于 API 实际授权——保守方向，不产生越权）。
-| **P4** | 文档/QA/ROADMAP 收口 + Runtime Acceptance（各角色登录 → 200/403 矩阵） | 收口 |
+> **迁移已完成（验收口径）**：`apps/web/src` 内 `hasPermission(` 调用点 = **0**（全部改走 `can()`）；`packages/shared` 的 `hasPermission` 已标记 `@deprecated`，仅保留 seed 基线与等价性矩阵单测两种用途。前端 UI 可见性与后端 `requirePermission` 完全同源。
+| **P4**(进行中) | 文档/QA/ROADMAP 收口 + Runtime Acceptance（各角色登录 → 200/403 矩阵，需运行环境） | 收口 |
 
 ### 5.1 部署前置（**Blocking**，P2 上线必须满足）
 

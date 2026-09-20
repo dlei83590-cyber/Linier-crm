@@ -44,7 +44,8 @@
 - departments/roles 无 DELETE（无软删字段，物理删除破坏引用完整性/审计链）
 - roles 前端权限分配：已由只读展示升级为**权限树勾选分配**（2026-09-20，ADR-0029 后续 backlog 项落地）；千级权限以「域 → 模块 → 动作」三层 + 默认折叠 + 搜索规避 checkbox 不可用问题
 - **权限分配运行时生效（ADR-0057 P2 已落地，2026-09-20）**：permissionCodes 即访问控制权威——`authenticate` 解析 DB 有效权限集（UserRole → Role → Permission，去重排序），`requirePermission` 据此判定（fail-closed、不回退静态表）；内置角色由 seed 首回填（等价基线）；`/api/auth/me` 与 `/api/auth/login` 返回 `permissions[]`；SUPER_ADMIN 权限禁止改 + 防自锁
-- **待办（ADR-0057 P3/P4）**：前端 UI 可见性判定（`hasPermission(roles, ...)`，245 处）迁移到 `can(code)`；迁移完成前前端仍按静态映射显示（内置角色等价；自定义角色 UI 可能少于 API 实际授权）；P4 收口含各角色 200/403 运行时验收
+- **前端可见性同源（ADR-0057 P3 已完成，2026-09-20）**：245 处页级判定（含系统域 12 处）全部迁移到 `can(user, permission)`/`useCan()`；验收口径 = `apps/web/src` 内 `hasPermission(` 调用点 **0**（`packages/shared` 的 `hasPermission` 已 @deprecated，仅 seed 基线 + 等价性矩阵单测使用）
+- **待办（ADR-0057 P4）**：各角色登录后的 **200/403 运行时验收矩阵**需在部署环境人工执行（本轮未执行，不声称已验证）；生产侧须先核对 seed 回填（ADR-0057 §5.1 SQL）
 - 走访/风险独立页为引导页（CRUD 在项目详情 Tab，B2-1B 已交付）
 
 ## 5. 验收人
