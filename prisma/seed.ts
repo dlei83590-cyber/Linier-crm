@@ -190,6 +190,45 @@ const SEED_ACTION_MODULES = [
   // cc-06 客户等级→供应商评级匹配（Contract Close）：CustomerSupplierRatingRule 专用配置模块（view/create/edit/delete；
   // 与 shared PERMISSION_MODULES 保持一致，ADR-0028 防漂移）
   "customer-supplier-rating-rule",
+  // 系统权限树 / 角色权限分配（Permission Catalog Reconciliation，2026-08-25）：
+  // 以下 34 个模块此前只存在于 shared PERMISSION_MODULES（静态 RBAC 已向 SUPER_ADMIN/ADMIN 授权），
+  // 但从未注册到 DB Permission 目录 → 权限目录不完整，角色无法被分配这些权限（ADR-0028 单向 Gate 未覆盖）。
+  // 本次按 PERMISSION_MODULES × PERMISSION_ACTIONS 补齐注册，使 DB 目录成为权限树的完整权威目录；
+  // 纯新增行（upsert），不改任何既有权限码语义，不改运行时静态鉴权。
+  "menu",
+  "menu-group",
+  "dashboard-widget",
+  "dashboard-layout",
+  "dashboard-kpi",
+  "dashboard-chart",
+  "file",
+  "file-folder",
+  "file-version",
+  "file-attachment",
+  "customer",
+  "customer-contact",
+  "customer-address",
+  "customer-tag",
+  "customer-credit",
+  "industry",
+  "tag",
+  "supplier",
+  "supplier-qualification",
+  "supplier-certificate",
+  "supplier-settlement",
+  "business-partner-role",
+  "partner-address",
+  "partner-tag",
+  "partner-bank-account",
+  "partner-credit",
+  "item-category",
+  "item-specification",
+  "item-uom",
+  "item-cost",
+  "item-supplier",
+  "item-revision",
+  "item-tag",
+  "item-attachment",
 ] as const;
 
 const SEED_ACTIONS = ["view", "create", "edit", "delete", "approve", "audit", "export", "import", "assign", "close"] as const;

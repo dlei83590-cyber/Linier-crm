@@ -88,11 +88,19 @@
 
 ### 5.3 /api/roles（角色权限）
 - 列表过滤：code / name；include permissions（code）计数
-- 创建（role:create）：code（唯一，大写）+ name + description? + permissionCodes[]?（按 code connect Permission 目录，未知 code → 400 VALIDATION_ERROR；**前端新建页暂不提供权限勾选——千级 checkbox 不可用 UX，权限分配由 seed/ADMIN 治理**）
-- PATCH（role:edit）：name / description? / permissionCodes?（全量替换 RolePermissions，API 能力保留）；Role 无 version 字段 → PATCH 不做 CAS
+- 创建（role:create）：code（唯一，大写）+ name + description? + permissionCodes[]?（按 code connect Permission 目录，未知 code → 400 VALIDATION_ERROR；服务端去重）
+- PATCH（role:edit）：name / description? / permissionCodes?（全量替换 RolePermissions）；Role 无 version 字段 → PATCH 不做 CAS
 - DELETE：**不提供**（Role 无软删字段 + UserRole 引用完整性；停用角色 = 从用户移除），API 只读+创建+编辑
-- 详情：含 permissions 全量 code 列表（前端编辑页按 module 分组**只读展示**）
+- 详情：含 permissions 全量 code 列表
+- 审计：role.update 的 before/after 记录 permissionCount + permissionAdded/permissionRemoved（谁授予/回收了什么可追溯）
 - 边界：内置角色（SUPER_ADMIN/ADMIN/MANAGER/MEMBER/VIEWER，seed 定义 ROLE_PERMISSIONS）仍由 seed 治理；本 API 覆盖 DB Role 记录的 CRUD，不改 seed 静态映射语义
+
+### 5.4 /api/permissions（系统权限树 — 权限目录只读，2026-08-25）
+- GET（role:view）：DB Permission 目录全量只读返回 `{ items: [{ id, code, module, action, name }], total }`（无分页——配置型全量数据）
+- 三层树（域 → 模块 → 动作）由前端契约完成（`lib/frontend/permission-tree.ts`：域映射 + 三态选择 + 搜索过滤；未登记模块回退「其他（未归类）」使漂移可见）
+- 目录权威性：= shared PERMISSION_MODULES × PERMISSION_ACTIONS + SYSTEM_PERMISSIONS（ADR-0028）；seed 已补齐此前只存在于静态目录、未注册到 DB 的 34 个模块
+- 前端消费：/roles/new 与 /roles/[id]/edit 权限树勾选 → POST/PATCH permissionCodes；目录外历史权限码**保留并在保存时原样提交**（禁止静默丢弃）
+- 生效边界（如实声明）：permissionCodes 落库 + 审计留痕；**运行时鉴权仍为 packages/shared 静态角色权限映射**（hasPermission/requirePermission），动态鉴权（DB 为鉴权权威）为后续独立 ADR 范围
 
 ## 6. Batch 3 — 走访/风险独立页改引导（复用项目内子资源）
 

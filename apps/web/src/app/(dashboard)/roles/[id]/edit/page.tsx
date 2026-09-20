@@ -1,16 +1,31 @@
 "use client";
 
-/** Roles — 编辑角色（Pending Pages Completion Gate — Batch 2；无 CAS；权限只读分组展示） */
+/**
+ * Roles — 编辑角色 + 权限分配（权限树）
+ *
+ * - 权限树数据源：GET /api/permissions（DB Permission 目录）
+ * - 已分配：GET /api/roles/:id → permissions（code 列表）
+ * - 保存：PATCH /api/roles/:id { name, description?, permissionCodes[] }（**全量替换** RolePermissions）
+ *
+ * 红线：目录外的历史权限码（未在 Permission 目录登记）不允许被静默丢弃——
+ * 一律保留在选择集中并在界面显式列出，保存时原样提交。
+ *
+ * 生效边界（如实声明）：permissionCodes 落库 + 审计留痕；
+ * 运行时鉴权仍使用 packages/shared 静态角色权限映射（动态鉴权为后续 ADR 范围）。
+ */
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
+import { useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityFormWorkspace } from "@/components/workspace";
 import { PageLoading } from "@/components/ui/skeleton";
+import { PermissionTree } from "@/components/system/permission-tree";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
-import { moduleLabel, permissionLabel } from "@/lib/frontend/labels";
+import { roleLabel } from "@/lib/frontend/labels";
+import { selectedCodeList, type PermissionCatalogItem } from "@/lib/frontend/permission-tree";
 
 interface RolePermission {
   id: string;
@@ -30,17 +45,23 @@ interface RoleDetail {
 
 const inputClass = INPUT_CLASS;
 
-
 function RoleEditForm() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const id = params.id;
+  const { state } = useSession();
+  const canEdit =
+    state.status === "authenticated" &&
+    state.user !== null &&
+    hasPermission(state.user.roles as RoleCode[], actionPermission("role", "edit"));
 
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [permissions, setPermissions] = useState<RolePermission[]>([]);
   const [userCount, setUserCount] = useState(0);
+  const [catalog, setCatalog] = useState<PermissionCatalogItem[]>([]);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set<string>());
+  const [unknownCodes, setUnknownCodes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<ApiClientError | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -50,14 +71,23 @@ function RoleEditForm() {
   const load = () => {
     setLoading(true);
     setLoadError(null);
-    apiFetch<RoleDetail>(`/api/roles/${id}`)
-      .then((body) => {
-        const d = body.data;
+    Promise.all([
+      apiFetch<RoleDetail>(`/api/roles/${id}`),
+      apiFetch<{ items: PermissionCatalogItem[]; total: number }>("/api/permissions"),
+    ])
+      .then(([roleBody, catalogBody]) => {
+        const d = roleBody.data;
+        const items = catalogBody.data.items;
+        const catalogCodes = new Set(items.map((p) => p.code));
+        const assigned = d.permissions.map((p) => p.code);
         setCode(d.code);
         setName(d.name);
         setDescription(d.description ?? "");
-        setPermissions(d.permissions);
         setUserCount(d._count?.users ?? 0);
+        setCatalog(items);
+        // 目录外历史权限码保留在选择集中（禁止静默丢弃）
+        setSelected(new Set(assigned));
+        setUnknownCodes(assigned.filter((c) => !catalogCodes.has(c)).sort());
         setDirty(false);
         setLoading(false);
       })
@@ -83,6 +113,7 @@ function RoleEditForm() {
     const payload: Record<string, unknown> = {
       name: name.trim(),
       description: description.trim() || null,
+      permissionCodes: selectedCodeList(selected),
     };
     apiFetch<{ id: string }>(`/api/roles/${id}`, {
       method: "PATCH",
@@ -94,12 +125,6 @@ function RoleEditForm() {
         setSubmitting(false);
       });
   };
-
-  // 权限按 module 分组（只读展示）
-  const grouped = permissions.reduce<Record<string, RolePermission[]>>((acc, p) => {
-    (acc[p.module] = acc[p.module] ?? []).push(p);
-    return acc;
-  }, {});
 
   if (loading) {
     return (
@@ -120,7 +145,7 @@ function RoleEditForm() {
   return (
     <EntityFormWorkspace
       title="编辑角色"
-      description={`编码：${code} ｜ 关联用户：${userCount} ｜ 权限：${permissions.length} 项`}
+      description={`${roleLabel(code, name)}（${code}）｜ 关联用户：${userCount} ｜ 已分配权限：${selected.size} 项`}
       backHref="/roles"
       mode="edit"
       submitting={submitting}
@@ -146,26 +171,26 @@ function RoleEditForm() {
         </div>
       </section>
       <section className="rounded-md border border-border p-4">
-        <h2 className="mb-2 text-sm font-semibold text-ink-primary">权限映射（只读，由系统治理）</h2>
-        <p className="mb-3 text-xs text-ink-secondary">权限分配由 seed/ADMIN 配置治理；此处仅展示当前角色权限。</p>
-        {Object.keys(grouped).length === 0 ? (
-          <p className="text-sm text-ink-secondary">该角色暂无权限。</p>
-        ) : (
-          <div className="space-y-2">
-            {Object.entries(grouped).map(([module, list]) => (
-              <div key={module} className="rounded-md border border-border p-2">
-                <div className="mb-1 text-xs font-medium text-ink-secondary">{moduleLabel(module)}（{list.length}）</div>
-                <div className="flex flex-wrap gap-1">
-                  {list.map((p) => (
-                    <span key={p.id} className="rounded bg-canvas px-1.5 py-0.5 text-xs text-ink-secondary">
-                      {permissionLabel(p.code)}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <h2 className="mb-1 text-sm font-semibold text-ink-primary">权限分配</h2>
+        <p className="mb-3 text-xs text-ink-secondary">
+          保存时按当前勾选「全量替换」该角色权限。分配由审计日志留痕（含新增/移除）。
+          运行时鉴权当前仍以角色静态权限映射为准（动态鉴权待后续 ADR）。
+        </p>
+        {unknownCodes.length > 0 ? (
+          <p className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-800">
+            目录外权限码 {unknownCodes.length} 项（未在权限目录登记，已保留并在保存时原样提交）：
+            <span className="font-mono"> {unknownCodes.join(", ")}</span>
+          </p>
+        ) : null}
+        <PermissionTree
+          items={catalog}
+          selected={selected}
+          readOnly={!canEdit}
+          onChange={(next) => {
+            setSelected(next);
+            setDirty(true);
+          }}
+        />
       </section>
     </EntityFormWorkspace>
   );

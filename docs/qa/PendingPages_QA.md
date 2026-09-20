@@ -34,7 +34,7 @@
 - [ ] document-sequences：nextNo 只读；docType 枚举校验
 - [ ] users：创建（密码 hash 落库）/停用/角色全量替换/密码重置；403 权限（无 user:create 的角色）
 - [ ] departments：parent 选择 + 循环引用 409
-- [ ] roles：无 DELETE；权限只读展示
+- [ ] roles：无 DELETE；权限树勾选分配（域/模块/动作三态、搜索、全选/清空）→ 保存后 GET /api/roles/:id 权限列表与勾选一致；目录外权限码保留提示
 - [ ] project-visits / project-risks 引导页跳转 /projects
 - [ ] 无权限用户访问 → 403（PermissionGuard）
 
@@ -42,7 +42,8 @@
 
 - users/departments/roles 无乐观锁（模型无 version 字段，零迁移边界）；并发编辑以后进者胜
 - departments/roles 无 DELETE（无软删字段，物理删除破坏引用完整性/审计链）
-- roles 前端权限分配为只读展示（千级权限 checkbox 不可用；分配由 seed/ADMIN 治理，API 层保留 permissionCodes 能力）
+- roles 前端权限分配：已由只读展示升级为**权限树勾选分配**（2026-08-25，ADR-0029 后续 backlog 项落地）；千级权限以「域 → 模块 → 动作」三层 + 默认折叠 + 搜索规避 checkbox 不可用问题
+- **权限分配运行时生效边界（未闭环，如实声明）**：permissionCodes 已落库并有审计留痕，但运行时鉴权仍使用 packages/shared 静态角色权限映射（role code → 权限表），DB Role.permissions 目前不参与 hasPermission/requirePermission 判定；动态鉴权（DB 为鉴权权威）为后续独立 Design/ADR Gate 范围
 - 走访/风险独立页为引导页（CRUD 在项目详情 Tab，B2-1B 已交付）
 
 ## 5. 验收人

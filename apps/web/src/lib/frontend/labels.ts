@@ -20,8 +20,14 @@ export function roleLabel(code: string, fallback?: string | null): string {
   return fallback || code;
 }
 
-/** 权限动作中文（PERMISSION_ACTIONS；delete/import/export 为保留字键须加引号） */
+/**
+ * 权限动作中文（PERMISSION_ACTIONS；delete/import/export 为保留字键须加引号）
+ * read/write：遗留 read/write 权限码（PERMISSIONS.USER_READ 等，静态 RBAC 与 DB 目录均有注册）
+ * 与 SYSTEM_PERMISSIONS 的非通用动作（consume/apply）——均按原码回退展示。
+ */
 export const ACTION_LABELS: Record<string, string> = {
+  read: "读取",
+  write: "写入",
   view: "查看",
   create: "新建",
   edit: "编辑",
@@ -175,6 +181,33 @@ export const MODULE_LABELS: Record<string, string> = {
   "stock-projection": "库存余额投影",
   "inventory-movement": "库存流水",
   "supplier-invoice": "供应商发票",
+  // 系统权限树（Permission Catalog）补齐：受限子资源 / 系统权限 / 财务与报表模块
+  "supplier-invoice-line": "供应商发票行",
+  "supplier-credit-debit-note": "供应商贷项/借项",
+  "supplier-payment": "供应商付款",
+  "supplier-payment-allocation": "供应商付款核销",
+  "ap-open-item": "应付未结项",
+  "credit-debit-note-line": "贷项/借项通知单行",
+  "invoice-adjustment": "发票调整",
+  "customer-pool": "客户公海",
+  "gl": "总账",
+  "inventory-cost": "库存成本",
+  "inventory-ledger": "库存台账",
+  "domain-event": "领域事件",
+  "reports": "经营分析",
+  "production-inbound": "生产入库",
+  "purchase-requisition-line": "采购申请行",
+  "purchase-requisition-revision": "采购申请版本",
+  "purchase-order-line": "采购订单行",
+  "purchase-order-revision": "采购订单版本",
+  "purchase-order-snapshot": "采购订单快照",
+  "purchase-receipt-line": "到货收货行",
+  "warehouse-receipt-line": "采购入库行",
+  "purchase-return-line": "采购退货行",
+  "inventory-transfer-line": "库存调拨行",
+  "stock-count-line": "盘点行",
+  "inventory-adjustment-line": "库存调整行",
+  "inventory-conversion-line": "库存转换行",
 };
 
 export function moduleLabel(slug: string): string {
