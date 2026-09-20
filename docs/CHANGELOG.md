@@ -3,7 +3,7 @@
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
 
-## [Unreleased] - 系统权限树开发与角色权限分配（用户指令，2026-08-25）
+## [Unreleased] - 系统权限树开发与角色权限分配（用户指令，2026-09-20）
 
 ### 新增
 

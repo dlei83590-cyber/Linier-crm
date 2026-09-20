@@ -190,7 +190,7 @@ const SEED_ACTION_MODULES = [
   // cc-06 客户等级→供应商评级匹配（Contract Close）：CustomerSupplierRatingRule 专用配置模块（view/create/edit/delete；
   // 与 shared PERMISSION_MODULES 保持一致，ADR-0028 防漂移）
   "customer-supplier-rating-rule",
-  // 系统权限树 / 角色权限分配（Permission Catalog Reconciliation，2026-08-25）：
+  // 系统权限树 / 角色权限分配（Permission Catalog Reconciliation，2026-09-20）：
   // 以下 34 个模块此前只存在于 shared PERMISSION_MODULES（静态 RBAC 已向 SUPER_ADMIN/ADMIN 授权），
   // 但从未注册到 DB Permission 目录 → 权限目录不完整，角色无法被分配这些权限（ADR-0028 单向 Gate 未覆盖）。
   // 本次按 PERMISSION_MODULES × PERMISSION_ACTIONS 补齐注册，使 DB 目录成为权限树的完整权威目录；

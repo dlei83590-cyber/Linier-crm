@@ -33,13 +33,13 @@ main 上 9 个前端页面仍为 PlaceholderPage 骨架（modules.ts 全部 avai
 
 ## 后续（独立 backlog，不在本 Gate）
 
-- roles 前端权限勾选式管理（需要权限目录分页/搜索 API + 治理确认）→ **2026-08-25 已落地，见下方附录**
+- roles 前端权限勾选式管理（需要权限目录分页/搜索 API + 治理确认）→ **2026-09-20 已落地，见下方附录**
 - department 树形渲染（当前扁平 parent 列展示）
 - ADR-0028 CI 静态 Gate 实现（扫描 requirePermission vs PERMISSION_MODULES，独立 Governance backlog）
 
 ---
 
-## 附录 A（2026-08-25）：系统权限树 + 角色权限分配落地
+## 附录 A（2026-09-20）：系统权限树 + 角色权限分配落地
 
 - 状态：**已实现**（用户指令「系统权限树开发和分配」；本附录修订决策 5 的前端 UX 结论，其余决策不变）
 - 决策 5 原判断（千级 checkbox 不可用）仍然成立，本次以**权限树**而非平铺 checkbox 解决：

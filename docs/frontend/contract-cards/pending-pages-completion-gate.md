@@ -95,7 +95,7 @@
 - 审计：role.update 的 before/after 记录 permissionCount + permissionAdded/permissionRemoved（谁授予/回收了什么可追溯）
 - 边界：内置角色（SUPER_ADMIN/ADMIN/MANAGER/MEMBER/VIEWER，seed 定义 ROLE_PERMISSIONS）仍由 seed 治理；本 API 覆盖 DB Role 记录的 CRUD，不改 seed 静态映射语义
 
-### 5.4 /api/permissions（系统权限树 — 权限目录只读，2026-08-25）
+### 5.4 /api/permissions（系统权限树 — 权限目录只读，2026-09-20）
 - GET（role:view）：DB Permission 目录全量只读返回 `{ items: [{ id, code, module, action, name }], total }`（无分页——配置型全量数据）
 - 三层树（域 → 模块 → 动作）由前端契约完成（`lib/frontend/permission-tree.ts`：域映射 + 三态选择 + 搜索过滤；未登记模块回退「其他（未归类）」使漂移可见）
 - 目录权威性：= shared PERMISSION_MODULES × PERMISSION_ACTIONS + SYSTEM_PERMISSIONS（ADR-0028）；seed 已补齐此前只存在于静态目录、未注册到 DB 的 34 个模块

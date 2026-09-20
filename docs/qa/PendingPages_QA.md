@@ -42,7 +42,7 @@
 
 - users/departments/roles 无乐观锁（模型无 version 字段，零迁移边界）；并发编辑以后进者胜
 - departments/roles 无 DELETE（无软删字段，物理删除破坏引用完整性/审计链）
-- roles 前端权限分配：已由只读展示升级为**权限树勾选分配**（2026-08-25，ADR-0029 后续 backlog 项落地）；千级权限以「域 → 模块 → 动作」三层 + 默认折叠 + 搜索规避 checkbox 不可用问题
+- roles 前端权限分配：已由只读展示升级为**权限树勾选分配**（2026-09-20，ADR-0029 后续 backlog 项落地）；千级权限以「域 → 模块 → 动作」三层 + 默认折叠 + 搜索规避 checkbox 不可用问题
 - **权限分配运行时生效边界（未闭环，如实声明）**：permissionCodes 已落库并有审计留痕，但运行时鉴权仍使用 packages/shared 静态角色权限映射（role code → 权限表），DB Role.permissions 目前不参与 hasPermission/requirePermission 判定；动态鉴权（DB 为鉴权权威）为后续独立 Design/ADR Gate 范围
 - 走访/风险独立页为引导页（CRUD 在项目详情 Tab，B2-1B 已交付）
 
