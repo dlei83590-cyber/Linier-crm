@@ -10,8 +10,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { hasPermission, actionPermission, PERMISSIONS, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { actionPermission, PERMISSIONS } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog, ModuleKpiStrip } from "@/components/workspace";
 import type { ModuleSummaryData } from "@/lib/module-summary/types";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
@@ -43,12 +43,11 @@ const STATUS_LABELS: Record<string, string> = {
 function StockCountList() {
   const { state } = useSession();
   const toast = useToast();
-  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
   const canCreate =
     state.status === "authenticated" &&
     state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("stock-count", "create"));
-  const canDelete = hasPermission(roles, actionPermission("stock-count", "delete"));
+    can(state.user, actionPermission("stock-count", "create"));
+  const canDelete = can(state.user, actionPermission("stock-count", "delete"));
   const [countNoInput, setCountNoInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ countNo?: string; status?: string }>({});
