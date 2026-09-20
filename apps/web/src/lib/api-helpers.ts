@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth";
-import { hasPermission, type PermissionCode, type RoleCode } from "@nilier-crm/shared";
+import { hasEffectivePermission, normalizePermissions, type PermissionCode } from "@nilier-crm/shared";
 import { failConflict } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 
@@ -10,7 +10,13 @@ export interface SessionUser {
   id: string;
   email: string;
   name: string | null;
+  /** 角色 code 列表（展示/审计用；**不再用于鉴权判定**——ADR-0057） */
   roles: string[];
+  /**
+   * ADR-0057（动态 RBAC）：有效权限集 = UserRole → Role → Permission.code（去重排序）。
+   * 这是 requirePermission 的唯一判定来源（DB 权威）；空集即 fail-closed。
+   */
+  permissions: string[];
 }
 
 function bearerToken(request: NextRequest): string | null {
@@ -23,6 +29,9 @@ function bearerToken(request: NextRequest): string | null {
  * ADR-0045 双来源认证：Bearer（遗留/API 客户端）→ httpOnly 会话 cookie（浏览器）回退。
  * 浏览器 same-origin 请求由 fetch 默认携带 linier_session cookie，前端不再附加 Bearer
  * （apiFetch/session-context 均只带 cookie）；此处必须认 cookie，否则登录后全部接口 401。
+ *
+ * ADR-0057：同时解析有效权限集（DB 权威：Role.permissions），供 requirePermission 判定。
+ * 角色权限变更在**下一次请求/刷新**生效（不做实时推送、不做会话内热更新）。
  */
 export async function authenticate(request: NextRequest): Promise<SessionUser | null> {
   const token =
@@ -40,7 +49,13 @@ export async function authenticate(request: NextRequest): Promise<SessionUser | 
 
   const user = await prisma.user.findUnique({
     where: { id: payload.sub },
-    include: { roles: { include: { role: true } } },
+    include: {
+      roles: {
+        include: {
+          role: { include: { permissions: { select: { code: true } } } },
+        },
+      },
+    },
   });
 
   if (!user || !user.isActive) return null;
@@ -50,9 +65,19 @@ export async function authenticate(request: NextRequest): Promise<SessionUser | 
     email: user.email,
     name: user.name,
     roles: user.roles.map((m) => m.role.code),
+    // ADR-0057：DB 权限集为鉴权权威（去重排序）；空集 → requirePermission fail-closed 403
+    permissions: normalizePermissions(
+      user.roles.flatMap((m) => m.role.permissions.map((p) => p.code)),
+    ),
   };
 }
 
+/**
+ * ADR-0057：判定以**会话有效权限集（DB 权威）**为准，签名不变 → 全部调用点零改动。
+ * - fail-closed：权限集为空 / 未命中即 403；
+ * - **禁止回退静态 ROLE_PERMISSIONS**（不得因角色名为 SUPER_ADMIN 等而放行）；
+ * - 角色权限调整下一次请求生效。
+ */
 export function requirePermission(user: SessionUser | null, permission: PermissionCode): NextResponse | null {
   if (!user) {
     return NextResponse.json(
@@ -60,7 +85,7 @@ export function requirePermission(user: SessionUser | null, permission: Permissi
       { status: 401 },
     );
   }
-  if (!hasPermission(user.roles as RoleCode[], permission)) {
+  if (!hasEffectivePermission(user.permissions, permission)) {
     return NextResponse.json(
       { success: false, error: { code: "FORBIDDEN", message: "Insufficient permission" } },
       { status: 403 },

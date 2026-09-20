@@ -43,7 +43,8 @@
 - users/departments/roles 无乐观锁（模型无 version 字段，零迁移边界）；并发编辑以后进者胜
 - departments/roles 无 DELETE（无软删字段，物理删除破坏引用完整性/审计链）
 - roles 前端权限分配：已由只读展示升级为**权限树勾选分配**（2026-09-20，ADR-0029 后续 backlog 项落地）；千级权限以「域 → 模块 → 动作」三层 + 默认折叠 + 搜索规避 checkbox 不可用问题
-- **权限分配运行时生效边界（未闭环，如实声明）**：permissionCodes 已落库并有审计留痕，但运行时鉴权仍使用 packages/shared 静态角色权限映射（role code → 权限表），DB Role.permissions 目前不参与 hasPermission/requirePermission 判定；动态鉴权（DB 为鉴权权威）为后续独立 Design/ADR Gate 范围（提案 ADR-0057，状态 Proposed，待 CTO 裁决）
+- **权限分配运行时生效（ADR-0057 P2 已落地，2026-09-20）**：permissionCodes 即访问控制权威——`authenticate` 解析 DB 有效权限集（UserRole → Role → Permission，去重排序），`requirePermission` 据此判定（fail-closed、不回退静态表）；内置角色由 seed 首回填（等价基线）；`/api/auth/me` 与 `/api/auth/login` 返回 `permissions[]`；SUPER_ADMIN 权限禁止改 + 防自锁
+- **待办（ADR-0057 P3/P4）**：前端 UI 可见性判定（`hasPermission(roles, ...)`，245 处）迁移到 `can(code)`；迁移完成前前端仍按静态映射显示（内置角色等价；自定义角色 UI 可能少于 API 实际授权）；P4 收口含各角色 200/403 运行时验收
 - 走访/风险独立页为引导页（CRUD 在项目详情 Tab，B2-1B 已交付）
 
 ## 5. 验收人
