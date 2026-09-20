@@ -19,6 +19,18 @@ export interface SessionUser {
   permissions: string[];
 }
 
+/**
+ * ADR-0057（动态 RBAC）：会话级权限判定 —— **前端唯一判定入口**。
+ * - 数据源 = 会话有效权限集（DB 权威，由 /api/auth/me 与 /api/auth/login 返回）；
+ * - `permission === null` 表示该模块/动作无权限要求（已登录即可见）；
+ * - fail-closed：未认证 / 权限集为空 / 未命中一律 false；**禁止回退静态角色映射**。
+ */
+export function can(user: SessionUser | null, permission: string | null): boolean {
+  if (permission === null) return user !== null;
+  if (!user) return false;
+  return user.permissions.includes(permission);
+}
+
 type SessionStatus = "loading" | "authenticated" | "unauthenticated";
 
 interface SessionState {
@@ -90,4 +102,10 @@ export function useSession(): SessionContextValue {
     throw new Error("useSession must be used within a SessionProvider");
   }
   return ctx;
+}
+
+/** ADR-0057：`can(permission)` 便捷判定（等价于 can(session.user, permission)） */
+export function useCan(): (permission: string | null) => boolean {
+  const { state } = useSession();
+  return useCallback((permission: string | null) => can(state.user, permission), [state.user]);
 }

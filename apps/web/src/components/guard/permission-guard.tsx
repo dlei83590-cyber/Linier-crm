@@ -1,8 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { hasPermission, type PermissionCode, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import type { PermissionCode } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { Forbidden } from "@/components/ui/forbidden";
 
 export function PermissionGuard({
@@ -18,7 +18,8 @@ export function PermissionGuard({
     return null;
   }
 
-  if (permission !== null && !hasPermission(state.user.roles as RoleCode[], permission)) {
+  // ADR-0057：按会话有效权限集判定（DB 权威；fail-closed，不回退静态角色映射）
+  if (!can(state.user, permission)) {
     return <Forbidden />;
   }
 

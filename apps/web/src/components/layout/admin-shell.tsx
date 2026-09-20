@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { APP_NAME, type RoleCode } from "@nilier-crm/shared";
+import { APP_NAME } from "@nilier-crm/shared";
 import { useSession } from "@/lib/session-context";
 import type { FrontendModule, ModuleDomain } from "@/lib/frontend/modules";
 import {
@@ -202,10 +202,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const roles = (state.user?.roles ?? []) as RoleCode[];
+  // ADR-0057：导航可见性按会话有效权限集判定（DB 权威；不再用静态角色映射）
+  const permissions = state.user?.permissions ?? [];
 
   // 权限过滤后的可见模块（唯一事实源 = Registry 投影；纯函数在 lib/frontend/shell.ts）
-  const visibleGroups = useMemo(() => filterVisibleGroups(roles), [roles]);
+  const visibleGroups = useMemo(() => filterVisibleGroups(permissions), [permissions]);
 
   // 当前业务域（路径前缀匹配；未命中回退第一个非空域）
   const currentDomain = useMemo(() => resolveCurrentDomain(pathname, visibleGroups), [pathname, visibleGroups]);
@@ -214,7 +215,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const currentModule = useMemo(() => resolveCurrentModule(pathname, visibleGroups), [pathname, visibleGroups]);
 
   // 快捷创建投影（Registry ui.create + createRoute + createPermission + 权限门）
-  const quickCreate = useMemo(() => quickCreateItems(roles, visibleGroups), [roles, visibleGroups]);
+  const quickCreate = useMemo(() => quickCreateItems(permissions, visibleGroups), [permissions, visibleGroups]);
 
   // 最近访问：pathname 变化时把当前模块记录到 localStorage（按 route 去重、最新在前、最多 8 条）
   useEffect(() => {

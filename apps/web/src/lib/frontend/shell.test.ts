@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { RoleCode } from "@nilier-crm/shared";
+import { permissionsForRole } from "@nilier-crm/shared";
 import {
   filterVisibleGroups,
   parseCollapsedPreference,
@@ -15,8 +15,12 @@ import {
  * （Registry ui.create + createRoute + createPermission 权威入口 + 权限门）。
  */
 
-const ADMIN: RoleCode[] = ["ADMIN"];
-const VIEWER: RoleCode[] = ["VIEWER"];
+/**
+ * ADR-0057：导航可见性按**会话有效权限集**判定（DB 权威），测试基线取内置角色的静态等价集
+ * （P1 seed 回填保证 built-in 角色 DB 权限集 = 静态基线，故两者等价）。
+ */
+const ADMIN = permissionsForRole("ADMIN");
+const VIEWER = permissionsForRole("VIEWER");
 
 describe("App Shell 纯函数（UI-02）", () => {
   describe("parseCollapsedPreference（折叠状态）", () => {
