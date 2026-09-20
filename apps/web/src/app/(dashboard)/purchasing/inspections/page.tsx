@@ -9,8 +9,8 @@
  */
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { PERMISSIONS, actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog, ModuleKpiStrip } from "@/components/workspace";
 import type { ModuleSummaryData } from "@/lib/module-summary/types";
@@ -53,8 +53,8 @@ function InspectionList() {
   const canCreate =
     state.status === "authenticated" &&
     state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("inspection", "create"));
-  const canDelete = hasPermission(state.user?.roles as RoleCode[], actionPermission("inspection", "delete"));
+    can(state.user, actionPermission("inspection", "create"));
+  const canDelete = can(state.user, actionPermission("inspection", "delete"));
   const toast = useToast();
   const [deleting, setDeleting] = useState<InspectionRow | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
