@@ -4,8 +4,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { AppPage, EntityFormWorkspace, StatusBadge, ErrorPanel } from "@/components/workspace";
 import { PageLoading } from "@/components/ui/skeleton";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
@@ -33,8 +33,7 @@ const STATUS_TONE_MAP: Record<string, "neutral" | "info" | "success" | "warning"
 
 function CnDnDetailView() {
   const { state } = useSession();
-  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
-  const canEdit = hasPermission(roles, actionPermission("supplier-credit-debit-note", "edit"));
+  const canEdit = can(state.user, actionPermission("supplier-credit-debit-note", "edit"));
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const id = params.id;

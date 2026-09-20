@@ -13,8 +13,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { PERMISSIONS, actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
@@ -73,9 +73,8 @@ function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
 
 function StockCountDetailPage() {
   const { state } = useSession();
-  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
-  const canEdit = hasPermission(roles, actionPermission("stock-count", "edit"));
-  const canClose = hasPermission(roles, actionPermission("stock-count", "close"));
+  const canEdit = can(state.user, actionPermission("stock-count", "edit"));
+  const canClose = can(state.user, actionPermission("stock-count", "close"));
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
   const [detail, setDetail] = useState<StockCountDetail | null>(null);

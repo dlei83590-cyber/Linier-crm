@@ -10,9 +10,9 @@
  */
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
+import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { useSession } from "@/lib/session-context";
+import { can, useSession } from "@/lib/session-context";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
@@ -45,10 +45,9 @@ const STATUS_TONE_MAP: Record<string, "neutral" | "info" | "success" | "warning"
 function BomList() {
   const toast = useToast();
   const { state } = useSession();
-  const roles = (state.user?.roles ?? []) as RoleCode[];
-  const canCreate = hasPermission(roles, actionPermission("bom", "create"));
-  const canEdit = hasPermission(roles, actionPermission("bom", "edit"));
-  const canDelete = hasPermission(roles, actionPermission("bom", "delete"));
+  const canCreate = can(state.user, actionPermission("bom", "create"));
+  const canEdit = can(state.user, actionPermission("bom", "edit"));
+  const canDelete = can(state.user, actionPermission("bom", "delete"));
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ status?: string }>({});
   const [deleting, setDeleting] = useState<BomRow | null>(null);

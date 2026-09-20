@@ -15,8 +15,8 @@
  *       不修改 activity-timeline（FRT-04 独占）。
  */
 import { useCallback, useEffect, useState } from "react";
-import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { ConfirmActionDialog, StatusBadge } from "@/components/workspace";
@@ -104,19 +104,19 @@ function StatusLine({ loading, error, empty, emptyText, onRetry }: { loading: bo
 export function SupplierProfile({ supplierId, onChanged }: { supplierId: string; onChanged?: () => void }) {
   const toast = useToast();
   const { state } = useSession();
-  const roles = (state.user?.roles ?? []) as RoleCode[];
-  const canViewBase = hasPermission(roles, actionPermission("supplier", "view"));
-  const canEditBase = hasPermission(roles, actionPermission("supplier", "edit"));
-  const canViewCredit = hasPermission(roles, actionPermission("partner-credit", "view"));
-  const canEditCredit = hasPermission(roles, actionPermission("partner-credit", "create"));
-  const canViewSettlement = hasPermission(roles, actionPermission("supplier-settlement", "view"));
-  const canCreateSettlement = hasPermission(roles, actionPermission("supplier-settlement", "create"));
-  const canEditSettlement = hasPermission(roles, actionPermission("supplier-settlement", "edit"));
-  const canDeleteSettlement = hasPermission(roles, actionPermission("supplier-settlement", "delete"));
-  const canViewQual = hasPermission(roles, actionPermission("supplier-qualification", "view"));
-  const canCreateQual = hasPermission(roles, actionPermission("supplier-qualification", "create"));
-  const canEditQual = hasPermission(roles, actionPermission("supplier-qualification", "edit"));
-  const canDeleteQual = hasPermission(roles, actionPermission("supplier-qualification", "delete"));
+  // ADR-0057：按会话有效权限集判定（DB 权威）
+  const canViewBase = can(state.user, actionPermission("supplier", "view"));
+  const canEditBase = can(state.user, actionPermission("supplier", "edit"));
+  const canViewCredit = can(state.user, actionPermission("partner-credit", "view"));
+  const canEditCredit = can(state.user, actionPermission("partner-credit", "create"));
+  const canViewSettlement = can(state.user, actionPermission("supplier-settlement", "view"));
+  const canCreateSettlement = can(state.user, actionPermission("supplier-settlement", "create"));
+  const canEditSettlement = can(state.user, actionPermission("supplier-settlement", "edit"));
+  const canDeleteSettlement = can(state.user, actionPermission("supplier-settlement", "delete"));
+  const canViewQual = can(state.user, actionPermission("supplier-qualification", "view"));
+  const canCreateQual = can(state.user, actionPermission("supplier-qualification", "create"));
+  const canEditQual = can(state.user, actionPermission("supplier-qualification", "edit"));
+  const canDeleteQual = can(state.user, actionPermission("supplier-qualification", "delete"));
 
   const [profile, setProfile] = useState<SupplierProfileRow | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);

@@ -9,11 +9,11 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
+import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityDetailWorkspace, ConfirmActionDialog } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
-import { useSession } from "@/lib/session-context";
+import { can, useSession } from "@/lib/session-context";
 import { useToast } from "@/components/ui/toast";
 import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
 
@@ -66,7 +66,6 @@ function BomDetailPage() {
   const router = useRouter();
   const toast = useToast();
   const { state } = useSession();
-  const roles = (state.user?.roles ?? []) as RoleCode[];
 
   const [detail, setDetail] = useState<BomDetail | null>(null);
   const [loadError, setLoadError] = useState<ApiClientError | null>(null);
@@ -87,9 +86,9 @@ function BomDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  const canActivate = hasPermission(roles, actionPermission("bom", "approve"));
-  const canEdit = hasPermission(roles, actionPermission("bom", "edit"));
-  const canDelete = hasPermission(roles, actionPermission("bom", "delete"));
+  const canActivate = can(state.user, actionPermission("bom", "approve"));
+  const canEdit = can(state.user, actionPermission("bom", "edit"));
+  const canDelete = can(state.user, actionPermission("bom", "delete"));
 
   const runActivate = async () => {
     if (!detail || activating) return;

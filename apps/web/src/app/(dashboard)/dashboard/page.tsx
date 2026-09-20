@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { KpiCard, ErrorPanel } from "@/components/workspace";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -193,23 +193,22 @@ function SectionTitle({ title, meta }: { title: string; meta?: string }) {
 export default function DashboardPage() {
   const { state } = useSession();
   const user = state.user;
-  const roles = (user?.roles ?? []) as RoleCode[];
 
   const canReports = useMemo(
-    () => hasPermission(roles, actionPermission("reports", "view")),
-    [roles],
+    () => can(user, actionPermission("reports", "view")),
+    [user],
   );
   const canSalesOrders = useMemo(
-    () => hasPermission(roles, actionPermission("sales-order", "view")),
-    [roles],
+    () => can(user, actionPermission("sales-order", "view")),
+    [user],
   );
   const canExpenses = useMemo(
-    () => hasPermission(roles, actionPermission("project-expense", "view")),
-    [roles],
+    () => can(user, actionPermission("project-expense", "view")),
+    [user],
   );
   const canAudit = useMemo(
-    () => hasPermission(roles, actionPermission("audit", "view")),
-    [roles],
+    () => can(user, actionPermission("audit", "view")),
+    [user],
   );
 
   const [today, setToday] = useState("");

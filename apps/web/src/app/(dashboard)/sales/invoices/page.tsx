@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
+import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog, ModuleKpiStrip } from "@/components/workspace";
 import { RowActionsMenu } from "@/components/ui/row-actions-menu";
@@ -21,7 +21,7 @@ import { SALES_STATUS_OPTIONS, salesStatusLabel, salesStatusTone } from "@/lib/s
 import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
-import { useSession } from "@/lib/session-context";
+import { can, useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
 import { INVOICE_TYPE_LABELS } from "@/lib/vat-labels";
 
@@ -46,7 +46,7 @@ function InvoiceList() {
   const router = useRouter();
   const toast = useToast();
   const { state } = useSession();
-  const canDelete = hasPermission((state.user?.roles ?? []) as RoleCode[], actionPermission("invoice", "delete"));
+  const canDelete = can(state.user, actionPermission("invoice", "delete"));
   const [deleting, setDeleting] = useState<InvoiceRow | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [codeInput, setCodeInput] = useState("");

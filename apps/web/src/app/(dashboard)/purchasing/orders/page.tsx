@@ -9,8 +9,8 @@
  */
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { PERMISSIONS, actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog, ModuleKpiStrip } from "@/components/workspace";
 import type { ModuleSummaryData } from "@/lib/module-summary/types";
@@ -56,11 +56,10 @@ function OrderList() {
   const canCreate =
     state.status === "authenticated" &&
     state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("purchase-order", "create"));
+    can(state.user, actionPermission("purchase-order", "create"));
   const toast = useToast();
-  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
-  const canEdit = hasPermission(roles, actionPermission("purchase-order", "edit"));
-  const canDelete = hasPermission(roles, actionPermission("purchase-order", "delete"));
+  const canEdit = can(state.user, actionPermission("purchase-order", "edit"));
+  const canDelete = can(state.user, actionPermission("purchase-order", "delete"));
   const [codeInput, setCodeInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ code?: string; status?: string }>({});

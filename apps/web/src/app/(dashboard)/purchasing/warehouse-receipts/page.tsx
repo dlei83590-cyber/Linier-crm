@@ -9,8 +9,8 @@
  */
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { PERMISSIONS, actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog, ModuleKpiStrip } from "@/components/workspace";
 import type { ModuleSummaryData } from "@/lib/module-summary/types";
@@ -54,9 +54,9 @@ function WarehouseReceiptList() {
   const canCreate =
     state.status === "authenticated" &&
     state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("warehouse-receipt", "create"));
-  const canEdit = hasPermission(state.user?.roles as RoleCode[], actionPermission("warehouse-receipt", "edit"));
-  const canDelete = hasPermission(state.user?.roles as RoleCode[], actionPermission("warehouse-receipt", "delete"));
+    can(state.user, actionPermission("warehouse-receipt", "create"));
+  const canEdit = can(state.user, actionPermission("warehouse-receipt", "edit"));
+  const canDelete = can(state.user, actionPermission("warehouse-receipt", "delete"));
   const toast = useToast();
   const [deleting, setDeleting] = useState<WarehouseReceiptRow | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);

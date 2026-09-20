@@ -7,8 +7,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import {
   AppPage,
@@ -111,8 +111,8 @@ function PriceListDetailPage() {
   const id = typeof params.id === "string" ? params.id : "";
   const toast = useToast();
   const { state } = useSession();
-  const roles = (state.user?.roles ?? []) as RoleCode[];
-  const canEdit = hasPermission(roles, actionPermission("price-list", "edit"));
+  // ADR-0057：按会话有效权限集判定（DB 权威）
+  const canEdit = can(state.user, actionPermission("price-list", "edit"));
 
   const [detail, setDetail] = useState<PriceListDetail | null>(null);
   const [audit, setAudit] = useState<AuditEvent[]>([]);

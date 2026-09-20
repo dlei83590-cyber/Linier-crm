@@ -13,8 +13,8 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { PERMISSIONS, actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import {
   AppPage,
@@ -334,7 +334,7 @@ export default function Page() {
   const canEdit =
     state.status === "authenticated" &&
     state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("purchase-receipt", "edit"));
+    can(state.user, actionPermission("purchase-receipt", "edit"));
   return (
     <PermissionGuard permission={PERMISSIONS.PURCHASE_RECEIPT_READ}>
       {canEdit ? (

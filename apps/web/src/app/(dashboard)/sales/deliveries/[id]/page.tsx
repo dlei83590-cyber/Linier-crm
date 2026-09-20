@@ -16,14 +16,14 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
+import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel, StatusBadge } from "@/components/workspace";
 import { PageLoading } from "@/components/ui/skeleton";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, INPUT_CLASS } from "@/lib/ui-classes";
 import { salesStatusLabel, salesStatusTone } from "@/lib/sales-status";
-import { useSession } from "@/lib/session-context";
+import { can, useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
 
 interface DeliveryLine {
@@ -122,13 +122,13 @@ function DeliveryDetailPage() {
   const [invoicesLoading, setInvoicesLoading] = useState(true);
   const [invoicesError, setInvoicesError] = useState<ApiClientError | null>(null);
 
-  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
-  const canCreateInvoice = hasPermission(roles, actionPermission("invoice", "create"));
-  const canViewInvoice = hasPermission(roles, actionPermission("invoice", "view"));
-  const canEdit = hasPermission(roles, actionPermission("delivery", "edit"));
-  const canApprove = hasPermission(roles, actionPermission("delivery", "approve"));
-  const canClose = hasPermission(roles, actionPermission("delivery", "close"));
-  const canDelete = hasPermission(roles, actionPermission("delivery", "delete"));
+  // ADR-0057：按会话有效权限集判定（DB 权威）
+  const canCreateInvoice = can(state.user, actionPermission("invoice", "create"));
+  const canViewInvoice = can(state.user, actionPermission("invoice", "view"));
+  const canEdit = can(state.user, actionPermission("delivery", "edit"));
+  const canApprove = can(state.user, actionPermission("delivery", "approve"));
+  const canClose = can(state.user, actionPermission("delivery", "close"));
+  const canDelete = can(state.user, actionPermission("delivery", "delete"));
   const canInvoice = detail !== null && detail.status === "DELIVERED";
   const invoicableLines = (detail?.lines ?? []).filter(
     (l) => Number(l.remainingInvoiceQty ?? l.quantity) > 0,

@@ -6,8 +6,8 @@
  * 消费 2A-1 Backend API。主联系人只提交 isPrimary=true；编辑带 version；关系 target 排除自己；recurrence 透传；upcoming-reminders 展示服务端 nextOccurrence/remindAt。
  */
 import { useEffect, useMemo, useState } from "react";
-import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { ConfirmActionDialog } from "@/components/workspace";
@@ -48,11 +48,11 @@ const inputClass = INPUT_CLASS;
 
 export function ContactWorkspace({ partnerId }: { partnerId: string }) {
   const { state } = useSession();
-  const roles = (state.user?.roles ?? []) as RoleCode[];
-  const canView = hasPermission(roles, actionPermission("partner-contact", "view"));
-  const canCreate = hasPermission(roles, actionPermission("partner-contact", "create"));
-  const canEdit = hasPermission(roles, actionPermission("partner-contact", "edit"));
-  const canDelete = hasPermission(roles, actionPermission("partner-contact", "delete"));
+  // ADR-0057：按会话有效权限集判定（DB 权威）
+  const canView = can(state.user, actionPermission("partner-contact", "view"));
+  const canCreate = can(state.user, actionPermission("partner-contact", "create"));
+  const canEdit = can(state.user, actionPermission("partner-contact", "edit"));
+  const canDelete = can(state.user, actionPermission("partner-contact", "delete"));
   const toast = useToast();
 
   const [contacts, setContacts] = useState<ContactRow[]>([]);

@@ -9,8 +9,8 @@
  */
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { PERMISSIONS, actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog, ModuleKpiStrip } from "@/components/workspace";
 import type { ModuleSummaryData } from "@/lib/module-summary/types";
@@ -44,13 +44,12 @@ const STATUS_LABELS: Record<string, string> = {
 function RequisitionList() {
   const { state } = useSession();
   const toast = useToast();
-  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
   const canCreate =
     state.status === "authenticated" &&
     state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("purchase-requisition", "create"));
-  const canEdit = hasPermission(roles, actionPermission("purchase-requisition", "edit"));
-  const canDelete = hasPermission(roles, actionPermission("purchase-requisition", "delete"));
+    can(state.user, actionPermission("purchase-requisition", "create"));
+  const canEdit = can(state.user, actionPermission("purchase-requisition", "edit"));
+  const canDelete = can(state.user, actionPermission("purchase-requisition", "delete"));
   const [codeInput, setCodeInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ code?: string; status?: string }>({});

@@ -13,7 +13,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
+import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
@@ -22,7 +22,7 @@ import { salesStatusLabel, salesStatusTone } from "@/lib/sales-status";
 import { CopyButton } from "@/components/ui/copy-button";
 import { useToast } from "@/components/ui/toast";
 import { PageLoading } from "@/components/ui/skeleton";
-import { useSession } from "@/lib/session-context";
+import { can, useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
 import {
   INVOICE_TYPE_LABELS,
@@ -105,11 +105,11 @@ function InvoiceDetailPage() {
   const [issueVatError, setIssueVatError] = useState<string | null>(null);
   const toast = useToast();
 
-  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
-  const canApprove = hasPermission(roles, actionPermission("invoice", "approve"));
-  const canClose = hasPermission(roles, actionPermission("invoice", "close"));
-  const canCreate = hasPermission(roles, actionPermission("invoice", "create"));
-  const canDelete = hasPermission(roles, actionPermission("invoice", "delete"));
+  // ADR-0057：按会话有效权限集判定（DB 权威）
+  const canApprove = can(state.user, actionPermission("invoice", "approve"));
+  const canClose = can(state.user, actionPermission("invoice", "close"));
+  const canCreate = can(state.user, actionPermission("invoice", "create"));
+  const canDelete = can(state.user, actionPermission("invoice", "delete"));
   const isDraft = detail !== null && detail.status === "DRAFT";
   // 蓝票（ISSUED 且非红字）可红冲；红字草稿自动预填引用
   const isIssuedBlue = detail !== null && detail.status === "ISSUED" && !detail.redLetter;

@@ -3,6 +3,20 @@
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
 
+## [Unreleased] - ADR-0057 P3 批次 2-7：前端判定全量迁移完成（2026-09-20）
+
+### 变更
+
+- **全部剩余页级判定迁移到 `can(user, permission)`**（与后端 `requirePermission` 同源）：基础资料域 49 处 / 客户与项目域 57 处 / 销售域 33 处 / 采购域 38 处 / 库存域 27 处 / 财务与分析域 17 处（含批次 1 系统域 7 处与基础设施 3 处，**迁移前 `apps/web/src` 内 `hasPermission(` 实测 231 处 → 迁移后 0**）
+- **验收口径**：`apps/web/src` 内 `hasPermission(` 调用点 **= 0**；`packages/shared` 的 `hasPermission` 标记 `@deprecated`（仅保留 seed 静态基线与等价性矩阵单测用途）
+- 语义保持等价：权限码字符串、判定方向（view/edit/approve/delete…）与入口显隐逻辑均未改动；仅判定数据源由静态角色映射改为会话有效权限集
+
+### 边界
+
+- **自定义角色**前后端可见性现已一致（消除「UI 少于 API 授权」窗口）；内置角色前后等价（P1 seed 回填）
+- 零 Schema / 零 Migration / 零 API 契约变更 / 零新权限码
+- **Runtime Acceptance（P4）未执行**：各角色登录后的 200/403 矩阵需在部署环境人工验证，本条目不声称已验证
+
 ## [Unreleased] - ADR-0057 P3 批次 1：前端判定基础设施 + 系统域迁移（2026-09-20）
 
 ### 变更
@@ -31,7 +45,7 @@
 ### 边界
 
 - 内置角色行为等价（P1 seed 回填 = 静态基线）；**自定义角色自本 PR 起按其 DB 分配真实生效**（Q6 裁决：不设额外准入）。
-- **前端 UI 可见性仍按静态映射**（245 处 `hasPermission(roles, ...)`）——P3 分域迁移；迁移完成前，自定义角色的界面可见性可能少于 API 实际授权（保守方向，不产生越权）。
+- **前端 UI 可见性当时仍按静态映射**（迁移前 `apps/web/src` 共 231 处 `hasPermission(...)`）——P3 分域迁移已于本日完成（见上方 P3 条目）；迁移窗口内自定义角色的界面可见性可能少于 API 实际授权（保守方向，不产生越权）。
 - 零 Schema / 零 Migration / 零新权限码 / 零路由变更。
 - **部署前置（Blocking）**：P2 上线前生产须已执行 seed 且内置角色权限数符合 ADR-0057 §5.1 期望（未满足时 fail-closed 会导致全员 403）。
 

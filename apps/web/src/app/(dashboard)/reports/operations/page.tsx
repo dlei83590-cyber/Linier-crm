@@ -12,12 +12,12 @@
  * - Loading = 骨架屏（KPI 卡骨架 + 表格骨架行）；Error = ErrorPanel + Retry；Empty = EmptyState
  * - 表格：sticky header + hover 行 + 金额右对齐 tabular-nums + StatusBadge + 分布条
  * - 目标保存成功 = Toast（轻量反馈）；保存失败 = 表单顶部 ErrorPanel
- * RBAC：reports:view；目标维护另需 reports:edit（PermissionGuard + hasPermission）。
+ * RBAC：reports:view；目标维护另需 reports:edit（PermissionGuard + can()）。
  */
 import { useCallback, useEffect, useState } from "react";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { AppPage, ErrorPanel, KpiCard, StatusBadge } from "@/components/workspace";
 import { type StatusTone } from "@/components/design-system";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -178,8 +178,7 @@ function DistBar({ value, max, barClass }: { value: number; max: number; barClas
 function OperationsBoard() {
   const toast = useToast();
   const { state } = useSession();
-  const roles = (state.user?.roles ?? []) as RoleCode[];
-  const canEditTarget = hasPermission(roles, actionPermission("reports", "edit"));
+  const canEditTarget = can(state.user, actionPermission("reports", "edit"));
 
   const [period, setPeriod] = useState<Period>("month");
   const [data, setData] = useState<OperationsReportData | null>(null);

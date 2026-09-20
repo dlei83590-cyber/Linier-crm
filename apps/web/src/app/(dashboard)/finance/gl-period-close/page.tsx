@@ -4,8 +4,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
@@ -31,8 +31,7 @@ interface CloseResult {
 
 function PeriodCloseView() {
   const { state } = useSession();
-  const roles = (state.user?.roles ?? []) as RoleCode[];
-  const canOperate = hasPermission(roles, actionPermission("gl", "create"));
+  const canOperate = can(state.user, actionPermission("gl", "create"));
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
   const [closing, setClosing] = useState(false);
   const [closeError, setCloseError] = useState<ApiClientError | null>(null);
