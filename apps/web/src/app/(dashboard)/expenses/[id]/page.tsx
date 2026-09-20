@@ -11,11 +11,11 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
+import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityDetailWorkspace, ErrorPanel, ReasonDialog } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
-import { useSession } from "@/lib/session-context";
+import { can, useSession } from "@/lib/session-context";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { useToast } from "@/components/ui/toast";
 import { PageLoading } from "@/components/ui/skeleton";
@@ -77,9 +77,8 @@ function ExpenseDetailPage() {
   const toast = useToast();
   const id = typeof params.id === "string" ? params.id : "";
   const { state } = useSession();
-  const roles = (state.user?.roles ?? []) as RoleCode[];
-  const canEdit = hasPermission(roles, actionPermission("project-expense", "edit"));
-  const canApprove = hasPermission(roles, actionPermission("project-expense", "approve"));
+  const canEdit = can(state.user, actionPermission("project-expense", "edit"));
+  const canApprove = can(state.user, actionPermission("project-expense", "approve"));
 
   const [detail, setDetail] = useState<ExpenseDetail | null>(null);
   const [loading, setLoading] = useState(true);

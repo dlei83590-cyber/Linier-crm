@@ -14,8 +14,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { AppPage, EntityFormWorkspace, ReferenceSelector } from "@/components/workspace";
 import { useToast } from "@/components/ui/toast";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
@@ -210,7 +210,7 @@ export default function Page() {
   const canCreate =
     state.status === "authenticated" &&
     state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("project", "create"));
+    can(state.user, actionPermission("project", "create"));
   if (!canCreate) {
     return (
       <PermissionGuard permission={actionPermission("project", "create")}>

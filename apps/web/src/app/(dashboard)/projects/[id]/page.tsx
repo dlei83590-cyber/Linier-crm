@@ -16,8 +16,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import {
   AppPage,
   EntityDetailWorkspace,
@@ -307,12 +307,10 @@ function toIso(value: string): string {
 function ProjectDetailPage() {
   const { state } = useSession();
   const toast = useToast();
-  const roles =
-    state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
   const canEdit =
     state.status === "authenticated" &&
     state.user !== null &&
-    hasPermission(roles, actionPermission("project", "edit"));
+    can(state.user, actionPermission("project", "edit"));
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
@@ -1864,146 +1862,146 @@ function ProjectDetailPage() {
   const canAddStakeholder =
     canManageStakeholders &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-stakeholder", "create"));
+    can(state.user, actionPermission("project-stakeholder", "create"));
   const canEditStakeholder =
     canManageStakeholders &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-stakeholder", "edit"));
+    can(state.user, actionPermission("project-stakeholder", "edit"));
   const canDeleteStakeholder =
     canManageStakeholders &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-stakeholder", "delete"));
+    can(state.user, actionPermission("project-stakeholder", "delete"));
   const canManageMembers = detail.capabilities.members;
   const canAddMember =
     canManageMembers &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-member", "create"));
+    can(state.user, actionPermission("project-member", "create"));
   const canEditMember =
     canManageMembers &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-member", "edit"));
+    can(state.user, actionPermission("project-member", "edit"));
   const canDeleteMember =
     canManageMembers &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-member", "delete"));
+    can(state.user, actionPermission("project-member", "delete"));
   const canManageMilestones = detail.capabilities.milestones;
   const canAddMilestone =
     canManageMilestones &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-milestone", "create"));
+    can(state.user, actionPermission("project-milestone", "create"));
   const canEditMilestone =
     canManageMilestones &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-milestone", "edit"));
+    can(state.user, actionPermission("project-milestone", "edit"));
   const canDeleteMilestone =
     canManageMilestones &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-milestone", "delete"));
+    can(state.user, actionPermission("project-milestone", "delete"));
   const canManageTasks = detail.capabilities.tasks;
   const canAddTask =
     canManageTasks &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-task", "create"));
+    can(state.user, actionPermission("project-task", "create"));
   const canEditTask =
     canManageTasks &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-task", "edit"));
+    can(state.user, actionPermission("project-task", "edit"));
   const canDeleteTask =
     canManageTasks &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-task", "delete"));
+    can(state.user, actionPermission("project-task", "delete"));
   const canManageRisks = detail.capabilities.risks;
   const canAddRisk =
     canManageRisks &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-risk", "create"));
+    can(state.user, actionPermission("project-risk", "create"));
   const canEditRisk =
     canManageRisks &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-risk", "edit"));
+    can(state.user, actionPermission("project-risk", "edit"));
   const canDeleteRisk =
     canManageRisks &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-risk", "delete"));
+    can(state.user, actionPermission("project-risk", "delete"));
   const canManageVisits = detail.capabilities.visits;
   const canAddVisit =
     canManageVisits &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-visit", "create"));
+    can(state.user, actionPermission("project-visit", "create"));
   const canEditVisit =
     canManageVisits &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-visit", "edit"));
+    can(state.user, actionPermission("project-visit", "edit"));
   const canDeleteVisit =
     canManageVisits &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-visit", "delete"));
+    can(state.user, actionPermission("project-visit", "delete"));
   const canManageProducts = detail.capabilities.products;
   const canAddProduct =
     canManageProducts &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-product", "create")) &&
+    can(state.user, actionPermission("project-product", "create")) &&
     // selector 依赖真实 Items API：缺 item:view → 不显示添加按钮（CTO #13762）
-    hasPermission(roles, actionPermission("item", "view"));
+    can(state.user, actionPermission("item", "view"));
   const canEditProduct =
     canManageProducts &&
     detail.stage !== "CLOSED" &&
     // Edit 不需要 item:view：item 是 aggregate authoritative relation + Edit 时 locked（CTO #13762）
-    hasPermission(roles, actionPermission("project-product", "edit"));
+    can(state.user, actionPermission("project-product", "edit"));
   const canDeleteProduct =
     canManageProducts &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-product", "delete"));
+    can(state.user, actionPermission("project-product", "delete"));
   const canManageTags = detail.capabilities.tags;
   const canAddTag =
     canManageTags &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-tag", "create")) &&
+    can(state.user, actionPermission("project-tag", "create")) &&
     // selector 依赖真实 Tag 数据源：缺 tag:view → 不显示添加按钮（CTO #13762）
-    hasPermission(roles, actionPermission("tag", "view"));
+    can(state.user, actionPermission("tag", "view"));
   const canDeleteTag =
     canManageTags &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-tag", "delete"));
+    can(state.user, actionPermission("project-tag", "delete"));
   const canManageBudgets = detail.capabilities.budgets;
   const canAddBudget =
     canManageBudgets &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-budget", "create"));
+    can(state.user, actionPermission("project-budget", "create"));
   const canEditBudget =
     canManageBudgets &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-budget", "edit"));
+    can(state.user, actionPermission("project-budget", "edit"));
   const canDeleteBudget =
     canManageBudgets &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-budget", "delete"));
+    can(state.user, actionPermission("project-budget", "delete"));
   const canManageExpenses = detail.capabilities.expenses;
   const canAddExpense =
     canManageExpenses &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-expense", "create"));
+    can(state.user, actionPermission("project-expense", "create"));
   const canEditExpense =
     canManageExpenses &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-expense", "edit"));
+    can(state.user, actionPermission("project-expense", "edit"));
   const canDeleteExpense =
     canManageExpenses &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-expense", "delete"));
+    can(state.user, actionPermission("project-expense", "delete"));
   const canManageProgresses = detail.capabilities.progresses;
   const canAddProgress =
     canManageProgresses &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-progress", "create"));
+    can(state.user, actionPermission("project-progress", "create"));
   const canEditProgress =
     canManageProgresses &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-progress", "edit"));
+    can(state.user, actionPermission("project-progress", "edit"));
   const canDeleteProgress =
     canManageProgresses &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-progress", "delete"));
+    can(state.user, actionPermission("project-progress", "delete"));
   // L2-A：acceptance 三层按钮 Gate（capabilities + 细粒度 permission + stage !== CLOSED；CLOSED 后写按钮隐藏）
   const canManageAcceptances = detail.capabilities.acceptances;
   // L2-B1：Transition 入口 Gate（唯一候选来源 = detail.allowedTransitions；不复制状态机；无候选/CLOSED 不显示入口）
@@ -2014,20 +2012,20 @@ function ProjectDetailPage() {
   // FRT-05：Close 入口 Gate（backend requirePermission("project:close")；CLOSED 后不显示；
   // force 需 project:close + project:approve 双权限（与 backend close route force 分支一致））
   const canClose =
-    hasPermission(roles, actionPermission("project", "close")) && detail.stage !== "CLOSED";
-  const canForceClose = hasPermission(roles, actionPermission("project", "approve"));
+    can(state.user, actionPermission("project", "close")) && detail.stage !== "CLOSED";
+  const canForceClose = can(state.user, actionPermission("project", "approve"));
   const canAddAcceptance =
     canManageAcceptances &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-acceptance", "create"));
+    can(state.user, actionPermission("project-acceptance", "create"));
   const canEditAcceptance =
     canManageAcceptances &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-acceptance", "edit"));
+    can(state.user, actionPermission("project-acceptance", "edit"));
   const canDeleteAcceptance =
     canManageAcceptances &&
     detail.stage !== "CLOSED" &&
-    hasPermission(roles, actionPermission("project-acceptance", "delete"));
+    can(state.user, actionPermission("project-acceptance", "delete"));
 
   return (
     <AppPage>

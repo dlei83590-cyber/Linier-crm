@@ -19,8 +19,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { AppPage, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
 import { StatusBadge } from "@/components/workspace/status-badge";
 import { PageLoading } from "@/components/ui/skeleton";
@@ -114,18 +114,18 @@ function OpportunityDetailPage() {
   const canEdit =
     state.status === "authenticated" &&
     state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("project-opportunity", "edit"));
+    can(state.user, actionPermission("project-opportunity", "edit"));
   // 商机→报价 MVP：创建报价入口（quotation:create，与 POST /api/quotations 对齐；无权限不渲染）
   const canCreateQuotation =
     state.status === "authenticated" &&
     state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("quotation", "create"));
+    can(state.user, actionPermission("quotation", "create"));
   // FRT-05 convert 权限：与 backend requirePermission("project-opportunity:create") ?? requirePermission("project:create") 镜像
   const canConvert =
     state.status === "authenticated" &&
     state.user !== null &&
-    (hasPermission(state.user.roles as RoleCode[], actionPermission("project-opportunity", "create")) ||
-      hasPermission(state.user.roles as RoleCode[], actionPermission("project", "create")));
+    (can(state.user, actionPermission("project-opportunity", "create")) ||
+      can(state.user, actionPermission("project", "create")));
   const router = useRouter();
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";

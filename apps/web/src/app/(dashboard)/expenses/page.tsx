@@ -11,8 +11,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
@@ -80,8 +80,7 @@ const APPROVAL_TONE: Record<string, "neutral" | "info" | "success" | "danger"> =
 function ExpensesList() {
   const router = useRouter();
   const { state } = useSession();
-  const roles = (state.user?.roles ?? []) as RoleCode[];
-  const canCreate = hasPermission(roles, actionPermission("project-expense", "create"));
+  const canCreate = can(state.user, actionPermission("project-expense", "create"));
 
   // 筛选依赖数据：客户下拉 + 客户 → 项目级联
   const [customers, setCustomers] = useState<PartnerOption[]>([]);

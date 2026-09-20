@@ -17,8 +17,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { AppPage, EntityFormWorkspace, ErrorPanel } from "@/components/workspace";
 import { PageLoading } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
@@ -296,7 +296,7 @@ export default function Page() {
   const canEdit =
     state.status === "authenticated" &&
     state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("project", "edit"));
+    can(state.user, actionPermission("project", "edit"));
   if (!canEdit) {
     return (
       <PermissionGuard permission={actionPermission("project", "edit")}>

@@ -22,7 +22,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
+import { actionPermission } from "@nilier-crm/shared";
 import {
   AppPage,
   PageHeader,
@@ -36,7 +36,7 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
-import { useSession } from "@/lib/session-context";
+import { can, useSession } from "@/lib/session-context";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, INPUT_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { formatDate, formatDateOnly } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -172,8 +172,7 @@ interface PlanCustomerOption {
 function VisitsList() {
   const toast = useToast();
   const { state } = useSession();
-  const roles = (state.user?.roles ?? []) as RoleCode[];
-  const canCheckin = hasPermission(roles, actionPermission("project-visit", "create"));
+  const canCheckin = can(state.user, actionPermission("project-visit", "create"));
 
   const [range, setRange] = useState<RangeMode>("week");
   const [view, setView] = useState<ViewMode>("calendar");
