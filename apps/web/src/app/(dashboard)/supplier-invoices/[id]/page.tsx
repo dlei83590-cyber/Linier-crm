@@ -13,7 +13,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
+import { actionPermission } from "@nilier-crm/shared";
 import type { StatusTone } from "@/components/design-system";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel, DetailTable } from "@/components/workspace";
@@ -22,7 +22,7 @@ import { CopyButton } from "@/components/ui/copy-button";
 import { useToast } from "@/components/ui/toast";
 import { PageLoading } from "@/components/ui/skeleton";
 import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
-import { useSession } from "@/lib/session-context";
+import { can, useSession } from "@/lib/session-context";
 import { formatDateOnly, formatMoneyValue } from "@/lib/format";
 import { INVOICE_TYPE_LABELS, formatTaxInvoiceNumber } from "@/lib/vat-labels";
 
@@ -112,8 +112,7 @@ function SupplierInvoiceDetailPage() {
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const toast = useToast();
 
-  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
-  const canEdit = hasPermission(roles, actionPermission("supplier-invoice", "edit"));
+  const canEdit = can(state.user, actionPermission("supplier-invoice", "edit"));
 
   useEffect(() => {
     const controller = new AbortController();
