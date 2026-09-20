@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
+import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog, ModuleKpiStrip } from "@/components/workspace";
 import { RowActionsMenu } from "@/components/ui/row-actions-menu";
@@ -20,7 +20,7 @@ import { SALES_STATUS_OPTIONS, salesStatusLabel, salesStatusTone } from "@/lib/s
 import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
-import { useSession } from "@/lib/session-context";
+import { can, useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
 
 interface SalesOrderRow {
@@ -39,7 +39,7 @@ function SalesOrderList() {
   const router = useRouter();
   const toast = useToast();
   const { state } = useSession();
-  const canDelete = hasPermission((state.user?.roles ?? []) as RoleCode[], actionPermission("sales-order", "delete"));
+  const canDelete = can(state.user, actionPermission("sales-order", "delete"));
   const [deleting, setDeleting] = useState<SalesOrderRow | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [customers, setCustomers] = useState<Array<{ id: string; name: string | null }>>([]);

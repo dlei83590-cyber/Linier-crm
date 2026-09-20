@@ -15,14 +15,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
+import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityDetailWorkspace, ErrorPanel } from "@/components/workspace";
 import { PageLoading } from "@/components/ui/skeleton";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, INPUT_CLASS } from "@/lib/ui-classes";
 import { salesStatusLabel, salesStatusTone } from "@/lib/sales-status";
-import { useSession } from "@/lib/session-context";
+import { can, useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
 
 const PAYMENT_METHOD_LABEL: Record<string, string> = {
@@ -116,9 +116,9 @@ function ReceiptDetailPage() {
   const [reverseReason, setReverseReason] = useState("");
   const [reverseError, setReverseError] = useState<string | null>(null);
 
-  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
-  const canEdit = hasPermission(roles, actionPermission("receipt", "edit"));
-  const canClose = hasPermission(roles, actionPermission("receipt", "close"));
+  // ADR-0057：按会话有效权限集判定（DB 权威）
+  const canEdit = can(state.user, actionPermission("receipt", "edit"));
+  const canClose = can(state.user, actionPermission("receipt", "close"));
 
   const canAllocate =
     detail !== null &&

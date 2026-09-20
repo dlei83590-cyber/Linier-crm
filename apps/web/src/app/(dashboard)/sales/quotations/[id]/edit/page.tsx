@@ -23,9 +23,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
+import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { useSession } from "@/lib/session-context";
+import { can, useSession } from "@/lib/session-context";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, CARD_CLASS, INPUT_CLASS } from "@/lib/ui-classes";
 import { PageLoading } from "@/components/ui/skeleton";
@@ -140,10 +140,10 @@ function QuotationEditForm() {
   const [pendingReload, setPendingReload] = useState(false);
   const [pendingDeleteLine, setPendingDeleteLine] = useState<QuotationLine | null>(null);
 
-  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
-  const canCreateLine = hasPermission(roles, actionPermission("quotation-line", "create"));
-  const canEditLine = hasPermission(roles, actionPermission("quotation-line", "edit"));
-  const canDeleteLine = hasPermission(roles, actionPermission("quotation-line", "delete"));
+  // ADR-0057：按会话有效权限集判定（DB 权威）
+  const canCreateLine = can(state.user, actionPermission("quotation-line", "create"));
+  const canEditLine = can(state.user, actionPermission("quotation-line", "edit"));
+  const canDeleteLine = can(state.user, actionPermission("quotation-line", "delete"));
 
   // ── dirty scope 派生：header / lines / newLine ────────────────────────────
   const headerDirty =

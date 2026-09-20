@@ -14,7 +14,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
+import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge, ModuleKpiStrip } from "@/components/workspace";
 import type { ModuleSummaryData } from "@/lib/module-summary/types";
@@ -22,7 +22,7 @@ import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { SALES_STATUS_OPTIONS, approvalStatusDef, salesStatusLabel, salesStatusTone } from "@/lib/sales-status";
 import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
-import { useSession } from "@/lib/session-context";
+import { can, useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
 
 interface CnDnLine {
@@ -68,19 +68,11 @@ function CnDnList() {
   const canCreate =
     state.status === "authenticated" &&
     state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("credit-debit-note", "create"));
-  const canEdit = hasPermission(
-    state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [],
-    actionPermission("credit-debit-note", "edit"),
-  );
-  const canApprove = hasPermission(
-    state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [],
-    actionPermission("credit-debit-note", "approve"),
-  );
-  const canDelete = hasPermission(
-    state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [],
-    actionPermission("credit-debit-note", "delete"),
-  );
+    can(state.user, actionPermission("credit-debit-note", "create"));
+  // ADR-0057：按会话有效权限集判定（DB 权威）
+  const canEdit = can(state.user, actionPermission("credit-debit-note", "edit"));
+  const canApprove = can(state.user, actionPermission("credit-debit-note", "approve"));
+  const canDelete = can(state.user, actionPermission("credit-debit-note", "delete"));
 
   const [statusInput, setStatusInput] = useState("");
   const [noteTypeInput, setNoteTypeInput] = useState("");
