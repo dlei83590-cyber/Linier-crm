@@ -6,14 +6,27 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
 }));
 
-vi.mock('@/lib/session-context', () => ({
-  useSession: () => ({
-    state: {
-      status: 'authenticated',
-      user: { id: 'u-1', email: 'a@b.c', name: 'Admin', roles: ['SUPER_ADMIN'] },
-    },
-  }),
-}));
+import { permissionsForRole } from "@nilier-crm/shared";
+
+vi.mock('@/lib/session-context', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/session-context')>();
+  return {
+    ...actual,
+    useSession: () => ({
+      state: {
+        status: 'authenticated',
+        user: {
+          id: 'u-1',
+          email: 'a@b.c',
+          name: 'Admin',
+          roles: ['SUPER_ADMIN'],
+          // ADR-0057：会话有效权限集（内置角色等价集），供 can()/PermissionGuard 判定
+          permissions: permissionsForRole('SUPER_ADMIN'),
+        },
+      },
+    }),
+  };
+});
 
 import { DensityProvider } from '@/lib/table-density-context';
 import Page from '@/app/(dashboard)/purchasing/requisitions/new/page';
