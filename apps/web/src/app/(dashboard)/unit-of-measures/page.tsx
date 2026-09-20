@@ -8,8 +8,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { hasPermission, actionPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
@@ -46,10 +46,10 @@ function UomList() {
   const router = useRouter();
   const toast = useToast();
   const { state } = useSession();
-  const roles = (state.user?.roles ?? []) as RoleCode[];
-  const canCreate = hasPermission(roles, actionPermission("unit-of-measure", "create"));
-  const canEdit = hasPermission(roles, actionPermission("unit-of-measure", "edit"));
-  const canDelete = hasPermission(roles, actionPermission("unit-of-measure", "delete"));
+  // ADR-0057：按会话有效权限集判定（DB 权威）
+  const canCreate = can(state.user, actionPermission("unit-of-measure", "create"));
+  const canEdit = can(state.user, actionPermission("unit-of-measure", "edit"));
+  const canDelete = can(state.user, actionPermission("unit-of-measure", "delete"));
   const [deleting, setDeleting] = useState<UomRow | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
 

@@ -18,7 +18,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
+import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, ErrorPanel, StatusBadge } from "@/components/workspace";
 import { PageLoading } from "@/components/ui/skeleton";
@@ -30,7 +30,7 @@ import {
   enterpriseOwnershipLabel,
   enterpriseListingLabel,
 } from "@/lib/business-partner/enterprise-profile";
-import { useSession } from "@/lib/session-context";
+import { can, useSession } from "@/lib/session-context";
 import { formatDate, formatMoney, formatMoneyValue } from "@/lib/format";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { ContactWorkspace } from "./contact-workspace";
@@ -217,10 +217,10 @@ function PartnerDetailPage() {
   const params = useParams();
   const id = typeof params.id === "string" ? params.id : "";
   const { state } = useSession();
-  const roles = (state.user?.roles ?? []) as RoleCode[];
-  const canEdit = hasPermission(roles, actionPermission("business-partner", "edit"));
-  const canCreateActivity = hasPermission(roles, actionPermission("project-visit", "create"));
-  const canCreateOpportunity = hasPermission(roles, actionPermission("project-opportunity", "create"));
+  // ADR-0057：按会话有效权限集判定（DB 权威）
+  const canEdit = can(state.user, actionPermission("business-partner", "edit"));
+  const canCreateActivity = can(state.user, actionPermission("project-visit", "create"));
+  const canCreateOpportunity = can(state.user, actionPermission("project-opportunity", "create"));
 
   const [detail, setDetail] = useState<PartnerDetail | null>(null);
   const [loadError, setLoadError] = useState<ApiClientError | null>(null);
