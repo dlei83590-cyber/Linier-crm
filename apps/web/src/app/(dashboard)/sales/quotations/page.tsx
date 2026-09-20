@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
+import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog, ModuleKpiStrip } from "@/components/workspace";
 import { RowActionsMenu } from "@/components/ui/row-actions-menu";
@@ -18,7 +18,7 @@ import type { ModuleSummaryData } from "@/lib/module-summary/types";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { SALES_STATUS_OPTIONS, salesStatusLabel, salesStatusTone } from "@/lib/sales-status";
 import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
-import { useSession } from "@/lib/session-context";
+import { can, useSession } from "@/lib/session-context";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { formatDate, formatMoney } from "@/lib/format";
@@ -43,9 +43,9 @@ function QuotationList() {
   const router = useRouter();
   const toast = useToast();
   const { state } = useSession();
-  const roles = (state.user?.roles ?? []) as RoleCode[];
-  const canCreate = hasPermission(roles, actionPermission("quotation", "create"));
-  const canDelete = hasPermission(roles, actionPermission("quotation", "delete"));
+  // ADR-0057：按会话有效权限集判定（DB 权威）
+  const canCreate = can(state.user, actionPermission("quotation", "create"));
+  const canDelete = can(state.user, actionPermission("quotation", "delete"));
   const [deleting, setDeleting] = useState<QuotationRow | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [codeInput, setCodeInput] = useState("");

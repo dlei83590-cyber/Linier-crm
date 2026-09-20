@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
+import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog, ModuleKpiStrip } from "@/components/workspace";
 import { RowActionsMenu } from "@/components/ui/row-actions-menu";
@@ -19,7 +19,7 @@ import type { ModuleSummaryData } from "@/lib/module-summary/types";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { SALES_STATUS_OPTIONS, salesStatusLabel, salesStatusTone } from "@/lib/sales-status";
 import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
-import { useSession } from "@/lib/session-context";
+import { can, useSession } from "@/lib/session-context";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { formatDate, formatMoney } from "@/lib/format";
@@ -42,13 +42,13 @@ function ReceiptList() {
   const router = useRouter();
   const toast = useToast();
   const { state } = useSession();
-  const canDelete = hasPermission((state.user?.roles ?? []) as RoleCode[], actionPermission("receipt", "delete"));
+  const canDelete = can(state.user, actionPermission("receipt", "delete"));
   const [deleting, setDeleting] = useState<ReceiptRow | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const canCreate =
     state.status === "authenticated" &&
     state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("receipt", "create"));
+    can(state.user, actionPermission("receipt", "create"));
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ status?: string }>({});
 

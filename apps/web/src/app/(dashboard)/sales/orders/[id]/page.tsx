@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
+import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, ConfirmActionDialog, EntityDetailWorkspace, ErrorPanel, StatusBadge } from "@/components/workspace";
 import { CopyButton } from "@/components/ui/copy-button";
@@ -24,7 +24,7 @@ import { PageLoading } from "@/components/ui/skeleton";
 import { apiFetch, ApiClientError, describeStatus } from "@/lib/api-client";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS } from "@/lib/ui-classes";
 import { salesStatusLabel, salesStatusTone } from "@/lib/sales-status";
-import { useSession } from "@/lib/session-context";
+import { can, useSession } from "@/lib/session-context";
 import { formatDate, formatMoney } from "@/lib/format";
 
 interface SalesOrderLine {
@@ -149,11 +149,11 @@ function SalesOrderDetailPage() {
   const [confirmAction, setConfirmAction] = useState<"confirm" | "cancel" | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
-  const canCreateDelivery = hasPermission(roles, actionPermission("delivery", "create"));
-  const canEdit = hasPermission(roles, actionPermission("sales-order", "edit"));
-  const canApprove = hasPermission(roles, actionPermission("sales-order", "approve"));
-  const canClose = hasPermission(roles, actionPermission("sales-order", "close"));
+  // ADR-0057：按会话有效权限集判定（DB 权威）
+  const canCreateDelivery = can(state.user, actionPermission("delivery", "create"));
+  const canEdit = can(state.user, actionPermission("sales-order", "edit"));
+  const canApprove = can(state.user, actionPermission("sales-order", "approve"));
+  const canClose = can(state.user, actionPermission("sales-order", "close"));
   const canDeliver =
     detail !== null &&
     (detail.status === "CONFIRMED" || detail.status === "PARTIALLY_DELIVERED");
