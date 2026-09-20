@@ -65,8 +65,8 @@ function parseSeedCatalog(): Set<string> {
   }
 
   const catalog = new Set<string>();
-  for (const module of actionModules) {
-    for (const action of PERMISSION_ACTIONS) catalog.add(module + ':' + action);
+  for (const moduleName of actionModules) {
+    for (const action of PERMISSION_ACTIONS) catalog.add(moduleName + ':' + action);
   }
   for (const code of literalCodes) catalog.add(code);
   return catalog;
