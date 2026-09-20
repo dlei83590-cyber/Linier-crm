@@ -10,8 +10,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { hasPermission, PERMISSIONS, actionPermission, type RoleCode } from "@nilier-crm/shared";
-import { useSession } from "@/lib/session-context";
+import { PERMISSIONS, actionPermission } from "@nilier-crm/shared";
+import { can, useSession } from "@/lib/session-context";
 import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog, ModuleKpiStrip } from "@/components/workspace";
 import type { ModuleSummaryData } from "@/lib/module-summary/types";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
@@ -44,12 +44,11 @@ const STATUS_LABELS: Record<string, string> = {
 function TransferList() {
   const { state } = useSession();
   const toast = useToast();
-  const roles = state.status === "authenticated" && state.user ? (state.user.roles as RoleCode[]) : [];
   const canCreate =
     state.status === "authenticated" &&
     state.user !== null &&
-    hasPermission(state.user.roles as RoleCode[], actionPermission("inventory-transfer", "create"));
-  const canDelete = hasPermission(roles, actionPermission("inventory-transfer", "delete"));
+    can(state.user, actionPermission("inventory-transfer", "create"));
+  const canDelete = can(state.user, actionPermission("inventory-transfer", "delete"));
   const [noInput, setNoInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{ transferNo?: string; status?: string }>({});

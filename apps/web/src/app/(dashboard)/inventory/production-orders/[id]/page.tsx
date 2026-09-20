@@ -10,11 +10,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
+import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityDetailWorkspace, ConfirmActionDialog } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
-import { useSession } from "@/lib/session-context";
+import { can, useSession } from "@/lib/session-context";
 import { useToast } from "@/components/ui/toast";
 import { formatDate, formatMoney } from "@/lib/format";
 import { BUTTON_PRIMARY_CLASS } from "@/lib/ui-classes";
@@ -75,7 +75,6 @@ function OrderDetailPage() {
   const router = useRouter();
   const toast = useToast();
   const { state } = useSession();
-  const roles = (state.user?.roles ?? []) as RoleCode[];
 
   const [detail, setDetail] = useState<OrderDetail | null>(null);
   const [loadError, setLoadError] = useState<ApiClientError | null>(null);
@@ -94,9 +93,9 @@ function OrderDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  const canEdit = hasPermission(roles, actionPermission("production-order", "edit"));
-  const canDelete = hasPermission(roles, actionPermission("production-order", "delete"));
-  const canClose = hasPermission(roles, actionPermission("production-order", "close"));
+  const canEdit = can(state.user, actionPermission("production-order", "edit"));
+  const canDelete = can(state.user, actionPermission("production-order", "delete"));
+  const canClose = can(state.user, actionPermission("production-order", "close"));
 
   const runAction = async (action: Exclude<ConfirmAction, null>) => {
     if (!detail || busy) return;

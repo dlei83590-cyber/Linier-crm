@@ -9,9 +9,9 @@
  */
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { actionPermission, hasPermission, type RoleCode } from "@nilier-crm/shared";
+import { actionPermission } from "@nilier-crm/shared";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { useSession } from "@/lib/session-context";
+import { can, useSession } from "@/lib/session-context";
 import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
@@ -49,8 +49,7 @@ const STATUS_TONE_MAP: Record<string, "neutral" | "info" | "success" | "warning"
 
 function ProductionOrderList() {
   const { state } = useSession();
-  const roles = (state.user?.roles ?? []) as RoleCode[];
-  const canCreate = hasPermission(roles, actionPermission("production-order", "create"));
+  const canCreate = can(state.user, actionPermission("production-order", "create"));
   const [statusInput, setStatusInput] = useState("");
   const [typeInput, setTypeInput] = useState("");
   const [filters, setFilters] = useState<{ status?: string; productionType?: string }>({});
