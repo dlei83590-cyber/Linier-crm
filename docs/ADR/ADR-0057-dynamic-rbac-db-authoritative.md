@@ -150,6 +150,10 @@ GROUP BY r.code ORDER BY r.code;
    期望基数以 `packages/shared/src/rbac/index.test.ts` 的静态为准：`SUPER_ADMIN`/`ADMIN` = **1522**（= 去重后的静态权限宇宙大小），`VIEWER` = **0**，`MANAGER`/`MEMBER` 取其静态集去重后的数量。若任一内置角色为 0 而静态基数不为 0 → 回填未执行，**不得部署 P2**。
 
 3. 未满足时**不得合并 P2**：切换后所有用户（含 SUPER_ADMIN）将恒 403（fail-closed 设计使然，非缺陷）。
+4. **生产事件（2026-09-20）与自动化保护**：自建机部署路径未执行 seed，导致管理员导航只剩仪表盘、接口全 403。已加固：
+   - `prisma/seed.ts`：**SUPER_ADMIN 每次 seed 对齐为全集（自愈）**（Q2 已保证其不可经 API 修改，故不存在覆盖运营调整的风险）；其余内置角色仍仅首次回填。
+   - `/api/health/ready`：新增 RBAC 就绪检查——无任何角色持有权限关联时返回 **503 `RBAC_NOT_INITIALIZED`**（含 hint），Docker HEALTHCHECK 与 Dashboard 系统状态自动暴露该状态，不再以"静默锁死"形式表现。
+   - 部署 Runbook：`docs/runbooks/Deploy_Update_Runbook.md`（migrate → **seed** → 起容器 → 双校验；应急恢复 SQL；构建慢判读）。
 
 ---
 
