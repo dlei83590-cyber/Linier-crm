@@ -928,12 +928,20 @@ async function main() {
   // → 本段 fail loud（缺码即抛错，禁止静默跳过 / 部分回填）。
   // 幂等策略（ADR-0057 裁决 Q3）：仅当角色当前没有任何权限关联时回填一次，不覆盖运营侧后续调整。
   // 等价性：回填值 = 当前静态 permissionsForRole(code)（切换前后行为一致，见 packages/shared 单测）。
+  // 例外（2026-09-20 生产事件修复）：SUPER_ADMIN **每次 seed 都对齐为全集**（自愈）；
+  // 依据 ADR-0057 裁决 Q2——SUPER_ADMIN 权限不允许通过 API 修改（恒为全集），
+  // 故不存在"运营侧调整"会被覆盖的风险；同时保证任何环境下超级管理员不会因回填缺失而锁死。
+  const ALWAYS_FULL_ROLES = new Set<string>(["SUPER_ADMIN"]);
+
   for (const role of SEED_ROLES) {
     const saved = await prisma.role.findUnique({
       where: { code: role.code },
       select: { id: true, code: true, _count: { select: { permissions: true } } },
     });
-    if (!saved || saved._count.permissions > 0) continue;
+    if (!saved) continue;
+
+    const forceFull = ALWAYS_FULL_ROLES.has(saved.code);
+    if (!forceFull && saved._count.permissions > 0) continue;
 
     const codes = normalizePermissions(permissionsForRole(saved.code as RoleCode));
     if (codes.length === 0) continue;
@@ -952,9 +960,16 @@ async function main() {
 
     await prisma.role.update({
       where: { id: saved.id },
-      data: { permissions: { connect: codes.map((code) => ({ code })) } },
+      data: {
+        // 自愈型角色（SUPER_ADMIN）用 set 保持"恒为全集"；其余角色用 connect 追加（首次回填语义）
+        ...(forceFull
+          ? { permissions: { set: codes.map((code) => ({ code })) } }
+          : { permissions: { connect: codes.map((code) => ({ code })) } }),
+      },
     });
-    console.log(`[seed] ADR-0057 RBAC backfill ${saved.code}: ${codes.length} permissions`);
+    console.log(
+      `[seed] ADR-0057 RBAC backfill ${saved.code}: ${codes.length} permissions${forceFull ? " (always-full, set)" : ""}`,
+    );
   }
 
   // Admin user

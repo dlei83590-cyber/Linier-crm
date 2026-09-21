@@ -46,7 +46,10 @@ export async function GET() {
     database: false,
     migrationBaseline: false,
     buildMetadata: false,
+    // ADR-0057（2026-09-20 生产事件）：DB 权限集是鉴权权威，未回填 = 全员无权限（fail-closed）
+    rbacInitialized: false,
   };
+  let rolesWithPermissions = 0;
   let databaseErrorType: string | null = null;
   let appliedMigration: string | null = null;
   const expectedMigration = await latestMigrationInRepo();
@@ -85,7 +88,20 @@ export async function GET() {
       process.env.NEXT_PUBLIC_DEPLOYMENT_ENV,
   );
 
-  const ready = checks.database && checks.migrationBaseline && checks.buildMetadata;
+  // 4) RBAC 初始化（ADR-0057）：至少一个角色持有权限关联，才说明内置角色回填已执行。
+  //    若为 0，则本版本（P2 起）对外表现为"所有用户无任何权限"——必须显式 unready，
+  //    避免以"静默锁死"（全员 403 / 导航只剩仪表盘）的形式暴露为业务故障。
+  if (checks.database) {
+    try {
+      rolesWithPermissions = await prisma.role.count({ where: { permissions: { some: {} } } });
+    } catch {
+      rolesWithPermissions = 0;
+    }
+    checks.rbacInitialized = rolesWithPermissions > 0;
+  }
+
+  const ready =
+    checks.database && checks.migrationBaseline && checks.buildMetadata && checks.rbacInitialized;
 
   const base = {
     service: "linier-crm",
@@ -95,6 +111,11 @@ export async function GET() {
     expectedMigration,
     appliedMigration,
     buildMetadata: checks.buildMetadata,
+    rbacInitialized: checks.rbacInitialized,
+    rolesWithPermissions,
+    ...(checks.database && !checks.rbacInitialized
+      ? { reason: "RBAC_NOT_INITIALIZED", hint: "run pnpm db:seed（内置角色权限回填）" }
+      : {}),
     timestamp: new Date().toISOString(),
   };
 

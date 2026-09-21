@@ -3,6 +3,21 @@
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
 
+## [Unreleased] - 生产事件修复：RBAC 未回填导致管理员只剩仪表盘（2026-09-20）
+
+### 修复
+
+- **根因**：ADR-0057 P2/P3 后，鉴权与前端导航均以 DB 角色权限集为唯一权威（fail-closed）；自建机部署路径（compose）**不会自动执行 migrate/seed**，导致 `Role.permissions` 为空时表现为「所有用户无任何权限」——管理员的导航只剩仪表盘、接口全部 403（即 ADR-0057 §5.1 预告的部署前置未满足）
+- **`prisma/seed.ts`：SUPER_ADMIN 每次 seed 都对齐为权限全集（自愈）**——依据 ADR-0057 裁决 Q2（SUPER_ADMIN 权限不可通过 API 修改、恒为全集），使用 `set` 语义；其余内置角色保持「仅首次回填」不变（不覆盖运营侧调整）
+- **`/api/health/ready` 新增 RBAC 就绪检查**：无任何角色持有权限关联时返回 **503 + `reason=RBAC_NOT_INITIALIZED`**（含 `hint`），把「静默锁死」变成显式 unready；正常时返回 `rbacInitialized=true` / `rolesWithPermissions`（Docker HEALTHCHECK 与 Dashboard 系统状态自动反映）
+- **新增部署 Runbook** `docs/runbooks/Deploy_Update_Runbook.md`：标准升级顺序（migrate → **seed** → 起容器 → 校验）、就绪与 SQL 双校验、应急恢复 SQL（SUPER_ADMIN 全权限）、构建慢判读、回滚
+
+### 边界
+
+- 零 Schema / 零 Migration；不改权限码；不引入运行时「静态角色回退」（DB 仍是唯一鉴权权威）
+- seed 在缺少 `SEED_ADMIN_EMAIL/PASSWORD` 时仍 fail-closed（P0 凭据加固语义不变）
+- 生产侧须执行一次 `pnpm db:seed` 或应急 SQL，管理员权限才会恢复（本 PR 不含数据变更）
+
 ## [Unreleased] - ADR-0057 P3 批次 2-7：前端判定全量迁移完成（2026-09-20）
 
 ### 变更
