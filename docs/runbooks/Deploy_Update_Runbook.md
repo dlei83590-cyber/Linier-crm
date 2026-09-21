@@ -6,6 +6,32 @@
 
 ---
 
+## 0. 先把部署脚本本身修对（本文件存在的原因）
+
+多数自建机的更新脚本只做了 **migrate**，漏了 **seed**——这正是 2026-09-20 生产事件（升级后管理员导航只剩仪表盘、接口全 403）的根因。
+脚本形状通常是：
+
+```bash
+cd /opt/<部署目录>
+git pull ...
+docker compose -f docker-compose.prod.yml up -d --build     # ← 构建 + 起容器
+docker compose -f docker-compose.prod.yml exec -T app pnpm db:migrate:prod   # ← 只 migrate
+docker compose -f docker-compose.prod.yml ps
+```
+
+**必须在 migrate 之后补 seed，并且失败即中止发布**：
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T \
+  -e SEED_ADMIN_EMAIL="$SEED_ADMIN_EMAIL" -e SEED_ADMIN_PASSWORD="$SEED_ADMIN_PASSWORD" \
+  app pnpm db:seed || { echo '[deploy] seed 失败，终止发布'; exit 1; }
+```
+
+> ⚠️ `db:seed` 会用 `SEED_ADMIN_PASSWORD` **重置该管理员账号密码**（seed 的既有语义）。
+> 只想回填权限、不想动密码时：直接执行 §3.1 的 SQL（按角色授予），或先把密码传成当前值。
+
+---
+
 ## 1. 标准升级顺序（复制即用）
 
 ```bash
@@ -59,6 +85,12 @@ docker compose exec postgres psql -U nilier -d nilier_crm -c \
 ```bash
 docker compose run --rm -e SEED_ADMIN_EMAIL="$SEED_ADMIN_EMAIL" -e SEED_ADMIN_PASSWORD="$SEED_ADMIN_PASSWORD" \
   app pnpm db:seed
+```
+
+**先取数据库凭据**（`POSTGRES_USER` 未必是 `nilier`，用应用容器里的真实连接串）：
+
+```bash
+docker exec <app容器名> printenv DATABASE_URL     # postgresql://USER:PASS@postgres:5432/DB
 ```
 
 **次选（无法跑 seed 时的一次性 SQL，幂等）**：把权限目录全集授予 SUPER_ADMIN：
