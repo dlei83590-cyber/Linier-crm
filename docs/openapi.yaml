@@ -21398,6 +21398,11 @@ components:
         isActive: { type: boolean }
         departmentId: { type: [string, 'null'] }
         department: { type: [object, 'null'], properties: { id: { type: string }, code: { type: string }, name: { type: string } } }
+        permissions:
+          type: array
+          description: ADR-0058 附加授权（全量 code；列表/详情均返回）
+          items: { type: object, properties: { id: { type: string }, code: { type: string }, module: { type: string }, name: { type: string } } }
+        _count: { type: object, properties: { permissions: { type: integer } } }
         roles:
           type: array
           items: { type: object, properties: { role: { type: object, properties: { id: { type: string }, code: { type: string }, name: { type: string } } } } }
@@ -21426,6 +21431,12 @@ components:
         name: { type: [string, 'null'] }
         departmentId: { type: [string, 'null'] }
         roleIds: { type: array, items: { type: string } }
+        permissionCodes:
+          type: array
+          items: { type: string }
+          description: |
+            ADR-0058 用户附加授权：按 Permission 目录 code 校验（未知 code → 400；服务端去重）。
+            有效权限 = 所选角色权限 ∪ 附加授权（并集，只增不减；无 DENY 语义）。
         isActive: { type: boolean, default: true }
     UserUpdateRequest:
       type: object
@@ -21435,6 +21446,12 @@ components:
         isActive: { type: boolean }
         password: { type: string, minLength: 6, description: 非空才重置 }
         roleIds: { type: array, items: { type: string }, description: 全量替换 }
+        permissionCodes:
+          type: array
+          items: { type: string }
+          description: |
+            ADR-0058 用户附加授权：全量替换（空数组 = 清空附加授权，回到纯角色权限）。
+            未知 code → 400；变更写入审计（permissionAdded / permissionRemoved）。
     Department:
       type: object
       required: [id, code, name]

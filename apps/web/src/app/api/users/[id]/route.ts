@@ -17,6 +17,8 @@ const userUpdateSchema = z
     isActive: z.boolean().optional(),
     password: z.string().min(6).max(128).optional(),
     roleIds: z.array(z.string().min(1)).optional(),
+    /** ADR-0058：用户附加授权（权限目录 code；全量替换；与角色权限并集生效） */
+    permissionCodes: z.array(z.string().min(1)).optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "至少提供一个更新字段" });
 
@@ -38,6 +40,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       departmentId: true,
       department: { select: { id: true, code: true, name: true } },
       roles: { select: { role: { select: { id: true, code: true, name: true } } } },
+      // ADR-0058：附加授权全量 code（编辑页权限树回显）
+      permissions: { select: { id: true, code: true, module: true, name: true }, orderBy: { code: "asc" } },
       createdAt: true,
       updatedAt: true,
     },
@@ -58,7 +62,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const parsed = userUpdateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
-  const existing = await prisma.user.findUnique({ where: { id }, select: { id: true, email: true } });
+  const existing = await prisma.user.findUnique({
+    where: { id },
+    select: { id: true, email: true, permissions: { select: { code: true } } },
+  });
   if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "用户不存在");
 
   if (parsed.data.departmentId) {
@@ -71,6 +78,18 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const roles = await prisma.role.findMany({ where: { id: { in: roleIds } }, select: { id: true } });
     if (roles.length !== roleIds.length) {
       return failValidation({ roleIds: "存在无效角色" });
+    }
+  }
+
+  // ADR-0058：附加授权（去重 + 按目录校验；未知 code → 400，不静默裁剪）
+  const permissionCodes = [...new Set(parsed.data.permissionCodes ?? [])];
+  if (parsed.data.permissionCodes && permissionCodes.length > 0) {
+    const found = await prisma.permission.findMany({
+      where: { code: { in: permissionCodes } },
+      select: { code: true },
+    });
+    if (found.length !== permissionCodes.length) {
+      return failValidation({ permissionCodes: "存在无效权限码" });
     }
   }
 
@@ -93,16 +112,35 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         });
       }
     }
+    // ADR-0058：附加授权全量替换（与角色权限并集生效；只增不减语义 → 清空即回到纯角色权限）
+    if (parsed.data.permissionCodes) {
+      await tx.user.update({
+        where: { id },
+        data: { permissions: { set: permissionCodes.map((code) => ({ code })) } },
+      });
+    }
     return result;
   });
+
+  // ADR-0058：附加授权变更审计（谁给谁加了/收回了哪些权限）
+  const beforeCodes = existing.permissions.map((p) => p.code);
+  const afterCodes = parsed.data.permissionCodes ? permissionCodes : beforeCodes;
+  const beforeSet = new Set(beforeCodes);
+  const afterSet = new Set(afterCodes);
 
   await writeAuditLog({
     actorId: user?.id,
     action: "user.update",
     entityType: "user",
     entityId: id,
-    beforeData: { email: existing.email },
-    afterData: { email: updated.email, isActive: updated.isActive },
+    beforeData: { email: existing.email, permissionCount: beforeSet.size },
+    afterData: {
+      email: updated.email,
+      isActive: updated.isActive,
+      permissionCount: afterSet.size,
+      permissionAdded: afterCodes.filter((c) => !beforeSet.has(c)).sort(),
+      permissionRemoved: beforeCodes.filter((c) => !afterSet.has(c)).sort(),
+    },
     ...meta,
   });
 

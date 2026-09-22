@@ -21,6 +21,8 @@ interface UserRow {
   departmentId: string | null;
   department?: { id: string; code: string; name: string } | null;
   roles: Array<{ role: { id: string; code: string; name: string } }>;
+  /** ADR-0058：附加授权计数（角色权限之外的额外勾选） */
+  _count?: { permissions: number };
   createdAt: string;
 }
 
@@ -188,6 +190,15 @@ function UserList() {
             key: "roles",
             header: "角色",
             render: (row) => row.roles.map((r) => roleLabel(r.role.code, r.role.name)).join("、") || "—",
+          },
+          {
+            key: "extraPermissions",
+            header: "附加权限",
+            render: (row) => (
+              <Link href={`/users/${row.id}/edit`} className="text-brand-600 hover:underline">
+                {row._count?.permissions ?? 0} 项
+              </Link>
+            ),
           },
           { key: "isActive", header: "状态", render: (row) => (row.isActive ? "启用" : "停用") },
           { key: "createdAt", header: "创建时间", render: (row) => formatDate(row.createdAt) },

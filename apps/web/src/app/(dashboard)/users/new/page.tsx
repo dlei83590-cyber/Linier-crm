@@ -10,6 +10,8 @@ import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 import { roleLabel } from "@/lib/frontend/labels";
+import { PermissionTree } from "@/components/system/permission-tree";
+import { selectedCodeList, type PermissionCatalogItem } from "@/lib/frontend/permission-tree";
 
 interface DepartmentOption {
   id: string;
@@ -35,6 +37,9 @@ function UserCreateForm() {
   const [name, setName] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const [roleIds, setRoleIds] = useState<string[]>([]);
+  // ADR-0058：用户附加授权（与所选角色权限并集生效）
+  const [catalog, setCatalog] = useState<PermissionCatalogItem[]>([]);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set<string>());
   const [isActive, setIsActive] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiClientError | null>(null);
@@ -45,10 +50,13 @@ function UserCreateForm() {
     Promise.all([
       apiFetch<DepartmentOption[]>("/api/departments?pageSize=100", { signal: controller.signal }),
       apiFetch<RoleOption[]>("/api/roles?pageSize=100", { signal: controller.signal }),
+      // ADR-0058：权限目录（附加授权勾选）
+      apiFetch<{ items: PermissionCatalogItem[]; total: number }>("/api/permissions", { signal: controller.signal }),
     ])
-      .then(([deptBody, roleBody]) => {
+      .then(([deptBody, roleBody, permissionBody]) => {
         setDepts(deptBody.data);
         setRoles(roleBody.data);
+        setCatalog(permissionBody.data.items);
       })
       .catch(() => undefined);
     return () => controller.abort();
@@ -72,6 +80,7 @@ function UserCreateForm() {
       name: name.trim() || undefined,
       departmentId: departmentId || undefined,
       roleIds: roleIds.length > 0 ? roleIds : undefined,
+      ...(selected.size > 0 ? { permissionCodes: selectedCodeList(selected) } : {}),
       isActive,
     };
     apiFetch<{ id: string }>("/api/users", {
@@ -142,6 +151,21 @@ function UserCreateForm() {
             </select>
           </FormField>
         </div>
+      </section>
+      <section className="rounded-md border border-border p-4">
+        <h2 className="mb-1 text-sm font-semibold text-ink-primary">附加权限（可选）</h2>
+        <p className="mb-3 text-xs text-ink-secondary">
+          该用户的有效权限 = **所选角色权限** ∪ **此处勾选的附加权限**（并集，只增不减）。
+          若要「取消」角色已授予的权限，请调整角色本身；权限变更在下一次请求/刷新后生效。
+        </p>
+        <PermissionTree
+          items={catalog}
+          selected={selected}
+          onChange={(next) => {
+            setSelected(next);
+            setDirty(true);
+          }}
+        />
       </section>
     </EntityFormWorkspace>
   );

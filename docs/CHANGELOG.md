@@ -3,6 +3,22 @@
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
 
+## [Unreleased] - 用户附加授权：新建用户勾选 + 用户列表可编辑（ADR-0058，Migration 0058，2026-09-20）
+
+### 新增
+
+- **用户级附加授权**：`User.permissions`（隐式 m2m `_UserPermissions`，Migration 0058 纯新增表）。有效权限 = **所选角色权限 ∪ 用户附加授权**（并集，去重排序；只增不减，无 DENY 语义）
+- **API**：`POST /api/users` 与 `PATCH /api/users/:id` 接受 `permissionCodes`（PATCH 全量替换；未知 code → 400，服务端去重）；`GET /api/users` 返回 `_count.permissions`（列表列）；`GET /api/users/:id` 返回 `permissions`（编辑页回显）
+- **审计**：`user.create` 记录 `permissionCount`；`user.update` 记录 `permissionCount` + `permissionAdded` / `permissionRemoved`
+- **前端**：新建用户 / 编辑用户页接入既有权限树（域 → 模块 → 动作，三态/搜索/全选）；用户列表新增「附加权限」列（计数 + 点击进入编辑）；目录外历史 code 保留提示并原样提交（禁止静默丢弃）
+- 单测：`api-helpers.test.ts` 新增「角色权限 ∪ 附加授权，去重排序」用例
+
+### 边界
+
+- **无 DENY / 无角色覆盖**：要取消角色已授予的权限，须调整角色本身（ADR-0058 §2 明确取舍）
+- 不变量保持：fail-closed、不读静态 `ROLE_PERMISSIONS`、SUPER_ADMIN 权限恒为全集且 API 禁止修改
+- 生效时机：下一次请求/刷新（不做实时推送）
+
 ## [Unreleased] - 生产事件修复：RBAC 未回填导致管理员只剩仪表盘（2026-09-20）
 
 ### 修复

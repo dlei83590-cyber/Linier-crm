@@ -55,6 +55,8 @@ export async function authenticate(request: NextRequest): Promise<SessionUser | 
           role: { include: { permissions: { select: { code: true } } } },
         },
       },
+      // ADR-0058：用户附加授权（与角色权限并集生效）
+      permissions: { select: { code: true } },
     },
   });
 
@@ -66,9 +68,11 @@ export async function authenticate(request: NextRequest): Promise<SessionUser | 
     name: user.name,
     roles: user.roles.map((m) => m.role.code),
     // ADR-0057：DB 权限集为鉴权权威（去重排序）；空集 → requirePermission fail-closed 403
-    permissions: normalizePermissions(
-      user.roles.flatMap((m) => m.role.permissions.map((p) => p.code)),
-    ),
+    // ADR-0058：有效权限 = 所选角色权限 ∪ 用户附加授权（只增不减；无 DENY 语义）
+    permissions: normalizePermissions([
+      ...user.roles.flatMap((m) => m.role.permissions.map((p) => p.code)),
+      ...user.permissions.map((p) => p.code),
+    ]),
   };
 }
 

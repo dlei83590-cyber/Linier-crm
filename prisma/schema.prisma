@@ -315,6 +315,8 @@ model User {
   departmentId String?
   department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   roles        UserRole[]
+  /// ADR-0058：用户附加授权（与角色权限并集生效；只增不减——取消角色已授予的权限需改角色）
+  permissions  Permission[] @relation("UserPermissions")
   auditLogs    AuditLog[]
   customerOwnerships CustomerOwnership[] // 2C：作为公海归属 owner（ownerId 方向）
   responsibleForActivities CustomerActivity[] @relation("CustomerActivityResponsibleUser") // followup-level：跟进责任人（CustomerActivity.responsibleUserId 方向，Migration 0055）
@@ -379,6 +381,7 @@ model Permission {
   module      String
   description String?
   roles       Role[]   @relation("RolePermissions")
+  users       User[]   @relation("UserPermissions") // ADR-0058：被直接授予该权限的用户（附加授权）
   createdAt   DateTime @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @db.Timestamptz(3)
 

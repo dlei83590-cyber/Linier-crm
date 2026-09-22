@@ -73,6 +73,8 @@ describe("authenticate — ADR-0045 双来源认证（Bearer → httpOnly cookie
           },
         },
       ],
+      // ADR-0058：用户附加授权（默认为空）
+      permissions: [],
     });
   });
 
@@ -129,6 +131,7 @@ describe("authenticate — ADR-0045 双来源认证（Bearer → httpOnly cookie
         { role: { code: "MANAGER", permissions: [{ code: "item:view" }, { code: "item:edit" }] } },
         { role: { code: "AUDITOR", permissions: [{ code: "item:view" }, { code: "audit:view" }] } },
       ],
+      permissions: [],
     });
     const req = new NextRequest("http://localhost/api/auth/me", {
       headers: { cookie: "linier_session=tok" },
@@ -138,6 +141,23 @@ describe("authenticate — ADR-0045 双来源认证（Bearer → httpOnly cookie
     expect(u?.roles).toEqual(["MANAGER", "AUDITOR"]);
   });
 
+  it("ADR-0058：有效权限 = 角色权限 ∪ 用户附加授权（去重排序）", async () => {
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: "u3",
+      email: "extra@b.c",
+      name: "Extra",
+      isActive: true,
+      roles: [{ role: { code: "MEMBER", permissions: [{ code: "item:view" }] } }],
+      // 附加授权：其中 item:view 与角色重复（验证去重），bom:view 为角色之外的额外授权
+      permissions: [{ code: "bom:view" }, { code: "item:view" }],
+    });
+    const req = new NextRequest("http://localhost/api/auth/me", {
+      headers: { cookie: "linier_session=tok" },
+    });
+    const u = await authenticate(req);
+    expect(u?.permissions).toEqual(["bom:view", "item:view"]);
+  });
+
   it("ADR-0057：无任何角色授权 → permissions 为空数组（不注入默认权限）", async () => {
     prismaMock.user.findUnique.mockResolvedValue({
       id: "u2",
@@ -145,6 +165,7 @@ describe("authenticate — ADR-0045 双来源认证（Bearer → httpOnly cookie
       name: null,
       isActive: true,
       roles: [],
+      permissions: [],
     });
     const req = new NextRequest("http://localhost/api/auth/me", {
       headers: { cookie: "linier_session=tok" },
