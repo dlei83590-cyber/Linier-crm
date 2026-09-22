@@ -42,6 +42,7 @@
 
 - users/departments/roles 无乐观锁（模型无 version 字段，零迁移边界）；并发编辑以后进者胜
 - departments/roles 无 DELETE（无软删字段，物理删除破坏引用完整性/审计链）
+- **用户附加授权（ADR-0058，Migration 0058）**：用户可勾选权限目录 code 作为**附加授权**（新建/编辑用户页权限树；列表「附加权限」列显示计数）；有效权限 = 所选角色权限 ∪ 附加授权（并集去重）。**只增不减**：取消角色已授予的权限须调整角色本身（无 DENY 语义）
 - roles 前端权限分配：已由只读展示升级为**权限树勾选分配**（2026-09-20，ADR-0029 后续 backlog 项落地）；千级权限以「域 → 模块 → 动作」三层 + 默认折叠 + 搜索规避 checkbox 不可用问题
 - **权限分配运行时生效（ADR-0057 P2 已落地，2026-09-20）**：permissionCodes 即访问控制权威——`authenticate` 解析 DB 有效权限集（UserRole → Role → Permission，去重排序），`requirePermission` 据此判定（fail-closed、不回退静态表）；内置角色由 seed 首回填（等价基线）；`/api/auth/me` 与 `/api/auth/login` 返回 `permissions[]`；SUPER_ADMIN 权限禁止改 + 防自锁
 - **前端可见性同源（ADR-0057 P3 已完成，2026-09-20）**：实测 231 处判定（迁移前计数；基础设施 3 + 系统域 7 + 分域 221）全部迁移到 `can(user, permission)`/`useCan()`；验收口径 = `apps/web/src` 内 `hasPermission(` 调用点 **0**（`packages/shared` 的 `hasPermission` 已 @deprecated，仅 seed 基线 + 等价性矩阵单测使用）

@@ -11,6 +11,8 @@ import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 import { roleLabel } from "@/lib/frontend/labels";
+import { PermissionTree } from "@/components/system/permission-tree";
+import { selectedCodeList, type PermissionCatalogItem } from "@/lib/frontend/permission-tree";
 
 interface DepartmentOption {
   id: string;
@@ -31,6 +33,8 @@ interface UserDetail {
   isActive: boolean;
   departmentId: string | null;
   roles: Array<{ role: { id: string; code: string; name: string } }>;
+  /** ADR-0058：附加授权（全量 code） */
+  permissions: Array<{ id: string; code: string; module: string; name: string }>;
 }
 
 const inputClass = INPUT_CLASS;
@@ -47,6 +51,10 @@ function UserEditForm() {
   const [name, setName] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const [roleIds, setRoleIds] = useState<string[]>([]);
+  // ADR-0058：用户附加授权
+  const [catalog, setCatalog] = useState<PermissionCatalogItem[]>([]);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set<string>());
+  const [unknownCodes, setUnknownCodes] = useState<string[]>([]);
   const [isActive, setIsActive] = useState(true);
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(true);
@@ -62,9 +70,13 @@ function UserEditForm() {
       apiFetch<UserDetail>(`/api/users/${id}`),
       apiFetch<DepartmentOption[]>("/api/departments?pageSize=100"),
       apiFetch<RoleOption[]>("/api/roles?pageSize=100"),
+      apiFetch<{ items: PermissionCatalogItem[]; total: number }>("/api/permissions"),
     ])
-      .then(([userBody, deptBody, roleBody]) => {
+      .then(([userBody, deptBody, roleBody, permissionBody]) => {
         const d = userBody.data;
+        const items = permissionBody.data.items;
+        const catalogCodes = new Set(items.map((p) => p.code));
+        const granted = d.permissions.map((p) => p.code);
         setEmail(d.email);
         setName(d.name ?? "");
         setDepartmentId(d.departmentId ?? "");
@@ -72,6 +84,10 @@ function UserEditForm() {
         setIsActive(d.isActive);
         setDepts(deptBody.data);
         setRoles(roleBody.data);
+        setCatalog(items);
+        // 目录外历史权限码保留（禁止静默丢弃）
+        setSelected(new Set(granted));
+        setUnknownCodes(granted.filter((c) => !catalogCodes.has(c)).sort());
         setDirty(false);
         setLoading(false);
       })
@@ -99,6 +115,7 @@ function UserEditForm() {
       departmentId: departmentId || null,
       isActive,
       roleIds,
+      permissionCodes: selectedCodeList(selected),
       ...(password ? { password } : {}),
     };
     apiFetch<{ id: string }>(`/api/users/${id}`, {
@@ -185,6 +202,28 @@ function UserEditForm() {
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputClass} placeholder="至少 6 位" />
           </FormField>
         </div>
+      </section>
+      <section className="rounded-md border border-border p-4">
+        <h2 className="mb-1 text-sm font-semibold text-ink-primary">附加权限（可选）</h2>
+        <p className="mb-3 text-xs text-ink-secondary">
+          该用户的有效权限 = **所选角色权限** ∪ **此处勾选的附加权限**（并集，只增不减）。
+          保存时按当前勾选全量替换附加授权；若要「取消」角色已授予的权限，请调整角色本身。
+          权限变更在下一次请求/刷新后生效。
+        </p>
+        {unknownCodes.length > 0 ? (
+          <p className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-800">
+            目录外权限码 {unknownCodes.length} 项（未在权限目录登记，已保留并在保存时原样提交）：
+            <span className="font-mono"> {unknownCodes.join(", ")}</span>
+          </p>
+        ) : null}
+        <PermissionTree
+          items={catalog}
+          selected={selected}
+          onChange={(next) => {
+            setSelected(next);
+            setDirty(true);
+          }}
+        />
       </section>
     </EntityFormWorkspace>
   );

@@ -34,6 +34,8 @@ export async function POST(request: NextRequest) {
     where: { email },
     include: {
       roles: { include: { role: { include: { permissions: { select: { code: true } } } } } },
+      // ADR-0058：用户附加授权（与 /api/auth/me 同源）
+      permissions: { select: { code: true } },
     },
   });
 
@@ -53,10 +55,12 @@ export async function POST(request: NextRequest) {
   }
 
   const roles = user.roles.map((membership) => membership.role.code);
-  // ADR-0057：登录响应与 /api/auth/me 同源同形，携带 DB 有效权限集（前端 P3 起据此判定）
-  const permissions = normalizePermissions(
-    user.roles.flatMap((membership) => membership.role.permissions.map((p) => p.code)),
-  );
+  // ADR-0057 / ADR-0058：登录响应与 /api/auth/me 同源同形，携带 DB 有效权限集
+  // （= 所选角色权限 ∪ 用户附加授权，去重排序）
+  const permissions = normalizePermissions([
+    ...user.roles.flatMap((membership) => membership.role.permissions.map((p) => p.code)),
+    ...user.permissions.map((p) => p.code),
+  ]);
   const token = await signSessionToken({ sub: user.id, email: user.email, roles });
 
   const res = NextResponse.json({

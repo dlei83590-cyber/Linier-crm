@@ -16,6 +16,8 @@ const userCreateSchema = z.object({
   name: z.string().max(100).nullable().optional(),
   departmentId: z.string().min(1).nullable().optional(),
   roleIds: z.array(z.string().min(1)).optional(),
+  /** ADR-0058：用户附加授权（权限目录 code；与角色权限并集生效） */
+  permissionCodes: z.array(z.string().min(1)).optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -55,6 +57,8 @@ export async function GET(request: NextRequest) {
         departmentId: true,
         department: { select: { id: true, code: true, name: true } },
         roles: { select: { role: { select: { id: true, code: true, name: true } } } },
+        // ADR-0058：附加授权计数（列表列展示）
+        _count: { select: { permissions: true } },
         createdAt: true,
         updatedAt: true,
       },
@@ -93,6 +97,18 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // ADR-0058：附加授权按权限目录 code 校验（去重；未知 code → 400，不静默裁剪）
+  const permissionCodes = [...new Set(parsed.data.permissionCodes ?? [])];
+  if (permissionCodes.length > 0) {
+    const found = await prisma.permission.findMany({
+      where: { code: { in: permissionCodes } },
+      select: { code: true },
+    });
+    if (found.length !== permissionCodes.length) {
+      return failValidation({ permissionCodes: "存在无效权限码" });
+    }
+  }
+
   const passwordHash = await hashPassword(parsed.data.password);
   const created = await prisma.user.create({
     data: {
@@ -104,6 +120,9 @@ export async function POST(request: NextRequest) {
       ...(roleIds.length > 0
         ? { roles: { create: roleIds.map((roleId) => ({ role: { connect: { id: roleId } } })) } }
         : {}),
+      ...(permissionCodes.length > 0
+        ? { permissions: { connect: permissionCodes.map((code) => ({ code })) } }
+        : {}),
     },
     select: { id: true, email: true, name: true, isActive: true, createdAt: true },
   });
@@ -113,7 +132,12 @@ export async function POST(request: NextRequest) {
     action: "user.create",
     entityType: "user",
     entityId: created.id,
-    afterData: { email: created.email, isActive: created.isActive },
+    afterData: {
+      email: created.email,
+      isActive: created.isActive,
+      roleCount: roleIds.length,
+      permissionCount: permissionCodes.length,
+    },
     ...meta,
   });
 
