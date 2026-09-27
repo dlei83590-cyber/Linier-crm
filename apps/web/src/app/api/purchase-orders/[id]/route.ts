@@ -5,6 +5,7 @@ import { authenticate, requirePermission, requestMeta, writeAuditLog } from '@/l
 import { ok, fail, failValidation, failConflict, failNotFound } from '@/lib/api/response';
 import { ERROR_CODES } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
+import { failReferenceConflict, REFERENCE_SAMPLE_LIMIT } from '@/lib/api/reference-guard';
 import { recycleDocumentSequence } from '@/lib/document-sequence/recycle';
 import { purchaseOrderUpdateSchema } from '@/lib/api/schemas';
 import {
@@ -441,13 +442,42 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (!["DRAFT", "CANCELLED"].includes(existing.status)) {
     return failConflict(ERROR_CODES.PURCHASE_ORDER_INVALID_STATE, "仅 DRAFT/CANCELLED 状态可删除（已下单/已收货禁止删除）");
   }
-  const grCount = await prisma.purchaseReceipt.count({ where: { purchaseOrderId: id, deletedAt: null } });
-  if (grCount > 0) {
-    return failConflict(ERROR_CODES.PURCHASE_ORDER_INVALID_STATE, "采购订单已生成收货单，禁止删除（保持收货溯源）");
-  }
-  const rtCount = await prisma.purchaseReturn.count({ where: { purchaseOrderId: id, deletedAt: null } });
-  if (rtCount > 0) {
-    return failConflict(ERROR_CODES.PURCHASE_ORDER_INVALID_STATE, "采购订单已生成退货单，禁止删除（保持退货溯源）");
+  // 引用出处（问题二）：一次给出全部阻止删除的下链单据（收货单 / 退货单）条数 + 编号
+  const [grCount, rtCount] = await Promise.all([
+    prisma.purchaseReceipt.count({ where: { purchaseOrderId: id, deletedAt: null } }),
+    prisma.purchaseReturn.count({ where: { purchaseOrderId: id, deletedAt: null } }),
+  ]);
+  if (grCount > 0 || rtCount > 0) {
+    const [receipts, returns] = await Promise.all([
+      grCount > 0
+        ? prisma.purchaseReceipt.findMany({
+            where: { purchaseOrderId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            orderBy: { createdAt: 'desc' },
+            select: { code: true },
+          })
+        : Promise.resolve([] as Array<{ code: string }>),
+      rtCount > 0
+        ? prisma.purchaseReturn.findMany({
+            where: { purchaseOrderId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            orderBy: { createdAt: 'desc' },
+            select: { code: true },
+          })
+        : Promise.resolve([] as Array<{ code: string }>),
+    ]);
+    return failReferenceConflict(
+      ERROR_CODES.PURCHASE_ORDER_INVALID_STATE,
+      `采购订单「${existing.code}」`,
+      [
+        ...(grCount > 0
+          ? [{ entity: "收货单", count: grCount, samples: receipts.map((r) => r.code), releaseHint: "先回退/删除对应收货单（保持收货溯源）" }]
+          : []),
+        ...(rtCount > 0
+          ? [{ entity: "退货单", count: rtCount, samples: returns.map((r) => r.code), releaseHint: "先删除对应退货单（保持退货溯源）" }]
+          : []),
+      ],
+    );
   }
 
   const now = new Date();

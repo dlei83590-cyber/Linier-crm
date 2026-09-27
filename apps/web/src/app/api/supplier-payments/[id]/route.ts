@@ -4,6 +4,7 @@ import { authenticate, requirePermission, requestMeta, writeAuditLog } from '@/l
 import { ok, failNotFound, failConflict } from '@/lib/api/response';
 import { ERROR_CODES } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
+import { failReferenceConflict, REFERENCE_SAMPLE_LIMIT } from '@/lib/api/reference-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,7 +53,30 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     where: { paymentId: id, deletedAt: null, reversedAt: null },
   });
   if (activeAllocs > 0) {
-    return failConflict(ERROR_CODES.NOT_FOUND, "付款单仍有未冲销核销记录，禁止删除（先冲销核销）");
+    // 引用出处（问题二）：未冲销核销条数 + 对应供应商发票号（AP Open Item → Liability → SupplierInvoice）
+    const allocations = await prisma.supplierPaymentAllocation.findMany({
+      where: { paymentId: id, deletedAt: null, reversedAt: null },
+      take: REFERENCE_SAMPLE_LIMIT,
+      select: {
+        apOpenItem: {
+          select: { apLiabilityFact: { select: { supplierInvoice: { select: { invoiceNo: true } } } } },
+        },
+      },
+    });
+    return failReferenceConflict(
+      ERROR_CODES.NOT_FOUND,
+      `付款单「${existing.code}」`,
+      [
+        {
+          entity: "未冲销核销记录（对应供应商发票）",
+          count: activeAllocs,
+          samples: allocations
+            .map((a) => a.apOpenItem.apLiabilityFact.supplierInvoice.invoiceNo)
+            .filter((s) => s.length > 0),
+          releaseHint: "先冲销对应核销记录后再删除付款单",
+        },
+      ],
+    );
   }
 
   await prisma.supplierPayment.update({

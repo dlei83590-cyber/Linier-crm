@@ -11,6 +11,7 @@ import { createInvoiceRevision } from "@/lib/invoice/helpers";
 import { publishInvoiceEvent } from "@/lib/invoice/events";
 import { maybeTriggerInvoiceApproval } from "@/lib/invoice/workflow-sync";
 import { computeBalance } from "@/lib/accounts-receivable/projection";
+import { failReferenceConflict } from "@/lib/api/reference-guard";
 import {
   createAccountsReceivableRevision,
   createAccountsReceivableSnapshot,
@@ -186,7 +187,19 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     }
     const arCount = await prisma.accountsReceivable.count({ where: { invoiceId: id, deletedAt: null } });
     if (arCount > 0) {
-      return failConflict(ERROR_CODES.INVOICE_INVALID_STATE, "发票已生成应收，禁止删除（保持应收溯源）");
+      // 引用出处（问题二）：应收（AR）条数 + 对应发票号
+      return failReferenceConflict(
+        ERROR_CODES.INVOICE_INVALID_STATE,
+        `发票「${invoice.code ?? invoice.taxInvoiceNo ?? ""}」`,
+        [
+          {
+            entity: "应收账款（AR）",
+            count: arCount,
+            samples: [invoice.code ?? invoice.taxInvoiceNo ?? ""].filter((s) => s.length > 0),
+            releaseHint: "发票已生成应收（应收为财务事实，保持溯源）",
+          },
+        ],
+      );
     }
   } else if (!["DRAFT", "ISSUED", "CANCELLED"].includes(invoice.status)) {
     // 红字发票：DRAFT/ISSUED/CANCELLED 可删（用户指令 2026-08-21：无关联应收时 CANCELLED 红字也可清理）

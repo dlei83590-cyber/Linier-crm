@@ -29,4 +29,4 @@
 | P2 | PATCH 过期 version | 旧 version | 409 VERSION_CONFLICT |
 | P3 | PATCH code 与他人冲突 | 同仓库已有 code | 409 CONFLICT |
 | D1 | DELETE 无引用 | 无流水/单据引用 | 200 软删；再 GET → 404 |
-| D2 | DELETE 被引用 | 有 inventoryMovement/单据行/盘点行/调拨/调整/转换引用 | 409 CONFLICT「已被库存流水/单据/盘点/调拨/调整/转换引用，不能删除（可编辑）」 |
+| D2 | DELETE 被引用 | 有 inventoryMovement/单据行/盘点行/调拨/调整/转换引用 | 409 CONFLICT「库位「A-01」已被引用，不能删除：入库单 1 条（IN-2026-0001）；库存流水 2 条（MV-000001、MV-000002）；库存调拨单 1 条（TRF20260001）。请先解除上述引用后重试」+ `details.references`（按业务单据族给出条数与编号） |

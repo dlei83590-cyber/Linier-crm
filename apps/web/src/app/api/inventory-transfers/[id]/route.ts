@@ -5,6 +5,7 @@ import { authenticate, requirePermission, requestMeta, writeAuditLog } from '@/l
 import { ok, fail, failValidation, failConflict, failNotFound } from '@/lib/api/response';
 import { ERROR_CODES, type ErrorCode } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
+import { failReferenceConflict, REFERENCE_SAMPLE_LIMIT } from '@/lib/api/reference-guard';
 import { inventoryTransferUpdateSchema } from '@/lib/api/schemas';
 import { transferLineDedupeKey } from '@/lib/inventory-transfer/helpers';
 
@@ -255,7 +256,28 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     return failConflict(ERROR_CODES.INVENTORY_TRANSFER_INVALID_STATE, "仅 DRAFT/CANCELLED 状态可删除（已执行调拨禁止删除）");
   }
   if (existing.movementGroupId) {
-    return failConflict(ERROR_CODES.INVENTORY_TRANSFER_INVALID_STATE, "调拨单已执行（已产生库存移动），禁止删除");
+    // 引用出处（问题二）：已产生的库存流水（不可变事实）条数 + 流水号
+    const movementCount = await prisma.inventoryMovement.count({
+      where: { movementGroupId: existing.movementGroupId },
+    });
+    const movements = await prisma.inventoryMovement.findMany({
+      where: { movementGroupId: existing.movementGroupId },
+      take: REFERENCE_SAMPLE_LIMIT,
+      orderBy: { committedAt: "asc" },
+      select: { movementNo: true },
+    });
+    return failReferenceConflict(
+      ERROR_CODES.INVENTORY_TRANSFER_INVALID_STATE,
+      `调拨单「${existing.transferNo}」`,
+      [
+        {
+          entity: "库存流水（已执行）",
+          count: movementCount,
+          samples: movements.map((m) => m.movementNo),
+          releaseHint: "库存流水为不可变事实；如需回退请走反向 REVERSAL（受单独 Gate 管控）",
+        },
+      ],
+    );
   }
 
   const now = new Date();

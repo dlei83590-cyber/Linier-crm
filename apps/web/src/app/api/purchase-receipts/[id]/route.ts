@@ -5,6 +5,7 @@ import { authenticate, requirePermission, requestMeta, writeAuditLog } from '@/l
 import { ok, fail, failValidation, failConflict, failNotFound } from '@/lib/api/response';
 import { ERROR_CODES } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
+import { failReferenceConflict, REFERENCE_SAMPLE_LIMIT } from '@/lib/api/reference-guard';
 import { recycleDocumentSequence } from '@/lib/document-sequence/recycle';
 import { purchaseReceiptUpdateSchema } from '@/lib/api/schemas';
 
@@ -294,15 +295,45 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (!["DRAFT", "CANCELLED"].includes(existing.status)) {
     return failConflict(ERROR_CODES.PURCHASE_RECEIPT_INVALID_STATE, "仅 DRAFT/CANCELLED 状态可删除（已收货请先反收货）");
   }
-  const whrCount = await prisma.warehouseReceipt.count({ where: { purchaseReceiptId: id, deletedAt: null } });
-  if (whrCount > 0) {
-    return failConflict(ERROR_CODES.PURCHASE_RECEIPT_INVALID_STATE, "收货单已生成入库单，禁止删除（保持入库溯源）");
-  }
-  const inspCount = await prisma.inspection.count({
-    where: { purchaseReceiptLine: { purchaseReceiptId: id }, deletedAt: null },
-  });
-  if (inspCount > 0) {
-    return failConflict(ERROR_CODES.PURCHASE_RECEIPT_INVALID_STATE, "收货单已生成检验单，禁止删除（保持检验溯源）");
+  // 引用出处（问题二）：一次给出全部阻止删除的下链单据（入库单 / 质检记录）条数 + 编号
+  const [whrCount, inspCount] = await Promise.all([
+    prisma.warehouseReceipt.count({ where: { purchaseReceiptId: id, deletedAt: null } }),
+    prisma.inspection.count({ where: { purchaseReceiptLine: { purchaseReceiptId: id }, deletedAt: null } }),
+  ]);
+  if (whrCount > 0 || inspCount > 0) {
+    const warehouseReceipts = whrCount > 0
+      ? await prisma.warehouseReceipt.findMany({
+          where: { purchaseReceiptId: id, deletedAt: null },
+          take: REFERENCE_SAMPLE_LIMIT,
+          orderBy: { createdAt: 'desc' },
+          select: { code: true },
+        })
+      : ([] as Array<{ code: string }>);
+    // 质检记录无自身单号：以「本收货单 + 质检模式」定位（附收货单号作为出处）
+    const inspections = inspCount > 0
+      ? await prisma.inspection.findMany({
+          where: { purchaseReceiptLine: { purchaseReceiptId: id }, deletedAt: null },
+          take: REFERENCE_SAMPLE_LIMIT,
+          select: { inspectionMode: true },
+        })
+      : ([] as Array<{ inspectionMode: string }>);
+    return failReferenceConflict(
+      ERROR_CODES.PURCHASE_RECEIPT_INVALID_STATE,
+      `收货单「${existing.code}」`,
+      [
+        ...(whrCount > 0
+          ? [{ entity: "入库单", count: whrCount, samples: warehouseReceipts.map((w) => w.code), releaseHint: "先回退/删除对应入库单（保持入库溯源）" }]
+          : []),
+        ...(inspCount > 0
+          ? [{
+              entity: `本收货单下的质检记录（${inspections.map((i) => i.inspectionMode).join("、")}）`,
+              count: inspCount,
+              samples: [existing.code],
+              releaseHint: "先回退对应质检结论（保持检验溯源）",
+            }]
+          : []),
+      ],
+    );
   }
 
   const now = new Date();

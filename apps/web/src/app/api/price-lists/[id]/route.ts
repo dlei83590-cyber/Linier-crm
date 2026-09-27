@@ -6,6 +6,7 @@ import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/respon
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { casUpdate } from "@/lib/api/cas";
+import { collectReferences, failReferenceConflict, REFERENCE_SAMPLE_LIMIT } from "@/lib/api/reference-guard";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -117,8 +118,62 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   // 引用检查：已配置单价明细/已发布版本/被报价单快照引用 → 不可删除（可编辑）
   const snapshotCount = await prisma.quotationPriceSnapshot.count({ where: { priceListId: id } });
-  if (existing._count.items > 0 || existing._count.versions > 0 || snapshotCount > 0) {
-    return failConflict(ERROR_CODES.CONFLICT, "价目表已配置单价/版本或被报价单引用，不能删除（可编辑）");
+  // 引用出处（问题二）：条数 + 真实物料/版本/报价单编号
+  const references = await collectReferences([
+    {
+      entity: "单价明细（物料）",
+      count: () => Promise.resolve(existing._count.items),
+      samples: async () =>
+        (
+          await prisma.priceListItem.findMany({
+            where: { priceListId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            orderBy: { createdAt: "desc" },
+            select: { item: { select: { code: true } } },
+          })
+        ).map((r) => r.item.code),
+      releaseHint: "先删除该价目表下的单价明细",
+    },
+    {
+      entity: "价目表版本",
+      count: () => Promise.resolve(existing._count.versions),
+      samples: async () =>
+        (
+          await prisma.priceListVersion.findMany({
+            where: { priceListId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            orderBy: { versionNo: "desc" },
+            select: { versionNo: true, revisionNo: true },
+          })
+        ).map((v) => `v${v.versionNo}.${v.revisionNo}`),
+      releaseHint: "先删除该价目表下的版本记录",
+    },
+    {
+      entity: "报价单价格快照",
+      count: () => Promise.resolve(snapshotCount),
+      samples: async () => {
+        const snapshots = await prisma.quotationPriceSnapshot.findMany({
+          where: { priceListId: id },
+          take: REFERENCE_SAMPLE_LIMIT,
+          orderBy: { pricingTime: "desc" },
+          select: { quotationId: true },
+        });
+        if (snapshots.length === 0) return [];
+        const quotations = await prisma.quotation.findMany({
+          where: { id: { in: snapshots.map((s) => s.quotationId) } },
+          select: { code: true },
+        });
+        return quotations.map((q) => q.code);
+      },
+      releaseHint: "该价目表已被报价单取价快照引用（保持报价取价溯源）",
+    },
+  ]);
+  if (references.length > 0) {
+    return failReferenceConflict(
+      ERROR_CODES.CONFLICT,
+      `价目表「${existing.code} ${existing.name}」`,
+      references,
+    );
   }
 
   await prisma.priceList.update({

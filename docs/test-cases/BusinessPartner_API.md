@@ -19,7 +19,7 @@
 | B4 | **详情聚合（Phase 1A）** | GET | /api/business-partners/:id | business-partner:view | 200 + partnerContacts/partnerAddresses/partnerTags/partnerCredit/invoiceInfoRecord |
 | B5 | 编辑（CAS version） | PATCH | /api/business-partners/:id | business-partner:edit | 200 / 409 |
 | B6 | 软删除（供应商档案/角色/联系人/地址/银行账户/标签/信用/开票资料等**自有子资源级联软删**） | DELETE | /api/business-partners/:id | business-partner:delete | 200 |
-| B7 | 被**独立业务事实**引用（customer/opportunity/project 未删除） | DELETE | /api/business-partners/:id | business-partner:delete | 409「往来单位已被客户/商机/项目引用，不能删除（可编辑）」 |
+| B7 | 被**独立业务事实**引用（customer/opportunity/project 未删除） | DELETE | /api/business-partners/:id | business-partner:delete | 409「往来单位「BP-001 XX」已被引用，不能删除：客户档案 1 条（CUS-001）；项目 1 条（PJ-001）。请先解除上述引用后重试」+ `details.references`（引用出处，API_GUIDELINES §7） |
 | B8 | 仅存在已软删除的历史草稿引用（deletedAt≠null） | DELETE | /api/business-partners/:id | business-partner:delete | 200（历史草稿不计入引用） |
 
 ## Phase 1A detail aggregate contract（锁定）

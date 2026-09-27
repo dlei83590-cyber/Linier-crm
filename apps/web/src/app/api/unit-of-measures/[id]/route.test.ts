@@ -21,6 +21,8 @@ describe('DELETE /api/unit-of-measures/:id — 引用检查仅统计未删除（
   function uomWithCounts(counts: Record<string, number>) {
     return {
       id: 'uom-1',
+      code: 'KG',
+      name: '千克',
       _count: {
         items: counts.items ?? 0,
         stockItems: counts.stockItems ?? 0,
@@ -52,6 +54,8 @@ describe('DELETE /api/unit-of-measures/:id — 引用检查仅统计未删除（
     findFirstMock = vi.fn();
     updateMock = vi.fn().mockResolvedValue({ id: 'uom-1', deletedAt: new Date() });
     mockPrisma.unitOfMeasure = { findFirst: findFirstMock, update: updateMock };
+    // 引用出处（问题二）：物料样本查询（其他引用族 count=0 时不查询）
+    mockPrisma.item = { findMany: vi.fn().mockResolvedValue([{ code: 'ITM-001' }]) };
   });
 
   it('无任何引用 → 200 软删除', async () => {
@@ -63,12 +67,17 @@ describe('DELETE /api/unit-of-measures/:id — 引用检查仅统计未删除（
     expect(updateMock).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'uom-1' } }));
   });
 
-  it('存在未删除的有效引用（items>0）→ 409 CONFLICT', async () => {
+  it('存在未删除的有效引用（items>0）→ 409 CONFLICT + 引用出处（物料编码）', async () => {
     findFirstMock.mockResolvedValue(uomWithCounts({ items: 1 }));
     const res = await DELETE(new NextRequest('http://localhost/api/unit-of-measures/uom-1', { method: 'DELETE' }), { params: Promise.resolve({ id: 'uom-1' }) });
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error.code).toBe('CONFLICT');
+    // 问题二：提示引用出处（实体 + 条数 + 真实物料编码）
+    expect(body.error.message).toContain('计量单位「KG 千克」已被引用，不能删除：物料（基本/库存/采购/销售单位） 1 条（ITM-001）');
+    expect(body.error.details.references).toEqual([
+      expect.objectContaining({ entity: '物料（基本/库存/采购/销售单位）', count: 1 }),
+    ]);
   });
 
   it('计量单位不存在 → 404 NOT_FOUND', async () => {

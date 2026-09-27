@@ -3,6 +3,26 @@
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
 
+## [Unreleased] - 删除引用出处（Reference Provenance，问题二，2026-09-27）
+
+### 新增
+
+- **统一引用出处契约**：DELETE 因既有引用/下链单据被阻止时，409 必须回答「被谁引用」——**实体 + 条数 + 真实单据编号（≤3 条）**，不再只回「已被引用」；`error.details.references`（entity/count/samples/releaseHint）提供结构化出处（API_GUIDELINES §7）
+- **共享实现** `apps/web/src/lib/api/reference-guard.ts`：`collectReferences`（count 先行，命中才查样本 → 快乐路径零额外查询）/ `formatReferenceMessage` / `failReferenceConflict` / `referenceBlocked`；`failConflict` 新增可选 `details`
+- **覆盖 23 个 DELETE 路由**：
+  - 主数据：往来单位（客户档案/项目机会/项目）、物料（价格表单价/项目产品）、价目表（单价明细/版本/报价取价快照）、仓库（库位/入库单/收货单/调拨单/库存投影/库存流水）、库位（入库单/流水/投影/调拨/盘点/调整/转换）、计量单位（物料/单据行/换算关系/库存流水/转换基准单位）、技术标准（关联物料）、物料分类（子分类/物料）、规格定义（物料规格）
+  - 项目·销售：项目机会（已转项目）、报价单（已转销售订单）、销售订单（送货单）、送货单（未红冲发票）、发票（应收账款）、收款单（未冲销核销 → 对应发票）
+  - 采购·库存：采购申请（采购订单）、采购订单（收货单/退货单）、收货单（入库单/质检记录）、质检记录（入库行/退货行）、入库单（未全部退货的入库行）、库存调拨单（已执行库存流水）
+  - 供应商财务：供应商发票（匹配 Match Run）、供应商付款单（未冲销核销 → 对应供应商发票）
+- 单测：往来单位 / 物料 / 计量单位 引用拦截用例改为断言真实出处（message + `details.references`），并新增物料「价格表单价」出处用例
+
+### 边界
+
+- 零 Schema / Migration / Error Code / Event / RBAC 变更；仅 apps/web API 层 + docs
+- **拦截判定未放宽也未收紧**（`count` 与判定同 where、同未软删口径）；仓库收货「未全部退货」由总量比较改为**逐行是否退完**（等价且更精确），其余路由判定逻辑原样保留
+- 状态机类拦截（「仅 DRAFT/CANCELLED 可删除」等）不是引用，保持原语义
+- 未新增权限码；前端零改动（现有删除失败 Toast 直接展示含出处的 message）
+
 ## [Unreleased] - 项目机会列表删除（FRT-01 前端补齐，2026-09-27）
 
 ### 新增
@@ -14,7 +34,7 @@
 ### 边界
 
 - 零 Schema / Migration / API / Error Code / Event / RBAC 变更；仅 apps/web 前端 + docs
-- 保持既有不变量：**已转换为项目的机会禁止删除**（服务端 409「机会已转换为项目，禁止删除」）——前端不隐藏入口、不静默降级，直接展示服务端真实错误
+- 保持既有不变量：**已转换为项目的机会禁止删除**（服务端 409；文案随问题二升级为含出处的「机会「XX」已被引用，不能删除：已转项目 1 条（PJ-XXXX）」）——前端不隐藏入口、不静默降级，直接展示服务端真实错误
 - 已经被报价单引用的机会按既有软删除契约可删除（`Quotation.opportunityId` onDelete: SetNull；报价单本身保留）
 
 ## [Unreleased] - 密码策略与首次登录强制改密（ADR-0059，Migration 0059，2026-09-21）

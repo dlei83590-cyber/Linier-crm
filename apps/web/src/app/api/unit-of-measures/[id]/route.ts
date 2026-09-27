@@ -6,6 +6,7 @@ import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { casUpdate } from "@/lib/api/cas";
 import { handleServerError } from "@/lib/api/server-error";
+import { collectReferences, failReferenceConflict, REFERENCE_SAMPLE_LIMIT } from "@/lib/api/reference-guard";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -131,30 +132,242 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   // 引用检查：被物料/单据行/换算关系引用 → 不可删除（可编辑）
   const c = existing._count;
-  const referenced =
-    c.items +
-    c.stockItems +
-    c.purchaseItems +
-    c.salesItems +
-    c.fromConversions +
-    c.toConversions +
-    c.quotationLines +
-    c.salesOrderLines +
-    c.deliveryLines +
-    c.invoiceLines +
-    c.creditDebitNoteLines +
-    c.purchaseRequisitionLines +
-    c.purchaseOrderLines +
-    c.purchaseReceiptLines +
-    c.warehouseReceiptLines +
-    c.purchaseReturnLines +
-    c.inventoryMovements +
-    c.transferLines +
-    c.adjustmentLines +
-    c.conversionLines +
-    c.conversionBaseUoms;
-  if (referenced > 0) {
-    return failConflict(ERROR_CODES.CONFLICT, "计量单位已被物料/单据/换算引用，不能删除（可编辑）");
+  // 引用出处（问题二）：按引用族给出条数 + 真实单据编号（物料/单据行/换算/流水逐族可定位）
+  const references = await collectReferences([
+    {
+      entity: "物料（基本/库存/采购/销售单位）",
+      count: () => Promise.resolve(c.items + c.stockItems + c.purchaseItems + c.salesItems),
+      samples: async () =>
+        (
+          await prisma.item.findMany({
+            where: {
+              // Item 默认单位字段为 unitId（relation "ItemUnit"）；禁止写成不存在的 uomId
+              OR: [{ unitId: id }, { stockUomId: id }, { purchaseUomId: id }, { salesUomId: id }],
+              deletedAt: null,
+            },
+            take: REFERENCE_SAMPLE_LIMIT,
+            orderBy: { code: "asc" },
+            select: { code: true },
+          })
+        ).map((i) => i.code),
+      releaseHint: "先修改对应物料的计量单位",
+    },
+    {
+      entity: "报价单行",
+      count: () => Promise.resolve(c.quotationLines),
+      samples: async () =>
+        (
+          await prisma.quotationLine.findMany({
+            where: { uomId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            select: { quotation: { select: { code: true } } },
+          })
+        ).map((l) => l.quotation.code),
+      releaseHint: "先处理（替换/删除）对应报价单行",
+    },
+    {
+      entity: "销售订单行",
+      count: () => Promise.resolve(c.salesOrderLines),
+      samples: async () =>
+        (
+          await prisma.salesOrderLine.findMany({
+            where: { uomId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            select: { salesOrder: { select: { code: true } } },
+          })
+        ).map((l) => l.salesOrder.code),
+      releaseHint: "先回退/删除对应销售订单",
+    },
+    {
+      entity: "送货单行",
+      count: () => Promise.resolve(c.deliveryLines),
+      samples: async () =>
+        (
+          await prisma.deliveryLine.findMany({
+            where: { uomId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            select: { delivery: { select: { code: true } } },
+          })
+        ).map((l) => l.delivery.code),
+      releaseHint: "先回退/删除对应送货单",
+    },
+    {
+      entity: "销售发票行",
+      count: () => Promise.resolve(c.invoiceLines),
+      samples: async () =>
+        (
+          await prisma.invoiceLine.findMany({
+            where: { uomId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            select: { invoice: { select: { code: true, taxInvoiceNo: true } } },
+          })
+        ).map((l) => l.invoice.code ?? l.invoice.taxInvoiceNo ?? ""),
+      releaseHint: "先红冲/删除对应发票",
+    },
+    {
+      entity: "贷项/借项通知单行",
+      count: () => Promise.resolve(c.creditDebitNoteLines),
+      samples: async () =>
+        (
+          await prisma.creditDebitNoteLine.findMany({
+            where: { uomId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            select: { creditDebitNote: { select: { code: true } } },
+          })
+        ).map((l) => l.creditDebitNote.code),
+      releaseHint: "先回退/删除对应贷项/借项通知单",
+    },
+    {
+      entity: "采购申请行",
+      count: () => Promise.resolve(c.purchaseRequisitionLines),
+      samples: async () =>
+        (
+          await prisma.purchaseRequisitionLine.findMany({
+            where: { uomId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            select: { purchaseRequisition: { select: { code: true } } },
+          })
+        ).map((l) => l.purchaseRequisition.code),
+      releaseHint: "先删除对应采购申请",
+    },
+    {
+      entity: "采购订单行",
+      count: () => Promise.resolve(c.purchaseOrderLines),
+      samples: async () =>
+        (
+          await prisma.purchaseOrderLine.findMany({
+            where: { uomId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            select: { purchaseOrder: { select: { code: true } } },
+          })
+        ).map((l) => l.purchaseOrder.code),
+      releaseHint: "先回退/删除对应采购订单",
+    },
+    {
+      entity: "收货单行",
+      count: () => Promise.resolve(c.purchaseReceiptLines),
+      samples: async () =>
+        (
+          await prisma.purchaseReceiptLine.findMany({
+            where: { uomId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            select: { purchaseReceipt: { select: { code: true } } },
+          })
+        ).map((l) => l.purchaseReceipt.code),
+      releaseHint: "先回退/删除对应收货单",
+    },
+    {
+      entity: "入库单行",
+      count: () => Promise.resolve(c.warehouseReceiptLines),
+      samples: async () =>
+        (
+          await prisma.warehouseReceiptLine.findMany({
+            where: { uomId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            select: { warehouseReceipt: { select: { code: true } } },
+          })
+        ).map((l) => l.warehouseReceipt.code),
+      releaseHint: "先回退/删除对应入库单",
+    },
+    {
+      entity: "退货单行",
+      count: () => Promise.resolve(c.purchaseReturnLines),
+      samples: async () =>
+        (
+          await prisma.purchaseReturnLine.findMany({
+            where: { uomId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            select: { purchaseReturn: { select: { code: true } } },
+          })
+        ).map((l) => l.purchaseReturn.code),
+      releaseHint: "先删除对应退货单",
+    },
+    {
+      entity: "单位换算关系",
+      count: () => Promise.resolve(c.fromConversions + c.toConversions),
+      samples: async () =>
+        (
+          await prisma.uomConversion.findMany({
+            where: { OR: [{ fromUomId: id }, { toUomId: id }], deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            select: { fromUom: { select: { code: true } }, toUom: { select: { code: true } } },
+          })
+        ).map((u) => `${u.fromUom.code} → ${u.toUom.code}`),
+      releaseHint: "先删除对应单位换算关系",
+    },
+    {
+      entity: "库存流水",
+      count: () => Promise.resolve(c.inventoryMovements),
+      samples: async () =>
+        (
+          await prisma.inventoryMovement.findMany({
+            where: { uomId: id },
+            take: REFERENCE_SAMPLE_LIMIT,
+            orderBy: { committedAt: "desc" },
+            select: { movementNo: true },
+          })
+        ).map((m) => m.movementNo),
+      releaseHint: "库存流水为不可变事实（保持库存溯源）",
+    },
+    {
+      entity: "库存调拨单行",
+      count: () => Promise.resolve(c.transferLines),
+      samples: async () =>
+        (
+          await prisma.inventoryTransferLine.findMany({
+            where: { uomId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            select: { transferHeader: { select: { transferNo: true } } },
+          })
+        ).map((l) => l.transferHeader.transferNo),
+      releaseHint: "先删除对应调拨单",
+    },
+    {
+      entity: "库存调整单行",
+      count: () => Promise.resolve(c.adjustmentLines),
+      samples: async () =>
+        (
+          await prisma.inventoryAdjustmentLine.findMany({
+            where: { uomId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            select: { adjustmentHeader: { select: { adjustmentNo: true } } },
+          })
+        ).map((l) => l.adjustmentHeader.adjustmentNo),
+      releaseHint: "先删除对应库存调整单",
+    },
+    {
+      entity: "库存转换单行",
+      count: () => Promise.resolve(c.conversionLines),
+      samples: async () =>
+        (
+          await prisma.inventoryConversionLine.findMany({
+            where: { uomId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            select: { conversionHeader: { select: { conversionNo: true } } },
+          })
+        ).map((l) => l.conversionHeader.conversionNo),
+      releaseHint: "先删除对应库存转换单",
+    },
+    {
+      entity: "库存转换基准单位",
+      count: () => Promise.resolve(c.conversionBaseUoms),
+      samples: async () =>
+        (
+          await prisma.inventoryConversion.findMany({
+            where: { baseUomId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            select: { conversionNo: true },
+          })
+        ).map((v) => v.conversionNo),
+      releaseHint: "该计量单位被库存转换单作为基准单位引用",
+    },
+  ]);
+  if (references.length > 0) {
+    return failReferenceConflict(
+      ERROR_CODES.CONFLICT,
+      `计量单位「${existing.code} ${existing.name}」`,
+      references,
+    );
   }
 
   await prisma.unitOfMeasure.update({

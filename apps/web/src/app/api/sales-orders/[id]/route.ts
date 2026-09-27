@@ -10,6 +10,7 @@ import { salesOrderUpdateSchema } from "@/lib/api/schemas";
 import { createSalesOrderRevision } from "@/lib/sales-order/helpers";
 import { maybeTriggerSalesOrderApproval } from "@/lib/sales-order/workflow-sync";
 import { publishSalesOrderEvent } from "@/lib/sales-order/events";
+import { failReferenceConflict, REFERENCE_SAMPLE_LIMIT } from "@/lib/api/reference-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -173,9 +174,27 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     return failConflict(ERROR_CODES.SALES_ORDER_NOT_EDITABLE, "仅 CANCELLED 状态可删除（回退后清理列表）；进行中/已交付/已完成订单禁止删除");
   }
   // 引用防御：已生成送货单（Delivery.salesOrderId）禁止删除——保持交付溯源链
+  // 引用出处（问题二）：条数 + 送货单编号
   const deliveryCount = await prisma.delivery.count({ where: { salesOrderId: id, deletedAt: null } });
   if (deliveryCount > 0) {
-    return failConflict(ERROR_CODES.SALES_ORDER_NOT_EDITABLE, "销售订单已有送货单，禁止删除（保持交付溯源）");
+    const deliveries = await prisma.delivery.findMany({
+      where: { salesOrderId: id, deletedAt: null },
+      take: REFERENCE_SAMPLE_LIMIT,
+      orderBy: { createdAt: "desc" },
+      select: { code: true },
+    });
+    return failReferenceConflict(
+      ERROR_CODES.SALES_ORDER_NOT_EDITABLE,
+      `销售订单「${salesOrder.code}」`,
+      [
+        {
+          entity: "送货单",
+          count: deliveryCount,
+          samples: deliveries.map((d) => d.code),
+          releaseHint: "先回退/删除对应送货单（保持交付溯源）",
+        },
+      ],
+    );
   }
 
   const now = new Date();

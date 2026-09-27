@@ -6,6 +6,7 @@ import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/respon
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { casUpdate } from "@/lib/api/cas";
+import { failReferenceConflict } from "@/lib/api/reference-guard";
 import { buildFollowUpInfo } from "@/lib/api/opportunity-followup";
 import { z } from "zod";
 
@@ -142,7 +143,23 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   const existing = await prisma.projectOpportunity.findFirst({ where: { id, deletedAt: null } });
   if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "销售机会不存在");
   if (existing.convertedAt) {
-    return failConflict(ERROR_CODES.CONFLICT, "机会已转换为项目，禁止删除");
+    // 引用出处（问题二）：给出已转换生成的项目编号（保持「已转换禁止删除」项目溯源不变量）
+    const project = await prisma.project.findFirst({
+      where: { opportunityId: id },
+      select: { code: true, name: true },
+    });
+    return failReferenceConflict(
+      ERROR_CODES.CONFLICT,
+      `机会「${existing.code} ${existing.name}」`,
+      [
+        {
+          entity: "已转项目",
+          count: 1,
+          samples: project ? [project.code] : [],
+          releaseHint: "机会已转换为项目（项目溯源不可删除）；如需清理请先处理对应项目",
+        },
+      ],
+    );
   }
 
   await prisma.projectOpportunity.update({

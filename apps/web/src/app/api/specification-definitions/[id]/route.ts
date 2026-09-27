@@ -5,6 +5,7 @@ import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/respon
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { casUpdate } from "@/lib/api/cas";
+import { collectReferences, failReferenceConflict, REFERENCE_SAMPLE_LIMIT } from "@/lib/api/reference-guard";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -86,7 +87,29 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (!def) return failNotFound(ERROR_CODES.NOT_FOUND, "规格定义不存在");
 
   const refCount = await prisma.itemSpecification.count({ where: { definitionId: id, deletedAt: null } });
-  if (refCount > 0) return failConflict(ERROR_CODES.CONFLICT, "规格定义已被物料规格引用，不能删除");
+  // 引用出处（问题二）：条数 + 真实物料编号
+  const references = await collectReferences([
+    {
+      entity: "物料规格",
+      count: () => Promise.resolve(refCount),
+      samples: async () =>
+        (
+          await prisma.itemSpecification.findMany({
+            where: { definitionId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            select: { item: { select: { code: true } } },
+          })
+        ).map((s) => s.item.code),
+      releaseHint: "先删除对应物料的规格（ItemSpecification）",
+    },
+  ]);
+  if (references.length > 0) {
+    return failReferenceConflict(
+      ERROR_CODES.CONFLICT,
+      `规格定义「${def.code} ${def.name}」`,
+      references,
+    );
+  }
 
   await prisma.specificationDefinition.update({
     where: { id },
