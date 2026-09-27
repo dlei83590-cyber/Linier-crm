@@ -344,7 +344,7 @@ export const MODULES: ReadonlyArray<FrontendModule> = [
   },
 
   // ===== 客户与项目（F2-4 开放）=====
-  // project-opportunities：contract CRUD + convert（事实动作，无审批流）；ui CRUD + factActions（FRT-05 convert 已交付，POST /api/project-opportunities/:id/convert）
+  // project-opportunities：contract CRUD + convert（事实动作，无审批流）；ui CRUD + factActions（FRT-05 convert 已交付，POST /api/project-opportunities/:id/convert；2026-09-27 FRT-01 前端补齐：列表行操作新增「删除」，权限 project-opportunity:delete，已转换机会服务端 409）
   {
     id: 'project-opportunities',
     domain: 'customer-project',
