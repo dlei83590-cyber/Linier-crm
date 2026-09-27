@@ -182,6 +182,9 @@ describe("requirePermission — ADR-0057 DB 权限集判定（fail-closed，禁�
     name: "Admin",
     roles: ["SUPER_ADMIN"],
     permissions: ["role:view"],
+    // ADR-0059：已完成改密的常规会话
+    mustChangePassword: false,
+    passwordChangedAt: null as Date | null,
   };
 
   it("未认证 → 401", () => {
@@ -200,5 +203,70 @@ describe("requirePermission — ADR-0057 DB 权限集判定（fail-closed，禁�
   it("禁止回退静态表：角色名为 SUPER_ADMIN 但权限集为空 → 403", () => {
     expect(requirePermission({ ...user, permissions: [] }, "gl:create")?.status).toBe(403);
     expect(requirePermission({ ...user, permissions: [] }, "role:view")?.status).toBe(403);
+  });
+});
+
+/**
+ * ADR-0059：强制改密 Gate —— 初始密码 / 被重置密码的会话在改密前不得触达任何受权限保护 API。
+ * fail closed：即使权限集命中，也必须 403 PASSWORD_CHANGE_REQUIRED。
+ */
+describe("requirePermission — ADR-0059 强制改密 Gate（fail closed）", () => {
+  const pending = {
+    id: "u9",
+    email: "new@b.c",
+    name: "New",
+    roles: ["SUPER_ADMIN"],
+    permissions: ["user:view", "user:edit", "role:view"],
+    mustChangePassword: true,
+    passwordChangedAt: null as Date | null,
+  };
+
+  it("mustChangePassword=true + 权限命中 → 仍 403，且 code=PASSWORD_CHANGE_REQUIRED", async () => {
+    const res = requirePermission(pending, "user:view");
+    expect(res?.status).toBe(403);
+    const body = await res!.json();
+    expect(body.error.code).toBe("PASSWORD_CHANGE_REQUIRED");
+  });
+
+  it("强制改密 Gate 先于权限判定（无权限账号同样返回 PASSWORD_CHANGE_REQUIRED）", async () => {
+    const res = requirePermission({ ...pending, permissions: [] }, "gl:create");
+    expect(res?.status).toBe(403);
+    const body = await res!.json();
+    expect(body.error.code).toBe("PASSWORD_CHANGE_REQUIRED");
+  });
+
+  it("完成改密（false）→ 按常规权限判定放行", () => {
+    expect(requirePermission({ ...pending, mustChangePassword: false }, "user:view")).toBeNull();
+  });
+
+  it("未认证仍优先 401（不泄漏改密状态）", () => {
+    expect(requirePermission(null, "user:view")?.status).toBe(401);
+  });
+});
+
+describe("authenticate — ADR-0059 随会话返回强制改密状态", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    authMocks.verifySessionToken.mockResolvedValue({ sub: "u1", email: "a@b.c", roles: [] });
+  });
+
+  it("DB mustChangePassword=true → 会话 mustChangePassword=true（DB 权威，不读客户端声明）", async () => {
+    const changedAt = new Date("2026-09-21T00:00:00.000Z");
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: "u1",
+      email: "a@b.c",
+      name: "New",
+      isActive: true,
+      mustChangePassword: true,
+      passwordChangedAt: changedAt,
+      roles: [],
+      permissions: [],
+    });
+    const req = new NextRequest("http://localhost/api/auth/me", {
+      headers: { cookie: "linier_session=tok" },
+    });
+    const u = await authenticate(req);
+    expect(u?.mustChangePassword).toBe(true);
+    expect(u?.passwordChangedAt).toEqual(changedAt);
   });
 });

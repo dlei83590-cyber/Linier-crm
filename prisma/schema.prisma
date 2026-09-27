@@ -310,6 +310,10 @@ model User {
   id           String      @id @default(cuid())
   email        String      @unique
   passwordHash String
+  /// ADR-0059：待强制改密（新建用户初始密码 / 管理员重置密码后 = true；用户自行改密后清零）
+  mustChangePassword Boolean @default(true)
+  /// ADR-0059：最近一次密码变更时间（用户自助改密或管理员重置；历史数据为 null）
+  passwordChangedAt  DateTime? @db.Timestamptz(3)
   name         String?
   isActive     Boolean     @default(true)
   departmentId String?

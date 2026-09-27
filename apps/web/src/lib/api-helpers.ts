@@ -17,6 +17,13 @@ export interface SessionUser {
    * 这是 requirePermission 的唯一判定来源（DB 权威）；空集即 fail-closed。
    */
   permissions: string[];
+  /**
+   * ADR-0059：是否待强制改密（新建用户初始密码 / 管理员重置后 = true）。
+   * true 时除改密接口外的全部受权限保护 API 一律 403 PASSWORD_CHANGE_REQUIRED（fail closed）。
+   */
+  mustChangePassword: boolean;
+  /** ADR-0059：最近一次密码变更时间（审计投影；历史数据 null） */
+  passwordChangedAt: Date | null;
 }
 
 function bearerToken(request: NextRequest): string | null {
@@ -73,6 +80,9 @@ export async function authenticate(request: NextRequest): Promise<SessionUser | 
       ...user.roles.flatMap((m) => m.role.permissions.map((p) => p.code)),
       ...user.permissions.map((p) => p.code),
     ]),
+    // ADR-0059：强制改密状态随会话解析（DB 权威，不读客户端声明）
+    mustChangePassword: user.mustChangePassword,
+    passwordChangedAt: user.passwordChangedAt,
   };
 }
 
@@ -81,12 +91,29 @@ export async function authenticate(request: NextRequest): Promise<SessionUser | 
  * - fail-closed：权限集为空 / 未命中即 403；
  * - **禁止回退静态 ROLE_PERMISSIONS**（不得因角色名为 SUPER_ADMIN 等而放行）；
  * - 角色权限调整下一次请求生效。
+ *
+ * ADR-0059（强制改密 Gate）：会话 mustChangePassword=true 时**先于权限判定**返回
+ * 403 PASSWORD_CHANGE_REQUIRED —— 初始密码账号在改密前不得触达任何业务 API。
+ * 豁免路径 = 不经过 requirePermission 的接口（/api/auth/login、/api/auth/me、
+ * /api/auth/logout、/api/auth/change-password），前端据此引导用户完成改密。
  */
 export function requirePermission(user: SessionUser | null, permission: PermissionCode): NextResponse | null {
   if (!user) {
     return NextResponse.json(
       { success: false, error: { code: "AUTHENTICATION_ERROR", message: "Unauthorized" } },
       { status: 401 },
+    );
+  }
+  if (user.mustChangePassword) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          code: ERROR_CODES.PASSWORD_CHANGE_REQUIRED,
+          message: "当前账号仍在使用初始密码，请先修改密码后再使用系统功能",
+        },
+      },
+      { status: 403 },
     );
   }
   if (!hasEffectivePermission(user.permissions, permission)) {

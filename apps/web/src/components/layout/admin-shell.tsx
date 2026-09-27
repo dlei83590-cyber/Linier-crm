@@ -116,6 +116,17 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     }
   }, [state.status, router]);
 
+  // ADR-0059：初始密码 / 被管理员重置的账号必须先完成改密——
+  // 服务端 requirePermission 对 mustChangePassword 会话一律 403 PASSWORD_CHANGE_REQUIRED，
+  // 前端据此外加一层引导（只放行 /change-password），避免用户看到满屏业务导航却处处被拒。
+  const mustChangePassword = state.user?.mustChangePassword === true;
+
+  useEffect(() => {
+    if (state.status === "authenticated" && mustChangePassword) {
+      router.replace("/change-password");
+    }
+  }, [state.status, mustChangePassword, router]);
+
   // 路由变化：收起移动抽屉 / 搜索 / 下拉菜单
   useEffect(() => {
     setMenuOpen(false);
@@ -287,6 +298,26 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-9 w-full" />)}
+        </div>
+      </div>
+    );
+  }
+
+  // 强制改密态：不渲染业务导航与页面（服务端同源 fail closed），只保留引导
+  if (mustChangePassword) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-canvas px-4">
+        <div className="max-w-sm text-center">
+          <h1 className="text-base font-semibold text-ink-primary">请先修改初始密码</h1>
+          <p className="mt-2 text-sm text-ink-secondary">
+            当前账号仍在使用初始密码（或已被管理员重置），完成密码修改后才能使用系统功能。
+          </p>
+          <a
+            href="/change-password"
+            className="mt-4 inline-flex rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700"
+          >
+            前往修改密码
+          </a>
         </div>
       </div>
     );

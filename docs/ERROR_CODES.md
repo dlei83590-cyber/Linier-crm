@@ -333,5 +333,10 @@
 | EXPENSE_INVALID_STATE | 409 | 状态门禁：提交/批准/驳回/编辑/删除只能在允许的状态，409 |
 | EXPENSE_REJECT_REASON_REQUIRED | 400 | 驳回必须提供原因，400 |
 | REPORT_TARGET_NOT_FOUND | 404 | 目标不存在，404 |
+| PASSWORD_CHANGE_REQUIRED | 403 | 未完成初始密码修改：除改密接口外全部 API fail closed，403 |
+| PASSWORD_POLICY_VIOLATION | 400 | 新密码不满足强密码策略（大小写字母 + 数字，长度至少 8 位），400 |
+| PASSWORD_CURRENT_INVALID | 400 | 当前密码不正确（自助改密身份再校验），400 |
+| PASSWORD_SAME_AS_CURRENT | 400 | 新密码不得与当前密码相同，400 |
+| PASSWORD_DIRECT_SET_FORBIDDEN | 400 | 禁止直接设定/修改密码：只能用初始密码新建或管理员重置，400 |
 
-> 合计：**328 个错误码**（自动统计）
+> 合计：**333 个错误码**（自动统计）

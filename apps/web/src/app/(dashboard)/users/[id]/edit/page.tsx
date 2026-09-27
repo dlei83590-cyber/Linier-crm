@@ -9,10 +9,14 @@ import { AppPage, EntityFormWorkspace } from "@/components/workspace";
 import { PageLoading } from "@/components/ui/skeleton";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
 import { FormField } from "@/components/ui/form-field";
-import { INPUT_CLASS } from "@/lib/ui-classes";
+import { BUTTON_SECONDARY_CLASS, INPUT_CLASS } from "@/lib/ui-classes";
 import { roleLabel } from "@/lib/frontend/labels";
 import { PermissionTree } from "@/components/system/permission-tree";
 import { selectedCodeList, type PermissionCatalogItem } from "@/lib/frontend/permission-tree";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
+import { DEFAULT_INITIAL_PASSWORD, PASSWORD_POLICY_DESCRIPTION } from "@nilier-crm/shared";
+import { formatDate } from "@/lib/format";
 
 interface DepartmentOption {
   id: string;
@@ -35,6 +39,9 @@ interface UserDetail {
   roles: Array<{ role: { id: string; code: string; name: string } }>;
   /** ADR-0058：附加授权（全量 code） */
   permissions: Array<{ id: string; code: string; module: string; name: string }>;
+  /** ADR-0059：是否仍为初始密码（管理员重置后 = true） */
+  mustChangePassword: boolean;
+  passwordChangedAt: string | null;
 }
 
 const inputClass = INPUT_CLASS;
@@ -42,6 +49,7 @@ const inputClass = INPUT_CLASS;
 
 function UserEditForm() {
   const router = useRouter();
+  const toast = useToast();
   const params = useParams<{ id: string }>();
   const id = params.id;
 
@@ -56,7 +64,11 @@ function UserEditForm() {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set<string>());
   const [unknownCodes, setUnknownCodes] = useState<string[]>([]);
   const [isActive, setIsActive] = useState(true);
-  const [password, setPassword] = useState("");
+  // ADR-0059：密码状态（只读展示 + 管理员重置入口；管理员不得直接设定密码）
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [passwordChangedAt, setPasswordChangedAt] = useState<string | null>(null);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<ApiClientError | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -82,6 +94,8 @@ function UserEditForm() {
         setDepartmentId(d.departmentId ?? "");
         setRoleIds(d.roles.map((r) => r.role.id));
         setIsActive(d.isActive);
+        setMustChangePassword(d.mustChangePassword);
+        setPasswordChangedAt(d.passwordChangedAt ?? null);
         setDepts(deptBody.data);
         setRoles(roleBody.data);
         setCatalog(items);
@@ -106,6 +120,28 @@ function UserEditForm() {
     setRoleIds((prev) => (prev.includes(roleId) ? prev.filter((r) => r !== roleId) : [...prev, roleId]));
   };
 
+  // ADR-0059：管理员唯一的密码操作 = 重置为初始密码（不接受自定义密码）
+  const handleResetPassword = () => {
+    if (resetting) return;
+    setResetting(true);
+    apiFetch<{ mustChangePassword: boolean }>(`/api/users/${id}/reset-password`, { method: "POST" })
+      .then(() => {
+        setResetOpen(false);
+        setResetting(false);
+        setMustChangePassword(true);
+        setPasswordChangedAt(new Date().toISOString());
+        toast.warning(
+          "密码已重置",
+          `已重置为初始密码 ${DEFAULT_INITIAL_PASSWORD}，该用户下次登录必须修改密码`,
+        );
+      })
+      .catch((err: unknown) => {
+        setResetOpen(false);
+        setResetting(false);
+        toast.error("重置失败", err instanceof ApiClientError ? err.message : "网络错误");
+      });
+  };
+
   const handleSave = () => {
     if (submitting) return;
     setSubmitting(true);
@@ -116,7 +152,6 @@ function UserEditForm() {
       isActive,
       roleIds,
       permissionCodes: selectedCodeList(selected),
-      ...(password ? { password } : {}),
     };
     apiFetch<{ id: string }>(`/api/users/${id}`, {
       method: "PATCH",
@@ -198,9 +233,33 @@ function UserEditForm() {
               </div>
             </FormField>
           </div>
-          <FormField label="重置密码（留空不修改）">
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputClass} placeholder="至少 6 位" />
-          </FormField>
+          <div className="md:col-span-2 rounded-md border border-border p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-ink-primary">密码</p>
+                <p className="mt-1 text-xs text-ink-secondary">
+                  {mustChangePassword
+                    ? `仍为初始密码 ${DEFAULT_INITIAL_PASSWORD}（该用户登录后必须修改）`
+                    : passwordChangedAt
+                      ? `用户已自行设置（上次修改：${formatDate(passwordChangedAt)}）`
+                      : "用户已自行设置密码"}
+                </p>
+                <p className="mt-1 text-xs text-ink-muted">
+                  管理员不能直接设定密码：只能「重置密码」回到初始密码 {DEFAULT_INITIAL_PASSWORD}，
+                  用户下次登录将被强制修改（{PASSWORD_POLICY_DESCRIPTION}）。
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResetOpen(true)}
+                disabled={!isActive}
+                title={isActive ? undefined : "用户已停用，请先启用后再重置密码"}
+                className={BUTTON_SECONDARY_CLASS + " disabled:cursor-not-allowed disabled:opacity-50"}
+              >
+                重置密码
+              </button>
+            </div>
+          </div>
         </div>
       </section>
       <section className="rounded-md border border-border p-4">
@@ -225,6 +284,16 @@ function UserEditForm() {
           }}
         />
       </section>
+      <ConfirmDialog
+        open={resetOpen}
+        title="重置密码"
+        description={`将 ${email} 的密码重置为初始密码 ${DEFAULT_INITIAL_PASSWORD}，该用户下次登录必须立即修改密码。是否继续？`}
+        confirmLabel="重置密码"
+        tone="danger"
+        busy={resetting}
+        onConfirm={handleResetPassword}
+        onCancel={() => setResetOpen(false)}
+      />
     </EntityFormWorkspace>
   );
 }

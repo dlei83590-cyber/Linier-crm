@@ -73,6 +73,9 @@ export async function POST(request: NextRequest) {
         name: user.name,
         roles,
         permissions,
+        // ADR-0059：初始密码账号登录成功但只能前往改密页（其余 API 由 requirePermission fail closed 403）
+        mustChangePassword: user.mustChangePassword,
+        passwordChangedAt: user.passwordChangedAt,
       },
     },
   });

@@ -138,6 +138,31 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  # ADR-0059：自助改密（首次登录强制改密 / 个人中心改密同源）
+  # 唯一不经过 requirePermission 的业务写接口 → 强制改密态账号的唯一出口。
+  /api/auth/change-password:
+    post:
+      tags: [Auth]
+      summary: 修改自己的密码（需当前密码；新密码须满足强密码策略）
+      operationId: changePassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "200":
+          description: 密码已更新（mustChangePassword 清零 + passwordChangedAt 记录）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChangePasswordResponse"
+        "400":
+          description: VALIDATION_ERROR / PASSWORD_POLICY_VIOLATION / PASSWORD_CURRENT_INVALID / PASSWORD_SAME_AS_CURRENT
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   # ==========================================================================
   # Workflow Definitions（第一批）
   # 权限码：workflow-definition:view/create/edit/delete/approve/close
@@ -12892,6 +12917,32 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/Conflict"
+  # ADR-0059：管理员重置密码（唯一可用的密码操作）——固定回到初始密码 123456 + 强制下次登录改密
+  /api/users/{id}/reset-password:
+    post:
+      tags: [Users]
+      summary: 重置用户密码（回到初始密码，用户下次登录强制改密）
+      operationId: resetUserPassword
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: 已重置（mustChangePassword=true；幂等）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResetPasswordResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: FORBIDDEN（需 user:edit）/ PASSWORD_CHANGE_REQUIRED
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: 用户已停用，不允许重置
   /api/users/{id}:
     get:
       tags: [Users]
@@ -15098,6 +15149,40 @@ components:
         success: { type: boolean, example: true }
         data: { $ref: "#/components/schemas/User" }
 
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string, minLength: 1, maxLength: 128 }
+        newPassword:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: ADR-0059 强密码策略——必须同时包含大写字母、小写字母与数字（长度 ≥ 8）
+    ChangePasswordResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          required: [id, mustChangePassword]
+          properties:
+            id: { type: string }
+            mustChangePassword: { type: boolean, description: 改密成功后恒为 false }
+            passwordChangedAt: { type: string, format: date-time }
+    ResetPasswordResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          required: [id, mustChangePassword]
+          properties:
+            id: { type: string }
+            mustChangePassword: { type: boolean, description: 重置后恒为 true（用户下次登录必须改密） }
+            resetAt: { type: string, format: date-time }
     User:
       type: object
       required: [id, email]
@@ -15105,6 +15190,10 @@ components:
         id: { type: string }
         email: { type: string, format: email }
         name: { type: [string, "null"] }
+        mustChangePassword:
+          type: boolean
+          description: ADR-0059：仍为初始密码（改密前除改密接口外全部 API 403 PASSWORD_CHANGE_REQUIRED）
+        passwordChangedAt: { type: [string, "null"], format: date-time }
         roles:
           type: array
           items: { type: string }
@@ -21396,6 +21485,10 @@ components:
         email: { type: string }
         name: { type: [string, 'null'] }
         isActive: { type: boolean }
+        mustChangePassword:
+          type: boolean
+          description: ADR-0059：仍为初始密码（列表「密码」列 / 编辑页密码状态）
+        passwordChangedAt: { type: [string, 'null'], format: date-time }
         departmentId: { type: [string, 'null'] }
         department: { type: [object, 'null'], properties: { id: { type: string }, code: { type: string }, name: { type: string } } }
         permissions:
@@ -21424,10 +21517,14 @@ components:
             total: { type: integer }
     UserCreateRequest:
       type: object
-      required: [email, password]
+      required: [email]
       properties:
         email: { type: string, format: email }
-        password: { type: string, minLength: 6, description: 服务端 bcrypt 加密，不落明文 }
+        password:
+          type: string
+          description: |
+            **不接受**（ADR-0059）：初始密码固定为 123456 且用户首次登录必须修改；
+            请求体携带 password 字段 → 400 PASSWORD_DIRECT_SET_FORBIDDEN（fail closed，不静默忽略）。
         name: { type: [string, 'null'] }
         departmentId: { type: [string, 'null'] }
         roleIds: { type: array, items: { type: string } }
@@ -21444,7 +21541,11 @@ components:
         name: { type: [string, 'null'] }
         departmentId: { type: [string, 'null'] }
         isActive: { type: boolean }
-        password: { type: string, minLength: 6, description: 非空才重置 }
+        password:
+          type: string
+          description: |
+            **不接受**（ADR-0059）：管理员不得直接设定密码 → 400 PASSWORD_DIRECT_SET_FORBIDDEN；
+            请改用 POST /api/users/{id}/reset-password（回到初始密码 + 强制用户下次登录改密）。
         roleIds: { type: array, items: { type: string }, description: 全量替换 }
         permissionCodes:
           type: array

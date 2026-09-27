@@ -1,21 +1,24 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
-import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
+import { ok, fail, failValidation, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
-import { hashPassword } from "@/lib/auth";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
-/** User 无 version 字段 → PATCH 不做 CAS；DELETE = 停用（isActive=false，不物理删除） */
+/**
+ * User 无 version 字段 → PATCH 不做 CAS；DELETE = 停用（isActive=false，不物理删除）。
+ *
+ * ADR-0059：**PATCH 不接受 password**——管理员只能走 POST /api/users/:id/reset-password
+ * （重置为初始密码 + 强制改密）；带 password 字段的请求 → 400 fail closed（不静默忽略）。
+ */
 const userUpdateSchema = z
   .object({
     name: z.string().max(100).nullable().optional(),
     departmentId: z.string().min(1).nullable().optional(),
     isActive: z.boolean().optional(),
-    password: z.string().min(6).max(128).optional(),
     roleIds: z.array(z.string().min(1)).optional(),
     /** ADR-0058：用户附加授权（权限目录 code；全量替换；与角色权限并集生效） */
     permissionCodes: z.array(z.string().min(1)).optional(),
@@ -42,6 +45,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       roles: { select: { role: { select: { id: true, code: true, name: true } } } },
       // ADR-0058：附加授权全量 code（编辑页权限树回显）
       permissions: { select: { id: true, code: true, module: true, name: true }, orderBy: { code: "asc" } },
+      // ADR-0059：密码状态（编辑页「重置密码」区展示）
+      mustChangePassword: true,
+      passwordChangedAt: true,
       createdAt: true,
       updatedAt: true,
     },
@@ -59,7 +65,18 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   const { id } = await params;
   const meta = requestMeta(request);
-  const parsed = userUpdateSchema.safeParse(await request.json().catch(() => null));
+  const raw = (await request.json().catch(() => null)) as unknown;
+
+  // ADR-0059：密码不接受直接修改（只能由用户自助改密或管理员重置为初始密码）
+  if (raw !== null && typeof raw === "object" && "password" in raw) {
+    return fail(
+      ERROR_CODES.PASSWORD_DIRECT_SET_FORBIDDEN,
+      "不接受直接设置密码：请使用「重置密码」（回到初始密码并由用户首次登录修改），或由用户本人在个人中心修改",
+      400,
+    );
+  }
+
+  const parsed = userUpdateSchema.safeParse(raw);
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
   const existing = await prisma.user.findUnique({
@@ -100,7 +117,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
         ...(parsed.data.departmentId !== undefined ? { departmentId: parsed.data.departmentId } : {}),
         ...(parsed.data.isActive !== undefined ? { isActive: parsed.data.isActive } : {}),
-        ...(parsed.data.password ? { passwordHash: await hashPassword(parsed.data.password) } : {}),
       },
       select: { id: true, email: true, name: true, isActive: true, departmentId: true },
     });

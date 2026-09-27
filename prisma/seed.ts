@@ -973,15 +973,19 @@ async function main() {
   }
 
   // Admin user
+  // ADR-0059：seed 凭据来自环境变量（SEED_ADMIN_PASSWORD 由运维提供），**不是固定初始密码 123456**
+  // → 不进入强制改密态（mustChangePassword=false），避免新部署的 bootstrap 管理员/冒烟流程被 403 阻断。
+  // 强制改密只针对「新建用户初始密码 123456」与「管理员重置密码」两条路径（见 ADR-0059 §2）。
   const adminName = process.env.SEED_ADMIN_NAME ?? "管理员";
   const user = await prisma.user.upsert({
     where: { email },
-    update: { passwordHash, name: adminName },
+    update: { passwordHash, name: adminName, mustChangePassword: false },
     create: {
       email,
       passwordHash,
       name: adminName,
       departmentId: engineering.id,
+      mustChangePassword: false,
     },
   });
 
@@ -1017,13 +1021,15 @@ async function main() {
     const testPasswordHash = await hash(testPassword, 12);
     const testUser = await prisma.user.upsert({
       where: { email: testEmail },
-      update: { passwordHash: testPasswordHash, name: "Test User", isActive: true },
+      // ADR-0059：测试账号凭据同样来自环境变量（非固定初始密码）→ 不进入强制改密态
+      update: { passwordHash: testPasswordHash, name: "Test User", isActive: true, mustChangePassword: false },
       create: {
         email: testEmail,
         passwordHash: testPasswordHash,
         name: "Test User",
         isActive: true,
         departmentId: engineering.id,
+        mustChangePassword: false,
       },
     });
     // 角色精确归一化（CTO Review 23:57）：删除 test user 的 bootstrap 管理角色集合

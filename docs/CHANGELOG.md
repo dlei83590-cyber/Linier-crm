@@ -3,6 +3,32 @@
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
 
+## [Unreleased] - 密码策略与首次登录强制改密（ADR-0059，Migration 0059，2026-09-21）
+
+### 新增
+
+- **固定初始密码 + 首次登录强制改密**：新建用户初始密码固定为 **123456**（不再由管理员输入），并标记 `User.mustChangePassword=true`；用户首次登录被强制设置强密码（**大写字母 + 小写字母 + 数字，长度 ≥ 8**）
+- **自助改密**：`POST /api/auth/change-password`（需重新验证当前密码；成功后 `mustChangePassword=false` + `passwordChangedAt` 记录）；个人中心 `/profile` 新增「修改密码」区
+- **管理员只能「重置密码」**：`POST /api/users/:id/reset-password` 把密码重置回初始密码 123456 且标记强制改密（幂等）；用户列表行操作 + 编辑页按钮（二次确认）
+- **服务端强制改密 Gate（fail closed）**：`requirePermission` 在权限判定前判定 `mustChangePassword`，命中即 **403 `PASSWORD_CHANGE_REQUIRED`**——改密前除登录/改密/me/logout 外**任何业务 API 不可触达**（不依赖前端自觉）
+- **前端闭环**：新增 `/change-password` 页；登录成功按改密状态分流；dashboard shell 对强制改密态只渲染引导页；用户列表新增「密码」列（待修改初始密码 / 用户已设置）
+- **Schema/Migration**：`User.mustChangePassword`（默认 true）+ `User.passwordChangedAt`（Migration 0059，仅 ADD COLUMN + SET DEFAULT；**存量行 grandfather=false**）
+- 错误码 5 个：`PASSWORD_CHANGE_REQUIRED` / `PASSWORD_POLICY_VIOLATION` / `PASSWORD_CURRENT_INVALID` / `PASSWORD_SAME_AS_CURRENT` / `PASSWORD_DIRECT_SET_FORBIDDEN`（ERROR_CODES.md 自动同步 = 333 码）
+- 单测：shared 密码策略（`packages/shared/src/validators/index.test.ts`）、强制改密 Gate（`api-helpers.test.ts`）、两条新路由（`change-password/route.test.ts` / `reset-password/route.test.ts`）
+
+### 破坏性变更（契约）
+
+- `POST /api/users` **不再接受 `password`**（初始密码固定 123456）→ 携带即 **400 `PASSWORD_DIRECT_SET_FORBIDDEN`**
+- `PATCH /api/users/:id` **不再接受 `password`** → 携带即 **400 `PASSWORD_DIRECT_SET_FORBIDDEN`**（不静默忽略）；密码变更入口只剩「用户自助改密」与「管理员重置」
+- `POST /api/users/:id/reset-password` 权限复用 `user:edit`（ADMIN / SUPER_ADMIN；MANAGER 及以下 403）
+
+### 边界
+
+- 存量用户**不追溯强制改密**（grandfather）；如需一次性推行见 ADR-0059 §5 的显式 SQL（需单独批准）
+- seed bootstrap 管理员 / test user 凭据来自环境变量 → 显式 `mustChangePassword=false`（不冻结既有部署与冒烟流程）
+- 无状态 JWT 会话：改密**不吊销其它设备既有会话**；无密码过期/历史密码不可复用/登录失败锁定（后续独立 Gate）
+- 不新增权限码；不改角色权限模型；不改其它业务 API
+
 ## [Unreleased] - 用户附加授权：新建用户勾选 + 用户列表可编辑（ADR-0058，Migration 0058，2026-09-20）
 
 ### 新增
