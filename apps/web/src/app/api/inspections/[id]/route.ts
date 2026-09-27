@@ -5,6 +5,7 @@ import { authenticate, requirePermission, requestMeta, writeAuditLog } from '@/l
 import { ok, failValidation, failConflict, failNotFound } from '@/lib/api/response';
 import { ERROR_CODES } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
+import { failReferenceConflict, REFERENCE_SAMPLE_LIMIT } from '@/lib/api/reference-guard';
 import { inspectionUpdateSchema } from '@/lib/api/schemas';
 
 export const dynamic = 'force-dynamic';
@@ -186,15 +187,57 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (!existing) return failNotFound(ERROR_CODES.INSPECTION_NOT_FOUND, "质检记录不存在");
 
   // 下链防御：已入库（WHR line 引用）、已退货（Return line 引用）禁止删除
-  const whrCount = await prisma.warehouseReceiptLine.count({ where: { inspectionId: id, deletedAt: null } });
-  if (whrCount > 0) {
-    return failConflict(ERROR_CODES.INSPECTION_INVALID_STATE, `该质检已生成 ${whrCount} 条入库行，禁止删除（请先回退入库环节）`);
-  }
-  const retCount = await prisma.purchaseReturnLine.count({
-    where: { sourceRefType: "INSPECTION", sourceInspectionId: id, deletedAt: null },
-  });
-  if (retCount > 0) {
-    return failConflict(ERROR_CODES.INSPECTION_INVALID_STATE, "该质检已被退货引用，禁止删除（请先回退退货环节）");
+  // 引用出处（问题二）：一次给出全部阻止删除的下链单据（入库行→入库单 / 退货行→退货单）条数 + 编号
+  const [whrCount, retCount] = await Promise.all([
+    prisma.warehouseReceiptLine.count({ where: { inspectionId: id, deletedAt: null } }),
+    prisma.purchaseReturnLine.count({
+      where: { sourceRefType: "INSPECTION", sourceInspectionId: id, deletedAt: null },
+    }),
+  ]);
+  if (whrCount > 0 || retCount > 0) {
+    // 质检记录无自身单号：以所属收货单号作为业务主体（禁止展示 raw DB id）
+    const receiptLine = await prisma.purchaseReceiptLine.findFirst({
+      where: { id: existing.purchaseReceiptLineId },
+      select: { purchaseReceipt: { select: { code: true } } },
+    });
+    const [whrLines, returnLines] = await Promise.all([
+      whrCount > 0
+        ? prisma.warehouseReceiptLine.findMany({
+            where: { inspectionId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            select: { warehouseReceipt: { select: { code: true } } },
+          })
+        : Promise.resolve([] as Array<{ warehouseReceipt: { code: string } }>),
+      retCount > 0
+        ? prisma.purchaseReturnLine.findMany({
+            where: { sourceRefType: "INSPECTION", sourceInspectionId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            select: { purchaseReturn: { select: { code: true } } },
+          })
+        : Promise.resolve([] as Array<{ purchaseReturn: { code: string } }>),
+    ]);
+    return failReferenceConflict(
+      ERROR_CODES.INSPECTION_INVALID_STATE,
+      `质检记录（收货单 ${receiptLine?.purchaseReceipt.code ?? ""}）`,
+      [
+        ...(whrCount > 0
+          ? [{
+              entity: "入库行（入库单）",
+              count: whrCount,
+              samples: whrLines.map((l) => l.warehouseReceipt.code),
+              releaseHint: "请先回退入库环节",
+            }]
+          : []),
+        ...(retCount > 0
+          ? [{
+              entity: "退货行（退货单）",
+              count: retCount,
+              samples: returnLines.map((l) => l.purchaseReturn.code),
+              releaseHint: "请先回退退货环节",
+            }]
+          : []),
+      ],
+    );
   }
 
   await prisma.inspection.update({

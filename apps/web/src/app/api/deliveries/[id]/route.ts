@@ -12,6 +12,7 @@ import { buildSalesDeliveryReversalAtoms } from "@/lib/delivery/outbound-ledger"
 import { publishDeliveryEvent } from "@/lib/delivery/events";
 import { recalcSalesOrderDeliveryProjections } from "@/lib/sales-order/delivery-aggregation";
 import { executeLedgerAtoms, InventoryInsufficientStockError, InventoryLedgerIdempotencyConflictError } from "@/lib/inventory-ledger/ledger-command";
+import { failReferenceConflict, REFERENCE_SAMPLE_LIMIT } from "@/lib/api/reference-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -141,17 +142,34 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   // 引用防御：无"未红冲"发票引用（层层回退 Gate 与 unconfirm 一致——已红冲发票应收已回退，允许删除送货单）
   const issuedInvoices = await prisma.invoice.findMany({
     where: { deliveryId: id, deletedAt: null, status: { in: ["ISSUED", "PARTIALLY_PAID", "PAID"] } },
-    select: { id: true, redLetter: true },
+    select: { id: true, code: true, taxInvoiceNo: true, redLetter: true },
   });
-  const blueIds = issuedInvoices.filter((inv) => !inv.redLetter).map((inv) => inv.id);
-  const reducedCount = blueIds.length > 0
-    ? await prisma.invoice.count({
-        where: { redInvoiceRefId: { in: blueIds }, redLetter: true, deletedAt: null },
+  const blueInvoices = issuedInvoices.filter((inv) => !inv.redLetter);
+  // 已红冲（存在红字引用）的蓝票不计入阻止删除的引用（与 unconfirm 口径一致）
+  const reducedRefs = blueInvoices.length > 0
+    ? await prisma.invoice.findMany({
+        where: { redInvoiceRefId: { in: blueInvoices.map((inv) => inv.id) }, redLetter: true, deletedAt: null },
+        select: { redInvoiceRefId: true },
       })
-    : 0;
-  const unReduced = blueIds.length - reducedCount;
-  if (unReduced > 0) {
-    return failConflict(ERROR_CODES.DELIVERY_INVALID_STATE, `送货单仍有 ${unReduced} 张未红冲发票引用，禁止删除（请先红冲发票）`);
+    : [];
+  const reducedIds = new Set(reducedRefs.map((r) => r.redInvoiceRefId));
+  const unReducedInvoices = blueInvoices.filter((inv) => !reducedIds.has(inv.id));
+  if (unReducedInvoices.length > 0) {
+    // 引用出处（问题二）：未红冲发票的条数 + 真实发票号
+    return failReferenceConflict(
+      ERROR_CODES.DELIVERY_INVALID_STATE,
+      `送货单「${delivery.code}」`,
+      [
+        {
+          entity: "未红冲发票",
+          count: unReducedInvoices.length,
+          samples: unReducedInvoices
+            .slice(0, REFERENCE_SAMPLE_LIMIT)
+            .map((inv) => inv.code ?? inv.taxInvoiceNo ?? ""),
+          releaseHint: "请先红冲对应发票（红冲后即可删除送货单）",
+        },
+      ],
+    );
   }
 
   const now = new Date();

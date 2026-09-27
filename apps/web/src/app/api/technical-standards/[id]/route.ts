@@ -5,6 +5,7 @@ import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/respon
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { casUpdate } from "@/lib/api/cas";
+import { collectReferences, failReferenceConflict, REFERENCE_SAMPLE_LIMIT } from "@/lib/api/reference-guard";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -100,8 +101,28 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "技术标准不存在");
 
   // 引用检查：已被物料关联（ItemStandard）→ 不可删除（可编辑）
-  if (existing._count.items > 0) {
-    return failConflict(ERROR_CODES.CONFLICT, "技术标准已被物料引用，不能删除（可编辑）");
+  // 引用出处（问题二）：条数 + 真实物料编号
+  const references = await collectReferences([
+    {
+      entity: "关联物料",
+      count: () => Promise.resolve(existing._count.items),
+      samples: async () =>
+        (
+          await prisma.itemStandard.findMany({
+            where: { standardId: id, item: { deletedAt: null } },
+            take: REFERENCE_SAMPLE_LIMIT,
+            select: { item: { select: { code: true } } },
+          })
+        ).map((r) => r.item.code),
+      releaseHint: "先解除对应物料的技术标准关联",
+    },
+  ]);
+  if (references.length > 0) {
+    return failReferenceConflict(
+      ERROR_CODES.CONFLICT,
+      `技术标准「${existing.code} ${existing.name}」`,
+      references,
+    );
   }
 
   await prisma.technicalStandard.update({

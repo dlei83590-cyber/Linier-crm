@@ -5,6 +5,7 @@ import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/respon
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { casUpdate } from "@/lib/api/cas";
+import { collectReferences, failReferenceConflict, REFERENCE_SAMPLE_LIMIT } from "@/lib/api/reference-guard";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -106,8 +107,44 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   const hasDescendants = await prisma.itemCategory.count({
     where: { categoryPath: { startsWith: `${category.categoryPath}.` }, deletedAt: null },
   });
-  if (hasDescendants > 0) return failConflict(ERROR_CODES.CONFLICT, "存在子分类，不能删除");
-  if (category._count.items > 0) return failConflict(ERROR_CODES.CONFLICT, "分类下存在物料，不能删除");
+  // 引用出处（问题二）：子分类/物料的条数 + 真实编码，一次给出全部阻止原因
+  const references = await collectReferences([
+    {
+      entity: "子分类",
+      count: () => Promise.resolve(hasDescendants),
+      samples: async () =>
+        (
+          await prisma.itemCategory.findMany({
+            where: { categoryPath: { startsWith: `${category.categoryPath}.` }, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            orderBy: { categoryPath: "asc" },
+            select: { code: true },
+          })
+        ).map((c) => c.code),
+      releaseHint: "先删除该分类下的子分类（自下而上）",
+    },
+    {
+      entity: "分类下物料",
+      count: () => Promise.resolve(category._count.items),
+      samples: async () =>
+        (
+          await prisma.item.findMany({
+            where: { categoryId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            orderBy: { code: "asc" },
+            select: { code: true },
+          })
+        ).map((i) => i.code),
+      releaseHint: "先把对应物料改挂到其它分类",
+    },
+  ]);
+  if (references.length > 0) {
+    return failReferenceConflict(
+      ERROR_CODES.CONFLICT,
+      `物料分类「${category.code} ${category.name}」`,
+      references,
+    );
+  }
 
   await prisma.itemCategory.update({
     where: { id },

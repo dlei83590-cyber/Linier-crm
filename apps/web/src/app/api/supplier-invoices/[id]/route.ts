@@ -5,6 +5,7 @@ import { authenticate, requirePermission, requestMeta, writeAuditLog } from '@/l
 import { ok, fail, failValidation, failConflict, failNotFound } from '@/lib/api/response';
 import { ERROR_CODES, type ErrorCode } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
+import { failReferenceConflict, REFERENCE_SAMPLE_LIMIT } from '@/lib/api/reference-guard';
 import { supplierInvoiceUpdateSchema } from '@/lib/api/schemas';
 import {
   computeSupplierInvoiceLineAmounts,
@@ -307,7 +308,25 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   }
   const matchRunCount = await prisma.supplierInvoiceMatchRun.count({ where: { supplierInvoiceId: id } });
   if (matchRunCount > 0) {
-    return failConflict(ERROR_CODES.SUPPLIER_INVOICE_INVALID_STATE, "供应商发票已有匹配记录，禁止删除（保持匹配溯源）");
+    // 引用出处（问题二）：匹配 Run 条数 + 批次/修订（immutable Match Snapshot）
+    const matchRuns = await prisma.supplierInvoiceMatchRun.findMany({
+      where: { supplierInvoiceId: id },
+      take: REFERENCE_SAMPLE_LIMIT,
+      orderBy: { revision: 'asc' },
+      select: { runNo: true, revision: true, result: true },
+    });
+    return failReferenceConflict(
+      ERROR_CODES.SUPPLIER_INVOICE_INVALID_STATE,
+      `供应商发票「${existing.invoiceNo}」`,
+      [
+        {
+          entity: "匹配记录（Match Run）",
+          count: matchRunCount,
+          samples: matchRuns.map((r) => `第${r.runNo}次匹配 rev${r.revision}（${r.result}）`),
+          releaseHint: "匹配记录为不可变事实（保持匹配溯源）；如需清理请回退匹配/审批环节",
+        },
+      ],
+    );
   }
 
   const now = new Date();

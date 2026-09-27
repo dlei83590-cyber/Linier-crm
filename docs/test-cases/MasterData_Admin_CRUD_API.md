@@ -39,7 +39,7 @@
 | TS-3 | POST 重复 code | 409 |
 | TS-4 | PATCH { version, name } | 200 version+1 |
 | TS-5 | DELETE | 200 软删；再 GET → 404 |
-| TS-6 | DELETE 已被 ItemStandard 引用（物料已关联该标准） | 409 CONFLICT「已被物料引用，不能删除（可编辑）」 |
+| TS-6 | DELETE 已被 ItemStandard 引用（物料已关联该标准） | 409 CONFLICT「技术标准「XX」已被引用，不能删除：关联物料 1 条（ITM-001）。请先解除上述引用后重试」+ `details.references` |
 | TS-7 | PATCH 空 payload 仅 version | 400 VALIDATION_ERROR（至少一个更新字段） |
 
 ## 4. /api/commercial-terms（commercial-term:*）
@@ -72,7 +72,7 @@
 | PL-4 | PATCH { version, name } | 200 version+1 |
 | PL-5 | PATCH 过期 version | 409 VERSION_CONFLICT |
 | PL-6 | DELETE 无引用 | 200 软删 |
-| PL-7 | DELETE 已配置 PriceListItem（单价） | 409 CONFLICT「已配置单价/版本或被报价单引用，不能删除（可编辑）」 |
+| PL-7 | DELETE 已配置 PriceListItem（单价） | 409 CONFLICT「价目表「PL-001 XX」已被引用，不能删除：单价明细（物料） 2 条（ITM-001、ITM-002）；价目表版本 1 条（v1.1）。请先解除上述引用后重试」+ `details.references` |
 | PL-8 | DELETE 已有 PriceListVersion / 被 QuotationPriceSnapshot 引用 | 409 CONFLICT（同上） |
 
 ## 5.6 /api/unit-of-measures（unit-of-measure:view/create/edit/delete）
@@ -87,7 +87,7 @@
 | UOM-6 | PATCH 过期 version | 409 VERSION_CONFLICT |
 | UOM-7 | PATCH 改 code 与他人冲突 | 409 CONFLICT |
 | UOM-8 | DELETE 无引用 | 200 软删 |
-| UOM-9 | DELETE 被物料/单据行/UomConversion 引用 | 409 CONFLICT「已被物料/单据/换算引用，不能删除（可编辑）」 |
+| UOM-9 | DELETE 被物料/单据行/UomConversion 引用 | 409 CONFLICT「计量单位「KG 千克」已被引用，不能删除：物料（基本/库存/采购/销售单位） 2 条（ITM-001、ITM-002）；报价单行 1 条（QT-2026-0001）；单位换算关系 1 条（KG → T）。请先解除上述引用后重试」+ `details.references`（逐族给出条数与单据编号） |
 | UOM-10 | DELETE 仅存在已软删除的历史草稿引用（deletedAt≠null） | 200 软删（历史草稿不计入引用；InventoryMovement 为不可变事实仍计入） |
 
 ## 6. /api/users（user:view/create/edit/delete）

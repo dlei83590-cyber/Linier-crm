@@ -4,6 +4,7 @@ import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/l
 import { ok, failConflict, failNotFound } from "@/lib/api/response";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
+import { failReferenceConflict, REFERENCE_SAMPLE_LIMIT } from "@/lib/api/reference-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +61,28 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     where: { receiptId: id, deletedAt: null, reversedAt: null },
   });
   if (activeAllocCount > 0) {
-    return failConflict(ERROR_CODES.RECEIPT_VOID_FORBIDDEN, "收款单仍有未冲销的核销记录，禁止删除（先冲销核销后再删除）");
+    // 引用出处（问题二）：未冲销核销条数 + 对应应收发票号
+    const allocations = await prisma.receiptAllocation.findMany({
+      where: { receiptId: id, deletedAt: null, reversedAt: null },
+      take: REFERENCE_SAMPLE_LIMIT,
+      select: {
+        accountsReceivable: { select: { invoice: { select: { code: true, taxInvoiceNo: true } } } },
+      },
+    });
+    return failReferenceConflict(
+      ERROR_CODES.RECEIPT_VOID_FORBIDDEN,
+      `收款单「${receipt.code}」`,
+      [
+        {
+          entity: "未冲销核销记录（对应发票）",
+          count: activeAllocCount,
+          samples: allocations
+            .map((a) => a.accountsReceivable.invoice.code ?? a.accountsReceivable.invoice.taxInvoiceNo ?? "")
+            .filter((s) => s.length > 0),
+          releaseHint: "先冲销对应核销记录后再删除收款单",
+        },
+      ],
+    );
   }
 
   const now = new Date();

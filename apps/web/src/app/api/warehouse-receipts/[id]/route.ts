@@ -5,6 +5,7 @@ import { authenticate, requirePermission, requestMeta, writeAuditLog } from '@/l
 import { ok, fail, failValidation, failConflict, failNotFound } from '@/lib/api/response';
 import { ERROR_CODES } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
+import { failReferenceConflict, REFERENCE_SAMPLE_LIMIT } from '@/lib/api/reference-guard';
 import { recycleDocumentSequence } from '@/lib/document-sequence/recycle';
 import { warehouseReceiptUpdateSchema } from '@/lib/api/schemas';
 import {
@@ -367,24 +368,47 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     // 集成在仓库收货中退货（用户指令 2026-08-21）：全部入库行已 RETURNED 退货 → GRIR 已 REVERSAL，允许删除（退货+反收货一键完成）
     const whrLines = await prisma.warehouseReceiptLine.findMany({
       where: { warehouseReceiptId: id, deletedAt: null },
-      select: { id: true, quantity: true },
+      select: { id: true, quantity: true, item: { select: { code: true } } },
     });
     if (whrLines.length > 0) {
       const totalWhr = whrLines.reduce((s, l) => s.plus(l.quantity), new Prisma.Decimal(0));
-      const returnedAgg = await prisma.purchaseReturnLine.aggregate({
+      const returnedLines = await prisma.purchaseReturnLine.findMany({
         where: {
           sourceRefType: "WAREHOUSE_RECEIPT_LINE",
           sourceWarehouseReceiptLineId: { in: whrLines.map((l) => l.id) },
           purchaseReturn: { status: "RETURNED", deletedAt: null },
           deletedAt: null,
         },
-        _sum: { quantity: true },
+        select: { sourceWarehouseReceiptLineId: true, quantity: true },
       });
-      const totalReturned = returnedAgg._sum.quantity ?? new Prisma.Decimal(0);
-      if (totalReturned.lt(totalWhr)) {
-        return failConflict(
+      const returnedByLine = new Map<string, Prisma.Decimal>();
+      for (const rl of returnedLines) {
+        const key = rl.sourceWarehouseReceiptLineId ?? "";
+        returnedByLine.set(key, (returnedByLine.get(key) ?? new Prisma.Decimal(0)).plus(rl.quantity));
+      }
+      const totalReturned = [...returnedByLine.values()].reduce(
+        (s, q) => s.plus(q),
+        new Prisma.Decimal(0),
+      );
+      // 引用出处（问题二）：给出「哪些入库行尚未退完」+ 已退/应退数量
+      const pendingLines = whrLines.filter((l) =>
+        (returnedByLine.get(l.id) ?? new Prisma.Decimal(0)).lt(l.quantity),
+      );
+      if (pendingLines.length > 0) {
+        return failReferenceConflict(
           ERROR_CODES.WAREHOUSE_RECEIPT_INVALID_STATE,
-          "已过账且未全部退货，禁止删除（请在仓库收货中完成退货）",
+          `入库单「${existing.code}」`,
+          [
+            {
+              entity: "未全部退货的入库行（物料）",
+              count: pendingLines.length,
+              samples: pendingLines
+                .slice(0, REFERENCE_SAMPLE_LIMIT)
+                .map((l) => l.item?.code ?? "")
+                .filter((s) => s.length > 0),
+              releaseHint: `已退货 ${totalReturned} / 应退 ${totalWhr}；请在「仓库收货」中完成退货`,
+            },
+          ],
         );
       }
       // 全部已退货 → 允许删除

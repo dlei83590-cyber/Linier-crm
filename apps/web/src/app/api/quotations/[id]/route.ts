@@ -8,6 +8,7 @@ import { requestLog } from "@/lib/api/logger";
 import { quotationUpdateSchema } from "@/lib/api/schemas";
 import { createQuotationRevision, effectiveStatusOf } from "@/lib/quotation/helpers";
 import { publishQuotationEvent } from "@/lib/quotation/events";
+import { failReferenceConflict } from "@/lib/api/reference-guard";
 import { recycleDocumentSequence } from "@/lib/document-sequence/recycle";
 
 export const dynamic = "force-dynamic";
@@ -153,7 +154,23 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   }
   // 防御：已转换为销售订单（salesOrderId 非空）禁止删除——避免破坏 SO 溯源链
   if (quotation.salesOrderId) {
-    return failConflict(ERROR_CODES.QUOTATION_NOT_EDITABLE, "报价已转换为销售订单，禁止删除（保持 SO 溯源）");
+    // 引用出处（问题二）：给出对应销售订单编号
+    const salesOrder = await prisma.salesOrder.findFirst({
+      where: { id: quotation.salesOrderId },
+      select: { code: true },
+    });
+    return failReferenceConflict(
+      ERROR_CODES.QUOTATION_NOT_EDITABLE,
+      `报价单「${quotation.code}」`,
+      [
+        {
+          entity: "销售订单",
+          count: 1,
+          samples: salesOrder ? [salesOrder.code] : [],
+          releaseHint: "先在对应销售订单中回退（删除订单会释放报价单）",
+        },
+      ],
+    );
   }
 
   const now = new Date();

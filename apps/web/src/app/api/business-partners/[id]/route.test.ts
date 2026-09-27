@@ -187,6 +187,8 @@ describe('DELETE /api/business-partners/:id — 独立引用拒绝 + 自有子�
   function bpWithCounts(counts: Record<string, number>) {
     return {
       id: 'bp-del-1',
+      code: 'BP-001',
+      name: '往来单位一',
       _count: {
         customers: counts.customers ?? 0,
         opportunities: counts.opportunities ?? 0,
@@ -199,6 +201,10 @@ describe('DELETE /api/business-partners/:id — 独立引用拒绝 + 自有子�
     vi.clearAllMocks();
     findFirstMock = vi.fn();
     mockPrisma.businessPartner = { findFirst: findFirstMock };
+    // 引用出处（问题二）：引用样本查询（真实编码）
+    mockPrisma.customer = { findMany: vi.fn().mockResolvedValue([{ code: 'CUS-001' }]) };
+    mockPrisma.projectOpportunity = { findMany: vi.fn().mockResolvedValue([{ code: 'OP-001' }]) };
+    mockPrisma.project = { findMany: vi.fn().mockResolvedValue([{ code: 'PJ-001' }]) };
     // 级联软删 tx 对象（供应商档案扩展 + 自有子资源 + 主档）
     txMock = vi.fn((fn: (t: Record<string, unknown>) => Promise<unknown>) =>
       fn({
@@ -231,20 +237,29 @@ describe('DELETE /api/business-partners/:id — 独立引用拒绝 + 自有子�
     expect(txMock).toHaveBeenCalled();
   });
 
-  it('存在未删除的有效引用（customers>0）→ 409 CONFLICT', async () => {
+  it('存在未删除的有效引用（customers>0）→ 409 CONFLICT + 引用出处（客户编码）', async () => {
     findFirstMock.mockResolvedValue(bpWithCounts({ customers: 1 }));
     const res = await DELETE(new NextRequest('http://localhost/api/business-partners/bp-del-1', { method: 'DELETE' }), { params: Promise.resolve({ id: 'bp-del-1' }) });
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error.code).toBe('CONFLICT');
+    // 问题二：提示引用出处（实体 + 条数 + 真实编码）
+    expect(body.error.message).toContain('已被引用，不能删除：客户档案 1 条（CUS-001）');
+    expect(body.error.details.references).toEqual([
+      expect.objectContaining({ entity: '客户档案', count: 1, samples: ['CUS-001'] }),
+    ]);
   });
 
-  it('存在未删除的有效引用（projects>0）→ 409 CONFLICT', async () => {
+  it('存在未删除的有效引用（projects>0）→ 409 CONFLICT + 引用出处（项目编号）', async () => {
     findFirstMock.mockResolvedValue(bpWithCounts({ projects: 1 }));
     const res = await DELETE(new NextRequest('http://localhost/api/business-partners/bp-del-1', { method: 'DELETE' }), { params: Promise.resolve({ id: 'bp-del-1' }) });
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error.code).toBe('CONFLICT');
+    expect(body.error.message).toContain('项目 1 条（PJ-001）');
+    expect(body.error.details.references).toEqual([
+      expect.objectContaining({ entity: '项目', count: 1, samples: ['PJ-001'] }),
+    ]);
   });
 
   it('往来单位不存在 → 404 NOT_FOUND', async () => {

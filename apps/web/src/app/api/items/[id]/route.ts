@@ -6,6 +6,7 @@ import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/respon
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { casUpdate } from "@/lib/api/cas";
+import { collectReferences, failReferenceConflict, REFERENCE_SAMPLE_LIMIT } from "@/lib/api/reference-guard";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -164,8 +165,39 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     where: { id },
     include: { _count: { select: { priceListItems: { where: { deletedAt: null } }, projectProducts: { where: { deletedAt: null } } } } },
   });
-  if (refs && (refs._count.priceListItems > 0 || refs._count.projectProducts > 0)) {
-    return failConflict(ERROR_CODES.CONFLICT, "物料已被价格表或项目引用，不能删除");
+  // 引用出处（问题二）：条数 + 真实价格表/项目编号，明确「被谁引用」
+  const references = await collectReferences([
+    {
+      entity: "价格表单价",
+      count: () => Promise.resolve(refs?._count.priceListItems ?? 0),
+      samples: async () =>
+        (
+          await prisma.priceListItem.findMany({
+            where: { itemId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            orderBy: { createdAt: "desc" },
+            select: { priceList: { select: { code: true } } },
+          })
+        ).map((r) => r.priceList.code),
+      releaseHint: "先在「价格表」中移除该物料单价",
+    },
+    {
+      entity: "项目产品",
+      count: () => Promise.resolve(refs?._count.projectProducts ?? 0),
+      samples: async () =>
+        (
+          await prisma.projectProduct.findMany({
+            where: { itemId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            orderBy: { createdAt: "desc" },
+            select: { project: { select: { code: true } } },
+          })
+        ).map((r) => r.project.code),
+      releaseHint: "先在对应项目的产品清单中移除该物料",
+    },
+  ]);
+  if (references.length > 0) {
+    return failReferenceConflict(ERROR_CODES.CONFLICT, `物料「${item.code} ${item.name}」`, references);
   }
 
   const now = new Date();

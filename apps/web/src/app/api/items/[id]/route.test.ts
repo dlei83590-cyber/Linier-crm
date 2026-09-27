@@ -21,6 +21,9 @@ describe('DELETE /api/items/:id — 引用检查仅统计未删除（deletedAt:n
     vi.clearAllMocks();
     findFirstMock = vi.fn();
     mockPrisma.item = { findFirst: findFirstMock };
+    // 引用出处（问题二）：价格表/项目样本查询
+    mockPrisma.priceListItem = { findMany: vi.fn().mockResolvedValue([{ priceList: { code: 'PL-001' } }]) };
+    mockPrisma.projectProduct = { findMany: vi.fn().mockResolvedValue([{ project: { code: 'PJ-001' } }]) };
     mockPrisma.$transaction = vi.fn((fn: (t: Record<string, unknown>) => Promise<unknown>) =>
       fn({
         itemSpecification: { updateMany: vi.fn().mockResolvedValue({}) },
@@ -40,7 +43,7 @@ describe('DELETE /api/items/:id — 引用检查仅统计未删除（deletedAt:n
 
   it('无任何引用 → 200 软删除', async () => {
     findFirstMock
-      .mockResolvedValueOnce({ id: 'item-1', deletedAt: null })
+      .mockResolvedValueOnce({ id: 'item-1', code: 'ITM-001', name: '轴承', deletedAt: null })
       .mockResolvedValueOnce({ _count: { priceListItems: 0, projectProducts: 0 } });
     const res = await DELETE(makeDeleteRequest(), { params: Promise.resolve({ id: 'item-1' }) });
     expect(res.status).toBe(200);
@@ -48,14 +51,29 @@ describe('DELETE /api/items/:id — 引用检查仅统计未删除（deletedAt:n
     expect(body.data.deleted).toBe(true);
   });
 
-  it('存在未删除的有效引用（projectProducts>0）→ 409 CONFLICT', async () => {
+  it('存在未删除的有效引用（projectProducts>0）→ 409 CONFLICT + 引用出处（项目编号）', async () => {
     findFirstMock
-      .mockResolvedValueOnce({ id: 'item-1', deletedAt: null })
+      .mockResolvedValueOnce({ id: 'item-1', code: 'ITM-001', name: '轴承', deletedAt: null })
       .mockResolvedValueOnce({ _count: { priceListItems: 0, projectProducts: 1 } });
     const res = await DELETE(makeDeleteRequest(), { params: Promise.resolve({ id: 'item-1' }) });
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error.code).toBe('CONFLICT');
+    // 问题二：提示引用出处（实体 + 条数 + 真实项目编号）
+    expect(body.error.message).toContain('物料「ITM-001 轴承」已被引用，不能删除：项目产品 1 条（PJ-001）');
+    expect(body.error.details.references).toEqual([
+      expect.objectContaining({ entity: '项目产品', count: 1, samples: ['PJ-001'] }),
+    ]);
+  });
+
+  it('存在价格表单价引用（priceListItems>0）→ 409 + 引用出处（价格表编码）', async () => {
+    findFirstMock
+      .mockResolvedValueOnce({ id: 'item-1', code: 'ITM-001', name: '轴承', deletedAt: null })
+      .mockResolvedValueOnce({ _count: { priceListItems: 1, projectProducts: 0 } });
+    const res = await DELETE(makeDeleteRequest(), { params: Promise.resolve({ id: 'item-1' }) });
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error.message).toContain('价格表单价 1 条（PL-001）');
   });
 
   it('物料不存在 → 404 NOT_FOUND', async () => {

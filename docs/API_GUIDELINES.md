@@ -67,6 +67,30 @@
 - 错误码来源：`ERROR_CODES` 常量（`apps/web/src/lib/api/errors.ts`）+ 全局注册表（ERROR_CODES.md）
 - 新业务错误码必须先在 ERROR_CODES.md 注册，禁止散落魔法字符串
 - 前端按 code 做国际化与日志统计，message 为人类可读文案
+- **删除引用冲突必须给出「引用出处」（2026-09-27 问题二）**：DELETE 因既有引用/下链单据被阻止时，
+  响应 MUST 说明**被谁引用**，禁止只回「已被引用」：
+
+  ```json
+  {
+    "success": false,
+    "error": {
+      "code": "CONFLICT",
+      "message": "物料「ITM-001 轴承」已被引用，不能删除：价格表单价 2 条（PL-001、PL-002）；项目产品 1 条（PJ-001）。请先解除上述引用后重试",
+      "details": {
+        "references": [
+          { "entity": "价格表单价", "count": 2, "samples": ["PL-001", "PL-002"], "releaseHint": "先在「价格表」中移除该物料单价" },
+          { "entity": "项目产品", "count": 1, "samples": ["PJ-001"], "releaseHint": "先在对应项目的产品清单中移除该物料" }
+        ]
+      }
+    }
+  }
+  ```
+
+  - 口径红线：`count` 必须与拦截判定**完全一致**（同一 where + 未软删口径）；`samples` 只放真实单据编号（≤3 条，超出以「等」省略）；
+    引用条数为 0 时不查询样本（快乐路径零额外查询）
+  - 统一实现：`apps/web/src/lib/api/reference-guard.ts`（`collectReferences` / `failReferenceConflict` / `referenceBlocked`），
+    禁止各路由自行拼接文案
+  - 状态机类拦截（如「仅 DRAFT/CANCELLED 可删除」）不属引用冲突，保持原语义
 
 ## 8. 版本（Versioning）
 

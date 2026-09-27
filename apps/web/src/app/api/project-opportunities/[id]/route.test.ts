@@ -115,14 +115,19 @@ describe('DELETE /api/project-opportunities/:id — 列表删除契约（软删�
     });
   });
 
-  it('已转换为项目：409 CONFLICT 且不软删除（保持项目溯源不变量）', async () => {
+  it('已转换为项目：409 CONFLICT + 引用出处（项目编号）且不软删除（保持项目溯源不变量）', async () => {
     findFirstMock.mockResolvedValue({ ...makeOpp(), convertedAt: new Date() });
+    mockPrisma.project = { findFirst: vi.fn().mockResolvedValue({ code: 'PJ-001', name: '项目一' }) };
 
     const res = await DELETE(detailUrl(), { params: Promise.resolve({ id: 'o1' }) });
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.success).toBe(false);
-    expect(body.error.message).toBe('机会已转换为项目，禁止删除');
+    // 问题二：提示引用出处（实体 + 条数 + 真实项目编号）
+    expect(body.error.message).toContain('机会「OP-001 机会一」已被引用，不能删除：已转项目 1 条（PJ-001）');
+    expect(body.error.details.references).toEqual([
+      expect.objectContaining({ entity: '已转项目', count: 1, samples: ['PJ-001'] }),
+    ]);
     expect(updateMock).not.toHaveBeenCalled();
   });
 

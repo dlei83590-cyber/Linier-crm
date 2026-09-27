@@ -5,6 +5,7 @@ import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/respon
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { casUpdate } from "@/lib/api/cas";
+import { collectReferences, failReferenceConflict, REFERENCE_SAMPLE_LIMIT } from "@/lib/api/reference-guard";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -112,17 +113,108 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "库位不存在");
 
   const c = existing._count;
-  const referenced =
-    c.warehouseReceipts +
-    c.inventoryMovements +
-    c.stockProjections +
-    c.transferSourceLocations +
-    c.transferDestinationLocations +
-    c.stockCountLines +
-    c.adjustmentLines +
-    c.conversionLines;
-  if (referenced > 0) {
-    return failConflict(ERROR_CODES.CONFLICT, "库位已被库存流水/单据/盘点/调拨/调整/转换引用，不能删除（可编辑）");
+  // 引用出处（问题二）：按业务单据族分别给出条数 + 真实单据编号（不再只报「已被引用」）
+  const references = await collectReferences([
+    {
+      entity: "入库单",
+      count: () => Promise.resolve(c.warehouseReceipts),
+      samples: async () =>
+        (
+          await prisma.warehouseReceipt.findMany({
+            where: { locationId: id },
+            take: REFERENCE_SAMPLE_LIMIT,
+            orderBy: { createdAt: "desc" },
+            select: { code: true },
+          })
+        ).map((r) => r.code),
+      releaseHint: "先回退/删除对应入库单",
+    },
+    {
+      entity: "库存流水",
+      count: () => Promise.resolve(c.inventoryMovements),
+      samples: async () =>
+        (
+          await prisma.inventoryMovement.findMany({
+            where: { locationId: id },
+            take: REFERENCE_SAMPLE_LIMIT,
+            orderBy: { committedAt: "desc" },
+            select: { movementNo: true },
+          })
+        ).map((m) => m.movementNo),
+      releaseHint: "库存流水为不可变事实（保持库存溯源）",
+    },
+    {
+      entity: "库存投影（物料）",
+      count: () => Promise.resolve(c.stockProjections),
+      samples: async () =>
+        (
+          await prisma.stockProjection.findMany({
+            where: { locationId: id },
+            take: REFERENCE_SAMPLE_LIMIT,
+            select: { item: { select: { code: true } } },
+          })
+        ).map((p) => p.item.code),
+      releaseHint: "该库位仍有库存余额投影（需先清空该库位库存）",
+    },
+    {
+      entity: "库存调拨单",
+      count: () => Promise.resolve(c.transferSourceLocations + c.transferDestinationLocations),
+      samples: async () =>
+        (
+          await prisma.inventoryTransfer.findMany({
+            where: {
+              OR: [{ sourceLocationId: id }, { destinationLocationId: id }],
+              deletedAt: null,
+            },
+            take: REFERENCE_SAMPLE_LIMIT,
+            orderBy: { createdAt: "desc" },
+            select: { transferNo: true },
+          })
+        ).map((t) => t.transferNo),
+      releaseHint: "先删除对应调拨单",
+    },
+    {
+      entity: "库存盘点单",
+      count: () => Promise.resolve(c.stockCountLines),
+      samples: async () =>
+        (
+          await prisma.stockCountLine.findMany({
+            where: { locationId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            select: { countHeader: { select: { countNo: true } } },
+          })
+        ).map((l) => l.countHeader.countNo),
+      releaseHint: "先删除对应盘点单",
+    },
+    {
+      entity: "库存调整单",
+      count: () => Promise.resolve(c.adjustmentLines),
+      samples: async () =>
+        (
+          await prisma.inventoryAdjustmentLine.findMany({
+            where: { locationId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            select: { adjustmentHeader: { select: { adjustmentNo: true } } },
+          })
+        ).map((l) => l.adjustmentHeader.adjustmentNo),
+      releaseHint: "先删除对应调整单",
+    },
+    {
+      entity: "库存转换单",
+      count: () => Promise.resolve(c.conversionLines),
+      samples: async () =>
+        (
+          await prisma.inventoryConversionLine.findMany({
+            where: { locationId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            select: { conversionHeader: { select: { conversionNo: true } } },
+          })
+        ).map((l) => l.conversionHeader.conversionNo),
+      releaseHint: "先删除对应转换单",
+    },
+  ]);
+  if (references.length > 0) {
+    return failReferenceConflict(ERROR_CODES.CONFLICT, `库位「${existing.code}」`, references);
   }
 
   await prisma.warehouseLocation.update({

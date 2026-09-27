@@ -5,6 +5,7 @@ import { authenticate, requirePermission, requestMeta, writeAuditLog } from '@/l
 import { ok, fail, failValidation, failConflict, failNotFound } from '@/lib/api/response';
 import { ERROR_CODES } from '@/lib/api/errors';
 import { requestLog } from '@/lib/api/logger';
+import { failReferenceConflict, REFERENCE_SAMPLE_LIMIT } from '@/lib/api/reference-guard';
 import { recycleDocumentSequence } from '@/lib/document-sequence/recycle';
 import { purchaseRequisitionUpdateSchema } from '@/lib/api/schemas';
 import {
@@ -243,7 +244,25 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   }
   const poCount = await prisma.purchaseOrder.count({ where: { requisitionId: id, deletedAt: null } });
   if (poCount > 0) {
-    return failConflict(ERROR_CODES.PURCHASE_REQUISITION_INVALID_STATE, "采购申请已生成采购订单，禁止删除（保持 PO 溯源）");
+    // 引用出处（问题二）：条数 + 采购订单编号
+    const purchaseOrders = await prisma.purchaseOrder.findMany({
+      where: { requisitionId: id, deletedAt: null },
+      take: REFERENCE_SAMPLE_LIMIT,
+      orderBy: { createdAt: 'desc' },
+      select: { code: true },
+    });
+    return failReferenceConflict(
+      ERROR_CODES.PURCHASE_REQUISITION_INVALID_STATE,
+      `采购申请「${existing.code}」`,
+      [
+        {
+          entity: "采购订单",
+          count: poCount,
+          samples: purchaseOrders.map((o) => o.code),
+          releaseHint: "先回退/删除对应采购订单（保持 PO 溯源）",
+        },
+      ],
+    );
   }
 
   const now = new Date();

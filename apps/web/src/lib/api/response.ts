@@ -44,8 +44,8 @@ export function failNotFound(code: ErrorCode = ERROR_CODES.NOT_FOUND, message = 
   return fail(code, message, 404);
 }
 
-export function failConflict(code: ErrorCode, message: string) {
-  return fail(code, message, 409);
+export function failConflict(code: ErrorCode, message: string, details?: unknown) {
+  return fail(code, message, 409, details);
 }
 
 export function failServer(message = "Internal server error") {

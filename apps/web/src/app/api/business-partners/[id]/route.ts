@@ -9,6 +9,7 @@ import { requestLog } from "@/lib/api/logger";
 import { z } from "zod";
 import { validateUscc, normalizeUscc } from "@/lib/tax-invoice";
 import { casUpdate } from "@/lib/api/cas";
+import { collectReferences, failReferenceConflict, REFERENCE_SAMPLE_LIMIT } from "@/lib/api/reference-guard";
 import { matchCustomerPools } from "@/lib/customer-pool/match";
 import { BUSINESS_PARTNER_CHANNELS } from "@/lib/business-partner/channel";
 import {
@@ -271,12 +272,57 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   // 引用检查：仅独立业务事实（客户/商机/项目）→ 不可删除（可编辑）；
   // 供应商档案（1:1 扩展）/角色/联系人/地址/银行账户/标签/信用/开票资料为自有子资源，随主档级联软删
-  const referenced =
-    existing._count.customers +
-    existing._count.opportunities +
-    existing._count.projects;
-  if (referenced > 0) {
-    return failConflict(ERROR_CODES.CONFLICT, "往来单位已被客户/商机/项目引用，不能删除（可编辑）");
+  // 引用出处（问题二）：条数 + 真实编码/名称，明确「被哪几张记录引用」
+  const references = await collectReferences([
+    {
+      entity: "客户档案",
+      count: () => Promise.resolve(existing._count.customers),
+      samples: async () =>
+        (
+          await prisma.customer.findMany({
+            where: { partnerId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            orderBy: { createdAt: "desc" },
+            select: { code: true },
+          })
+        ).map((c) => c.code),
+      releaseHint: "先在客户管理中删除对应客户档案（或解除与该往来单位的关联）",
+    },
+    {
+      entity: "项目机会",
+      count: () => Promise.resolve(existing._count.opportunities),
+      samples: async () =>
+        (
+          await prisma.projectOpportunity.findMany({
+            where: { customerId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            orderBy: { createdAt: "desc" },
+            select: { code: true },
+          })
+        ).map((o) => o.code),
+      releaseHint: "先在「项目机会」列表中删除对应商机",
+    },
+    {
+      entity: "项目",
+      count: () => Promise.resolve(existing._count.projects),
+      samples: async () =>
+        (
+          await prisma.project.findMany({
+            where: { customerId: id, deletedAt: null },
+            take: REFERENCE_SAMPLE_LIMIT,
+            orderBy: { createdAt: "desc" },
+            select: { code: true },
+          })
+        ).map((p) => p.code),
+      releaseHint: "先在「项目管理」中处理对应项目（结项/删除）",
+    },
+  ]);
+  if (references.length > 0) {
+    return failReferenceConflict(
+      ERROR_CODES.CONFLICT,
+      `往来单位「${existing.code} ${existing.name}」`,
+      references,
+    );
   }
 
   const now = new Date();
