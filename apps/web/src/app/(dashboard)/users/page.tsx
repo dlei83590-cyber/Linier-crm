@@ -252,7 +252,7 @@ function UserList() {
         ]}
         rowActions={
           canResetPassword
-            ? (row) => (
+            ? (row: UserRow) => (
                 <button
                   type="button"
                   onClick={() => setResetTarget(row)}
