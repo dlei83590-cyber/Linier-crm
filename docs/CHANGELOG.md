@@ -3,6 +3,20 @@
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
 
+## [Unreleased] - 项目机会列表删除（FRT-01 前端补齐，2026-09-27）
+
+### 新增
+
+- **项目机会列表行操作新增「删除」**（/project-opportunities）：权限按会话有效权限集判定 `project-opportunity:delete`（ADR-0057 `can()`，无权限不渲染）；二次确认走 `ConfirmActionDialog`（禁止原生弹窗）；成功 Toast + 列表刷新
+- 对接既有 `DELETE /api/project-opportunities/:id`（软删除：`deletedAt` + `isActive=false` + audit log）——**零后端变更**；删除后该机会不再计入往来单位删除引用检查（`opportunities: { deletedAt: null }`），解除「商机引用导致客户/供应商不能删除」的死锁
+- 文档同步：Contract Card（project-opportunities：Permission 增补 `:delete`、Frontend Current State / Current UI / Gap 校对）+ Module Registry capability 注释
+
+### 边界
+
+- 零 Schema / Migration / API / Error Code / Event / RBAC 变更；仅 apps/web 前端 + docs
+- 保持既有不变量：**已转换为项目的机会禁止删除**（服务端 409「机会已转换为项目，禁止删除」）——前端不隐藏入口、不静默降级，直接展示服务端真实错误
+- 已经被报价单引用的机会按既有软删除契约可删除（`Quotation.opportunityId` onDelete: SetNull；报价单本身保留）
+
 ## [Unreleased] - 密码策略与首次登录强制改密（ADR-0059，Migration 0059，2026-09-21）
 
 ### 新增

@@ -7,6 +7,10 @@
  * 本线开放 List/Detail 现代视觉。结构：AppPage + EntityListWorkspace（Header → Toolbar → Table → Pagination）。
  * 不改 backend / 状态机 / action；Create/Edit 表单见 F2-4A2（customer selector 数据源 /api/business-partners?type=CUSTOMER，P0-1 SSOT）。
  * UI-06：阶段文案/语义色统一消费 lib/project-stage.ts；金额列右对齐 tabular-nums；行操作收进右侧浮现区。
+ * FRT-01 前端补齐（2026-09-27）：列表行操作新增「删除」——权限镜像 backend
+ * `project-opportunity:delete`（会话有效权限集 can()），二次确认 ConfirmActionDialog，
+ * 调既有 DELETE /api/project-opportunities/:id（软删除）；已转换为项目的机会由服务端 409 拦截，
+ * 前端不隐藏入口、不静默降级，直接展示服务端真实错误。
  */
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -14,9 +18,11 @@ import { useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { can, useSession } from "@/lib/session-context";
-import { AppPage, EntityListWorkspace, StatusBadge } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
 import { formatDate, formatMoneyValue } from "@/lib/format";
 import {
   PROJECT_STAGE_LABELS,
@@ -53,6 +59,14 @@ function OpportunityList() {
     state.status === "authenticated" &&
     state.user !== null &&
     can(state.user, actionPermission("project-opportunity", "edit"));
+  // 删除（FRT-01 前端补齐）：镜像 backend DELETE requirePermission("project-opportunity:delete")
+  const canDelete =
+    state.status === "authenticated" &&
+    state.user !== null &&
+    can(state.user, actionPermission("project-opportunity", "delete"));
+  const toast = useToast();
+  const [deleting, setDeleting] = useState<OpportunityRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [codeInput, setCodeInput] = useState("");
   const [nameInput, setNameInput] = useState("");
   const [stageInput, setStageInput] = useState("");
@@ -94,6 +108,26 @@ function OpportunityList() {
     setStageInput("");
     setFilters({});
     setPage(1);
+  };
+
+  // 删除 = backend 软删除（DELETE /api/project-opportunities/:id）；已转换为项目的机会 backend 返回 409，
+  // 不静默降级：展示服务端真实错误原因（保持「已转换禁止删除」不变量）。
+  const runDelete = async () => {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      await apiFetch(`/api/project-opportunities/${deleting.id}`, { method: "DELETE" });
+      toast.success("机会已删除");
+      setDeleting(null);
+      refresh();
+    } catch (err) {
+      const e = err instanceof ApiClientError ? err : new ApiClientError(0, "删除失败", "NETWORK_ERROR");
+      toast.error("删除失败", e.message);
+      setDeleting(null);
+      refresh();
+    } finally {
+      setDeleteBusy(false);
+    }
   };
 
   return (
@@ -327,8 +361,27 @@ function OpportunityList() {
                 编辑
               </button>
             ) : null}
+            {canDelete ? (
+              <button
+                type="button"
+                onClick={() => setDeleting(row)}
+                className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text transition-colors hover:bg-red-50"
+              >
+                删除
+              </button>
+            ) : null}
           </div>
         )}
+      />
+      <ConfirmActionDialog
+        open={deleting !== null}
+        title={`删除机会「${deleting?.code ?? ""} ${deleting?.name ?? ""}」？`}
+        description="已转换为项目的机会不可删除（保持项目溯源）；未被引用将软删除并从列表隐藏。"
+        confirmLabel="删除"
+        tone="danger"
+        busy={deleteBusy}
+        onConfirm={runDelete}
+        onCancel={() => setDeleting(null)}
       />
     </AppPage>
   );

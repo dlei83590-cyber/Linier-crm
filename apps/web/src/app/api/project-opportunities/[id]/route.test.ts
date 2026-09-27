@@ -11,7 +11,7 @@ vi.mock('@/lib/api-helpers', () => ({
   requestLog: vi.fn(),
 }));
 
-import { GET } from '@/app/api/project-opportunities/[id]/route';
+import { GET, DELETE } from '@/app/api/project-opportunities/[id]/route';
 
 const DAY = 86_400_000;
 
@@ -80,5 +80,59 @@ describe('GET /api/project-opportunities/:id — 商机跟进 MVP（详情显示
     expect(body.data.lastFollowUpAt).toBeNull();
     expect(body.data.daysSinceFollowUp).toBeNull();
     expect(body.data.needsFollowUp).toBe(true);
+  });
+});
+
+describe('DELETE /api/project-opportunities/:id — 列表删除契约（软删除；已转换禁止删除）', () => {
+  let findFirstMock: ReturnType<typeof vi.fn>;
+  let updateMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    findFirstMock = vi.fn();
+    updateMock = vi.fn().mockResolvedValue({ id: 'o1' });
+    activityModel = { findFirst: vi.fn() };
+    mockPrisma.projectOpportunity = { findFirst: findFirstMock, update: updateMock };
+    mockPrisma.customerActivity = activityModel;
+  });
+
+  it('未转换为项目：软删除（deletedAt + isActive=false + updatedById）', async () => {
+    findFirstMock.mockResolvedValue(makeOpp());
+
+    const res = await DELETE(detailUrl(), { params: Promise.resolve({ id: 'o1' }) });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data).toEqual({ id: 'o1', deleted: true });
+
+    expect(updateMock).toHaveBeenCalledTimes(1);
+    expect(updateMock).toHaveBeenCalledWith({
+      where: { id: 'o1' },
+      data: expect.objectContaining({
+        deletedAt: expect.any(Date),
+        isActive: false,
+        updatedById: 'u-1',
+      }),
+    });
+  });
+
+  it('已转换为项目：409 CONFLICT 且不软删除（保持项目溯源不变量）', async () => {
+    findFirstMock.mockResolvedValue({ ...makeOpp(), convertedAt: new Date() });
+
+    const res = await DELETE(detailUrl(), { params: Promise.resolve({ id: 'o1' }) });
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.success).toBe(false);
+    expect(body.error.message).toBe('机会已转换为项目，禁止删除');
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it('机会不存在（已软删/无效 id）：404 NOT_FOUND 且不写库', async () => {
+    findFirstMock.mockResolvedValue(null);
+
+    const res = await DELETE(detailUrl(), { params: Promise.resolve({ id: 'o-x' }) });
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error.code).toBe('NOT_FOUND');
+    expect(updateMock).not.toHaveBeenCalled();
   });
 });
