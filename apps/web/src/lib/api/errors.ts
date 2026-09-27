@@ -411,6 +411,13 @@ export const ERROR_CODES = {
 
   // 经营目标 ReportTarget（固定看板目标值/达成率；Migration 0051；校验走 zod failValidation，仅删除用 404）
   REPORT_TARGET_NOT_FOUND: 'REPORT_TARGET_NOT_FOUND', // 目标不存在，404
+
+  // ADR-0059：密码策略与首次登录强制改密（初始密码 123456 / 自助改密 / 管理员仅重置）
+  PASSWORD_CHANGE_REQUIRED: 'PASSWORD_CHANGE_REQUIRED', // 未完成初始密码修改：除改密接口外全部 API fail closed，403
+  PASSWORD_POLICY_VIOLATION: 'PASSWORD_POLICY_VIOLATION', // 新密码不满足强密码策略（大小写字母 + 数字，长度至少 8 位），400
+  PASSWORD_CURRENT_INVALID: 'PASSWORD_CURRENT_INVALID', // 当前密码不正确（自助改密身份再校验），400
+  PASSWORD_SAME_AS_CURRENT: 'PASSWORD_SAME_AS_CURRENT', // 新密码不得与当前密码相同，400
+  PASSWORD_DIRECT_SET_FORBIDDEN: 'PASSWORD_DIRECT_SET_FORBIDDEN', // 禁止直接设定/修改密码：只能用初始密码新建或管理员重置，400
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

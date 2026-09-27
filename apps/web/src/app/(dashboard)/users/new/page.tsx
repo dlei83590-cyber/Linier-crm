@@ -12,6 +12,7 @@ import { INPUT_CLASS } from "@/lib/ui-classes";
 import { roleLabel } from "@/lib/frontend/labels";
 import { PermissionTree } from "@/components/system/permission-tree";
 import { selectedCodeList, type PermissionCatalogItem } from "@/lib/frontend/permission-tree";
+import { DEFAULT_INITIAL_PASSWORD, PASSWORD_POLICY_DESCRIPTION } from "@nilier-crm/shared";
 
 interface DepartmentOption {
   id: string;
@@ -33,7 +34,6 @@ function UserCreateForm() {
   const [depts, setDepts] = useState<DepartmentOption[]>([]);
   const [roles, setRoles] = useState<RoleOption[]>([]);
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const [roleIds, setRoleIds] = useState<string[]>([]);
@@ -68,15 +68,15 @@ function UserCreateForm() {
 
   const handleSave = () => {
     if (submitting) return;
-    if (!email.trim() || !password) {
-      setError(new ApiClientError(400, "邮箱与密码为必填项", "VALIDATION"));
+    if (!email.trim()) {
+      setError(new ApiClientError(400, "邮箱为必填项", "VALIDATION"));
       return;
     }
     setSubmitting(true);
     setError(null);
+    // ADR-0059：不提交任何密码——初始密码由服务端固定为 123456 并强制首次登录改密
     const payload: Record<string, unknown> = {
       email: email.trim(),
-      password,
       name: name.trim() || undefined,
       departmentId: departmentId || undefined,
       roleIds: roleIds.length > 0 ? roleIds : undefined,
@@ -108,12 +108,17 @@ function UserCreateForm() {
       onCancel={() => router.push("/users")}
     >
       <section className="rounded-md border border-border p-4">
+        <p className="mb-3 rounded-md border border-status-info-border bg-status-info-bg px-3 py-2 text-xs text-status-info-text">
+          新用户初始密码为 <span className="font-mono font-semibold">{DEFAULT_INITIAL_PASSWORD}</span>，
+          该用户首次登录时将被强制修改密码（{PASSWORD_POLICY_DESCRIPTION}）。
+          管理员无法代设密码；用户忘记密码时请在编辑页使用「重置密码」。
+        </p>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <FormField label="邮箱" required>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
           </FormField>
-          <FormField label="初始密码" required>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputClass} placeholder="至少 6 位" />
+          <FormField label="初始密码" hint={`固定为 ${DEFAULT_INITIAL_PASSWORD}（由系统生成，不可自定义）`}>
+            <input value={DEFAULT_INITIAL_PASSWORD} readOnly className={`${inputClass} bg-canvas`} />
           </FormField>
           <FormField label="姓名">
             <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />

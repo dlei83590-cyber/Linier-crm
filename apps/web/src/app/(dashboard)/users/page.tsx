@@ -9,9 +9,12 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { AppPage, EntityListWorkspace } from "@/components/workspace";
 import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { formatDate } from "@/lib/format";
-import { apiFetch } from "@/lib/api-client";
-import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { BUTTON_LINK_CLASS, BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { roleLabel } from "@/lib/frontend/labels";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
+import { DEFAULT_INITIAL_PASSWORD } from "@nilier-crm/shared";
 
 interface UserRow {
   id: string;
@@ -23,6 +26,9 @@ interface UserRow {
   roles: Array<{ role: { id: string; code: string; name: string } }>;
   /** ADR-0058：附加授权计数（角色权限之外的额外勾选） */
   _count?: { permissions: number };
+  /** ADR-0059：仍为初始密码（新建 / 已重置，登录后必须修改） */
+  mustChangePassword: boolean;
+  passwordChangedAt: string | null;
   createdAt: string;
 }
 
@@ -34,10 +40,20 @@ interface DepartmentOption {
 
 function UserList() {
   const { state } = useSession();
+  const toast = useToast();
   const canCreate =
     state.status === "authenticated" &&
     state.user !== null &&
     can(state.user, actionPermission("user", "create"));
+  // ADR-0059：重置密码复用 user:edit（ADMIN / SUPER_ADMIN；MANAGER 及以下无该权限）
+  const canResetPassword =
+    state.status === "authenticated" &&
+    state.user !== null &&
+    can(state.user, actionPermission("user", "edit"));
+
+  // 重置密码确认（管理员唯一可用的密码操作）
+  const [resetTarget, setResetTarget] = useState<UserRow | null>(null);
+  const [resetting, setResetting] = useState(false);
 
   const [emailInput, setEmailInput] = useState("");
   const [nameInput, setNameInput] = useState("");
@@ -56,6 +72,27 @@ function UserList() {
 
   const { items, total, page, pageSize, loading, error, setPage, setPageSize, refresh } =
     useListQuery<UserRow>("/api/users", filters, 20, { syncUrl: true });
+
+  // ADR-0059：管理员重置密码（回到初始密码 123456 + 用户下次登录强制改密）
+  const handleResetPassword = () => {
+    if (!resetTarget || resetting) return;
+    setResetting(true);
+    apiFetch(`/api/users/${resetTarget.id}/reset-password`, { method: "POST" })
+      .then(() => {
+        toast.warning(
+          "密码已重置",
+          `${resetTarget.email} 的密码已重置为初始密码 ${DEFAULT_INITIAL_PASSWORD}，该用户下次登录必须修改`,
+        );
+        setResetTarget(null);
+        setResetting(false);
+        refresh();
+      })
+      .catch((err: unknown) => {
+        setResetTarget(null);
+        setResetting(false);
+        toast.error("重置失败", err instanceof ApiClientError ? err.message : "网络错误");
+      });
+  };
 
   // URL 筛选恢复（hydration 后一次性应用；刷新/分享后筛选不丢失）
   const urlRestored = useRef(false);
@@ -200,9 +237,34 @@ function UserList() {
               </Link>
             ),
           },
+          {
+            key: "mustChangePassword",
+            header: "密码",
+            render: (row) =>
+              row.mustChangePassword ? (
+                <span className="text-status-warning-text">待修改初始密码</span>
+              ) : (
+                <span className="text-ink-secondary">用户已设置</span>
+              ),
+          },
           { key: "isActive", header: "状态", render: (row) => (row.isActive ? "启用" : "停用") },
           { key: "createdAt", header: "创建时间", render: (row) => formatDate(row.createdAt) },
         ]}
+        rowActions={
+          canResetPassword
+            ? (row: UserRow) => (
+                <button
+                  type="button"
+                  onClick={() => setResetTarget(row)}
+                  disabled={!row.isActive}
+                  title={row.isActive ? "重置为初始密码（用户下次登录必须修改）" : "用户已停用，请先启用后再重置密码"}
+                  className={BUTTON_LINK_CLASS + " disabled:cursor-not-allowed disabled:opacity-50"}
+                >
+                  重置密码
+                </button>
+              )
+            : undefined
+        }
         rows={items}
         rowKey={(row) => row.id}
         loading={loading}
@@ -222,6 +284,20 @@ function UserList() {
           filters.departmentId ? { key: "departmentId", label: `部门：${depts.find((d) => d.id === filters.departmentId)?.name ?? filters.departmentId}`, onClear: () => { setDeptInput(""); setFilters((prev) => { const n = { ...prev }; delete n.departmentId; return n; }); } } : null,
           filters.isActive ? { key: "isActive", label: `状态：${filters.isActive === "true" ? "启用" : "停用"}`, onClear: () => { setActiveInput(""); setFilters((prev) => { const n = { ...prev }; delete n.isActive; return n; }); } } : null,
         ].filter((c): c is NonNullable<typeof c> => c !== null)}
+      />
+      <ConfirmDialog
+        open={resetTarget !== null}
+        title="重置密码"
+        description={
+          resetTarget
+            ? `将 ${resetTarget.email} 的密码重置为初始密码 ${DEFAULT_INITIAL_PASSWORD}，该用户下次登录必须立即修改密码。是否继续？`
+            : undefined
+        }
+        confirmLabel="重置密码"
+        tone="danger"
+        busy={resetting}
+        onConfirm={handleResetPassword}
+        onCancel={() => setResetTarget(null)}
       />
     </AppPage>
   );

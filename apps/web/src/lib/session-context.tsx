@@ -17,6 +17,14 @@ export interface SessionUser {
    * P2 起由 /api/auth/me 与 /api/auth/login 返回；P3 起前端判定统一改用该集合（can(code)）。
    */
   permissions: string[];
+  /**
+   * ADR-0059：待强制改密（初始密码账号 / 管理员重置后 = true）。
+   * 服务端对全部受权限保护 API fail closed（403 PASSWORD_CHANGE_REQUIRED），
+   * 前端据此外加一层引导：只允许进入 /change-password。
+   */
+  mustChangePassword?: boolean;
+  /** ADR-0059：最近一次密码变更时间（个人中心展示；历史数据为 null） */
+  passwordChangedAt?: string | null;
 }
 
 /**

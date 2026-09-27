@@ -55,7 +55,8 @@ export default function LoginPage() {
       }
 
       setAuthToken(body.data.token);
-      router.replace("/dashboard");
+      // ADR-0059：初始密码账号（新建用户 123456 / 管理员重置后）必须先改密再进入系统
+      router.replace(body.data.user.mustChangePassword ? "/change-password" : "/dashboard");
       router.refresh();
     } catch {
       setError("网络异常，请稍后重试");

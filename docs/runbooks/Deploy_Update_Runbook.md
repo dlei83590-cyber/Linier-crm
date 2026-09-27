@@ -76,6 +76,24 @@ docker compose exec postgres psql -U nilier -d nilier_crm -c \
 - `/api/health/ready` 返回 **503 + `reason=RBAC_NOT_INITIALIZED`** ⇒ 第 3 步没执行或失败 ⇒ 立即补跑 seed（§3 应急）。
 - 管理员登录后**只需刷新页面**即可看到新权限（权限在下一次请求/刷新生效，无需重新登录）。
 
+### 2.1 密码策略与强制改密（ADR-0059，Migration 0059）
+
+- Migration 0059 给 `User` 增加 `mustChangePassword`（默认 true）与 `passwordChangedAt`：**存量账号一律 grandfather（false）**，
+  升级后老用户不会被强制改密；此后**新建用户**（初始密码固定 `123456`）与**管理员重置过密码**的账号，
+  下一次登录会被强制改密（改密前除登录/改密/me/logout 外全部 API 返回 403 `PASSWORD_CHANGE_REQUIRED`）。
+- 核对（可选）：
+
+  ```bash
+  docker compose exec postgres psql -U nilier -d nilier_crm -c \
+   'SELECT email, "mustChangePassword", "passwordChangedAt" FROM "User" ORDER BY "createdAt" DESC LIMIT 20;'
+  ```
+
+- 若希望**一次性要求全部历史账号改密**（属治理决策，需单独批准）：
+
+  ```sql
+  UPDATE "User" SET "mustChangePassword" = true WHERE "passwordChangedAt" IS NULL;
+  ```
+
 ---
 
 ## 3. 应急恢复：管理员立刻恢复全部权限
