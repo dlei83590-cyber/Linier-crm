@@ -16,11 +16,11 @@
 ### 新增
 
 - `GET /api/health/ready` 新增 `rbac` 覆盖度字段（**只报告、不参与 ready 判定**）：
-  `declaredPermissions`（本版本声明的权限码总数，当前 1532）、`catalogComplete` / `catalogMissingCount` / `catalogMissingSample`、
+  `declaredPermissions`（本版本声明的权限码总数，当前 1522）、`catalogComplete` / `catalogMissingCount` / `catalogMissingSample`、
   `superAdminComplete` / `superAdminMissingCount` / `superAdminMissingSample`、`hint`。
 - 目的：把“**仅部分接口 403**”的静默故障变成一条 curl 可读事实（原先只有“至少一个角色持有权限关联”的判定，
   发现不了目录缺码 / SUPER_ADMIN 覆盖率不足）。
-- Runbook §2 校验清单同步（新增 `rbac.catalogComplete` / `rbac.superAdminComplete` 判定行；权限计数基线 1522 → 1532）+ 新增 §2.1 事故复盘与处置表。
+- Runbook §2 校验清单同步（新增 `rbac.catalogComplete` / `rbac.superAdminComplete` 判定行；权限计数基线 1522，并注明"以探针/seed 日志为准，勿手工推算"）+ 新增 §2.1 事故复盘与处置表。
 
 ### 边界
 
