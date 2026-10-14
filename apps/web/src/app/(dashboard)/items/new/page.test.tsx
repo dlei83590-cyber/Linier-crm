@@ -60,22 +60,22 @@ const REMOVED_KEYS = [
 ];
 
 /** 按字段文案取该字段下的控件（FormField 的 span → label → 控件） */
-function byText<T extends HTMLElement>(text: string, tag: 'select' | 'input'): T {
+function fieldControl(text: string, tag: 'select' | 'input'): HTMLElement {
   let node: HTMLElement | null = screen.getByText(text);
   for (let i = 0; i < 4 && node; i += 1) {
     const found = node.querySelector(tag);
-    if (found) return found as T;
+    if (found) return found as HTMLElement;
     node = node.parentElement;
   }
   throw new Error('未找到字段 ' + text + ' 下的 ' + tag);
 }
 
 function selectByText(text: string): HTMLSelectElement {
-  return byText<HTMLSelectElement>(text, 'select');
+  return fieldControl(text, 'select') as HTMLSelectElement;
 }
 
 function inputByText(text: string): HTMLInputElement {
-  return byText<HTMLInputElement>(text, 'input');
+  return fieldControl(text, 'input') as HTMLInputElement;
 }
 
 function retryIn(fieldLabel: string) {
