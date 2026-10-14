@@ -3,6 +3,32 @@
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
 
+## [Unreleased] - 就绪探针新增 RBAC 覆盖度诊断（问题三根因：生产 RBAC 数据陈旧，2026-09-27）
+
+### 背景（生产事实）
+
+用户复测反馈：物料表单的分类、供应商下拉报 **403 无权限访问**，且**超级管理员（SUPER_ADMIN）账户同样 403**。
+定位为**部署环境 RBAC 数据陈旧**，不是代码缺陷：运行时鉴权以 DB 权限集为唯一权威（ADR-0057），
+该库的权限目录 / SUPER_ADMIN 权限集落后于代码（缺 `item-category:view` / `supplier:view` 等后加入的模块码），
+因此这些码不在会话有效权限集中 → 对应接口 fail-closed 403；现象必然是“**部分**接口 403”。
+处置见 `docs/runbooks/Deploy_Update_Runbook.md` §2.1/§3（补跑 `pnpm db:seed`，幂等）。
+
+### 新增
+
+- `GET /api/health/ready` 新增 `rbac` 覆盖度字段（**只报告、不参与 ready 判定**）：
+  `declaredPermissions`（本版本声明的权限码总数，当前 1532）、`catalogComplete` / `catalogMissingCount` / `catalogMissingSample`、
+  `superAdminComplete` / `superAdminMissingCount` / `superAdminMissingSample`、`hint`。
+- 目的：把“**仅部分接口 403**”的静默故障变成一条 curl 可读事实（原先只有“至少一个角色持有权限关联”的判定，
+  发现不了目录缺码 / SUPER_ADMIN 覆盖率不足）。
+- Runbook §2 校验清单同步（新增 `rbac.catalogComplete` / `rbac.superAdminComplete` 判定行；权限计数基线 1522 → 1532）+ 新增 §2.1 事故复盘与处置表。
+
+### 边界
+
+- 零 Schema / Migration / API 业务路由 / Error Code / Event / 权限码变更；仅健康探针（只读诊断）+ docs。
+- **ready 判定语义不变**：覆盖度不参与 200/503 判定——本端点可能被平台用作运行中容器的健康检查，
+  若因既有数据陈旧返回 503，会把“部分接口不可用”升级为整站被摘除（扩大故障面）。
+- 不做运行时权限回退（不得因角色名为 SUPER_ADMIN 而放行）：唯一修复路径是回填数据（seed）。
+- 单测：`apps/web/src/app/api/health/ready/route.test.ts`（全覆盖 / 目录缺码 / 角色覆盖不足 / DB 不可达 4 例）。
 ## [Unreleased] - 物料管理引用下拉加载失败修复 + 计量单位联动（问题三，2026-09-27）
 
 ### 修复
