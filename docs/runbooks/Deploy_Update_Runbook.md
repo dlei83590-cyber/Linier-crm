@@ -69,9 +69,9 @@ docker compose up -d
 #    并且 rbac.catalogComplete=true、rbac.superAdminComplete=true（见 §2.1）
 curl -s http://127.0.0.1:3000/api/health/ready
 
-# B) 角色权限计数（期望：SUPER_ADMIN/ADMIN = 1532，VIEWER = 0；MANAGER/MEMBER 取静态基数）
-#    该数字 = 本版本声明的权限码全集（PERMISSIONS ∪ ALL_ACTION_PERMISSIONS ∪ SYSTEM_PERMISSIONS），
-#    随模块增加而增长；应与探针的 rbac.declaredPermissions 一致。
+# B) 角色权限计数（当前期望：SUPER_ADMIN/ADMIN = 1522，MANAGER = 695，MEMBER = 14，VIEWER = 0）
+#    管理员数 = 本版本声明的权限码全集（PERMISSIONS ∪ ALL_ACTION_PERMISSIONS ∪ SYSTEM_PERMISSIONS，去重），
+#    随模块增加而增长 —— **权威值以探针 rbac.declaredPermissions 与 seed 日志行为准，勿手工推算**。
 docker compose exec postgres psql -U nilier -d nilier_crm -c \
  'SELECT r.code, count(rp."A") AS permission_count FROM "Role" r LEFT JOIN "_RolePermissions" rp ON rp."B"=r.id GROUP BY r.code ORDER BY r.code;'
 ```
