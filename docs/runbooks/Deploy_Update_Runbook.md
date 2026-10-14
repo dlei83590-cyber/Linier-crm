@@ -65,10 +65,13 @@ docker compose up -d
 ## 2. 部署后校验清单（两条都必须过）
 
 ```bash
-# A) 就绪探针：必须 status=ok 且 rbacInitialized=true
+# A) 就绪探针：必须 status=ok 且 rbacInitialized=true，
+#    并且 rbac.catalogComplete=true、rbac.superAdminComplete=true（见 §2.1）
 curl -s http://127.0.0.1:3000/api/health/ready
 
-# B) 角色权限计数（期望：SUPER_ADMIN/ADMIN = 1522，VIEWER = 0；MANAGER/MEMBER 取静态基数）
+# B) 角色权限计数（期望：SUPER_ADMIN/ADMIN = 1532，VIEWER = 0；MANAGER/MEMBER 取静态基数）
+#    该数字 = 本版本声明的权限码全集（PERMISSIONS ∪ ALL_ACTION_PERMISSIONS ∪ SYSTEM_PERMISSIONS），
+#    随模块增加而增长；应与探针的 rbac.declaredPermissions 一致。
 docker compose exec postgres psql -U nilier -d nilier_crm -c \
  'SELECT r.code, count(rp."A") AS permission_count FROM "Role" r LEFT JOIN "_RolePermissions" rp ON rp."B"=r.id GROUP BY r.code ORDER BY r.code;'
 ```
@@ -76,7 +79,30 @@ docker compose exec postgres psql -U nilier -d nilier_crm -c \
 - `/api/health/ready` 返回 **503 + `reason=RBAC_NOT_INITIALIZED`** ⇒ 第 3 步没执行或失败 ⇒ 立即补跑 seed（§3 应急）。
 - 管理员登录后**只需刷新页面**即可看到新权限（权限在下一次请求/刷新生效，无需重新登录）。
 
-### 2.1 密码策略与强制改密（ADR-0059，Migration 0059）
+### 2.1 部分 RBAC 陈旧（2026-09-27 生产事件——必须看 `rbac` 字段）
+
+症状：**只有部分接口 403** —— 例如物料「新建/编辑」表单的**分类、供应商**下拉报“无权限访问（403）”，
+而物料列表、计量单位、其它模块都正常；**管理员账户（SUPER_ADMIN）同样 403**。
+
+根因：运行时鉴权以 **DB 权限集**为唯一权威（ADR-0057），而该库的 RBAC 数据**落后于代码**：
+DB 权限目录缺少后加入的模块权限码（如 `item-category:view` / `supplier:view`），
+SUPER_ADMIN 的权限集也停留在旧基线 ⇒ 这些码不在会话有效权限集中 ⇒ 对应接口 fail-closed 403。
+仅“至少一个角色持有权限关联”发现不了这种**部分**陈旧，因此探针新增覆盖度字段
+（**只报告、不参与 ready 判定**——本端点可能被平台当作运行中容器的健康检查，
+若因既有数据陈旧返回 503，会把“部分接口不可用”升级为整站被摘除）。
+
+判定与处置：
+
+| 探针字段 | 含义 | 处置 |
+| --- | --- | --- |
+| `rbac.catalogComplete=false` | DB 权限目录缺码（`rbac.catalogMissingSample` 给出样本） | 补跑 seed（§3）——**只有 seed 会写权限目录**，只补 `_RolePermissions` 的 SQL 无效 |
+| `rbac.superAdminComplete=false` | SUPER_ADMIN 未持有全集（`rbac.superAdminMissingSample` 给出样本） | 补跑 seed（§3 首选）或 §3 次选 SQL |
+| `rbac.checked=false` | DB 查询失败，覆盖度未知 | 先解决数据库连通性，**不得**当作“完整” |
+
+> `SUPER_ADMIN` 的权限由系统治理（ADR-0057 裁决 Q2：恒为全集，API 与界面均禁止修改），
+> 所以“SUPER_ADMIN 覆盖率不足”一定是**回填/数据**问题，不是有人手工改过权限。
+
+### 2.2 密码策略与强制改密（ADR-0059，Migration 0059）
 
 - Migration 0059 给 `User` 增加 `mustChangePassword`（默认 true）与 `passwordChangedAt`：**存量账号一律 grandfather（false）**，
   升级后老用户不会被强制改密；此后**新建用户**（初始密码固定 `123456`）与**管理员重置过密码**的账号，
