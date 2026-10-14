@@ -86,28 +86,25 @@ function ItemCreateForm() {
    * 「材料类型」与「分类」**不联动**（用户指令 2026-09-27）：两个控件各自独立，
    * 输入材料类型不会自动选中分类，选择分类也不会回填材料类型。
    *
-   * 保存语义保持不变：材料类型文本非空时，由服务端按名称匹配/新建物料分类并写入 categoryId；
-   * 文本为空才回落到下拉选中的分类。为避免**静默丢弃**用户显式选择的下拉值，
-   * 两者都填写且指向不同分类时，前端直接拦下并要求二选一（见 handleSave）。
+   * 两者最终都写同一个 categoryId ⇒ 都填写且不一致时**以用户最近修改的那个为准**
+   * （last-write-wins，不再拦截保存），并在字段下方用一行提示说明以谁为准。
+   * 材料类型文本非空且最近改的是它 → 交服务端 categoryName 匹配/新建分类；
+   * 最近改的是分类下拉（含编辑页只回填未改动的情形）→ 提交 categoryId。
    */
-  const typeTextMatchesSelectedCategory = (): boolean => {
-    if (!categoryId) return true;
+  const [classificationSource, setClassificationSource] = useState<"type" | "category">("category");
+
+  /** 两者都填且指向不同分类（分类数据未加载时不做判断，避免误报） */
+  const classificationConflict = (): boolean => {
+    if (!itemTypeText.trim() || !categoryId) return false;
     const selected = categories.data.find((c) => c.id === categoryId);
-    if (!selected) return true;
-    return (selected.name ?? "").trim().toLowerCase() === itemTypeText.trim().toLowerCase();
+    if (!selected) return false;
+    return (selected.name ?? "").trim().toLowerCase() !== itemTypeText.trim().toLowerCase();
   };
 
   const handleSave = () => {
     if (submitting) return;
     if (!code.trim() || !name.trim()) {
       setError(new ApiClientError(400, "编码与名称为必填项", "VALIDATION"));
-      return;
-    }
-    // 材料类型与分类都能决定该物料的分类 ⇒ 同时填写且不一致时必须让用户选一个（不静默覆盖）
-    if (itemTypeText.trim() && categoryId && !typeTextMatchesSelectedCategory()) {
-      setError(
-        new ApiClientError(400, "「材料类型」与「分类」都已填写且不一致，请只保留其中一个", "VALIDATION"),
-      );
       return;
     }
     setSubmitting(true);
@@ -121,13 +118,16 @@ function ItemCreateForm() {
       oemCode: oemCode.trim() || undefined,
       stockUomId: stockUomId || undefined,
     };
-    // 分类只提交二者之一：类型文本优先（服务端按名称匹配已有分类，否则新建并回写 categoryId）；
-    // 文本为空才回落到下拉选中的 categoryId；两者都为空则不提交分类字段。
+    // 分类只提交二者之一：以**最近修改**的入口为准（材料类型 → categoryName；分类下拉 → categoryId），
+    // 两者都为空则不提交分类字段。
     const categoryName = itemTypeText.trim();
-    if (categoryName) {
+    if (classificationSource === "type" && categoryName) {
       payload.categoryName = categoryName;
     } else if (categoryId) {
       payload.categoryId = categoryId;
+    } else if (categoryName) {
+      // 分类被清空但材料类型仍有文字：不得静默丢弃用户输入
+      payload.categoryName = categoryName;
     }
     apiFetch<{ id: string }>("/api/items", {
       method: "POST",
@@ -176,21 +176,33 @@ function ItemCreateForm() {
           {/* 自由文本：不做枚举归一化，提交时以 categoryName 交给服务端匹配或新建分类 */}
           <input
             value={itemTypeText}
-            onChange={(e) => setItemTypeText(e.target.value)}
+            onChange={(e) => {
+              setItemTypeText(e.target.value);
+              setClassificationSource("type");
+            }}
             className={inputClass}
             placeholder="输入材料类型"
           />
+          {classificationConflict() && classificationSource === "category" ? (
+            <p className="text-xs text-ink-muted">与「分类」不同：保存时以「分类」为准</p>
+          ) : null}
         </FormField>
         <FormField label="分类">
           <ReferenceSelector
             value={categoryId}
-            onChange={setCategoryId}
+            onChange={(id) => {
+              setCategoryId(id);
+              setClassificationSource("category");
+            }}
             options={categories.data.map((c) => ({ value: c.id, label: c.name ?? c.code ?? "" }))}
             placeholder="请选择分类"
             loading={categories.loading}
             error={categoryError}
             onRetry={categories.reload}
           />
+          {classificationConflict() && classificationSource === "type" ? (
+            <p className="text-xs text-ink-muted">与「材料类型」不同：保存时以「材料类型」为准</p>
+          ) : null}
         </FormField>
         <FormField label="计量单位">
           <ReferenceSelector

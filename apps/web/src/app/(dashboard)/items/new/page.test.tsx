@@ -3,7 +3,7 @@
  *
  * 覆盖：
  * 1. 引用源不级联：分类 403 与计量单位 500 各自独立，失败字段级可见 + 可单独重试。
- * 2. 「类型」自由文本：不再有枚举校验错误；保存时以 categoryName 交给服务端匹配/新建分类。
+ * 2. 「材料类型」自由文本：不再有枚举校验错误；保存时以 categoryName 交给服务端匹配/新建分类。
  * 3. 「类型」↔「分类」双向联动：同名自动选中；下拉选择回填文本。
  * 4. payload 只含仍维护的字段（被移除字段一律不提交），且不调用任何 supplier-items。
  */
@@ -230,7 +230,7 @@ describe('Items Create — 第 3 轮表单（类型=材质分类 + 引用源独�
     expect(inputByText('材料类型').value).toBe('45#钢');
   });
 
-  it('材料类型与分类同时填写且不一致 → 拦下保存并提示二选一（不发 POST）', async () => {
+  it('材料类型与分类不一致 → 不拦截保存，以「最近修改」的为准（后改分类 → 提交 categoryId）', async () => {
     render(
       <DensityProvider>
         <Page />
@@ -243,11 +243,39 @@ describe('Items Create — 第 3 轮表单（类型=材质分类 + 引用源独�
     fireEvent.change(inputByText('名称'), { target: { value: '轴承' } });
     fireEvent.change(inputByText('材料类型'), { target: { value: '45#钢' } });
     fireEvent.change(selectByText('分类'), { target: { value: 'cat-1' } });
-    fireEvent.click(screen.getByRole('button', { name: '保存' }));
 
-    const alert = await screen.findByRole('alert');
-    expect(alert.textContent).toContain('请只保留其中一个');
-    expect(fetchMockRef.current.mock.calls.some((c) => c[1]?.method === 'POST')).toBe(false);
+    // 非拦截式提示：说明以谁为准（不是错误、不禁用保存）
+    expect(screen.getByText('与「材料类型」不同：保存时以「分类」为准')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    await waitFor(() => {
+      expect(fetchMockRef.current.mock.calls.some((c) => c[1]?.method === 'POST')).toBe(true);
+    });
+    const post = fetchMockRef.current.mock.calls.find((c) => String(c[0]).includes('/api/items') && c[1]?.method === 'POST');
+    const body = JSON.parse(String(post?.[1]?.body)) as Record<string, unknown>;
+    expect(body.categoryId).toBe('cat-1');
+    expect(body).not.toHaveProperty('categoryName');
+  });
+
+  it('材料类型与分类不一致 → 后改材料类型则以「材料类型」为准（提交 categoryName）', async () => {
+    render(
+      <DensityProvider>
+        <Page />
+      </DensityProvider>,
+    );
+    await screen.findByText('新建物料');
+    await waitFor(() => expect(selectByText('分类').options.length).toBe(3));
+
+    fireEvent.change(inputByText('编码'), { target: { value: 'ITM-004' } });
+    fireEvent.change(inputByText('名称'), { target: { value: '轴承' } });
+    fireEvent.change(selectByText('分类'), { target: { value: 'cat-1' } });
+    fireEvent.change(inputByText('材料类型'), { target: { value: '45#钢' } });
+
+    expect(screen.getByText('与「分类」不同：保存时以「材料类型」为准')).toBeInTheDocument();
+
+    const body = await fillRequiredAndSave('');
+    expect(body.categoryName).toBe('45#钢');
+    expect(body).not.toHaveProperty('categoryId');
   });
 
   it('计量单位选择与场景字段提交', async () => {
