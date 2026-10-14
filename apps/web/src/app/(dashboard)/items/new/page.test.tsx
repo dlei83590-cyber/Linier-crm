@@ -245,7 +245,7 @@ describe('Items Create — 第 3 轮表单（类型=材质分类 + 引用源独�
     fireEvent.change(selectByText('分类'), { target: { value: 'cat-1' } });
 
     // 非拦截式提示：说明以谁为准（不是错误、不禁用保存）
-    expect(screen.getByText('与「材料类型」不同：保存时以「分类」为准')).toBeInTheDocument();
+    expect(screen.getByText('保存时以「分类」为准（与材料类型不一致）')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
     await waitFor(() => {
@@ -271,7 +271,7 @@ describe('Items Create — 第 3 轮表单（类型=材质分类 + 引用源独�
     fireEvent.change(selectByText('分类'), { target: { value: 'cat-1' } });
     fireEvent.change(inputByText('材料类型'), { target: { value: '45#钢' } });
 
-    expect(screen.getByText('与「分类」不同：保存时以「材料类型」为准')).toBeInTheDocument();
+    expect(screen.getByText('保存时以「材料类型」为准（与所选分类不一致）')).toBeInTheDocument();
 
     const body = await fillRequiredAndSave('');
     expect(body.categoryName).toBe('45#钢');

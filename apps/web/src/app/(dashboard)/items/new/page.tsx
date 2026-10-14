@@ -184,7 +184,7 @@ function ItemCreateForm() {
             placeholder="输入材料类型"
           />
           {classificationConflict() && classificationSource === "category" ? (
-            <p className="text-xs text-ink-muted">与「分类」不同：保存时以「分类」为准</p>
+            <p className="text-xs text-ink-muted">保存时以「分类」为准（与材料类型不一致）</p>
           ) : null}
         </FormField>
         <FormField label="分类">
@@ -201,7 +201,7 @@ function ItemCreateForm() {
             onRetry={categories.reload}
           />
           {classificationConflict() && classificationSource === "type" ? (
-            <p className="text-xs text-ink-muted">与「材料类型」不同：保存时以「材料类型」为准</p>
+            <p className="text-xs text-ink-muted">保存时以「材料类型」为准（与所选分类不一致）</p>
           ) : null}
         </FormField>
         <FormField label="计量单位">
