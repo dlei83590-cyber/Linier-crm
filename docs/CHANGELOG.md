@@ -3,6 +3,32 @@
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
 
+## [Unreleased] - 物料管理表单改造（2026-09-27 用户指令「物料管理改造」）
+
+### 变更（apps/web 前端表单，零后端变更）
+
+「新建 / 编辑物料」表单按业务需要收窄，分区与字段变化：
+
+| 分区 | 改造后 |
+| --- | --- |
+| 基本信息 | 编码 / 名称 / 助记码 / **类型（手动输入）** / 商品来源 / 分类 / **描述（由"采购 / 销售标记"迁入）**；**移除 品牌、制造商** |
+| 计量单位（原"计量与状态"） | 库存 / 采购 / 销售单位（**联动保留**）；**移除 生命周期、状态** |
+| 材料属性（原"技术属性"） | 系列 / 型号 / 规格 / OEM 编码；**移除 产品精度等级、预压值** |
+| ~~供应商与采购价~~ | **整区移除**（不再取 `/api/suppliers`、`/api/commercial-terms`，不再写 supplier-items） |
+| ~~采购 / 销售标记~~ | **整区移除**（可采购 / 可销售 / 可生产） |
+
+- **类型手动输入**（新增 `apps/web/src/lib/item-type.ts`）：`Item.itemType` 仍是 **DB 枚举**（不改 Schema），表单改为文本输入 + datalist 候选；提交前经 `normalizeItemTypeInput` 归一化（接受枚举码或中文业务名，如「成品」→ `FINISHED_GOOD`）；**无法识别即阻止提交并提示**，不静默改写用户输入。编辑页用中文业务名回填，未改动时往返一致。
+
+### 边界
+
+- **零 Schema / Migration / 业务 API / Error Code / Event / 权限码变更**：`POST` / `PATCH /api/items` 的 zod schema 与列全部保留，移除的字段仍可经 API 维护。
+- **零数据删除**：既有 `brand/manufacturer/lifecycle/status/precisionGrade/preload/isSalable/isPurchasable/isManufacturable` 与 `SupplierItem` 行全部保留；编辑页把这些字段从 PATCH payload 移除 ⇒ **不再被清空**（不是写 null）。
+- **能力收窄（需知情）**：页面不再提供 停用/归档物料、品牌/制造商/精度/预压维护、供应商与采购价维护、可采购/可销售/可生产开关；新建沿用 DB 默认（salable/purchasable=true、manufacturable=false、status=ACTIVE），与改造前表单默认一致。BOM / 生产等后端流程未校验 `isManufacturable`（仅投影展示），故不阻塞配方创建。采购「选商品自动带出默认供应商/采购价/付款条款」仅对已配置 `SupplierItem` 的物料生效。
+- 详情页 / 列表页**未改**（这些字段的只读呈现保留）；是否同步收窄待产品决策。
+- 保留上一轮修复：引用源每源独立取数 + 字段级重试 + 失败可见；库存单位 → 采购/销售单位联动；Dirty guard；409 CAS 重载。
+- 单测：`apps/web/src/app/(dashboard)/items/new/page.test.tsx`（类型归一化与非法值阻断、被移除字段不进 payload、无 supplier-items 调用、引用源不级联、联动）。
+- 文档：Contract Card（items 字段契约重写）+ `docs/qa/ItemMaster_Form_Restructure_QA.md`。
+
 ## [Unreleased] - 就绪探针新增 RBAC 覆盖度诊断（问题三根因：生产 RBAC 数据陈旧，2026-09-27）
 
 ### 背景（生产事实）
