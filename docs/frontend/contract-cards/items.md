@@ -37,25 +37,43 @@
 - 409：version 冲突（并发编辑）
 - 422：校验失败（必填/格式）
 
-## 字段契约（表单分区，2026-09-27 用户指令「物料管理改造」）
+## 字段契约（表单，2026-09-27 第 3 轮「继续优化」后为最终形态）
 
-| 分区 | 字段 | 后端事实 | 说明 |
+表单**只有一个分区「基本信息」**，字段顺序固定为 9 个：
+
+| 序 | 字段 | 后端事实 | 说明 |
 | --- | --- | --- | --- |
-| 基本信息 | 编码 / 名称 / 助记码 | `Item.code/name/mnemonic` | 编码 + 名称必填 |
-| 基本信息 | **类型（手动输入）** | `Item.itemType`：`ItemType` **枚举（10 值）** | 由下拉改为**文本输入 + datalist 候选**；提交前经 `lib/item-type.ts#normalizeItemTypeInput` 归一化（接受枚举码或中文业务名）；无法识别 → **阻止提交并提示**，不静默改写 |
-| 基本信息 | 商品来源 | `ItemSourcingType`：BOUGHT / SELF_MANUFACTURED / OEM_OUTSOURCED / OEM_OUTSOURCED_FULL | 下拉，保留 |
-| 基本信息 | 分类 | `ItemCategory`（独立取数 + 字段级重试） | 保留 |
-| 基本信息 | 描述 | `Item.description` | 由原「采购 / 销售标记」分区**迁入**（用户只要求移除该分区，未要求删描述） |
-| 计量单位 | 库存 / 采购 / 销售单位 | `Item.stockUomId/purchaseUomId/salesUomId` | 保留；库存单位 → 采购/销售单位联动 |
-| 材料属性 | 系列 / 型号 / 规格 / OEM 编码 | `Item.series/model/spec/oemCode` | 原「技术属性」更名 |
-| ~~供应商与采购价~~ | — | `SupplierItem`（API 保留） | 2026-09-27 **从表单移除**（不再取 `/api/suppliers`、`/api/commercial-terms`，不再写 supplier-items；**既有数据不删不改**） |
-| ~~采购 / 销售标记~~ | — | `Item.isSalable/isPurchasable/isManufacturable` | 2026-09-27 **从表单移除**；新建沿用 DB 默认（salable/purchasable=true、manufacturable=false），编辑不再变更 |
-| ~~生命周期 / 状态~~ | — | `Item.lifecycle/status` | 2026-09-27 **从表单移除**；新建沿用 DB 默认（status=ACTIVE）；编辑不再变更 |
+| 1 | 编码 | `Item.code` | 必填；唯一 |
+| 2 | 名称 | `Item.name` | 必填 |
+| 3 | 系列 | `Item.series` | 自由文本 |
+| 4 | 型号 | `Item.model` | 自由文本 |
+| 5 | 规格 | `Item.spec` | 自由文本 |
+| 6 | **类型** | → **`Item.categoryId`**（`categoryName` 解析） | **自由文本**；保存时按名称匹配/新建**物料分类**并写入分类，**不再写 `Item.itemType`**（沿用 DB 默认）。与「分类」双向联动 |
+| 7 | 分类 | `Item.categoryId` | `ReferenceSelector`（分类源，独立取数 + 字段级重试）；与「类型」是同一事实的两个入口 |
+| 8 | 计量单位 | `Item.stockUomId` | **唯一计量单位字段**（绑定库存单位列：BOM 原料单位红线 / 生产工单行单位 / 换算基准都依赖它）；已移除 采购单位、销售单位 及其跟随联动 |
+| 9 | OEM 编码 | `Item.oemCode` | 自由文本 |
 
-**从表单移除但列与 API 保留（零数据删除）**：`brand`、`manufacturer`、`lifecycle`、`status`、`precisionGrade`、`preload`、`isSalable`、`isPurchasable`、`isManufacturable`、`variant/barcode/drawingNo/drawingVersion/revision`。
+**本轮从表单移除**：助记码、商品来源（`sourcingType`）、描述（`description`）、采购单位 / 销售单位（`purchaseUomId/salesUomId`）。上一轮已移除：供应商与采购价、采购/销售标记、生命周期、状态、品牌、制造商、产品精度等级、预压值。
 
-> API（POST/PATCH `/api/items`）**未改动**：这些字段仍可选、仍可经 API 维护（列与 zod schema 保留），本改造只收窄**页面入口**。彻底废弃字段属 Schema 变更，需单独 Design/Scope Gate。
+**分类自动解析契约（服务端，零 Schema 变更）**：`POST /api/items` 与 `PATCH /api/items/:id` 新增可选字段 `categoryName`：
 
+- 先按名称（trim + 忽略大小写）匹配未软删的 `ItemCategory` → 命中即复用（不重复建）；
+- 未命中则**在同一事务内**新建（`level=1`、`categoryPath`=下一个 3 位数字、`code=MAT-<path>`）并关联 → 事务失败整体回滚，不留孤儿分类；
+- 新建需要 `item-category:create` 权限，否则 403（仅复用已有分类不需要该权限）；
+- 非空时**优先于** `categoryId`。
+
+**从表单移除但列与 API 保留（零数据删除）**：`mnemonic/sourcingType/description/purchaseUomId/salesUomId/brand/manufacturer/lifecycle/status/precisionGrade/preload/isSalable/isPurchasable/isManufacturable/variant/barcode/drawingNo/drawingVersion/revision`。
+
+> API 侧字段与列全部保留，仍可经 API 维护；本改造只收窄**页面入口**。彻底废弃字段属 Schema 变更，需单独 Design/Scope Gate。
+
+## 列表页字段（2026-09-27「重新整理列表字段显示」）
+
+列与表单同序：**编码 / 名称 / 系列 / 型号 / 规格 / 类型 / 分类 / 计量单位 / OEM 编码**。
+
+- 「类型」列 = 分类名（表单「类型」输入即自动匹配/新建物料分类）；「分类」列 = 分类树位置（`categoryPath` + 名称，如 `001.003 机床直线导轨`）——两列信息互补不重复。
+- 移除列：状态、可采购、可销售、创建时间（**状态仍保留为筛选条件**，不丢能力）。
+- 筛选：编码 / 名称 / **分类**（原「类型」枚举筛选改为分类筛选——表单已不再写 `itemType`）/ 状态；URL 参数 `itemType` → `categoryId`。
+- 列表 API `GET /api/items` 的 `category` select 增加 `categoryPath`（纯新增字段，向后兼容）。
 ## Frontend Current State（ui 层事实，2026-08-14）
 
 | 能力              | 状态                           |
