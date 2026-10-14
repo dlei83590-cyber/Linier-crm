@@ -25,10 +25,14 @@
 
 - 主数据无审批状态机（`isActive` 启用/停用）
 
-## Selectors
+## Selectors（2026-09-27 引用加载修复）
 
-- UOM（`/api/unit-of-measures`，GET FINAL）
+- UOM（`/api/unit-of-measures`，GET FINAL）—— 库存 / 采购 / 销售三处共用
 - Item Category（`/api/item-categories`，GET FINAL）
+- Supplier（`/api/suppliers`，GET FINAL；下拉值 = `Supplier.partner.id` = `SupplierItem.supplierId`）
+- Commercial Term（`/api/commercial-terms`，GET FINAL；付款条款）
+- **取数契约（问题三修复）**：每个引用源**独立取数**（`lib/use-reference-options.ts`：独立 loading / error / reload）——**禁止**再用单个 Promise.all 聚合多源（任一源失败会让整组下拉一起空白）；失败必须字段级可见（403 显示缺失权限码、500/网络显示真实 code）+ 可单独重试，禁止静默空列表。
+- **联动**：库存单位 → 采购单位 / 销售单位 默认跟随（手工改过即解除该字段跟随，改回空值或与库存单位一致时恢复）；编辑页按详情值推导初始跟随态，不覆盖既有数据。
 
 ## Error Codes
 
@@ -66,5 +70,6 @@
 
 - - 无剩余 Gap；审计已通过 /api/audit-logs（entityType=item）接入
 - UX Hardening（CTO #11660）：Dirty-State Guard（useDirtyStateGuard）+ 409 CAS 冲突专用面板（isVersionConflict + 重新加载）已接入
+- 引用下拉加载（问题三，2026-09-27）：分类 / 库存单位 / 采购单位 / 销售单位 / 供应商每源独立取数 + 字段级重试 + 失败可见；库存单位 → 采购/销售单位联动；编辑页引用源失败不再阻塞详情（QA：docs/qa/Items_Reference_Loading_Fix_QA.md）
 
 - 列表页（EntityListWorkspace）、详情（EntityDetailWorkspace）、Create/Edit 表单（EntityFormWorkspace + LineEditor）全部缺失 → F2-2 实现
