@@ -92,7 +92,7 @@ function retryIn(fieldLabel: string) {
 async function fillRequiredAndSave(typeText: string) {
   fireEvent.change(inputByText('编码'), { target: { value: 'ITM-001' } });
   fireEvent.change(inputByText('名称'), { target: { value: '直线导轨' } });
-  if (typeText) fireEvent.change(inputByText('类型'), { target: { value: typeText } });
+  if (typeText) fireEvent.change(inputByText('材料类型'), { target: { value: typeText } });
   fireEvent.click(screen.getByRole('button', { name: '保存' }));
   await waitFor(() => {
     expect(fetchMockRef.current.mock.calls.some((c) => String(c[0]).includes('/api/items') && c[1]?.method === 'POST')).toBe(true);
@@ -197,7 +197,7 @@ describe('Items Create — 第 3 轮表单（类型=材质分类 + 引用源独�
     await screen.findByText('新建物料');
 
     // 任意文字都不再触发枚举校验错误（上一轮的用户报错点）
-    fireEvent.change(inputByText('类型'), { target: { value: '不存在的材质' } });
+    fireEvent.change(inputByText('材料类型'), { target: { value: '不存在的材质' } });
     expect(screen.queryAllByRole('alert')).toHaveLength(0);
 
     const body = await fillRequiredAndSave('不存在的材质');
@@ -211,7 +211,7 @@ describe('Items Create — 第 3 轮表单（类型=材质分类 + 引用源独�
     expect(fetchMockRef.current.mock.calls.some((c) => String(c[0]).includes('/api/suppliers'))).toBe(false);
   });
 
-  it('类型与已有分类同名 → 自动选中该分类；选择分类 → 回填类型文本', async () => {
+  it('材料类型与分类不联动：输入不回填下拉、选择不回填输入', async () => {
     render(
       <DensityProvider>
         <Page />
@@ -220,13 +220,34 @@ describe('Items Create — 第 3 轮表单（类型=材质分类 + 引用源独�
     await screen.findByText('新建物料');
     await waitFor(() => expect(selectByText('分类').options.length).toBe(3));
 
-    // 类型文本命中已有分类（trim + 忽略大小写）
-    fireEvent.change(inputByText('类型'), { target: { value: ' 45#钢 ' } });
-    expect(selectByText('分类').value).toBe('cat-2');
+    // 输入材料类型（哪怕与已有分类同名）→ 不得自动选中分类
+    fireEvent.change(inputByText('材料类型'), { target: { value: '45#钢' } });
+    expect(selectByText('分类').value).toBe('');
+    expect(inputByText('材料类型').value).toBe('45#钢');
 
-    // 反向：下拉选择回填类型文本
+    // 选择分类 → 不得回填材料类型
     fireEvent.change(selectByText('分类'), { target: { value: 'cat-1' } });
-    expect(inputByText('类型').value).toBe('滑块');
+    expect(inputByText('材料类型').value).toBe('45#钢');
+  });
+
+  it('材料类型与分类同时填写且不一致 → 拦下保存并提示二选一（不发 POST）', async () => {
+    render(
+      <DensityProvider>
+        <Page />
+      </DensityProvider>,
+    );
+    await screen.findByText('新建物料');
+    await waitFor(() => expect(selectByText('分类').options.length).toBe(3));
+
+    fireEvent.change(inputByText('编码'), { target: { value: 'ITM-003' } });
+    fireEvent.change(inputByText('名称'), { target: { value: '轴承' } });
+    fireEvent.change(inputByText('材料类型'), { target: { value: '45#钢' } });
+    fireEvent.change(selectByText('分类'), { target: { value: 'cat-1' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('请只保留其中一个');
+    expect(fetchMockRef.current.mock.calls.some((c) => c[1]?.method === 'POST')).toBe(false);
   });
 
   it('计量单位选择与场景字段提交', async () => {

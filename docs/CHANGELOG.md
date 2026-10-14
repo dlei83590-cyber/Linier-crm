@@ -3,6 +3,19 @@
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
 
+## [Unreleased] - 物料「类型」更名为「材料类型」并与分类解除联动（2026-09-27）
+
+### 变更（纯前端，零 API / Schema 变更）
+
+- 表单字段「类型」**更名为「材料类型」**（新建 / 编辑页标签、placeholder、提示文案；列表列头同步为「材料类型」）。
+- **解除与「分类」的联动**：两控件各自独立——输入材料类型不再自动选中分类，选择分类也不再回填材料类型（上一轮的`handleTypeTextChange/handleCategoryChange` 双向同步删除），分类下拉直接 `setCategoryId`。
+- **不静默覆盖**：材料类型与分类都填写、且指向不同分类时，前端拦下保存并提示「「材料类型」与「分类」都已填写且不一致，请只保留其中一个」（400 VALIDATION，不发请求）；两者一致（trim + 忽略大小写）或只填其一时正常提交。
+- 保存语义**不变**（仍为上一轮已确认的契约）：材料类型文本非空 → `categoryName`（服务端匹配/新建物料分类）；文本为空才回落到所选 `categoryId`。
+
+### 边界
+
+- 零 Schema / Migration / API / Error Code / Event / RBAC 变更：后端 `categoryName` 解析契约与测试未改动。
+- 单测更新：`items/new/page.test.tsx`——「不联动」用例（输入不回填下拉、选择不回填输入）替换原联动用例；新增「两者不一致 → 拦下且不发 POST」用例；其余用例仅同步标签名。
 ## [Unreleased] - 物料管理持续优化（类型=材质分类自动建分类 / 9 字段表单 / 列表重排，2026-09-27）
 
 ### 变更（前端 + 后端 API 行为；零 Schema / Migration）
