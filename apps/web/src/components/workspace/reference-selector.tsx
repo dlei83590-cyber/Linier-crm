@@ -25,8 +25,40 @@ interface ReferenceSelectorProps {
   placeholder?: string;
   loading?: boolean;
   error?: string | null;
+  /** 加载失败时的字段级「重试」（引用源独立取数：一个源失败不影响其他源，可单独重试） */
+  onRetry?: () => void;
   disabled?: boolean;
   required?: boolean;
+}
+
+/**
+ * ReferenceErrorNote — 引用源加载失败提示（字段级「重试」）
+ *
+ * 与 ReferenceSelector 的 error 渲染同源：原生 select（供应商 / 付款条款等）也能复用同一
+ * 「失败必须可见 + 可单独重试」语义，不各自造提示。
+ */
+export function ReferenceErrorNote({
+  message,
+  onRetry,
+}: {
+  message: string | null | undefined;
+  onRetry?: () => void;
+}) {
+  if (!message) return null;
+  return (
+    <p className="text-status-danger-text text-xs" role="alert">
+      {message}
+      {onRetry ? (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="ml-2 underline underline-offset-2 hover:no-underline"
+        >
+          重试
+        </button>
+      ) : null}
+    </p>
+  );
 }
 
 export function ReferenceSelector({
@@ -38,6 +70,7 @@ export function ReferenceSelector({
   placeholder = '请选择',
   loading = false,
   error,
+  onRetry,
   disabled = false,
   required = false,
 }: ReferenceSelectorProps) {
@@ -58,7 +91,7 @@ export function ReferenceSelector({
         required={required}
         className={CONTROL_CLASS}
       >
-        <option value="">{loading ? '加载中…' : placeholder}</option>
+        <option value="">{loading ? '加载中…' : error ? '加载失败，请重试' : placeholder}</option>
         {options.map((opt) => (
           <option key={opt.value} value={opt.value}>
             {opt.label}
@@ -66,7 +99,7 @@ export function ReferenceSelector({
           </option>
         ))}
       </select>
-      {error ? <p className="text-status-danger-text text-xs">{error}</p> : null}
+      <ReferenceErrorNote message={error} onRetry={onRetry} />
     </div>
   );
 }

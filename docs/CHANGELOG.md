@@ -3,6 +3,24 @@
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
 
+## [Unreleased] - 物料管理引用下拉加载失败修复 + 计量单位联动（问题三，2026-09-27）
+
+### 修复
+
+- **物料「新建 / 编辑」页引用下拉整组空白**：分类 / 库存单位 / 采购单位 / 销售单位 / 供应商此前由**单次 `Promise.all`** 拉取 4 个引用源（`/api/item-categories` / `/api/unit-of-measures` / `/api/suppliers` / `/api/commercial-terms`），任一源失败（403 / 500 / 网络）即让整组下拉一起空白，且只显示一句笼统文案、无法单独重试。改为**每源独立取数**（新增 `apps/web/src/lib/use-reference-options.ts`）：独立 loading / error / reload，一个源失败不再影响其他源。
+- **编辑页页面级失败**：引用源此前与详情 `GET /api/items/:id` 共用同一个 `Promise.all`，任一引用源失败会把整个编辑页打成 ErrorPanel（连详情都进不去）→ 详情与引用源解耦，只有详情失败才是页面级失败。
+- **失败必须可见（禁止静默空列表）**：`ReferenceSelector` 新增 `onRetry` 与失败占位（「加载失败，请重试」）+ 共享 `ReferenceErrorNote`（原生 select 供应商 / 付款条款复用同一语义）；403 明确提示**缺失的权限码**（`item-category:view` / `unit-of-measure:view` / `supplier:view` / `commercial-term:view`），500 / 网络失败保留后端真实 code / message。修复前编辑页对引用源失败完全静默（下拉空白且无任何提示）。
+
+### 新增（联动）
+
+- **库存单位 → 采购单位 / 销售单位 联动**：选定库存单位后，仍处于「跟随」状态的采购 / 销售单位自动带出同一单位；用户手工改过某字段即解除该字段跟随（不再被覆盖），改回空值或与库存单位一致时恢复跟随；编辑页按详情值推导初始跟随状态（已单独设置过的既有数据不被静默覆盖）。
+
+### 边界
+
+- 零 Schema / Migration / API / Error Code / Event / RBAC 变更；仅 apps/web 前端（2 页面 + 1 共享组件 + 1 新 hook）+ docs
+- **未放宽任何权限**：引用源接口的权限判定原样保留；本次只让「无权限 / 失败」在字段上可见并给出可执行的授权提示（不再伪装成"没有数据"）
+- 单测：`apps/web/src/app/(dashboard)/items/new/page.test.tsx`（引用源失败不级联 + 字段级重试；单位联动 4 步）
+
 ## [Unreleased] - 删除引用出处（Reference Provenance，问题二，2026-09-27）
 
 ### 新增

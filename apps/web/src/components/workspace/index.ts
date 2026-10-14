@@ -22,7 +22,7 @@ export type { KpiCardProps } from './kpi-card';
 export { EntityDetailWorkspace } from './entity-detail-workspace';
 export { EntityFormWorkspace } from './entity-form-workspace';
 
-export { ReferenceSelector } from './reference-selector';
+export { ReferenceSelector, ReferenceErrorNote } from './reference-selector';
 export type { ReferenceOption } from './reference-selector';
 
 export { DependentSelector } from './dependent-selector';

@@ -7,12 +7,13 @@
  * 结构：AppPage + EntityFormWorkspace（Header → Sections → Validation → Save/Cancel）。
  * 分区：基本信息 / 计量与状态 / 技术属性 / 采购销售标记；不 40 行平铺。
  */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
-import { AppPage, EntityFormWorkspace, ReferenceSelector } from "@/components/workspace";
+import { AppPage, EntityFormWorkspace, ReferenceSelector, ReferenceErrorNote } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { useReferenceOptions, referenceErrorText } from "@/lib/use-reference-options";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
 
@@ -20,6 +21,19 @@ interface ItemOption {
   id: string;
   code: string | null;
   name: string | null;
+}
+
+interface UomOption {
+  id: string;
+  code: string | null;
+  name: string | null;
+  symbol: string | null;
+}
+
+interface CommercialTermOption {
+  id: string;
+  code: string;
+  name: string;
 }
 
 interface SupplierOption {
@@ -83,6 +97,12 @@ const LIFECYCLE_OPTIONS = [
 
 const inputClass = INPUT_CLASS;
 
+/** 引用源对应的后端权限码（403 时在字段上明确"缺哪个权限"，便于管理员授权） */
+const REF_CATEGORY_PERMISSION = "item-category:view";
+const REF_UOM_PERMISSION = "unit-of-measure:view";
+const REF_SUPPLIER_PERMISSION = "supplier:view";
+const REF_TERM_PERMISSION = "commercial-term:view";
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="rounded-md border border-border p-4">
@@ -95,10 +115,16 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function ItemCreateForm() {
   const router = useRouter();
-  const [categories, setCategories] = useState<ItemOption[]>([]);
-  const [uoms, setUoms] = useState<ItemOption[]>([]);
-  const [selectorsLoading, setSelectorsLoading] = useState(true);
-  const [selectorsError, setSelectorsError] = useState<string | null>(null);
+  // 引用数据源：分类 / 计量单位 / 供应商 / 付款条款——**每源独立取数**（独立 loading/error/重试）。
+  // 修复：此前单次 Promise.all 拉 4 个源，任一源失败会让分类 + 库存/采购/销售单位 + 供应商整组空白。
+  const categories = useReferenceOptions<ItemOption>("/api/item-categories?pageSize=100");
+  const uoms = useReferenceOptions<UomOption>("/api/unit-of-measures?pageSize=100");
+  const suppliers = useReferenceOptions<SupplierOption>("/api/suppliers?pageSize=100");
+  const commercialTerms = useReferenceOptions<CommercialTermOption>("/api/commercial-terms?pageSize=100");
+  const categoryError = referenceErrorText(categories.error, REF_CATEGORY_PERMISSION);
+  const uomError = referenceErrorText(uoms.error, REF_UOM_PERMISSION);
+  const supplierError = referenceErrorText(suppliers.error, REF_SUPPLIER_PERMISSION);
+  const termError = referenceErrorText(commercialTerms.error, REF_TERM_PERMISSION);
 
   // 表单字段（对齐 itemCreateSchema）
   const [code, setCode] = useState("");
@@ -126,37 +152,36 @@ function ItemCreateForm() {
   const [description, setDescription] = useState("");
   // 供应商与采购价（用户指令 2026-08-21：商品设置采购价/供应商/付款条款；SupplierItem 存储，ADR-0012 §9 多供应商）
   const [supplierRows, setSupplierRows] = useState<SupplierRow[]>([emptySupplierRow()]);
-  const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
-  const [commercialTerms, setCommercialTerms] = useState<Array<{ id: string; code: string; name: string }>>([]);
+  // 采购 / 销售单位默认「跟随库存单位」（联动）；某字段被手工改过即不再被覆盖，
+  // 改回空值或与库存单位一致时恢复跟随（避免"改过一次就永远不跟随"的死状态）。
+  const [purchaseFollowsStock, setPurchaseFollowsStock] = useState(true);
+  const [salesFollowsStock, setSalesFollowsStock] = useState(true);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiClientError | null>(null);
   // F2-2 UX Hardening ①：Dirty-State Guard（填写内容后离开需确认）
   const [dirty, setDirty] = useState(false);
 
-  // Selector 数据源：分类 + 计量单位（GET 已 FINAL）
-  useEffect(() => {
-    const controller = new AbortController();
-    Promise.all([
-      apiFetch<ItemOption[]>("/api/item-categories?pageSize=100", { signal: controller.signal }),
-      apiFetch<ItemOption[]>("/api/unit-of-measures?pageSize=100", { signal: controller.signal }),
-      apiFetch<SupplierOption[]>("/api/suppliers?pageSize=100", { signal: controller.signal }),
-      apiFetch<Array<{ id: string; code: string; name: string }>>("/api/commercial-terms?pageSize=100", { signal: controller.signal }),
-    ])
-      .then(([catBody, uomBody, supBody, termBody]) => {
-        setCategories(catBody.data);
-        setUoms(uomBody.data);
-        setSuppliers(supBody.data);
-        setCommercialTerms(termBody.data);
-        setSelectorsLoading(false);
-      })
-      .catch((err: unknown) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setSelectorsError("加载分类/计量单位失败");
-        setSelectorsLoading(false);
-      });
-    return () => controller.abort();
-  }, []);
+  /**
+   * 联动（用户指令「物料管理：分类/单位/供应商加载失败 + 关联联动修复」）：
+   * 库存单位是计量基准 —— 选定后，仍处于「跟随」状态的采购单位 / 销售单位同步带出同一单位；
+   * 用户手工改过某字段则解除该字段的跟随（不再被覆盖），改回空值或与库存单位一致时恢复跟随。
+   */
+  const handleStockUomChange = (next: string) => {
+    setStockUomId(next);
+    if (purchaseFollowsStock) setPurchaseUomId(next);
+    if (salesFollowsStock) setSalesUomId(next);
+  };
+
+  const handlePurchaseUomChange = (next: string) => {
+    setPurchaseUomId(next);
+    setPurchaseFollowsStock(next === "" || next === stockUomId);
+  };
+
+  const handleSalesUomChange = (next: string) => {
+    setSalesUomId(next);
+    setSalesFollowsStock(next === "" || next === stockUomId);
+  };
 
   const handleSave = () => {
     if (submitting) return;
@@ -271,10 +296,11 @@ function ItemCreateForm() {
           <ReferenceSelector
             value={categoryId}
             onChange={setCategoryId}
-            options={categories.map((c) => ({ value: c.id, label: c.name ?? c.code ?? "" }))}
+            options={categories.data.map((c) => ({ value: c.id, label: c.name ?? c.code ?? "" }))}
             placeholder="请选择分类"
-            loading={selectorsLoading}
-            error={selectorsError}
+            loading={categories.loading}
+            error={categoryError}
+            onRetry={categories.reload}
           />
         </FormField>
         <FormField label="品牌">
@@ -289,32 +315,42 @@ function ItemCreateForm() {
         <FormField label="库存单位">
           <ReferenceSelector
             value={stockUomId}
-            onChange={setStockUomId}
-            options={uoms.map((u) => ({ value: u.id, label: u.name ?? u.code ?? "" }))}
+            onChange={handleStockUomChange}
+            options={uoms.data.map((u) => ({ value: u.id, label: u.name ?? u.code ?? "" }))}
             placeholder="请选择"
-            loading={selectorsLoading}
-            error={selectorsError}
+            loading={uoms.loading}
+            error={uomError}
+            onRetry={uoms.reload}
           />
+          <p className="text-xs text-ink-muted">采购单位 / 销售单位默认跟随库存单位，可单独修改。</p>
         </FormField>
         <FormField label="采购单位">
           <ReferenceSelector
             value={purchaseUomId}
-            onChange={setPurchaseUomId}
-            options={uoms.map((u) => ({ value: u.id, label: u.name ?? u.code ?? "" }))}
+            onChange={handlePurchaseUomChange}
+            options={uoms.data.map((u) => ({ value: u.id, label: u.name ?? u.code ?? "" }))}
             placeholder="请选择"
-            loading={selectorsLoading}
-            error={selectorsError}
+            loading={uoms.loading}
+            error={uomError}
+            onRetry={uoms.reload}
           />
+          <p className="text-xs text-ink-muted">
+            {purchaseFollowsStock ? "跟随库存单位" : "已单独设置（不再跟随库存单位）"}
+          </p>
         </FormField>
         <FormField label="销售单位">
           <ReferenceSelector
             value={salesUomId}
-            onChange={setSalesUomId}
-            options={uoms.map((u) => ({ value: u.id, label: u.name ?? u.code ?? "" }))}
+            onChange={handleSalesUomChange}
+            options={uoms.data.map((u) => ({ value: u.id, label: u.name ?? u.code ?? "" }))}
             placeholder="请选择"
-            loading={selectorsLoading}
-            error={selectorsError}
+            loading={uoms.loading}
+            error={uomError}
+            onRetry={uoms.reload}
           />
+          <p className="text-xs text-ink-muted">
+            {salesFollowsStock ? "跟随库存单位" : "已单独设置（不再跟随库存单位）"}
+          </p>
         </FormField>
         <FormField label="生命周期">
           <select value={lifecycle} onChange={(e) => setLifecycle(e.target.value)} className={inputClass}>
@@ -363,6 +399,9 @@ function ItemCreateForm() {
           <p className="text-xs text-ink-muted">
             一个商品可配置多个供应商（ADR-0012 §9）；「优选」供应商为采购单据选商品时自动带出的默认供应商。
           </p>
+          {/* 供应商 / 付款条款引用源独立取数：失败必须可见且可单独重试（不静默显示空列表） */}
+          <ReferenceErrorNote message={supplierError} onRetry={suppliers.reload} />
+          <ReferenceErrorNote message={termError} onRetry={commercialTerms.reload} />
           {supplierRows.map((row, i) => (
             <div key={row.key} className="border-border flex flex-wrap items-end gap-3 rounded-md border p-3">
               <div className="min-w-[180px] flex-1">
@@ -373,7 +412,7 @@ function ItemCreateForm() {
                   className={inputClass}
                 >
                   <option value="">请选择供应商</option>
-                  {suppliers.map((s) => (
+                  {suppliers.data.map((s) => (
                     <option key={s.partner?.id ?? s.id} value={s.partner?.id ?? ""}>
                       {s.name ?? s.code ?? ""}
                     </option>
@@ -400,7 +439,7 @@ function ItemCreateForm() {
                   className={inputClass}
                 >
                   <option value="">不设置</option>
-                  {commercialTerms.map((t) => (
+                  {commercialTerms.data.map((t) => (
                     <option key={t.id} value={t.code}>
                       {t.code} {t.name}
                     </option>
