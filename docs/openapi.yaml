@@ -16452,6 +16452,14 @@ components:
         itemType: { $ref: "#/components/schemas/ItemType" }
         sourcingType: { $ref: "#/components/schemas/ItemSourcingType" }
         categoryId: { type: string }
+        categoryName:
+          type: string
+          maxLength: 100
+          description: >-
+            按名称解析物料分类（2026-09-27）：先按名称（trim + 忽略大小写）匹配未删除的
+            ItemCategory，命中即复用；未命中则在**同一事务内**新建一个物料分类
+            （level=1、categoryPath=下一个 3 位数字、code=MAT-<path>）并关联。
+            非空时**优先于 categoryId**。新建需要 item-category:create 权限，否则 403。
         series: { type: string }
         model: { type: string }
         variant: { type: string }
@@ -16483,6 +16491,13 @@ components:
         itemType: { $ref: "#/components/schemas/ItemType" }
         sourcingType: { $ref: "#/components/schemas/ItemSourcingType" }
         categoryId: { type: string }
+        categoryName:
+          type: string
+          maxLength: 100
+          description: >-
+            按名称解析物料分类（2026-09-27）：命中已有分类即复用；未命中则在同一事务内新建
+            （需 item-category:create 权限，否则 403）。非空时优先于 categoryId；
+            事务回滚（如 CAS 409）不会留下孤儿分类。
         series: { type: string }
         model: { type: string }
         variant: { type: string }

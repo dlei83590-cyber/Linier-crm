@@ -3,6 +3,25 @@
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
 
+## [Unreleased] - 物料管理持续优化（类型=材质分类自动建分类 / 9 字段表单 / 列表重排，2026-09-27）
+
+### 变更（前端 + 后端 API 行为；零 Schema / Migration）
+
+- **表单收敛为单分区 9 字段**，顺序固定：编码、名称、系列、型号、规格、**类型**、**分类**、**计量单位**、OEM 编码。
+  - **「类型」＝自由文本**：保存时按名称匹配/新建**物料分类**并写入分类（**不再写 `Item.itemType`**，沿用 DB 默认）。用户报的「类型无法识别…VALIDATION」错误随之消失（不再做枚举归一化）。
+  - 「分类」与「类型」**双向联动**：类型文字与已有分类同名（trim + 忽略大小写）→ 自动选中；下拉选择 → 回填类型文字。
+  - **「计量单位」唯一**，绑定 `stockUomId`（BOM 原料单位红线、生产工单行单位、单位换算基准都依赖它）；移除 采购单位 / 销售单位 两个下拉及其跟随联动。
+  - 本轮移除字段：助记码、商品来源（`sourcingType`）、描述（`description`）、采购单位、销售单位。
+- **后端新增 `categoryName` 解析**（`POST /api/items`、`PATCH /api/items/:id`）：命中已有分类即复用（不重复建）；未命中则**在同一事务内**新建（`level=1`、`categoryPath`=下一个 3 位数字、`code=MAT-<path>`）；新建需 `item-category:create` 权限否则 403；非空时优先于 `categoryId`；事务回滚不留孤儿分类；并发撞车（唯一约束 P2002）**重开事务**重试（PostgreSQL 事务内语句失败即 aborted/25P02，不能在同一事务内续跑，故重试发生在事务边界，最多 3 次）。共享实现 `apps/web/src/lib/item-category/helpers.ts`；自动新建写审计（`item-category.create` + `autoCreatedFromItem`）。
+- **列表页字段整理**：列与表单同序 9 列（编码 / 名称 / 系列 / 型号 / 规格 / 类型 / 分类 / 计量单位 / OEM 编码）；移除 状态 / 可采购 / 可销售 / 创建时间 四列（**状态仍保留为筛选条件**）；「类型」列＝分类名、「分类」列＝分类树位置（`categoryPath` + 名称）；筛选「类型（枚举）」→「**分类**」；列表 API 的 `category` select 增加 `categoryPath`（纯新增，向后兼容）。
+
+### 边界
+
+- 零 Schema / Migration / Error Code / Event / RBAC 权限码变更；API 为**新增可选字段**（旧调用方零影响）。
+- 零数据删除：表单不再提交的字段（`mnemonic/sourcingType/description/purchaseUomId/salesUomId@@BT@@` …）在编辑时**省略** ⇒ 既有值保留（不是写 null）。
+- **语义变化（需知情）**：① 新建物料的 `Item.itemType` 一律取 DB 默认 `FINISHED_GOOD`（下游若按 itemType 做科目映射/判断，会看到默认值）；② 「分类」可由「类型」文字**自动新建**（新的主数据来源，已带审计）。
+- 详情页未改：仍展示 品牌 / 制造商 / 状态 / 标记 / 默认供应商与采购价 / 精度等级 / 预压值 的只读呈现（这些数据保留）。
+- 单测：`apps/web/src/app/api/items/route.test.ts` + `apps/web/src/app/api/items/[id]/route.test.ts`（categoryName 复用/新建/403/优先级/无孤儿分类）、`items/new/page.test.tsx`（类型↔分类联动、payload、计量单位、引用源不级联、无 supplier-items）。
 ## [Unreleased] - 物料管理表单改造（2026-09-27 用户指令「物料管理改造」）
 
 ### 变更（apps/web 前端表单，零后端变更）

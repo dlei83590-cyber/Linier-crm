@@ -5,6 +5,13 @@
  *
  * 依据 Contract Card（items.md）：backend CRUD FINAL，本 Wave 实现 List。
  * 结构：AppPage + EntityListWorkspace（Header → Toolbar → Table → Pagination）。
+ *
+ * 列表字段整理（2026-09-27 用户指令「重新整理列表字段显示」）：列与表单字段一一对应且同序 ——
+ * 编码 / 名称 / 系列 / 型号 / 规格 / 类型 / 分类 / 计量单位 / OEM 编码；
+ * 移除 状态、可采购、可销售、创建时间 四列（「状态」仍保留为筛选条件，不丢能力）。
+ * 「类型」与「分类」同源（类型输入即自动匹配/新建物料分类）：「类型」列展示分类名，
+ * 「分类」列展示分类树位置（categoryPath + 名称），两列各有信息、不重复。
+ * 筛选：编码 / 名称 / 分类（原「类型」枚举筛选改为分类筛选，因为表单已不再写 itemType）。
  */
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -12,38 +19,32 @@ import { useRouter } from "next/navigation";
 import { actionPermission } from "@nilier-crm/shared";
 import { can, useSession } from "@/lib/session-context";
 import { PermissionGuard } from "@/components/guard/permission-guard";
-import { AppPage, EntityListWorkspace, StatusBadge, ConfirmActionDialog } from "@/components/workspace";
+import { AppPage, EntityListWorkspace, ReferenceErrorNote, ConfirmActionDialog } from "@/components/workspace";
 import { BUTTON_PRIMARY_CLASS, BUTTON_SECONDARY_CLASS, SELECT_CLASS } from "@/lib/ui-classes";
 import { useListQuery, readUrlFilterParams } from "@/lib/use-list-query";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { useReferenceOptions, referenceErrorText } from "@/lib/use-reference-options";
 import { useToast } from "@/components/ui/toast";
-import { formatDate } from "@/lib/format";
 
 interface ItemRow {
   id: string;
   code: string;
   name: string;
-  itemType: string | null;
+  series: string | null;
+  model: string | null;
+  spec: string | null;
+  oemCode: string | null;
   status: string | null;
-  category?: { code: string | null; name: string | null } | null;
-  stockUom?: { code: string | null; symbol: string | null } | null;
-  isSalable: boolean | null;
-  isPurchasable: boolean | null;
-  createdAt: string;
+  category?: { code: string | null; name: string | null; categoryPath?: string | null } | null;
+  stockUom?: { code: string | null; name: string | null; symbol: string | null } | null;
 }
 
-const ITEM_TYPE_OPTIONS = [
-  "FINISHED_GOOD",
-  "RAW_MATERIAL",
-  "SEMI_FINISHED",
-  "PURCHASED_PART",
-  "ACCESSORY",
-  "SERVICE",
-  "CONSUMABLE",
-  "ASSET",
-  "TOOLING",
-  "PACKAGING",
-] as const;
+interface CategoryOption {
+  id: string;
+  code: string | null;
+  name: string | null;
+  categoryPath?: string | null;
+}
 
 const STATUS_OPTIONS = ["ACTIVE", "INACTIVE", "LOCKED", "ARCHIVED"] as const;
 
@@ -55,25 +56,16 @@ const STATUS_LABELS: Record<string, string> = {
   ARCHIVED: "已归档",
 };
 
-const ITEM_TYPE_LABELS: Record<string, string> = {
-  FINISHED_GOOD: "成品",
-  RAW_MATERIAL: "原材料",
-  SEMI_FINISHED: "半成品",
-  PURCHASED_PART: "外购件",
-  ACCESSORY: "配件",
-  SERVICE: "服务",
-  CONSUMABLE: "消耗品",
-  ASSET: "资产",
-  TOOLING: "工装",
-  PACKAGING: "包装物",
-};
+/** 引用源对应的后端权限码（403 时明确"缺哪个权限"，便于管理员授权） */
+const REF_CATEGORY_PERMISSION = "item-category:view";
 
-const ITEM_TONE_MAP: Record<string, "success" | "neutral" | "warning" | "danger"> = {
-  ACTIVE: "success",
-  INACTIVE: "neutral",
-  LOCKED: "warning",
-  ARCHIVED: "danger",
-};
+/** 分类展示：分类树位置（categoryPath）+ 名称，如「001.003 机床直线导轨」 */
+function formatCategoryPath(row: ItemRow): string {
+  const name = row.category?.name ?? "";
+  const path = row.category?.categoryPath ?? "";
+  if (!name && !path) return "—";
+  return path ? path + " " + name : name;
+}
 
 function ItemList() {
   const router = useRouter();
@@ -86,14 +78,18 @@ function ItemList() {
   const [deleting, setDeleting] = useState<ItemRow | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
+  // 分类筛选数据源（每源独立取数：失败字段级可见 + 可单独重试）
+  const categories = useReferenceOptions<CategoryOption>("/api/item-categories?pageSize=100");
+  const categoryError = referenceErrorText(categories.error, REF_CATEGORY_PERMISSION);
+
   const [codeInput, setCodeInput] = useState("");
   const [nameInput, setNameInput] = useState("");
-  const [typeInput, setTypeInput] = useState("");
+  const [categoryInput, setCategoryInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
   const [filters, setFilters] = useState<{
     code?: string;
     name?: string;
-    itemType?: string;
+    categoryId?: string;
     status?: string;
   }>({});
 
@@ -105,16 +101,16 @@ function ItemList() {
   useEffect(() => {
     if (urlRestored.current) return;
     urlRestored.current = true;
-    const u = readUrlFilterParams(["code", "name", "itemType", "status"]);
+    const u = readUrlFilterParams(["code", "name", "categoryId", "status"]);
     setCodeInput(u.code ?? "");
     setNameInput(u.name ?? "");
-    setTypeInput(u.itemType ?? "");
+    setCategoryInput(u.categoryId ?? "");
     setStatusInput(u.status ?? "");
     setFilters(() => {
-      const n: { code?: string; name?: string; itemType?: string; status?: string } = {};
+      const n: { code?: string; name?: string; categoryId?: string; status?: string } = {};
       if (u.code) n.code = u.code;
       if (u.name) n.name = u.name;
-      if (u.itemType) n.itemType = u.itemType;
+      if (u.categoryId) n.categoryId = u.categoryId;
       if (u.status) n.status = u.status;
       return n;
     });
@@ -122,10 +118,10 @@ function ItemList() {
   }, []);
 
   const applyFilter = () => {
-    const next: { code?: string; name?: string; itemType?: string; status?: string } = {};
+    const next: { code?: string; name?: string; categoryId?: string; status?: string } = {};
     if (codeInput.trim()) next.code = codeInput.trim();
     if (nameInput.trim()) next.name = nameInput.trim();
-    if (typeInput) next.itemType = typeInput;
+    if (categoryInput) next.categoryId = categoryInput;
     if (statusInput) next.status = statusInput;
     setFilters(next);
     setPage(1);
@@ -134,10 +130,16 @@ function ItemList() {
   const resetFilter = () => {
     setCodeInput("");
     setNameInput("");
-    setTypeInput("");
+    setCategoryInput("");
     setStatusInput("");
     setFilters({});
     setPage(1);
+  };
+
+  const categoryLabel = (id: string | undefined): string => {
+    if (!id) return "";
+    const c = categories.data.find((x) => x.id === id);
+    return c?.name ?? id;
   };
 
   const runDelete = async () => {
@@ -194,18 +196,22 @@ function ItemList() {
               placeholder="按名称搜索"
               className={"w-40 " + SELECT_CLASS}
             />
-            <select
-              value={typeInput}
-              onChange={(e) => setTypeInput(e.target.value)}
-              className={SELECT_CLASS}
-            >
-              <option value="">全部类型</option>
-              {ITEM_TYPE_OPTIONS.map((t) => (
-                <option key={t} value={t}>
-                  {ITEM_TYPE_LABELS[t]}
-                </option>
-              ))}
-            </select>
+            <div className="flex flex-col gap-1">
+              <select
+                value={categoryInput}
+                onChange={(e) => setCategoryInput(e.target.value)}
+                className={SELECT_CLASS}
+              >
+                <option value="">{categories.loading ? "分类加载中…" : "全部分类"}</option>
+                {categories.data.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name ?? c.code ?? ""}
+                  </option>
+                ))}
+              </select>
+              {/* 分类筛选源独立取数：失败可见 + 可单独重试（不静默显示空列表） */}
+              <ReferenceErrorNote message={categoryError} onRetry={categories.reload} />
+            </div>
             <select
               value={statusInput}
               onChange={(e) => setStatusInput(e.target.value)}
@@ -249,46 +255,27 @@ function ItemList() {
             ),
           },
           { key: "name", header: "名称" },
+          { key: "series", header: "系列", render: (row) => row.series ?? "—" },
+          { key: "model", header: "型号", render: (row) => row.model ?? "—" },
+          { key: "spec", header: "规格", render: (row) => row.spec ?? "—" },
           {
-            key: "itemType",
+            // 「类型」＝ 分类名（表单「类型」输入即自动匹配/新建物料分类）
+            key: "categoryName",
             header: "类型",
-            render: (row) => (row.itemType ? ITEM_TYPE_LABELS[row.itemType] ?? row.itemType : "—"),
-          },
-          {
-            key: "status",
-            header: "状态",
-            render: (row) =>
-              row.status ? (
-                <StatusBadge status={row.status} label={STATUS_LABELS[row.status] ?? row.status} toneMap={ITEM_TONE_MAP} />
-              ) : (
-                "—"
-              ),
-          },
-          {
-            key: "category",
-            header: "分类",
             render: (row) => row.category?.name ?? "—",
           },
           {
+            // 「分类」＝ 分类树位置（categoryPath + 名称），与「类型」列信息互补不重复
+            key: "categoryPath",
+            header: "分类",
+            render: (row) => formatCategoryPath(row),
+          },
+          {
             key: "stockUom",
-            header: "库存单位",
-            render: (row) => row.stockUom?.symbol ?? "—",
+            header: "计量单位",
+            render: (row) => row.stockUom?.symbol ?? row.stockUom?.name ?? "—",
           },
-          {
-            key: "isPurchasable",
-            header: "可采购",
-            render: (row) => (row.isPurchasable ? "是" : "否"),
-          },
-          {
-            key: "isSalable",
-            header: "可销售",
-            render: (row) => (row.isSalable ? "是" : "否"),
-          },
-          {
-            key: "createdAt",
-            header: "创建时间",
-            render: (row) => formatDate(row.createdAt),
-          },
+          { key: "oemCode", header: "OEM 编码", render: (row) => row.oemCode ?? "—" },
         ]}
         rows={items}
         rowKey={(row) => row.id}
@@ -332,15 +319,15 @@ function ItemList() {
                 },
               }
             : null,
-          filters.itemType
+          filters.categoryId
             ? {
-                key: "itemType",
-                label: `类型：${ITEM_TYPE_LABELS[filters.itemType] ?? filters.itemType}`,
+                key: "categoryId",
+                label: `分类：${categoryLabel(filters.categoryId)}`,
                 onClear: () => {
-                  setTypeInput("");
+                  setCategoryInput("");
                   setFilters((prev) => {
                     const n = { ...prev };
-                    delete n.itemType;
+                    delete n.categoryId;
                     return n;
                   });
                 },

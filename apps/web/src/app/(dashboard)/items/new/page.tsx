@@ -4,8 +4,17 @@
  * Items — 新建物料（F2-2 Master Data Workspaces）
  *
  * 依据 Contract Card（items.md）：backend create FINAL → 实现 Create。
- * 结构：AppPage + EntityFormWorkspace（Header → Sections → Validation → Save/Cancel）。
- * 分区：基本信息 / 计量单位 / 材料属性；不 40 行平铺。
+ * 结构：AppPage + EntityFormWorkspace（Header → 分区 → Validation → Save/Cancel）。
+ *
+ * 第 3 轮表单收敛（用户确认的产品决策）：
+ * - 表单只剩一个分区「基本信息」，字段顺序固定：
+ *   编码 → 名称 → 系列 → 型号 → 规格 → 类型 → 分类 → 计量单位 → OEM 编码；
+ * - 「类型」= 自由文本：保存时由服务端按名称自动匹配或新建「物料分类」，并把结果写入 categoryId
+ *   （类型本身不再写 itemType），因此彻底删除上一轮的枚举归一化与
+ *   「类型无法识别，请填写：…」错误（那正是用户报告的 bug），也不再依赖 @/lib/item-type；
+ * - 「计量单位」= stockUomId（库存单位列），标签显示为「计量单位」；
+ *   移除「采购单位」「销售单位」两个下拉及其全部 follow / 联动 state 与 handler；
+ * - 移除字段：助记码 / 商品来源 / 描述 / 采购单位 / 销售单位（state、常量、payload 键一并清理）。
  */
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -13,7 +22,6 @@ import { PermissionGuard } from "@/components/guard/permission-guard";
 import { actionPermission } from "@nilier-crm/shared";
 import { AppPage, EntityFormWorkspace, ReferenceSelector } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
-import { ITEM_TYPE_OPTIONS, ITEM_TYPE_INPUT_HINT, normalizeItemTypeInput } from "@/lib/item-type";
 import { useReferenceOptions, referenceErrorText } from "@/lib/use-reference-options";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
@@ -30,13 +38,6 @@ interface UomOption {
   name: string | null;
   symbol: string | null;
 }
-
-const SOURCING_OPTIONS = [
-  { value: "BOUGHT", label: "外购（直接采购/销售）" },
-  { value: "SELF_MANUFACTURED", label: "自产（物料组合，本厂加工）" },
-  { value: "OEM_OUTSOURCED", label: "OEM 外协（含工不含料：我方供料 + 加工费）" },
-  { value: "OEM_OUTSOURCED_FULL", label: "OEM 外协（含工含料：外协厂包工包料）" },
-];
 
 const inputClass = INPUT_CLASS;
 
@@ -57,8 +58,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function ItemCreateForm() {
   const router = useRouter();
   // 引用数据源：分类 / 计量单位——**每源独立取数**（独立 loading/error/重试）。
-  // 修复：此前单次 Promise.all 拉 4 个源，任一源失败会让分类 + 库存/采购/销售单位整组空白。
-  // 供应商 / 付款条款两个源随「供应商与采购价」分区一并移除：既有 SupplierItem 数据不从此表单维护。
+  // 单次 Promise.all 拉多源会让任一源失败导致整组下拉空白，故保持逐源独立。
   const categories = useReferenceOptions<ItemOption>("/api/item-categories?pageSize=100");
   const uoms = useReferenceOptions<UomOption>("/api/unit-of-measures?pageSize=100");
   const categoryError = referenceErrorText(categories.error, REF_CATEGORY_PERMISSION);
@@ -67,24 +67,15 @@ function ItemCreateForm() {
   // 表单字段（对齐 itemCreateSchema）
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
-  const [mnemonic, setMnemonic] = useState("");
-  // 类型：手动输入（文本 + datalist 候选），提交前归一化为 DB 枚举码；初值为空（未填则不提交该字段）
-  const [itemType, setItemType] = useState("");
-  const [sourcingType, setSourcingType] = useState("BOUGHT");
-  const [categoryId, setCategoryId] = useState("");
   const [series, setSeries] = useState("");
   const [model, setModel] = useState("");
   const [spec, setSpec] = useState("");
-  const [oemCode, setOemCode] = useState("");
+  // 类型：自由文本输入，不写 itemType——保存时服务端按名称匹配或新建「物料分类」，结果落到 categoryId。
+  const [itemTypeText, setItemTypeText] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  // 计量单位 = 库存单位（stockUomId）；采购单位 / 销售单位字段已随产品决策移除。
   const [stockUomId, setStockUomId] = useState("");
-  const [purchaseUomId, setPurchaseUomId] = useState("");
-  const [salesUomId, setSalesUomId] = useState("");
-  // 描述：原「采购 / 销售标记」分区已移除，用户只要求移除采购/销售标记，故描述移入「基本信息」分区末尾保留
-  const [description, setDescription] = useState("");
-  // 采购 / 销售单位默认「跟随库存单位」（联动）；某字段被手工改过即不再被覆盖，
-  // 改回空值或与库存单位一致时恢复跟随（避免"改过一次就永远不跟随"的死状态）。
-  const [purchaseFollowsStock, setPurchaseFollowsStock] = useState(true);
-  const [salesFollowsStock, setSalesFollowsStock] = useState(true);
+  const [oemCode, setOemCode] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiClientError | null>(null);
@@ -92,24 +83,23 @@ function ItemCreateForm() {
   const [dirty, setDirty] = useState(false);
 
   /**
-   * 联动（用户指令「物料管理：分类/单位加载失败 + 关联联动修复」）：
-   * 库存单位是计量基准 —— 选定后，仍处于「跟随」状态的采购单位 / 销售单位同步带出同一单位；
-   * 用户手工改过某字段则解除该字段的跟随（不再被覆盖），改回空值或与库存单位一致时恢复跟随。
+   * 「类型」↔「分类」联动（同一事实的两个入口，必须双向同步）：
+   * 类型文本与某个已有分类同名（trim + 忽略大小写）→ 自动选中该分类；
+   * 否则清空选择——保存时由服务端按名称新建分类。
+   * 注：ItemCategory.name 在 schema 中为非空 String，故空文本不会误匹配到无名称分类。
    */
-  const handleStockUomChange = (next: string) => {
-    setStockUomId(next);
-    if (purchaseFollowsStock) setPurchaseUomId(next);
-    if (salesFollowsStock) setSalesUomId(next);
+  const handleTypeTextChange = (raw: string) => {
+    setItemTypeText(raw);
+    const key = raw.trim().toLowerCase();
+    const match = categories.data.find((c) => (c.name ?? "").trim().toLowerCase() === key);
+    setCategoryId(match ? match.id : "");
   };
 
-  const handlePurchaseUomChange = (next: string) => {
-    setPurchaseUomId(next);
-    setPurchaseFollowsStock(next === "" || next === stockUomId);
-  };
-
-  const handleSalesUomChange = (next: string) => {
-    setSalesUomId(next);
-    setSalesFollowsStock(next === "" || next === stockUomId);
+  /** 反向同步：分类下拉变化时把分类名回填到类型输入 */
+  const handleCategoryChange = (id: string) => {
+    setCategoryId(id);
+    const c = categories.data.find((x) => x.id === id);
+    setItemTypeText(c?.name ?? "");
   };
 
   const handleSave = () => {
@@ -118,37 +108,31 @@ function ItemCreateForm() {
       setError(new ApiClientError(400, "编码与名称为必填项", "VALIDATION"));
       return;
     }
-    // 类型改为手动输入：提交前归一化为 DB 枚举码（接受枚举码或中文业务名）。
-    // 无法识别时必须阻止提交并明确提示，绝不静默改写用户输入（禁止 silent degradation）。
-    const normalizedItemType = normalizeItemTypeInput(itemType);
-    if (itemType.trim() && !normalizedItemType) {
-      setError(new ApiClientError(400, "类型无法识别，请填写：" + ITEM_TYPE_INPUT_HINT, "VALIDATION"));
-      return;
-    }
     setSubmitting(true);
     setError(null);
     const payload: Record<string, unknown> = {
       code: code.trim(),
       name: name.trim(),
-      mnemonic: mnemonic.trim() || undefined,
-      itemType: normalizedItemType || undefined,
-      sourcingType: sourcingType || undefined,
-      categoryId: categoryId || undefined,
       series: series.trim() || undefined,
       model: model.trim() || undefined,
       spec: spec.trim() || undefined,
       oemCode: oemCode.trim() || undefined,
-      description: description.trim() || undefined,
       stockUomId: stockUomId || undefined,
-      purchaseUomId: purchaseUomId || undefined,
-      salesUomId: salesUomId || undefined,
     };
+    // 分类只提交二者之一：类型文本优先（服务端按名称匹配已有分类，否则新建并回写 categoryId）；
+    // 文本为空才回落到下拉选中的 categoryId；两者都为空则不提交分类字段。
+    const categoryName = itemTypeText.trim();
+    if (categoryName) {
+      payload.categoryName = categoryName;
+    } else if (categoryId) {
+      payload.categoryId = categoryId;
+    }
     apiFetch<{ id: string }>("/api/items", {
       method: "POST",
       body: JSON.stringify(payload),
     })
       .then((body) => {
-        // 创建成功后直接进入详情页（「供应商与采购价」分区已移除，不再逐行 POST /supplier-items）
+        // 创建成功后直接进入详情页
         router.push(`/items/${body.data.id}`);
       })
       .catch((err: unknown) => {
@@ -177,93 +161,6 @@ function ItemCreateForm() {
         <FormField label="名称" required>
           <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
         </FormField>
-        <FormField label="助记码">
-          <input value={mnemonic} onChange={(e) => setMnemonic(e.target.value)} className={inputClass} />
-        </FormField>
-        <FormField label="类型">
-          {/* 手动输入：文本输入 + datalist 候选（共享模块 @/lib/item-type），提交前归一化为 DB 枚举码 */}
-          <input
-            list="item-type-options-new"
-            value={itemType}
-            onChange={(e) => setItemType(e.target.value)}
-            className={inputClass}
-            placeholder={ITEM_TYPE_INPUT_HINT}
-          />
-          <datalist id="item-type-options-new">
-            {ITEM_TYPE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.label} />
-            ))}
-          </datalist>
-        </FormField>
-        <FormField label="商品来源">
-          <select value={sourcingType} onChange={(e) => setSourcingType(e.target.value)} className={inputClass}>
-            {SOURCING_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </FormField>
-        <FormField label="分类">
-          <ReferenceSelector
-            value={categoryId}
-            onChange={setCategoryId}
-            options={categories.data.map((c) => ({ value: c.id, label: c.name ?? c.code ?? "" }))}
-            placeholder="请选择分类"
-            loading={categories.loading}
-            error={categoryError}
-            onRetry={categories.reload}
-          />
-        </FormField>
-        <FormField label="描述">
-          <input value={description} onChange={(e) => setDescription(e.target.value)} className={inputClass} />
-        </FormField>
-      </Section>
-
-      <Section title="计量单位">
-        <FormField label="库存单位">
-          <ReferenceSelector
-            value={stockUomId}
-            onChange={handleStockUomChange}
-            options={uoms.data.map((u) => ({ value: u.id, label: u.name ?? u.code ?? "" }))}
-            placeholder="请选择"
-            loading={uoms.loading}
-            error={uomError}
-            onRetry={uoms.reload}
-          />
-          <p className="text-xs text-ink-muted">采购单位 / 销售单位默认跟随库存单位，可单独修改。</p>
-        </FormField>
-        <FormField label="采购单位">
-          <ReferenceSelector
-            value={purchaseUomId}
-            onChange={handlePurchaseUomChange}
-            options={uoms.data.map((u) => ({ value: u.id, label: u.name ?? u.code ?? "" }))}
-            placeholder="请选择"
-            loading={uoms.loading}
-            error={uomError}
-            onRetry={uoms.reload}
-          />
-          <p className="text-xs text-ink-muted">
-            {purchaseFollowsStock ? "跟随库存单位" : "已单独设置（不再跟随库存单位）"}
-          </p>
-        </FormField>
-        <FormField label="销售单位">
-          <ReferenceSelector
-            value={salesUomId}
-            onChange={handleSalesUomChange}
-            options={uoms.data.map((u) => ({ value: u.id, label: u.name ?? u.code ?? "" }))}
-            placeholder="请选择"
-            loading={uoms.loading}
-            error={uomError}
-            onRetry={uoms.reload}
-          />
-          <p className="text-xs text-ink-muted">
-            {salesFollowsStock ? "跟随库存单位" : "已单独设置（不再跟随库存单位）"}
-          </p>
-        </FormField>
-      </Section>
-
-      <Section title="材料属性">
         <FormField label="系列">
           <input value={series} onChange={(e) => setSeries(e.target.value)} className={inputClass} />
         </FormField>
@@ -272,6 +169,37 @@ function ItemCreateForm() {
         </FormField>
         <FormField label="规格">
           <input value={spec} onChange={(e) => setSpec(e.target.value)} className={inputClass} />
+        </FormField>
+        <FormField label="类型" hint="输入后自动匹配/新建物料分类（与下方「分类」联动）">
+          {/* 自由文本：不做枚举归一化，提交时以 categoryName 交给服务端匹配或新建分类 */}
+          <input
+            value={itemTypeText}
+            onChange={(e) => handleTypeTextChange(e.target.value)}
+            className={inputClass}
+            placeholder="输入类型名称"
+          />
+        </FormField>
+        <FormField label="分类">
+          <ReferenceSelector
+            value={categoryId}
+            onChange={handleCategoryChange}
+            options={categories.data.map((c) => ({ value: c.id, label: c.name ?? c.code ?? "" }))}
+            placeholder="请选择分类"
+            loading={categories.loading}
+            error={categoryError}
+            onRetry={categories.reload}
+          />
+        </FormField>
+        <FormField label="计量单位">
+          <ReferenceSelector
+            value={stockUomId}
+            onChange={setStockUomId}
+            options={uoms.data.map((u) => ({ value: u.id, label: u.name ?? u.code ?? "" }))}
+            placeholder="请选择"
+            loading={uoms.loading}
+            error={uomError}
+            onRetry={uoms.reload}
+          />
         </FormField>
         <FormField label="OEM 编码">
           <input value={oemCode} onChange={(e) => setOemCode(e.target.value)} className={inputClass} />

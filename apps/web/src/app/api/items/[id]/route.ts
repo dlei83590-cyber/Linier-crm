@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import type { ItemType, ItemStatus, ItemLifecycle } from "@prisma/client";
+import { hasEffectivePermission } from "@nilier-crm/shared";
 import { prisma } from "@/lib/prisma";
 import { authenticate, requirePermission, requestMeta, writeAuditLog } from "@/lib/api-helpers";
 import { ok, failValidation, failConflict, failNotFound } from "@/lib/api/response";
@@ -7,6 +8,17 @@ import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { casUpdate } from "@/lib/api/cas";
 import { collectReferences, failReferenceConflict, REFERENCE_SAMPLE_LIMIT } from "@/lib/api/reference-guard";
+import { handleServerError } from "@/lib/api/server-error";
+import {
+  failCategoryResolve,
+  isItemWriteAbort,
+  ItemWriteAbortError,
+  normalizeCategoryName,
+  readCategoryAuditSnapshot,
+  resolveCategoryIdByName,
+  runWithCategoryConflictRetry,
+  type CategoryAuditSnapshot,
+} from "@/lib/item-category/helpers";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +31,9 @@ const itemUpdateSchema = z
     itemType: z.enum(["FINISHED_GOOD", "RAW_MATERIAL", "SEMI_FINISHED", "PURCHASED_PART", "ACCESSORY", "SERVICE", "CONSUMABLE", "ASSET", "TOOLING", "PACKAGING"]).optional(),
     sourcingType: z.enum(["BOUGHT", "SELF_MANUFACTURED", "OEM_OUTSOURCED", "OEM_OUTSOURCED_FULL"]).optional(),
     categoryId: z.string().min(1).nullable().optional(),
+    // 「类型」自由文本（产品决策）：服务端按名称匹配/新建物料分类并写入 categoryId（不再写 itemType）
+    // 长度（trim 后 1..100）与空值语义由 resolveCategoryIdByName 判定，保证中文错误信息可读
+    categoryName: z.string().optional(),
     series: z.string().max(100).nullable().optional(),
     model: z.string().max(100).nullable().optional(),
     variant: z.string().max(100).nullable().optional(),
@@ -117,35 +132,87 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const parsed = itemUpdateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failValidation(parsed.error.flatten());
 
-  const { version, ...updates } = parsed.data;
+  const { version, categoryName, ...updates } = parsed.data;
 
   const existing = await prisma.item.findFirst({ where: { id, deletedAt: null } });
   if (!existing) return failNotFound(ERROR_CODES.NOT_FOUND, "物料不存在");
 
-  // 原子乐观锁（审计 P1：updateMany where {id,version} + count 判定）
-  const cas = await casUpdate(prisma, 'item', id, version, {
-    ...updates,
-    itemType: updates.itemType as ItemType | undefined,
-    lifecycle: updates.lifecycle === undefined ? undefined : (updates.lifecycle as ItemLifecycle | null),
-    status: updates.status as ItemStatus | undefined,
-    updatedById: user!.id,
-  });
-  if (cas.outcome === 'NOT_FOUND') return failNotFound(ERROR_CODES.NOT_FOUND, "物料不存在");
-  if (cas.outcome === 'CONFLICT') return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
-  const updated = await prisma.item.findFirst({ where: { id, deletedAt: null } });
-  if (!updated) return failNotFound(ERROR_CODES.NOT_FOUND, "物料不存在");
+  // 「类型」自由文本 → 物料分类：categoryName 非空时优先于 categoryId（此时忽略请求里的 categoryId）
+  const requestedCategoryName = categoryName === undefined ? "" : normalizeCategoryName(categoryName);
+  // 仅在「未命中已有分类、需要新建」时要求 item-category:create（不额外加 requirePermission，避免拦死仅复用路径）
+  const canCreateCategory = hasEffectivePermission(user!.permissions, "item-category:create");
 
-  await writeAuditLog({
-    actorId: user?.id,
-    action: "item.update",
-    entityType: "item",
-    entityId: id,
-    beforeData: { name: existing.name, itemType: existing.itemType, status: existing.status },
-    afterData: { name: updated.name, itemType: updated.itemType, status: updated.status },
-    ...meta,
-  });
+  try {
+    // 分类解析/新建 + 原子乐观锁更新同事务：任一步失败整体回滚，不留孤儿分类
+    const { autoCreatedCategory } = await runWithCategoryConflictRetry(() =>
+      prisma.$transaction(async (tx) => {
+        let categoryId = updates.categoryId;
+        let autoCategory: CategoryAuditSnapshot | null = null;
 
-  return ok(updated);
+        if (requestedCategoryName.length > 0) {
+          const resolved = await resolveCategoryIdByName(tx, requestedCategoryName, user!.id, canCreateCategory);
+          if (!resolved.ok) throw new ItemWriteAbortError({ type: "category", error: resolved.error });
+          categoryId = resolved.categoryId;
+          if (resolved.created) autoCategory = await readCategoryAuditSnapshot(tx, resolved.categoryId);
+        }
+
+        // 原子乐观锁（审计 P1：updateMany where {id,version} + count 判定）
+        const cas = await casUpdate(tx, 'item', id, version, {
+          ...updates,
+          categoryId,
+          itemType: updates.itemType as ItemType | undefined,
+          lifecycle: updates.lifecycle === undefined ? undefined : (updates.lifecycle as ItemLifecycle | null),
+          status: updates.status as ItemStatus | undefined,
+          updatedById: user!.id,
+        });
+        // 乐观锁失败必须回滚（否则刚自动新建的分类会成为孤儿）
+        if (cas.outcome !== 'OK') throw new ItemWriteAbortError({ type: "cas", outcome: cas.outcome });
+
+        return { autoCreatedCategory: autoCategory };
+      }),
+    );
+
+    const updated = await prisma.item.findFirst({ where: { id, deletedAt: null } });
+    if (!updated) return failNotFound(ERROR_CODES.NOT_FOUND, "物料不存在");
+
+    await writeAuditLog({
+      actorId: user?.id,
+      action: "item.update",
+      entityType: "item",
+      entityId: id,
+      beforeData: { name: existing.name, itemType: existing.itemType, status: existing.status },
+      afterData: { name: updated.name, itemType: updated.itemType, status: updated.status },
+      ...meta,
+    });
+
+    // 确实新建了分类时，额外写一条分类审计（与物料自身审计并存）
+    if (autoCreatedCategory) {
+      await writeAuditLog({
+        actorId: user?.id,
+        action: "item-category.create",
+        entityType: "item-category",
+        entityId: autoCreatedCategory.id,
+        afterData: {
+          code: autoCreatedCategory.code,
+          name: autoCreatedCategory.name,
+          categoryPath: autoCreatedCategory.categoryPath,
+          level: autoCreatedCategory.level,
+          autoCreatedFromItem: true,
+        },
+        ...meta,
+      });
+    }
+
+    return ok(updated);
+  } catch (error) {
+    if (isItemWriteAbort(error)) {
+      const reason = error.reason;
+      if (reason.type === "category") return failCategoryResolve(reason.error);
+      if (reason.outcome === "NOT_FOUND") return failNotFound(ERROR_CODES.NOT_FOUND, "物料不存在");
+      return failConflict(ERROR_CODES.VERSION_CONFLICT, "版本冲突，请刷新后重试");
+    }
+    return handleServerError(request, user?.id, "item.update", error);
+  }
 }
 
 /** DELETE /api/items/:id（软删除；有交易引用时拒绝） */
