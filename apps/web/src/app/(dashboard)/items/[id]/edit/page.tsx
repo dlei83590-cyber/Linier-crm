@@ -143,28 +143,30 @@ function ItemEditForm() {
   };
 
   /**
-   * 「类型」↔「分类」双向联动（同一事实的两个入口）：
-   * 类型文本变化 → 与某个已有分类同名（trim + 忽略大小写）就自动选中该分类；
-   * 无匹配则清空选择（保存时由服务端按类型文本新建分类）。
+   * 「材料类型」与「分类」**不联动**（用户指令 2026-09-27）：两个控件各自独立——
+   * 改材料类型不会自动选中分类，选分类也不会回填材料类型。
+   *
+   * 保存语义不变：材料类型文本非空 → 服务端按名称匹配/新建物料分类并写入 categoryId；
+   * 文本为空才回落到下拉选中的分类。两者都填写且不一致时前端拦下，避免静默丢弃显式选择。
    */
-  const handleTypeTextChange = (raw: string) => {
-    setItemTypeText(raw);
-    const key = raw.trim().toLowerCase();
-    const match = categories.data.find((c) => (c.name ?? "").trim().toLowerCase() === key);
-    setCategoryId(match ? match.id : "");
-  };
-
-  /** 分类下拉变化 → 反向把分类名回填到类型输入 */
-  const handleCategoryChange = (id: string) => {
-    setCategoryId(id);
-    const c = categories.data.find((x) => x.id === id);
-    setItemTypeText(c?.name ?? "");
+  const typeTextMatchesSelectedCategory = (): boolean => {
+    if (!categoryId) return true;
+    const selected = categories.data.find((c) => c.id === categoryId);
+    if (!selected) return true;
+    return (selected.name ?? "").trim().toLowerCase() === itemTypeText.trim().toLowerCase();
   };
 
   const handleSave = () => {
     if (submitting) return;
     if (!code.trim() || !name.trim()) {
       setError(new ApiClientError(400, "编码与名称为必填项", "VALIDATION"));
+      return;
+    }
+    // 材料类型与分类都能决定该物料的分类 ⇒ 同时填写且不一致时必须让用户选一个（不静默覆盖）
+    if (itemTypeText.trim() && categoryId && !typeTextMatchesSelectedCategory()) {
+      setError(
+        new ApiClientError(400, "「材料类型」与「分类」都已填写且不一致，请只保留其中一个", "VALIDATION"),
+      );
       return;
     }
     setSubmitting(true);
@@ -239,19 +241,19 @@ function ItemEditForm() {
         <FormField label="规格">
           <input value={spec} onChange={(e) => setSpec(e.target.value)} className={inputClass} />
         </FormField>
-        <FormField label="类型" hint="输入后自动匹配/新建物料分类（与下方「分类」联动）">
-          {/* 自由文本：不做枚举归一化；同名分类自动选中，否则保存时新建分类 */}
+        <FormField label="材料类型" hint="输入后自动匹配或新建物料分类（与分类不联动）">
+          {/* 自由文本：不做枚举归一化；保存时交服务端匹配或新建分类 */}
           <input
             value={itemTypeText}
-            onChange={(e) => handleTypeTextChange(e.target.value)}
+            onChange={(e) => setItemTypeText(e.target.value)}
             className={inputClass}
-            placeholder="输入类型名称"
+            placeholder="输入材料类型"
           />
         </FormField>
         <FormField label="分类">
           <ReferenceSelector
             value={categoryId}
-            onChange={handleCategoryChange}
+            onChange={setCategoryId}
             options={categories.data.map((c) => ({ value: c.id, label: c.name ?? c.code ?? "" }))}
             placeholder="请选择分类"
             loading={categories.loading}
