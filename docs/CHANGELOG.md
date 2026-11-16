@@ -3,6 +3,33 @@
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
 
+## [Unreleased] - 采购单供应商为空修复：往来单位 ⇒ 供应商档案自动建档（2026-10-14）
+
+### 修复
+
+- 用户报告：「采购管理 —— 在新增采购单时供应商为空，没有关联到来往单位」。
+  根因：采购 / 收货 / 退货 / 供应商发票 / 付款的供应商下拉一律消费 `GET /api/suppliers`（Supplier 档案），
+  但往来单位（BusinessPartner）保存时**不会**建立 1:1 供应商档案——在主数据建了 type=SUPPLIER/BOTH 的往来单位后，
+  供应商下拉始终为空，采购单无法创建。
+- **服务端（写入即建档，幂等）**：`POST /api/business-partners` 与 `PATCH /api/business-partners/:id` 在**同一事务**内
+  调用 `ensureSupplierArchive`（`apps/web/src/lib/supplier/provision.ts`）：
+  - 仅 type=SUPPLIER/BOTH 建档（客户不被误当供应商）；
+  - 编码沿用往来单位编码；已被**其他**档案占用时使用确定性候选「编码-往来单位 id 尾段[-n]」，仍冲突则 fail loud（不静默改名/跳过）；
+  - 已有档案（含软删/停用）**只复活不重建**（Supplier.partnerId 唯一，1:1 角色扩展）；
+  - 同步写入 `BusinessPartnerRole` roleType=SUPPLIER（与 `POST /api/suppliers` 一致）。
+- **存量数据自愈**：`prisma/seed.ts` 新增幂等 backfill —— 所有 type=SUPPLIER/BOTH 往来单位补齐供应商档案与角色行（部署 update 脚本含 seed 即生效）。
+- **前端（可见性）**：`/purchasing/orders/new` 引用源改为**每源独立取数**（`useReferenceOptions`）：
+  供应商 / 物料 / 单位 / 付款条件各自 loading / error / 重试，任一源失败不再把整组下拉打成空白；
+  供应商列表为空（成功但 0 条）时明确提示「供应商档案来自往来单位」并给出 `/business-partners/new` 入口。
+
+### 边界
+
+- 零 Schema / Migration / 错误码 / Event / RBAC 变更；Supplier 模型（partnerId @unique 角色扩展）语义不变。
+- 未改动供应商档案已有业务字段（status/rating/账期/资质等仍由供应商档案页维护）；不删除、不降级任何既有档案。
+- 单测：`lib/supplier/provision.test.ts`（幂等 / 复活 / 编码候选 / fail loud / 客户不建档）、
+  `api/business-partners/route.test.ts`（create 自动建档 + 客户不建档）、`api/business-partners/[id]/route.test.ts`（type 改 SUPPLIER 补档）、
+  `purchasing/orders/new/page.test.tsx`（引用源独立失败可见 / 空供应商引导 / POST 契约）。
+
 ## [Unreleased] - 材料类型 / 分类不一致不再拦截保存（改为「最近修改优先」，2026-09-27）
 
 ### 修复

@@ -76,6 +76,15 @@ describe('POST /api/business-partners — Phase 2B create guard', () => {
     };
     mockPrisma['businessPartner'] = bpMock;
     mockPrisma['partnerContact'] = { findMany: vi.fn().mockResolvedValue([]) };
+    // 供应商档案自动建档（同一事务）：事务客户端 = mockPrisma 本身（模型桩按需挂载）
+    mockPrisma['$transaction'] = vi.fn((fn: (t: unknown) => unknown) => fn(mockPrisma));
+    mockPrisma['businessPartnerRole'] = { upsert: vi.fn().mockResolvedValue({ id: 'role-1' }) };
+    mockPrisma['supplier'] = {
+      findFirst: vi.fn().mockResolvedValue(null),
+      findUnique: vi.fn().mockResolvedValue(null),
+      create: vi.fn().mockResolvedValue({ id: 'sup-new' }),
+      update: vi.fn().mockResolvedValue({ id: 'sup-1' }),
+    };
   });
 
   it('14. EXACT create → 409 DUPLICATE_EXACT（阻断，ack 不能绕过见 15）', async () => {
@@ -207,6 +216,30 @@ describe('POST /api/business-partners — Phase 2B create guard', () => {
     expect(res.status).toBe(201);
     const createArgs = (bpMock.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(createArgs.data.channel).toBe('直销');
+  });
+
+  it('25. type=SUPPLIER 新建 → 同事务自动建立供应商档案（采购单供应商下拉不再为空）', async () => {
+    createImpl = () =>
+      Promise.resolve({ id: 'bp-new', code: 'BP-NEW-001', name: '新客户有限公司', type: 'SUPPLIER' });
+    const res = await POST(makeRequest({ ...baseBody, type: 'SUPPLIER' }));
+    expect(res.status).toBe(201);
+    const supplierCreate = mockPrisma['supplier'] as { create: ReturnType<typeof vi.fn> };
+    expect(supplierCreate.create).toHaveBeenCalledTimes(1);
+    expect(supplierCreate.create.mock.calls[0][0]).toMatchObject({
+      data: { code: 'BP-NEW-001', name: '新客户有限公司', partnerId: 'bp-new', status: 'POTENTIAL', currency: 'CNY' },
+    });
+    // 角色扩展同步：BusinessPartnerRole roleType=SUPPLIER
+    const role = mockPrisma['businessPartnerRole'] as { upsert: ReturnType<typeof vi.fn> };
+    expect(role.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { partnerId_roleType: { partnerId: 'bp-new', roleType: 'SUPPLIER' } } }),
+    );
+  });
+
+  it('25b. type=CUSTOMER 新建 → 不建立供应商档案（客户不被误当供应商）', async () => {
+    const res = await POST(makeRequest(baseBody));
+    expect(res.status).toBe(201);
+    const supplierCreate = mockPrisma['supplier'] as { create: ReturnType<typeof vi.fn> };
+    expect(supplierCreate.create).not.toHaveBeenCalled();
   });
 
   it('24b. channel 非法值（不在固定枚举）→ 400 VALIDATION_ERROR（fail closed，不落库）', async () => {

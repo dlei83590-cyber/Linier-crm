@@ -4,14 +4,23 @@
  * Purchase Order — 新建采购订单（F2-3 Batch A selective port，CTO #11739）
  *
  * 只吸收 PR #38 业务逻辑，不吸收旧 UI：
- * - 数据源：suppliers / items / unit-of-measures（当前 main FINAL read API，统一 envelope，不保留历史兼容分支）
+ * - 数据源：suppliers / items / unit-of-measures / commercial-terms（当前 main FINAL read API，统一 envelope）
  * - supplierId 必填；lines 每行 itemId 必填、quantity > 0；MANUAL 要求 unitPrice + priceReason
  * - 服务端生成 canonical id 后导航；客户端不提交总金额（金额服务端 Decimal 聚合）
  * - 页面消费 F2-2 Workspace：AppPage → EntityFormWorkspace → ReferenceSelector → LineEditor
  * - Dirty State 交 EntityFormWorkspace（不页面自挂 beforeunload）
  * - 权限用 shared constant（PERMISSIONS / actionPermission），不复制裸字符串
+ *
+ * 引用源取数（用户指令「新增采购单供应商为空，没有关联到往来单位」）：
+ * - 每源独立取数（useReferenceOptions）：此前用单个 Promise.all 拉 4 个源，任一源失败
+ *   （403/500/网络）会让供应商 + 物料 + 单位 + 付款条件一起空白；
+ * - 失败必须可见并可单字段重试，禁止静默降级成空下拉；
+ * - 供应商成功加载但为空 → 明确说明「供应商档案来自往来单位」并给出建档入口，
+ *   不再只留一个静默空下拉（供应商档案 = type=SUPPLIER/BOTH 往来单位的 1:1 角色扩展，
+ *   服务端在往来单位保存时自动建档）。
  */
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PERMISSIONS, actionPermission } from "@nilier-crm/shared";
 import { can, useSession } from "@/lib/session-context";
@@ -20,11 +29,13 @@ import {
   AppPage,
   EntityFormWorkspace,
   ReferenceSelector,
+  ReferenceErrorNote,
   LineEditor,
   type LineColumn,
   type LineRow,
 } from "@/components/workspace";
 import { apiFetch, ApiClientError } from "@/lib/api-client";
+import { useReferenceOptions, referenceErrorText } from "@/lib/use-reference-options";
 import { Combobox } from "@/components/ui/combobox";
 import { FormField } from "@/components/ui/form-field";
 import { INPUT_CLASS } from "@/lib/ui-classes";
@@ -58,6 +69,12 @@ interface UomOption {
   symbol: string | null;
 }
 
+interface CommercialTermOption {
+  id: string;
+  code: string;
+  name: string;
+}
+
 interface POItemOptionRow extends LineRow {
   itemId: string;
   description: string;
@@ -87,6 +104,12 @@ const PRICE_SOURCE_OPTIONS = [
   { value: "MANUAL", label: "手工定价" },
 ];
 
+/** 引用源对应的后端权限码（403 时在字段上明确「缺哪个权限」，便于管理员授权） */
+const REF_SUPPLIER_PERMISSION = "supplier:view";
+const REF_ITEM_PERMISSION = "item:view";
+const REF_UOM_PERMISSION = "unit-of-measure:view";
+const REF_TERM_PERMISSION = "commercial-term:view";
+
 /** 本地今日 YYYY-MM-DD（date 输入默认值；用户指令 2026-08-21：全站日期默认今天） */
 function todayInput(): string {
   const d = new Date();
@@ -99,15 +122,25 @@ const inputClass = INPUT_CLASS;
 function PurchaseOrderCreateForm() {
   const router = useRouter();
 
-  const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
-  const [items, setItems] = useState<ItemOption[]>([]);
-  const [uoms, setUoms] = useState<UomOption[]>([]);
-  const [selectorsLoading, setSelectorsLoading] = useState(true);
+  // 引用数据源：供应商 / 物料 / 计量单位 / 付款条件——**每源独立取数**（独立 loading/error/重试）
+  const supplierSource = useReferenceOptions<SupplierOption>("/api/suppliers?pageSize=100");
+  const itemSource = useReferenceOptions<ItemOption>("/api/items?pageSize=100");
+  const uomSource = useReferenceOptions<UomOption>("/api/unit-of-measures?pageSize=100");
+  const termSource = useReferenceOptions<CommercialTermOption>("/api/commercial-terms?pageSize=100");
+
+  const suppliers = supplierSource.data;
+  const items = itemSource.data;
+  const uoms = uomSource.data;
+  const commercialTerms = termSource.data;
+
+  const supplierError = referenceErrorText(supplierSource.error, REF_SUPPLIER_PERMISSION);
+  const itemError = referenceErrorText(itemSource.error, REF_ITEM_PERMISSION);
+  const uomError = referenceErrorText(uomSource.error, REF_UOM_PERMISSION);
+  const termError = referenceErrorText(termSource.error, REF_TERM_PERMISSION);
 
   const [supplierId, setSupplierId] = useState("");
   const [currency, setCurrency] = useState("");
   const [paymentTerm, setPaymentTerm] = useState("");
-  const [commercialTerms, setCommercialTerms] = useState<Array<{ id: string; code: string; name: string }>>([]);
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState(todayInput);
   const [remark, setRemark] = useState("");
   const [lines, setLines] = useState<POItemOptionRow[]>([emptyLine()]);
@@ -115,30 +148,6 @@ function PurchaseOrderCreateForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiClientError | null>(null);
   const [dirty, setDirty] = useState(false);
-
-  // 数据源：当前 main FINAL read API（统一 envelope：{ success, data }）
-  useEffect(() => {
-    const controller = new AbortController();
-    Promise.all([
-      apiFetch<SupplierOption[]>("/api/suppliers?pageSize=100", { signal: controller.signal }),
-      apiFetch<ItemOption[]>("/api/items?pageSize=100", { signal: controller.signal }),
-      apiFetch<UomOption[]>("/api/unit-of-measures?pageSize=100", { signal: controller.signal }),
-      apiFetch<Array<{ id: string; code: string; name: string }>>("/api/commercial-terms?pageSize=100", { signal: controller.signal }),
-    ])
-      .then(([supBody, itemBody, uomBody, termBody]) => {
-        setSuppliers(supBody.data);
-        setItems(itemBody.data);
-        setUoms(uomBody.data);
-        setCommercialTerms(termBody.data);
-        setSelectorsLoading(false);
-      })
-      .catch((err: unknown) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(err instanceof ApiClientError ? err : new ApiClientError(0, "加载数据源失败", "NETWORK_ERROR"));
-        setSelectorsLoading(false);
-      });
-    return () => controller.abort();
-  }, []);
 
   // 三层 validation（仅 UX 层；领域事实以服务端为准）
   const validate = (): string | null => {
@@ -294,8 +303,19 @@ function PurchaseOrderCreateForm() {
                 hint: s.code ?? undefined,
               }))}
               placeholder="请选择供应商"
-              loading={selectorsLoading}
+              loading={supplierSource.loading}
+              error={supplierError}
+              onRetry={supplierSource.reload}
             />
+            {!supplierSource.loading && !supplierSource.error && suppliers.length === 0 ? (
+              <p className="text-ink-muted text-xs">
+                暂无供应商档案。供应商档案来自往来单位：往来单位类型设为「供应商」或「客户/供应商」后自动建立档案；
+                <Link href="/business-partners/new" className="underline underline-offset-2">
+                  新建往来单位
+                </Link>
+                （已有往来单位重新保存一次即可补档）。
+              </p>
+            ) : null}
           </FormField>
           <FormField label="币种">
             <select
@@ -328,6 +348,7 @@ function PurchaseOrderCreateForm() {
               placeholder="不设置"
               clearable
             />
+            <ReferenceErrorNote message={termError} onRetry={termSource.reload} />
           </FormField>
           <FormField label="期望交货日期">
             <input
@@ -353,6 +374,10 @@ function PurchaseOrderCreateForm() {
           </FormField>
         </div>
       </section>
+
+      {/* 行区域引用源失败提示（物料 / 单位各自独立重试，不影响标题区已加载的供应商） */}
+      <ReferenceErrorNote message={itemError} onRetry={itemSource.reload} />
+      <ReferenceErrorNote message={uomError} onRetry={uomSource.reload} />
 
       <LineEditor<POItemOptionRow>
         columns={lineColumns}

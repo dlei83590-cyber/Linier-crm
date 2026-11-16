@@ -1257,6 +1257,51 @@ async function main() {
     });
   }
 
+  // 供应商档案自愈（Backfill）—— 用户报告：「新增采购单时供应商为空，没有关联到往来单位」
+  // 采购 / 收货 / 退货 / 供应商发票 / 付款的供应商下拉全部消费 /api/suppliers（Supplier 档案），
+  // 而历史往来单位（只建了 BusinessPartner，甚至 type=SUPPLIER）没有 1:1 供应商档案 → 下拉恒为空。
+  // 幂等：按 partnerId 判定；编码冲突退化为确定性候选（编码-往来单位 id 尾段）；已存在档案只复活不重建。
+  const supplierPartners = await prisma.businessPartner.findMany({
+    where: { deletedAt: null, type: { in: ["SUPPLIER", "BOTH"] } },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      suppliers: { select: { id: true, isActive: true, deletedAt: true } },
+    },
+  });
+  for (const p of supplierPartners) {
+    // 角色扩展（BusinessPartnerRole roleType=SUPPLIER）与档案同步存在
+    await prisma.businessPartnerRole.upsert({
+      where: { partnerId_roleType: { partnerId: p.id, roleType: "SUPPLIER" as never } },
+      update: { deletedAt: null },
+      create: { partnerId: p.id, roleType: "SUPPLIER" as never },
+    });
+    const existing = p.suppliers[0];
+    if (existing) {
+      if (existing.deletedAt !== null || !existing.isActive) {
+        await prisma.supplier.update({ where: { id: existing.id }, data: { deletedAt: null, isActive: true } });
+      }
+      continue;
+    }
+    const suffix = p.id.slice(-6);
+    const candidates = [p.code, `${p.code}-${suffix}`, `${p.code}-${suffix}-2`, `${p.code}-${suffix}-3`];
+    let created = false;
+    for (const code of candidates) {
+      const taken = await prisma.supplier.findUnique({ where: { code } });
+      if (taken) continue;
+      await prisma.supplier.create({
+        data: { code, name: p.name, partnerId: p.id, status: "POTENTIAL", currency: "CNY" },
+      });
+      created = true;
+      break;
+    }
+    if (!created) {
+      // 不静默跳过：编码空间耗尽属数据异常，必须留痕人工处理
+      console.warn(`[seed] 供应商档案编码候选全部被占用，未建档（需人工处理）：往来单位 ${p.code}`);
+    }
+  }
+
   const menuGroupIds = new Map<string, string>();
   for (const g of SEED_MENU_GROUPS) {
     const saved = await prisma.menuGroup.upsert({
