@@ -136,6 +136,14 @@ describe('PATCH /api/business-partners/:id — 信用等级（creditRating）写
           findFirst: vi.fn().mockResolvedValue({ id: 'bp-sup-1', code: 'SUP-001', name: '华东供应商有限公司', creditRating: 'AA', version: 2 }),
         },
         businessPartnerInvoiceInfo: { upsert: vi.fn() },
+        // 供应商档案自动建档（type=SUPPLIER/BOTH 时触发）
+        businessPartnerRole: { upsert: vi.fn().mockResolvedValue({ id: 'role-1' }) },
+        supplier: {
+          findFirst: vi.fn().mockResolvedValue(null),
+          findUnique: vi.fn().mockResolvedValue(null),
+          create: vi.fn().mockResolvedValue({ id: 'sup-new' }),
+          update: vi.fn().mockResolvedValue({ id: 'sup-1' }),
+        },
       }),
     );
   });
@@ -168,6 +176,48 @@ describe('PATCH /api/business-partners/:id — 信用等级（creditRating）写
     const body = await res.json();
     expect(body.error.code).toBe('VALIDATION_ERROR');
     expect(casMock).not.toHaveBeenCalled();
+  });
+
+  it('type 改为 SUPPLIER → 同事务自动建立供应商档案（存量往来单位补档）', async () => {
+    const supplierCreate = vi.fn().mockResolvedValue({ id: 'sup-new' });
+    mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) =>
+      fn({
+        businessPartner: {
+          findFirst: vi.fn().mockResolvedValue({ id: 'bp-sup-1', code: 'SUP-001', name: '华东供应商有限公司', type: 'SUPPLIER', version: 2 }),
+        },
+        businessPartnerInvoiceInfo: { upsert: vi.fn() },
+        businessPartnerRole: { upsert: vi.fn().mockResolvedValue({ id: 'role-1' }) },
+        supplier: {
+          findFirst: vi.fn().mockResolvedValue(null),
+          findUnique: vi.fn().mockResolvedValue(null),
+          create: supplierCreate,
+          update: vi.fn().mockResolvedValue({ id: 'sup-1' }),
+        },
+      }),
+    );
+    const res = await PATCH(makeRequest({ version: 1, type: 'SUPPLIER' }), { params: Promise.resolve({ id: 'bp-sup-1' }) });
+    expect(res.status).toBe(200);
+    expect(supplierCreate).toHaveBeenCalledTimes(1);
+    expect(supplierCreate.mock.calls[0][0]).toMatchObject({
+      data: { code: 'SUP-001', name: '华东供应商有限公司', partnerId: 'bp-sup-1' },
+    });
+  });
+
+  it('type 保持 CUSTOMER → 不建立供应商档案', async () => {
+    const supplierCreate = vi.fn();
+    mockPrisma.$transaction = vi.fn((fn: (t: unknown) => Promise<unknown>) =>
+      fn({
+        businessPartner: {
+          findFirst: vi.fn().mockResolvedValue({ id: 'bp-cust-1', code: 'CUS-001', name: '某客户', type: 'CUSTOMER', version: 2 }),
+        },
+        businessPartnerInvoiceInfo: { upsert: vi.fn() },
+        businessPartnerRole: { upsert: vi.fn() },
+        supplier: { findFirst: vi.fn(), findUnique: vi.fn(), create: supplierCreate, update: vi.fn() },
+      }),
+    );
+    const res = await PATCH(makeRequest({ version: 1, creditRating: 'AA' }), { params: Promise.resolve({ id: 'bp-cust-1' }) });
+    expect(res.status).toBe(200);
+    expect(supplierCreate).not.toHaveBeenCalled();
   });
 
   it('版本冲突 → 409 VERSION_CONFLICT', async () => {

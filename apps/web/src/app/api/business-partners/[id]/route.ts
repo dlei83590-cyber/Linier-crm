@@ -11,6 +11,7 @@ import { validateUscc, normalizeUscc } from "@/lib/tax-invoice";
 import { casUpdate } from "@/lib/api/cas";
 import { collectReferences, failReferenceConflict, REFERENCE_SAMPLE_LIMIT } from "@/lib/api/reference-guard";
 import { matchCustomerPools } from "@/lib/customer-pool/match";
+import { ensureSupplierArchive } from "@/lib/supplier/provision";
 import { BUSINESS_PARTNER_CHANNELS } from "@/lib/business-partner/channel";
 import {
   ENTERPRISE_QUALIFICATIONS,
@@ -188,6 +189,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (cas.outcome === 'CONFLICT') throw new Error('VERSION_CONFLICT');
     const saved = await tx.businessPartner.findFirst({ where: { id, deletedAt: null } });
     if (!saved) throw new Error('NOT_FOUND');
+    // 供应商档案自动建档（type=SUPPLIER/BOTH ⇒ 供应商档案必须存在；幂等，同事务回滚）
+    // 修复：往来单位改为「供应商」后采购单供应商下拉仍然为空（用户报告 2026-10）
+    await ensureSupplierArchive(tx, saved, user?.id ?? null);
     // 开票资料 upsert（1:1；变更走 approvalStatus=DRAFT，由 BusinessPartner 审批投影治理，I10）
     if (taxInvoiceInfo !== undefined && taxInvoiceInfo !== null) {
       await tx.businessPartnerInvoiceInfo.upsert({

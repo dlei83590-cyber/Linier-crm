@@ -30,6 +30,13 @@
 ## Selectors
 
 - Supplier、Item、UOM（`/api/unit-of-measures`）、Warehouse（`/api/warehouses`）、Requisition（convert 来源）
+- **Supplier 数据源 = `GET /api/suppliers`（Supplier 档案；提交的 `supplierId` 语义 = Supplier.id）**。
+  档案是**往来单位（BusinessPartner）type=SUPPLIER/BOTH 的 1:1 角色扩展**：
+  - 服务端在往来单位 create / update 时**同事务自动建档**（幂等；编码沿用往来单位编码，冲突走确定性候选编码）；
+  - 历史存量由 `prisma/seed.ts` 的自愈步骤补齐（幂等；部署 update 脚本含 seed 即生效）；
+  - 前端引用源**每源独立取数**（`useReferenceOptions`）+ 字段级失败可见 / 重试；供应商列表为空时
+    明确提示「档案来自往来单位」并给出 `/business-partners/new` 入口，不静默留空下拉。
+- Item / UOM / 付款条件同样是独立引用源：任一源失败都不得连带清空其他下拉。
 
 ## Error Codes
 

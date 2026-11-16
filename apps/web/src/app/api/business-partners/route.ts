@@ -14,6 +14,7 @@ import {
   ENTERPRISE_LISTING_STATUSES,
 } from "@/lib/business-partner/enterprise-profile";
 import { matchCustomerPools } from "@/lib/customer-pool/match";
+import { ensureSupplierArchive } from "@/lib/supplier/provision";
 import { ERROR_CODES } from "@/lib/api/errors";
 import { requestLog } from "@/lib/api/logger";
 import { z } from "zod";
@@ -195,51 +196,58 @@ export async function POST(request: NextRequest) {
 
   let created: Awaited<ReturnType<typeof prisma.businessPartner.create>> | undefined;
   try {
-    created = await prisma.businessPartner.create({
-      data: {
-        code: parsed.data.code,
-        mnemonic: parsed.data.mnemonic ?? null,
-        name: parsed.data.name,
-        type: (parsed.data.type as PartnerType) ?? "SUPPLIER",
-        uscc: usccNormalized,
-        taxpayerType: parsed.data.taxpayerType ?? null,
-        legalRepresentative: parsed.data.legalRepresentative ?? null,
-        registeredAddress: parsed.data.registeredAddress ?? null,
-        invoiceInfo: parsed.data.invoiceInfo === undefined ? undefined : parsed.data.invoiceInfo === null ? Prisma.JsonNull : (parsed.data.invoiceInfo as Prisma.InputJsonValue),
-        bankName: parsed.data.bankName ?? null,
-        bankAccount: parsed.data.bankAccount ?? null,
-        settlementTerms: parsed.data.settlementTerms ?? null,
-        shortName: parsed.data.shortName ?? null,
-        fullName: parsed.data.fullName ?? null,
-        groupName: parsed.data.groupName ?? null,
-        region: parsed.data.region ?? null,
-        industry: parsed.data.industry ?? null,
-        companySize: parsed.data.companySize ?? null,
-        creditRating: parsed.data.creditRating ?? null,
-        customerLevel: parsed.data.customerLevel ?? null,
-        sourceChannel: parsed.data.sourceChannel ?? null,
-        channel: parsed.data.channel ?? null,
-        qualifications: Array.from(new Set(parsed.data.qualifications ?? [])),
-        ownershipType: parsed.data.ownershipType ?? null,
-        listingStatus: parsed.data.listingStatus ?? null,
-        foundedDate: parsed.data.foundedDate ? new Date(parsed.data.foundedDate) : null,
-        registeredCapital: parsed.data.registeredCapital ?? null,
-        employeeCount: parsed.data.employeeCount ?? null,
-        website: parsed.data.website ?? null,
-        wechatOfficialAccount: parsed.data.wechatOfficialAccount ?? null,
-        tags: parsed.data.tags === undefined ? undefined : parsed.data.tags === null ? Prisma.JsonNull : (parsed.data.tags as Prisma.InputJsonValue),
-        contactPerson: parsed.data.contactPerson ?? null,
-        phone: parsed.data.phone ?? null,
-        email: parsed.data.email ?? null,
-        address: parsed.data.address ?? null,
-        latitude: parsed.data.latitude ?? null,
-        longitude: parsed.data.longitude ?? null,
-        allowedRadiusMeters: parsed.data.allowedRadiusMeters ?? null,
-        collaborationChannelKey: parsed.data.collaborationChannelKey ?? null,
-        approvalStatus: "APPROVED",
-        createdById: user?.id ?? null,
-        updatedById: user?.id ?? null,
-      },
+    // 与「供应商档案自动建档」同事务：type=SUPPLIER/BOTH 必须同时存在 Supplier 档案，
+    // 否则采购 / 供应商发票 / 付款的供应商下拉为空（禁止半成功事实）
+    created = await prisma.$transaction(async (tx) => {
+      const partner = await tx.businessPartner.create({
+        data: {
+          code: parsed.data.code,
+          mnemonic: parsed.data.mnemonic ?? null,
+          name: parsed.data.name,
+          type: (parsed.data.type as PartnerType) ?? "SUPPLIER",
+          uscc: usccNormalized,
+          taxpayerType: parsed.data.taxpayerType ?? null,
+          legalRepresentative: parsed.data.legalRepresentative ?? null,
+          registeredAddress: parsed.data.registeredAddress ?? null,
+          invoiceInfo: parsed.data.invoiceInfo === undefined ? undefined : parsed.data.invoiceInfo === null ? Prisma.JsonNull : (parsed.data.invoiceInfo as Prisma.InputJsonValue),
+          bankName: parsed.data.bankName ?? null,
+          bankAccount: parsed.data.bankAccount ?? null,
+          settlementTerms: parsed.data.settlementTerms ?? null,
+          shortName: parsed.data.shortName ?? null,
+          fullName: parsed.data.fullName ?? null,
+          groupName: parsed.data.groupName ?? null,
+          region: parsed.data.region ?? null,
+          industry: parsed.data.industry ?? null,
+          companySize: parsed.data.companySize ?? null,
+          creditRating: parsed.data.creditRating ?? null,
+          customerLevel: parsed.data.customerLevel ?? null,
+          sourceChannel: parsed.data.sourceChannel ?? null,
+          channel: parsed.data.channel ?? null,
+          qualifications: Array.from(new Set(parsed.data.qualifications ?? [])),
+          ownershipType: parsed.data.ownershipType ?? null,
+          listingStatus: parsed.data.listingStatus ?? null,
+          foundedDate: parsed.data.foundedDate ? new Date(parsed.data.foundedDate) : null,
+          registeredCapital: parsed.data.registeredCapital ?? null,
+          employeeCount: parsed.data.employeeCount ?? null,
+          website: parsed.data.website ?? null,
+          wechatOfficialAccount: parsed.data.wechatOfficialAccount ?? null,
+          tags: parsed.data.tags === undefined ? undefined : parsed.data.tags === null ? Prisma.JsonNull : (parsed.data.tags as Prisma.InputJsonValue),
+          contactPerson: parsed.data.contactPerson ?? null,
+          phone: parsed.data.phone ?? null,
+          email: parsed.data.email ?? null,
+          address: parsed.data.address ?? null,
+          latitude: parsed.data.latitude ?? null,
+          longitude: parsed.data.longitude ?? null,
+          allowedRadiusMeters: parsed.data.allowedRadiusMeters ?? null,
+          collaborationChannelKey: parsed.data.collaborationChannelKey ?? null,
+          approvalStatus: "APPROVED",
+          createdById: user?.id ?? null,
+          updatedById: user?.id ?? null,
+        },
+      });
+      // 供应商档案自动建档（幂等；同事务 → 档案建档失败整体回滚，不留「供应商但没有供应商档案」）
+      await ensureSupplierArchive(tx, partner, user?.id ?? null);
+      return partner;
     });
   } catch (err) {
     // ③ P2002 Race Safety（CTO §D）：并发下 precheck 可能同时通过 → 按 target 区分语义
