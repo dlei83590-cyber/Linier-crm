@@ -93,15 +93,27 @@ function renderPage() {
   );
 }
 
+/** 原生 <select> 的选项文本（付款条件 Combobox 不是原生 select，无 options 属性，必须排除） */
+function optionTexts(el: HTMLElement): string[] {
+  const options = (el as HTMLSelectElement).options;
+  if (!options) return [];
+  return Array.from(options).map((o) => o.textContent ?? '');
+}
+
+/** 供应商下拉（原生 select；按往来单位/供应商名称定位，不依赖 DOM 序号） */
 function supplierSelect(): HTMLSelectElement {
-  return screen.getAllByRole('combobox')[0] as HTMLSelectElement;
+  const found = screen
+    .getAllByRole('combobox')
+    .find((s) => optionTexts(s).some((t) => t.includes('华东供应商有限公司')));
+  if (!found) throw new Error('未找到供应商下拉');
+  return found as HTMLSelectElement;
 }
 
 /** 行编辑区的物料下拉（选项来自 /api/items） */
 function itemSelect(): HTMLSelectElement {
   const found = screen
     .getAllByRole('combobox')
-    .find((s) => Array.from((s as HTMLSelectElement).options).some((o) => o.textContent?.includes('ITM-001')));
+    .find((s) => optionTexts(s).some((t) => t.includes('ITM-001')));
   if (!found) throw new Error('未找到物料下拉');
   return found as HTMLSelectElement;
 }
@@ -160,7 +172,9 @@ describe('Purchase Order Create — 供应商引用源（往来单位）可见�
     renderPage();
     await screen.findByText('新建采购订单');
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
-    expect(await screen.findByText(/请选择供应商/)).toBeInTheDocument();
+    // 校验错误面板（占位 option 同样是「请选择供应商」文案，故按 role=alert 断言）
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('请选择供应商');
   });
 
   it('选供应商 + 行 → POST 契约（supplierId + lines[itemId/quantity]）', async () => {
