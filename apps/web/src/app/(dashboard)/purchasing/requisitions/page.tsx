@@ -27,10 +27,20 @@ interface RequisitionRow {
   needDate?: string | null;
   requester?: { name: string | null } | null;
   department?: { name: string | null } | null;
-  _count?: { lines: number };
+  /** lines = 行数；purchaseOrders = 有效（未删除）采购订单引用数（后端只读投影，删除门禁用） */
+  _count?: { lines: number; purchaseOrders?: number };
 }
 
 const STATUS_OPTIONS = ["DRAFT", "SUBMITTED", "APPROVED", "CONVERTED", "CANCELLED"] as const;
+
+/**
+ * 可删除状态（与 DELETE /api/purchase-requisitions/:id 的服务端契约一一对应）：
+ * DRAFT / SUBMITTED / CANCELLED / APPROVED。
+ * APPROVED 允许删除的前提是「未关联其它动作」——即没有任何有效采购订单引用该申请
+ * （对应列表行 _count.purchaseOrders === 0）；已转单（CONVERTED）必须先「回退」再删。
+ * 前端只做状态契约的映射，最终判定与服务端引用防御一致（409 会返回引用出处）。
+ */
+const DELETABLE_STATUSES: readonly string[] = ["DRAFT", "SUBMITTED", "CANCELLED", "APPROVED"];
 
 /** 状态中文业务名（Business UX Rationalization：枚举展示中文，不展示数据库枚举值；key 保留真实 enum） */
 const STATUS_LABELS: Record<string, string> = {
@@ -270,30 +280,46 @@ function RequisitionList() {
           {
             key: "actions",
             header: "操作",
-            render: (row) => (
-              <div className="flex items-center gap-2">
-                {row.status === "CONVERTED" && canEdit && (
-                  <button
-                    type="button"
-                    onClick={() => setUnconverting(row)}
-                    disabled={unconvertBusy || deleteBusy}
-                    className="rounded-md border border-border px-2 py-1 text-xs text-ink-primary hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {unconvertBusy && unconverting?.id === row.id ? "回退中…" : "回退"}
-                  </button>
-                )}
-                {["DRAFT", "SUBMITTED", "CANCELLED"].includes(row.status) && canDelete && (
-                  <button
-                    type="button"
-                    onClick={() => setDeleting(row)}
-                    disabled={unconvertBusy || deleteBusy}
-                    className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text hover:bg-status-danger-bg/10 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    删除
-                  </button>
-                )}
-              </div>
-            ),
+            render: (row) => {
+              // 「未关联其它动作时，列表可以删除」：可删状态 + 无有效采购订单引用
+              const linkedOrders = row._count?.purchaseOrders ?? 0;
+              const statusAllowsDelete = DELETABLE_STATUSES.includes(row.status);
+              const blockedByReference = canDelete && statusAllowsDelete && linkedOrders > 0;
+              return (
+                <div className="flex items-center gap-2">
+                  {row.status === "CONVERTED" && canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => setUnconverting(row)}
+                      disabled={unconvertBusy || deleteBusy}
+                      className="rounded-md border border-border px-2 py-1 text-xs text-ink-primary hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {unconvertBusy && unconverting?.id === row.id ? "回退中…" : "回退"}
+                    </button>
+                  )}
+                  {canDelete && statusAllowsDelete && linkedOrders === 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setDeleting(row)}
+                      disabled={unconvertBusy || deleteBusy}
+                      className="rounded-md border border-status-danger-border px-2 py-1 text-xs text-status-danger-text hover:bg-status-danger-bg/10 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      删除
+                    </button>
+                  )}
+                  {blockedByReference && (
+                    <button
+                      type="button"
+                      disabled
+                      title={`该申请已被 ${linkedOrders} 张采购订单引用，不能删除；请先回退并删除对应采购订单`}
+                      className="rounded-md border border-border px-2 py-1 text-xs text-ink-muted disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      删除
+                    </button>
+                  )}
+                </div>
+              );
+            },
           },
         ]}
         rows={items}
@@ -344,7 +370,7 @@ function RequisitionList() {
       <ConfirmActionDialog
         open={deleting !== null}
         title={"删除采购申请「" + (deleting?.code ?? "") + "」？"}
-        description="仅草稿/已提交/已取消状态的采购申请可删除（无关联采购订单时）；删除后列表不再展示。"
+        description="草稿/已提交/已取消/已批准（且未关联采购订单）的采购申请可删除；已转采购订单的申请需先「回退」再删除。删除后列表不再展示。"
         confirmLabel="确认删除"
         tone="danger"
         busy={deleteBusy}
