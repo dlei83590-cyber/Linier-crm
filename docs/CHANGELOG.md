@@ -3,6 +3,28 @@
 所有重要变更都会记录在此文件。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
 
+## [Unreleased] - 采购申请列表：未关联其它动作时可删除（2026-11-16）
+
+### 修复
+
+- 用户指令：「采购申请列表，在未关联其它动作时，列表可以删除」。
+  服务端 `DELETE /api/purchase-requisitions/:id` 的契约本来就允许 **APPROVED 且无采购订单引用** 删除
+  （层层回退-层层可删除，2026-08-21），但列表页的行删除按钮只对 `DRAFT / SUBMITTED / CANCELLED` 渲染，
+  导致「已批准但未转单」的采购申请在列表里**没有删除入口**。
+- **后端只读投影**：`GET /api/purchase-requisitions` 的 `_count` 增加
+  `purchaseOrders: { where: { deletedAt: null } }`（有效采购订单引用数），列表删除门禁只消费该后端投影。
+- **前端**：`/purchasing/requisitions` 行操作按状态契约 + 引用数渲染：
+  - `DRAFT / SUBMITTED / CANCELLED / APPROVED` 且 `purchaseOrders = 0` → 可删除（APPROVED 入口补齐）；
+  - 已被采购订单引用 → 删除**禁用**并以 title 说明「已被 N 张采购订单引用，先回退并删除对应采购订单」（不静默隐藏）；
+  - `CONVERTED` → 仍只提供「回退」，删除须先回退（服务端对 CONVERTED 一律 409）。
+  - 删除确认弹窗文案同步（含「已批准（且未关联采购订单）可删除」）。
+
+### 边界
+
+- 零 Schema / Migration / 错误码 / Event / RBAC 变更；删除语义、状态机、引用防御（409 + 引用出处）、单号回收、审计均未改动。
+- 前端不新增额外请求、不缓存猜测状态：删除可用性完全由 `_count.purchaseOrders` + 状态集决定。
+- 单测：`purchasing/requisitions/page.test.tsx`（APPROVED 无引用可删 / 有引用禁用并说明 / CONVERTED 只回退 / 确认删除调用 DELETE 并刷新列表）。
+
 ## [Unreleased] - 采购单供应商为空修复：往来单位 ⇒ 供应商档案自动建档（2026-10-14）
 
 ### 修复

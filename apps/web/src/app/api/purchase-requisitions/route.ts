@@ -14,7 +14,14 @@ import { publishPurchaseRequisitionEvent } from '@/lib/purchase-requisition/even
 
 export const dynamic = 'force-dynamic';
 
-/** GET /api/purchase-requisitions（分页 + code/status/requesterId/departmentId/dateFrom/dateTo 过滤 + createdAt desc 排序） */
+/**
+ * GET /api/purchase-requisitions（分页 + code/status/requesterId/departmentId/dateFrom/dateTo 过滤 + createdAt desc 排序）
+ *
+ * 只读投影补充（用户指令 2026-11-16「采购申请列表，在未关联其它动作时，列表可以删除」）：
+ * _count 同时返回 lines 与有效 purchaseOrders 数量——列表删除按钮的显隐**只消费该后端投影**
+ * （未关联采购订单 = 可删除；APPROVED 亦可删，与 DELETE /:id 的契约完全一致），
+ * 前端不再自己猜状态，也不用额外的二次请求。
+ */
 export async function GET(request: NextRequest) {
   const user = await authenticate(request);
   const denied = requirePermission(user, 'purchase-requisition:view');
@@ -56,7 +63,7 @@ export async function GET(request: NextRequest) {
       include: {
         requester: { select: { id: true, email: true, name: true } },
         department: { select: { id: true, code: true, name: true } },
-        _count: { select: { lines: true } },
+        _count: { select: { lines: true, purchaseOrders: { where: { deletedAt: null } } } },
       },
     }),
   ]);
